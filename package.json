@@ -1,0 +1,8 @@
+{
+  "name": "field-cafe-pos-vercel-turso",
+  "private": true,
+  "type": "module",
+  "engines": {"node": ">=20"},
+  "scripts": {"test": "node --test test/*.test.mjs", "bootstrap": "node scripts/bootstrap.mjs"},
+  "dependencies": {"@libsql/client": "^0.17.0"}
+}
