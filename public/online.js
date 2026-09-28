@@ -18,7 +18,7 @@
     <button class="btn ghost" id="onlineBackup" type="button" hidden>ดาวน์โหลดข้อมูลในเครื่อง (.json)</button>
   </div>`;
   const css = document.createElement('style');
-  css.textContent = `#onlineGate{position:fixed;inset:0;z-index:10000;background:#17382c;display:grid;place-items:center;padding:16px}
+  css.textContent = `#onlineGate{position:fixed;inset:0;z-index:100000;background:#17382c;display:grid;place-items:center;padding:16px}
     #onlineGate[hidden]{display:none}#onlineGate .online-card{width:min(460px,100%);max-height:95vh;overflow:auto;background:#f8f4e9;border-radius:20px;padding:26px;box-shadow:0 18px 60px #0004;color:#211e19}
     #onlineGate .online-brand{font-weight:800;color:#527b3b}#onlineGate h2{margin:12px 0}#onlineGate p{line-height:1.5}
     #onlineGate label{display:block;margin:10px 0;font-size:.85rem;font-weight:700}#onlineGate input{display:block;width:100%;padding:12px;border:1px solid #c8c5b9;border-radius:8px}
@@ -70,7 +70,11 @@
         el('onlineImport').onclick=async()=>{backup();await firstCommit(local)};
         return;
       }
-      await firstCommit(local);
+      show();el('onlineForm').hidden=true;el('onlineChoices').hidden=false;
+      msg('ฐานข้อมูลออนไลน์ยังว่าง','หากมีข้อมูล POS อยู่ในเครื่องเดิม ให้เปิดเว็บนี้จากเครื่องนั้นและนำข้อมูลขึ้นออนไลน์ก่อน');
+      el('onlineChoices').innerHTML='<button class="btn green" id="onlineStartEmpty" type="button">เริ่มร้านใหม่โดยไม่มีข้อมูลเดิม</button><button class="btn ghost" id="onlineCheckAgain" type="button">ตรวจข้อมูลออนไลน์อีกครั้ง</button>';
+      el('onlineStartEmpty').onclick=()=>{if(confirm('ยืนยันว่าไม่มีบิลหรือข้อมูลเดิมที่ต้องนำเข้าจากเครื่องอื่น?'))firstCommit(local)};
+      el('onlineCheckAgain').onclick=boot;
       return;
     }
     revision=remote.revision;

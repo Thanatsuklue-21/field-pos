@@ -1367,6 +1367,6 @@ function startAuth(){if(authData?.corrupt){document.getElementById('authTitle').
 document.getElementById('reportDate').value=isoDate();renderCategories();renderMenuGrid();renderCart();renderQueue();updateQueueBadge();renderActionAlerts();updateDbUi();loadPosterPhotos();startAuth();
 setInterval(()=>{if(document.getElementById('v-queue').classList.contains('active'))renderQueue()},60000);
 </script>
-<script src="/online.js"></script>
+<script src="/online.js" defer></script>
 </body>
 </html>
