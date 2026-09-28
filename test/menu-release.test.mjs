@@ -6,7 +6,7 @@ import {previewSnapshot} from '../lib/migration.mjs';
 const html=await readFile(new URL('../public/index.html',import.meta.url),'utf8');
 
 test('approved menu release is the only active master recipe',()=>{
-  assert.match(html,/FIELD_DATA_VERSION='2026-09-28\.30'/);
+  assert.match(html,/FIELD_DATA_VERSION='2026-09-28\.31'/);
   assert.match(html,/id:'pure-matcha'.*enabled:true.*iced\(\{matcha:4,water:170\}\)/);
   assert.match(html,/id:'matcha-latte'.*enabled:true.*iced\(\{matcha:5,water:40,milk:110,syrup:15\}\)/);
   assert.match(html,/id:'matcha-signature'.*name:'FIELD Matcha Signature'.*v\('100%'.*condensed:30,evaporated:30,milk:70.*v\('50%'.*condensed:15,evaporated:30,milk:70.*v\('0%'.*milk:110,evaporated:15/);
@@ -53,10 +53,29 @@ test('actual COGS excludes estimated variable cost',()=>{
 });
 
 test('Turso snapshot migration accepts cost rows and preserves historical sales and orders',()=>{
-  const snapshot={dataVersion:'old',menu:[],ingredients:{},menuCostRecords:[{menu_id:'pure-matcha'}],archivedRecipes:[{menu_id:'coconut-matcha'}],sales:[{id:'sale-old'}],orders:[{id:'order-old'}]};
+  const snapshot={dataVersion:'old',menu:[],ingredients:{},menuCostRecords:[{menu_id:'pure-matcha'}],archivedRecipes:[{menu_id:'coconut-matcha'}],costEntries:[{id:'cost-old',ingredientId:'matcha'}],sales:[{id:'sale-old'}],orders:[{id:'order-old'}]};
   const out=previewSnapshot(snapshot).document;
   assert.deepEqual(out.sales,snapshot.sales);
   assert.deepEqual(out.orders,snapshot.orders);
   assert.deepEqual(out.menuCostRecords,snapshot.menuCostRecords);
   assert.deepEqual(out.archivedRecipes,snapshot.archivedRecipes);
+  assert.deepEqual(out.costEntries,snapshot.costEntries);
+});
+
+test('cost center is separated from stock and uses owner-confirmed purchase inputs',()=>{
+  const stockSection=html.match(/<section id="v-stock"[\s\S]*?<\/section>/)?.[0]||'';
+  assert.doesNotMatch(stockSection,/costPurchasePrice|ต้นทุน\/หน่วย|confirmCostBtn/);
+  assert.match(html,/id="menuCostPanel"[\s\S]*?id="costPurchasePrice"[\s\S]*?id="costPackageQty"[\s\S]*?id="costPurchaseDate"[\s\S]*?id="costOwnerConfirm"/);
+  assert.match(html,/function confirmedCostEntry\(key\)/);
+  assert.doesNotMatch(html,/COST_REFERENCES|makro\.pro|lotuss\.com|shopee\.co\.th/);
+});
+
+test('accounting and marketing views expose separate cost, price and profit formulas',()=>{
+  assert.match(html,/data-menu-panel="menuListPanel">1 · สูตร/);
+  assert.match(html,/data-menu-panel="menuCostPanel">2 · ต้นทุน/);
+  assert.match(html,/data-menu-panel="menuPricePanel">3 · ราคาขาย/);
+  assert.match(html,/data-menu-panel="menuProfitPanel">4 · กำไร/);
+  assert.match(html,/actual\+p\.estimatedVariableCost\+p\.fixedPerCup\+p\.hiddenCostPerCup/);
+  assert.match(html,/actual\/\(p\.targetCogsPercent\/100\)/);
+  assert.match(html,/full\/\(1-p\.targetNetMarginPercent\/100\)/);
 });
