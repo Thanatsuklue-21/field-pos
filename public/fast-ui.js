@@ -37,7 +37,6 @@
       });
       card.querySelector('[data-delivered]').onclick=()=>{
         if(!requireView('queue'))return;
-        if(!confirm('คิว '+queueLabel(o)+' ทำเสร็จและลูกค้ารับครบทุกแก้วแล้ว?'))return;
         items.forEach(x=>{x.readyQty=Number(x.qty)||0;x.qcQty=x.readyQty;x.calledQty=x.readyQty;x.prepSelected=false});
         o.status='returned';o.deliveredAt=Date.now();saveState();renderQueue();
       };

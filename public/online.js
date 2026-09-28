@@ -1,4 +1,4 @@
-// Server snapshot mode. Every edit is acknowledged by Turso before another edit is allowed.
+// Optimistic snapshot mode. The POS responds immediately and Turso sync runs in the background.
 // A revision conflict never overwrites either copy; the operator must export and reconcile.
 (() => {
   const gate = document.createElement('div');
@@ -26,7 +26,7 @@
   document.head.appendChild(css);
   document.body.appendChild(gate);
   const el = id => document.getElementById(id);
-  let csrf = '', revision = null, onlineReady = false, syncPending = false, syncTimer = null;
+  let csrf = '', revision = null, onlineReady = false, syncPending = false, syncTimer = null, retryTimer = null, retryDelay = 3000, flushing = false, editVersion = 0;
   let setupMode = false, serverUser = null, lastSavedState = null;
   const originalSave = saveState;
   const originalLock = lockApp;
@@ -34,6 +34,11 @@
   const msg = (title, detail) => { el('onlineTitle').textContent=title; el('onlineMessage').textContent=detail; };
   const show = () => { gate.hidden=false; };
   const hide = () => { gate.hidden=true; };
+  const status = document.createElement('div');
+  status.id='onlineSyncStatus';status.setAttribute('role','status');status.setAttribute('aria-live','polite');
+  status.style.cssText='position:fixed;right:12px;bottom:12px;z-index:9999;background:#e8f1e6;color:#225037;border-radius:12px;padding:7px 12px;font:700 12px system-ui;box-shadow:0 2px 12px #0002';
+  status.hidden=true;document.body.appendChild(status);
+  const syncStatus = message => {status.textContent=message;status.hidden=!message};
   const request = async (path, options={}) => {
     const response = await fetch('/api/'+path,{credentials:'same-origin',cache:'no-store',...options,
       headers:{'Content-Type':'application/json',...(options.body?{'X-CSRF-Token':csrf}:{}),...options.headers}});
@@ -99,7 +104,8 @@
       else failure(e)}
   }
   function adopt(remote){
-    state=normalizeState(remote.state);revision=remote.revision;onlineReady=true;syncPending=false;
+    const needsMigration=remote.state?.dataVersion!==FIELD_DATA_VERSION;
+    state=normalizeState(remote.state);revision=remote.revision;onlineReady=true;syncPending=false;syncStatus('');
     lastSavedState=JSON.stringify(state);
     localStorage.setItem(APP_KEY,lastSavedState);
     dbWrite=dbWrite.then(()=>persistDatabase()).catch(console.warn);
@@ -112,6 +118,7 @@
     el('accessSettings').hidden=true;
     el('resetAllBtn').disabled=true;el('resetAllBtn').title='ปิดการรีเซ็ตข้อมูลขณะใช้ฐานข้อมูลออนไลน์';
     el('importFile').disabled=true;el('importFile').parentElement.hidden=true;
+    if(needsMigration){syncPending=true;editVersion++;syncStatus('กำลังอัปเกรดฐานข้อมูลเมนู…');clearTimeout(syncTimer);syncTimer=setTimeout(flush,0)}
   }
   function failure(e){
     show();el('onlineForm').hidden=true;el('onlineChoices').hidden=true;el('onlineBackup').hidden=false;
@@ -129,21 +136,31 @@
     }catch(err){failure(err)}
   }
   async function flush(){
-    if(!onlineReady||!syncPending)return;
-    show();msg('กำลังบันทึกออนไลน์','รอ Turso ยืนยันก่อนทำรายการต่อ');el('onlineRetry').hidden=true;el('onlineBackup').hidden=true;
-    const document=deepClone(state);
+    if(!onlineReady||!syncPending||flushing)return;
+    flushing=true;
     try{
-      const body=JSON.stringify({state:document,expectedRevision:revision,replace:true});
-      if(new Blob([body]).size>3_500_000)throw new Error('ข้อมูลใหญ่เกิน 3.5 MB กรุณาลดขนาดรูปภาพเมนูแล้วลองใหม่');
-      const result=await request('import/commit',{method:'POST',body});
-      revision=result.revision;lastSavedState=JSON.stringify(document);syncPending=false;hide();
-    }catch(e){failure(e)}
+      while(syncPending){
+        const version=editVersion,document=deepClone(state);
+        const body=JSON.stringify({state:document,expectedRevision:revision,replace:true});
+        if(new Blob([body]).size>3_500_000)throw new Error('ข้อมูลใหญ่เกิน 3.5 MB กรุณาลดขนาดรูปภาพเมนูแล้วลองใหม่');
+        const result=await request('import/commit',{method:'POST',body});
+        revision=result.revision;lastSavedState=JSON.stringify(document);
+        syncPending=editVersion!==version;
+      }
+      retryDelay=3000;clearTimeout(retryTimer);syncStatus('บันทึกออนไลน์แล้ว');setTimeout(()=>{if(!syncPending)syncStatus('')},1800);hide();
+    }catch(e){
+      syncPending=true;
+      if(e.status===401||e.status===409)failure(e);
+      else{syncStatus('บันทึกในเครื่องแล้ว · รอซิงก์ออนไลน์');clearTimeout(retryTimer);retryTimer=setTimeout(flush,retryDelay);retryDelay=Math.min(retryDelay*2,30000)}
+    }
+    finally{flushing=false}
   }
   saveState = function(){
     originalSave();
-    if(onlineReady){syncPending=true;show();msg('กำลังบันทึกออนไลน์','รอ Turso ยืนยันก่อนทำรายการต่อ');
-      clearTimeout(syncTimer);syncTimer=setTimeout(flush,80)}
+    if(onlineReady){syncPending=true;editVersion++;syncStatus('บันทึกในเครื่องแล้ว · กำลังซิงก์…');
+      clearTimeout(syncTimer);syncTimer=setTimeout(flush,350)}
   };
+  window.addEventListener('beforeunload',e=>{if(syncPending){e.preventDefault();e.returnValue=''}});
   refreshAccessUi = function(){originalRefresh();if(onlineReady)el('accessSettings').hidden=true};
   lockApp = function(message){if(onlineReady){authSession=null;document.body.classList.add('auth-locked');setForm('login');
     if(message)el('onlineMessage').textContent=message;return}originalLock(message)};
@@ -175,5 +192,5 @@
   boot();
   setInterval(async()=>{if(!onlineReady||syncPending||gate.hidden===false||!authSession)return;
     try{const remote=await request('state');if(remote.revision!==revision)adopt(remote)}
-    catch(e){failure(e)}},15000);
+    catch(e){if(e.status===401)failure(e);else syncStatus('ออฟไลน์ชั่วคราว · ใช้ข้อมูลในเครื่อง')}} ,15000);
 })();

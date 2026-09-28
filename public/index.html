@@ -412,7 +412,7 @@ body.auth-locked>header,body.auth-locked>nav,body.auth-locked>main{visibility:hi
   </div>
 
   <div id="menuListPanel" class="menu-panel active">
-    <div class="notice">ราคาแนะนำที่เพิ่ม 27 ก.ย. 2026: Americano ฿40, Latte ฿55, Cocoa ฿55, Fresh Milk ฿40 คำนวณจากต้นทุนสูตรปัจจุบันรวม Waste 5% และบรรจุภัณฑ์ แล้วปัดขึ้นทีละ ฿5 ให้ต้นทุนไม่เกิน 40% ของราคาขาย ร้านแก้ราคาได้เอง และเมนูที่พักขายยังคงพักขาย</div>
+    <div class="notice">ราคาแนะนำเดิม: Americano ฿40, Latte ฿55, Cocoa ฿55, Fresh Milk ฿40 · เมนูเหล่านี้ยังพักขายและไม่กระทบรายการ APPROVED หลัก</div>
     <details class="notice"><summary>แหล่งราคาและรายการที่รอยืนยัน</summary><p>ราคาอ้างอิงเดิมใน POS คือกาแฟช่อลดา Extra Espresso 500g ฿225 และโกโก้ช่อลดา 500g ฿285; หน้าเว็บร้านช่อลดาที่ตรวจ 28 ก.ย. 2026 แสดง Extra Espresso ฿290 และโกโก้ 100% ฿300 ต่อ 500g (กรุณาตรวจรุ่นและยอดชำระจริง) จาก <a href="https://shopee.co.th/cholada.coffee" target="_blank" rel="noopener noreferrer">ร้านบริษัทช่อลดา</a> ราคาที่พบจากหน้าร้านออนไลน์อาจเปลี่ยนตามช่วงเวลา/พื้นที่และยังไม่รวมค่าส่ง ต้นทุนนมและบรรจุภัณฑ์ใช้ค่าที่ร้านบันทึกไว้เดิม ตรวจสินค้าขนาดจริงก่อนซื้อ</p><p>ชาไทยรินชาสูตร 3 ขนาด 1 กก. ฿204 หลังใช้โค้ดส่วนลด ตามภาพหน้าสินค้าที่เจ้าของส่ง 28 ก.ย. 2026 (<a href="https://th.shp.ee/uWhvss8E" target="_blank" rel="noopener noreferrer">ลิงก์สินค้า</a>) เท่ากับ ฿0.204/กรัมใบชา ยังไม่รวมค่าส่งและราคาอาจเปลี่ยนเมื่อไม่มีโค้ด สูตร POS ใช้น้ำชาชงแล้ว 105g จึงยังต้องทราบกรัมใบชาต่อน้ำชงที่ได้จริงก่อนคิดต้นทุนต่อแก้วและกำหนดราคาขาย ชาเขียวรินชายังไม่มีราคาสินค้าที่ระบุรุ่นชัดเจน เมนูน้ำผึ้ง มะนาว น้ำแดง ลิ้นจี่ และโซดายังคงรอราคาซื้อจริง</p></details>
     <div class="table-wrap">
       <table>
@@ -423,7 +423,7 @@ body.auth-locked>header,body.auth-locked>nav,body.auth-locked>main{visibility:hi
   </div>
 
   <div id="menuCostPanel" class="menu-panel">
-    <div class="notice">ต้นทุนสูตร = วัตถุดิบ + Waste 5% ของวัตถุดิบ + บรรจุภัณฑ์ · แตะ “แจกแจง” เพื่อดูที่มาของทุกบาท ราคาที่ยังไม่ยืนยันจะแสดงสถานะชัดเจน และไม่ใช้ต้นทุนไม่ครบคำนวณกำไร</div>
+    <div class="notice">Actual COGS = วัตถุดิบ + บรรจุภัณฑ์ + น้ำแข็ง · Estimated variable cost 2.50 บาท/แก้วแสดงแยกและไม่รวมใน COGS · แตะ “แจกแจง” เพื่อดูรายละเอียด</div>
     <div id="costDashboard" class="cost-dashboard"></div>
     <div id="costAllocation" class="cost-allocation"></div>
     <div class="table-wrap">
@@ -520,25 +520,26 @@ body.auth-locked>header,body.auth-locked>nav,body.auth-locked>main{visibility:hi
 <script>
 'use strict';
 const APP_KEY='field_pos_v2_state'; // ใช้ key เดิมเพื่อรักษาข้อมูลลูกค้าเมื่ออัปเกรด
-const FIELD_DATA_VERSION='2026-09-28.29';
+const FIELD_DATA_VERSION='2026-09-28.30';
 document.getElementById('masterDataVersion').textContent=FIELD_DATA_VERSION;
 const FIELD_IMAGE_VERSION='2026-09-28.4';
 const posterPhotos={};
 const FIELD_DATA_INFO={
-  recipe:'Master Recipe V4 · 26 ก.ย. 2026',
-  costs:'ฐานต้นทุนวัตถุดิบ · 23 ก.ย. 2026',
+  recipe:'Approved Main Menu · 28 ก.ย. 2026',
+  costs:'ต้นทุนวัตถุดิบและบรรจุภัณฑ์ · 28 ก.ย. 2026',
   brand:'FIELD Brand Identity · 27 ก.ย. 2026',
-  correction:'สูตรมัทฉะที่ผ่านตามภาพสรุป 1612 · 28 ก.ย. 2026'
+  correction:'สูตร APPROVED จากเจ้าของร้าน · 28 ก.ย. 2026'
 };
-const PACKAGING_KEYS=new Set(['cup16','lid16','straw','sticker','ice','hotCupSet','cupHot','lidHot']);
-const CATEGORIES=['MATCHA','HOT MATCHA','COFFEE','TEA','COCOA','MILK','SODA','ALL'];
-const CAT_LABEL={'ALL':'ทั้งหมด','MATCHA':'มัทฉะ','HOT MATCHA':'มัทฉะร้อน','COFFEE':'กาแฟ','TEA':'ชา','COCOA':'โกโก้','MILK':'นม','SODA':'โซดา'};
+const PACKAGING_KEYS=new Set(['cup16','lid16','straw','sticker','hotCupSet','cupHot','lidHot']);
+const ESTIMATED_VARIABLE_COST=2.50;
+const CATEGORIES=['MATCHA','HOT MATCHA','FRUIT','COFFEE','TEA','COCOA','MILK','SODA','ALL'];
+const CAT_LABEL={'ALL':'ทั้งหมด','MATCHA':'มัทฉะ','HOT MATCHA':'มัทฉะร้อน','FRUIT':'ผลไม้','COFFEE':'กาแฟ','TEA':'ชา','COCOA':'โกโก้','MILK':'นม','SODA':'โซดา'};
 
 const CAT_VISUAL={
   'MATCHA':{emoji:'🍵',a:'#6A8B4A',b:'#DCE9CE'},'HOT MATCHA':{emoji:'♨️',a:'#52723A',b:'#E9DFC6'},
   'COFFEE':{emoji:'☕',a:'#6B4B35',b:'#D7B99A'},'TEA':{emoji:'🫖',a:'#B46A2E',b:'#F0D49C'},
   'COCOA':{emoji:'🍫',a:'#70452F',b:'#D1A383'},'MILK':{emoji:'🥛',a:'#8AA3B7',b:'#E9F0F5'},
-  'SODA':{emoji:'🥤',a:'#4C91A7',b:'#CBEAF1'},'ALL':{emoji:'▦',a:'#39332B',b:'#E8E0D2'}
+  'FRUIT':{emoji:'🍊',a:'#E47D22',b:'#FFE0A6'},'SODA':{emoji:'🥤',a:'#4C91A7',b:'#CBEAF1'},'ALL':{emoji:'▦',a:'#39332B',b:'#E8E0D2'}
 };
 function svgData(svg){return 'data:image/svg+xml;charset=UTF-8,'+encodeURIComponent(svg)}
 function categoryThumb(cat){const v=CAT_VISUAL[cat]||CAT_VISUAL.ALL;return svgData(`<svg xmlns="http://www.w3.org/2000/svg" width="160" height="160" viewBox="0 0 160 160"><defs><linearGradient id="g" x1="0" x2="1" y1="0" y2="1"><stop stop-color="${v.b}"/><stop offset="1" stop-color="${v.a}"/></linearGradient></defs><rect width="160" height="160" rx="28" fill="url(#g)"/><circle cx="80" cy="70" r="43" fill="white" opacity=".72"/><text x="80" y="89" font-size="54" text-anchor="middle">${v.emoji}</text></svg>`)}
@@ -572,20 +573,21 @@ function loadPosterPhotos(){
   };img.onerror=()=>console.warn('โหลดรูปเมนูมัทฉะไม่ได้');img.src='data:image/jpeg;base64,'+bytes;
 }
 
-const basePackagingIced={cup16:1,lid16:1,straw:1,sticker:1,ice:1};
+const basePackagingIced={cup16:1,lid16:1,straw:1,sticker:1,ice:210};
 const basePackagingHot={hotCupSet:1,sticker:1};
 const r=(items,note='')=>({items,note});
 const v=(label,items,baselineCogs=null,note='')=>({label,recipe:r(items,note),baselineCogs});
 const DEFAULT_INGREDIENTS={
-  matcha:{name:'ผงมัทฉะยามิโตะ',unit:'g',qty:1000,low:150,unitCost:2.076},
-  water:{name:'น้ำดื่ม Crystal',unit:'g',qty:20000,low:3000,unitCost:0.0075},
-  milk:{name:'นมสดพาสเจอร์ไรซ์ Meiji',unit:'g',qty:6000,low:1000,unitCost:0.0525},
-  syrup:{name:'ไซรัปมิตรผล',unit:'g',qty:1500,low:250,unitCost:0.04625},
-  condensed:{name:'นมข้นหวาน Carnation',unit:'g',qty:1500,low:250,unitCost:0.0645},
-  evaporated:{name:'นมข้นจืด Carnation Extra',unit:'g',qty:1500,low:250,unitCost:0.099},
+  matcha:{name:'Yamito Matcha',unit:'g',qty:250,low:50,unitCost:2.076,costSource:'519 บาท / 250 g',costCheckedAt:'2026-09-28'},
+  water:{name:'น้ำดื่ม',unit:'ml',qty:7200,low:1500,unitCost:0.0075,costSource:'54 บาท / 7200 ml',costCheckedAt:'2026-09-28'},
+  milk:{name:'นม Meiji',unit:'ml',qty:2000,low:500,unitCost:0.0525,costSource:'105 บาท / 2000 ml',costCheckedAt:'2026-09-28'},
+  syrup:{name:'Mitr Phol Syrup',unit:'ml',qty:800,low:200,unitCost:0.04625,costSource:'37 บาท / 800 ml',costCheckedAt:'2026-09-28'},
+  condensed:{name:'นมข้นหวาน',unit:'g',qty:2000,low:400,unitCost:0.0645,costSource:'129 บาท / 2000 g',costCheckedAt:'2026-09-28'},
+  evaporated:{name:'นมข้นจืด',unit:'ml',qty:1000,low:250,unitCost:0.099,costSource:'99 บาท / 1000 ml',costCheckedAt:'2026-09-28'},
   honey:{name:'น้ำผึ้ง',unit:'g',qty:800,low:150,unitCost:0},
   lime:{name:'น้ำมะนาว',unit:'g',qty:500,low:100,unitCost:0},
-  coconutSyrup:{name:'ไซรัปมะพร้าว Nature Taste',unit:'g',qty:0,low:100,unitCost:0.2266666667},
+  coconutSyrup:{name:'SENORITA Coconut Syrup',unit:'ml',qty:750,low:150,unitCost:0.2653,costSource:'199 บาท / 750 ml',costCheckedAt:'2026-09-28'},
+  orangeMix:{name:'Sunquick Orange Mix',unit:'ml',qty:1000,low:200,unitCost:0.225,costSource:'225 บาท / 1000 ml',costCheckedAt:'2026-09-28'},
   strawberrySyrup:{name:'ไซรัปสตรอว์เบอร์รี่ Nature Taste',unit:'g',qty:0,low:100,unitCost:0.2380952381},
   redSyrup:{name:'น้ำแดง/ไซรัปแดง',unit:'g',qty:800,low:150,unitCost:0},
   lycheeSyrup:{name:'ไซรัปลิ้นจี่',unit:'g',qty:0,low:100,unitCost:0},
@@ -599,7 +601,7 @@ const DEFAULT_INGREDIENTS={
   lid16:{name:'ฝาแก้วเย็น',unit:'pcs',qty:100,low:30,unitCost:0.5},
   straw:{name:'หลอด',unit:'pcs',qty:100,low:30,unitCost:0.2},
   sticker:{name:'สติกเกอร์โลโก้ FIELD',unit:'pcs',qty:100,low:30,unitCost:0.5},
-  ice:{name:'น้ำแข็ง',unit:'serve',qty:100,low:20,unitCost:1},
+  ice:{name:'น้ำแข็งหลอดเล็ก',unit:'g',qty:20000,low:4000,unitCost:0.0025,costSource:'50 บาท / 20 kg',costCheckedAt:'2026-09-28'},
   hotCupSet:{name:'แก้วร้อน 8 oz + ฝา',unit:'set',qty:30,low:10,unitCost:2},
   cupHot:{name:'แก้วร้อน 8 oz (ข้อมูลเดิม)',unit:'pcs',qty:30,low:10,unitCost:0},
   lidHot:{name:'ฝาแก้วร้อน (ข้อมูลเดิม)',unit:'pcs',qty:30,low:10,unitCost:0}
@@ -607,12 +609,13 @@ const DEFAULT_INGREDIENTS={
 function iced(items){return Object.assign({},items,basePackagingIced)}
 function hot(items){return Object.assign({},items,basePackagingHot)}
 const DEFAULT_MENU=[
- {id:'pure-matcha',category:'MATCHA',name:'Pure Matcha Iced',price:45,enabled:true,variants:[v('ไม่หวาน',iced({matcha:4,water:170}),null,'ชั่งมัทฉะ 4g → ตีกับน้ำร้อน 40g (70–75°C) → เติมน้ำเย็น 130g → เทใส่น้ำแข็ง · ไม่เติมไซรัป')]},
- {id:'matcha-latte',category:'MATCHA',name:'Matcha Latte',price:55,enabled:true,variants:[v('หวานปกติ',iced({matcha:5,water:40,milk:110,syrup:15}),null,'สูตรที่ชิมผ่าน: ตีกับน้ำร้อน 40g (70°C) → ผสมนม 110g กับไซรัป 15g → ใส่น้ำแข็ง → ราดมัทฉะ'),v('หวานน้อย',iced({matcha:5,water:40,milk:115,syrup:10}),null,'สูตรหวานน้อยจาก Master Menu ก่อนหน้า · รอชิมยืนยัน: ไซรัป 10g นม 115g'),v('ไม่หวาน',iced({matcha:5,water:40,milk:125}),null,'ไม่เติมไซรัป; นมยังมีความหวานตามธรรมชาติ · สูตรจาก Master Menu ก่อนหน้า รอชิมยืนยัน')]},
- {id:'matcha-signature',category:'MATCHA',name:'Matcha Signature',price:55,enabled:true,variants:[v('หวานปกติ',iced({matcha:5,water:40,condensed:30,evaporated:30,milk:70}),null,'ตีกับน้ำอุ่น 40g → ผสมนมสดและนมข้น → ใส่น้ำแข็ง → ราดมัทฉะ'),v('หวานน้อย',iced({matcha:5,water:40,condensed:15,evaporated:30,milk:70}),null,'ตีกับน้ำอุ่น 40g → ผสมนมสดและนมข้น → ใส่น้ำแข็ง → ราดมัทฉะ'),v('ไม่หวาน',iced({matcha:5,water:40,evaporated:15,milk:110}),null,'0% = ไม่ใส่นมข้นหวาน แต่ยังมีความหวานตามธรรมชาติจากนม · ตีกับน้ำอุ่น 40g → ใส่น้ำแข็ง → ราดมัทฉะ')]},
- {id:'coconut-matcha',category:'MATCHA',name:'Coconut Matcha',price:55,enabled:false,variants:[v('หวานปกติ',iced({matcha:5,water:145,coconutSyrup:20}),21.1341666667,'refreshing / ไม่มีนม'),v('หวานน้อย',iced({matcha:5,water:155,coconutSyrup:10}),null)]},
- {id:'strawberry-matcha',category:'MATCHA',name:'Strawberry Matcha',price:60,enabled:false,variants:[v('หวานปกติ',iced({matcha:5,water:40,milk:105,strawberrySyrup:20}),26.1448809524,'R&D 15 vs 20g'),v('หวานน้อย',iced({matcha:5,water:40,milk:115,strawberrySyrup:10}),null)]},
- {id:'honey-matcha',category:'ARCHIVED',name:'Honey Matcha (ตัดออก)',price:0,enabled:false,variants:[v('หวานปกติ',iced({matcha:5,water:40,milk:105,honey:20})),v('หวานน้อย',iced({matcha:5,water:40,milk:115,honey:10})),v('ไม่หวาน',iced({matcha:5,water:40,milk:125,honey:0}))]},
+ {id:'pure-matcha',category:'MATCHA',name:'Pure Matcha Iced',price:45,enabled:true,status:'ACTIVE / APPROVED',recipeVersion:'APPROVED-2026-09-28',variants:[v('ไม่หวาน',iced({matcha:4,water:170}),null,'ชั่ง Matcha 4g → ตีกับน้ำอุ่น 40g → เติมน้ำเย็น 130g → เทใส่น้ำแข็งเต็มแก้ว')]},
+ {id:'matcha-latte',category:'MATCHA',name:'Matcha Latte',price:55,enabled:true,status:'ACTIVE / APPROVED',recipeVersion:'APPROVED-2026-09-28',variants:[v('หวานปกติ',iced({matcha:5,water:40,milk:110,syrup:15}),null,'ตี Matcha 5g กับน้ำอุ่น 40g → ผสมนม Meiji 110g กับ Syrup 15g → ใส่น้ำแข็งเต็มแก้ว → ราดมัทฉะ')]},
+ {id:'matcha-signature',category:'MATCHA',name:'FIELD Matcha Signature',price:55,enabled:true,status:'ACTIVE / APPROVED',recipeVersion:'APPROVED-2026-09-28',variants:[v('100%',iced({matcha:5,water:40,condensed:30,evaporated:30,milk:70}),null,'ตี Matcha 5g กับน้ำอุ่น 40g → ผสมนมข้นหวาน 30g นมข้นจืด 30g และนมสด 70g → ใส่น้ำแข็งเต็มแก้ว → ราดมัทฉะ'),v('50%',iced({matcha:5,water:40,condensed:15,evaporated:30,milk:70}),null,'ตี Matcha 5g กับน้ำอุ่น 40g → ผสมนมข้นหวาน 15g นมข้นจืด 30g และนมสด 70g → ใส่น้ำแข็งเต็มแก้ว → ราดมัทฉะ'),v('0%',iced({matcha:5,water:40,milk:110,evaporated:15}),null,'ตี Matcha 5g กับน้ำอุ่น 40g → ผสมนมสด 110g และนมข้นจืด 15g → ใส่น้ำแข็งเต็มแก้ว → ราดมัทฉะ')]},
+ {id:'coconut-matcha',category:'MATCHA',name:'FIELD Coconut Matcha',price:60,enabled:true,status:'ACTIVE / APPROVED',recipeVersion:'APPROVED-2026-09-28',variants:[v('สูตร APPROVED',iced({matcha:5,water:145,coconutSyrup:20}),null,'ตี Matcha 5g กับน้ำอุ่น 40g → ผสม SENORITA Coconut Syrup 20g กับน้ำเย็น 105g → ใส่น้ำแข็งเต็มแก้ว → ราดมัทฉะ')]},
+ {id:'field-orange',category:'FRUIT',name:'FIELD Orange',price:45,enabled:true,status:'ACTIVE / APPROVED',recipeVersion:'APPROVED-2026-09-28',variants:[v('สูตร APPROVED',iced({orangeMix:35,water:135}),null,'ผสม Sunquick Orange Mix 35g กับน้ำเย็น 135g → คนให้เข้ากัน → เทใส่น้ำแข็งเต็มแก้ว')]},
+ {id:'strawberry-matcha',category:'MATCHA',name:'Strawberry Matcha (HOLD)',price:60,enabled:false,status:'HOLD',recipeVersion:'HOLD',variants:[v('หวานปกติ',iced({matcha:5,water:40,milk:105,strawberrySyrup:20}),26.1448809524,'สูตรทดลองเดิม · ห้ามเปิดขายจนกว่าจะ APPROVED'),v('หวานน้อย',iced({matcha:5,water:40,milk:115,strawberrySyrup:10}),null,'สูตรทดลองเดิม · ห้ามเปิดขายจนกว่าจะ APPROVED')]},
+ {id:'honey-matcha',category:'ARCHIVED',name:'Honey Matcha (CUT)',price:0,enabled:false,status:'CUT / INACTIVE',recipeVersion:'ARCHIVED',variants:[v('หวานปกติ',iced({matcha:5,water:40,milk:105,honey:20})),v('หวานน้อย',iced({matcha:5,water:40,milk:115,honey:10})),v('ไม่หวาน',iced({matcha:5,water:40,milk:125,honey:0}))]},
  {id:'cold-whisk',category:'MATCHA',name:'Cold Whisk',price:60,enabled:false,variants:[v('หวานปกติ',iced({matcha:5,milk:150,syrup:15}),21.405,'ตีเย็นสดทุกแก้ว'),v('หวานน้อย',iced({matcha:5,milk:155,syrup:10})),v('ไม่หวาน',iced({matcha:5,milk:165,syrup:0}))]},
  {id:'pure-hot-matcha',category:'HOT MATCHA',name:'Pure Hot Matcha',price:40,enabled:false,variants:[v('ไม่หวาน',hot({matcha:3,water:150}),9.853,'เมนูร้อนไม่บังคับ 170g')]},
  {id:'hot-matcha-latte',category:'HOT MATCHA',name:'Hot Matcha Latte',price:45,enabled:false,variants:[v('หวานปกติ',hot({matcha:4,water:35,milk:120,syrup:10}),17.316),v('ไม่หวาน',hot({matcha:4,water:35,milk:130,syrup:0}))]},
@@ -631,8 +634,14 @@ const DEFAULT_MENU=[
 ];
 const DEFAULT_SETTINGS={shopName:'FIELD',promptpayId:'',pagerCount:10,receiptFooter:'Simple · Fresh · Everyday',lineOaUrl:'',pointsSpend:0,forecastDays:7};
 function deepClone(x){return JSON.parse(JSON.stringify(x))}
-function mergeMenuDefaults(savedMenu=[]){
+function mergeMenuDefaults(savedMenu=[],applyApprovedRelease=false){
   const savedMap=new Map((Array.isArray(savedMenu)?savedMenu:[]).map(m=>[m.id,m]));
+  const approved=new Map([
+    ['pure-matcha',{price:45,enabled:true}],['matcha-latte',{price:55,enabled:true}],
+    ['matcha-signature',{price:55,enabled:true}],['coconut-matcha',{price:60,enabled:true}],
+    ['field-orange',{price:45,enabled:true}],['strawberry-matcha',{price:60,enabled:false}],
+    ['honey-matcha',{price:0,enabled:false}]
+  ]);
   const merged=DEFAULT_MENU.map(d=>{
     const s=savedMap.get(d.id);
     if(!s)return deepClone(d);
@@ -645,16 +654,17 @@ function mergeMenuDefaults(savedMenu=[]){
       price:Number(s.price)>0?Number(s.price):Number(d.price)||0,
       enabled:typeof s.enabled==='boolean'?s.enabled:d.enabled
     });
+    if(applyApprovedRelease&&approved.has(d.id))Object.assign(out,approved.get(d.id));
     if(s.imageData)out.imageData=s.imageData;
     return out;
   });
   savedMap.forEach(m=>merged.push(m)); // เมนูที่ผู้ใช้สร้างเองยังอยู่
   return merged;
 }
-function mergeIngredientDefaults(saved={}){
+function mergeIngredientDefaults(saved={},applyApprovedRelease=false){
   const out=deepClone(DEFAULT_INGREDIENTS);
   const src=saved&&typeof saved==='object'?saved:{};
-  const formerNames={thaiTea:['ชาไทยเข้มข้นพร้อมใช้','น้ำชาไทยรินชาชงเข้มข้น (รออัตราชง)'],greenTea:['ชาเขียวเข้มข้นพร้อมใช้'],coffeeBeans:['เมล็ดกาแฟ'],cocoa:['ผงโกโก้']};
+  const formerNames={thaiTea:['ชาไทยเข้มข้นพร้อมใช้','น้ำชาไทยรินชาชงเข้มข้น (รออัตราชง)'],greenTea:['ชาเขียวเข้มข้นพร้อมใช้'],coffeeBeans:['เมล็ดกาแฟ'],cocoa:['ผงโกโก้'],coconutSyrup:['ไซรัปมะพร้าว Nature Taste']};
   Object.entries(src).forEach(([k,v])=>{
     if(out[k]){
       const base=out[k],savedCost=Number(v?.unitCost);
@@ -664,38 +674,54 @@ function mergeIngredientDefaults(saved={}){
       out[k]=deepClone(v);
     }
   });
+  if(applyApprovedRelease){
+    for(const key of ['matcha','water','milk','syrup','condensed','evaporated','coconutSyrup','orangeMix','cup16','lid16','straw','sticker','ice']){
+      const base=DEFAULT_INGREDIENTS[key],previous=src[key];
+      out[key]=Object.assign({},out[key],base,{qty:previous&&previous.unit===base.unit&&Number(previous.qty)>=0?Number(previous.qty):base.qty});
+    }
+  }
   // ย้ายจำนวนแก้วร้อนเดิมมาใช้ stock แบบชุด เมื่อยังไม่เคยมี hotCupSet
   if(!src.hotCupSet && src.cupHot && Number(src.cupHot.qty)>=0)out.hotCupSet.qty=Number(src.cupHot.qty);
   return out;
 }
-function defaultState(){return {version:4.3,dataVersion:FIELD_DATA_VERSION,updatedAt:0,menu:deepClone(DEFAULT_MENU),ingredients:deepClone(DEFAULT_INGREDIENTS),cart:[],sales:[],orders:[],expenses:[],closes:[],openCash:{},customers:[],costLog:[],settings:deepClone(DEFAULT_SETTINGS),billSeq:{}}}
+const ARCHIVED_RECIPES=[{menu_id:'coconut-matcha',name:'Coconut Matcha สูตรเก่า',status:'ARCHIVED',recipe_version:'PRE-APPROVED',ingredients:{matcha:5,water:145,coconutSyrup:20},note:'สูตร Nature Taste เดิม เก็บเพื่ออ้างอิงเท่านั้นและไม่ใช้ขาย'}];
+function costParts(variant,ingredients){let recipeCost=0,packagingCost=0,iceCost=0,missing=[];for(const [key,qty] of Object.entries(variant?.recipe?.items||{})){if(Number(qty)<=0)continue;const unit=Number(ingredients[key]?.unitCost);if(!Number.isFinite(unit)||unit<=0){missing.push(key);continue}const line=Number(qty)*unit;if(key==='ice')iceCost+=line;else if(PACKAGING_KEYS.has(key))packagingCost+=line;else recipeCost+=line}return {recipeCost,packagingCost,iceCost,totalCost:recipeCost+packagingCost+iceCost,missing}}
+function buildMenuCostRecords(menu,ingredients){const rows=[];for(const m of menu)for(const variant of m.variants||[]){const parts=costParts(variant,ingredients),items=Object.entries(variant.recipe?.items||{}).filter(([,qty])=>Number(qty)>0);for(const [ingredientId,qty] of items)rows.push({menu_id:m.id,category:m.category,name:m.name,price:Number(m.price)||0,active:!!m.enabled,recipe_version:m.recipeVersion||'LEGACY',ingredient_id:ingredientId,qty_g:Number(qty),unit_cost:Number(ingredients[ingredientId]?.unitCost)||0,recipe_cost:parts.recipeCost,packaging_cost:parts.packagingCost,ice_cost:parts.iceCost,estimated_variable_cost:ESTIMATED_VARIABLE_COST,total_cost:parts.totalCost,sweetness_modifier:variant.label,preparation_steps:variant.recipe?.note||'',cost_complete:parts.missing.length===0})}return rows}
+function defaultState(){const menu=deepClone(DEFAULT_MENU),ingredients=deepClone(DEFAULT_INGREDIENTS);return {version:4.3,dataVersion:FIELD_DATA_VERSION,updatedAt:0,menu,ingredients,menuCostRecords:buildMenuCostRecords(menu,ingredients),archivedRecipes:deepClone(ARCHIVED_RECIPES),estimatedVariableCost:ESTIMATED_VARIABLE_COST,cart:[],sales:[],orders:[],expenses:[],closes:[],openCash:{},customers:[],costLog:[],settings:deepClone(DEFAULT_SETTINGS),billSeq:{}}}
 function enforceFieldMenuRules(menu=[]){
   return menu.map(m=>{
     const d=DEFAULT_MENU.find(x=>x.id===m.id);
     if(!d)return m;
-    return Object.assign({},m,{name:d.name,category:d.category,variants:deepClone(d.variants),enabled:m.id==='honey-matcha'?false:m.enabled});
+    return Object.assign({},m,{name:d.name,category:d.category,status:d.status||m.status,recipeVersion:d.recipeVersion||m.recipeVersion,variants:deepClone(d.variants),enabled:['honey-matcha','strawberry-matcha'].includes(m.id)?false:m.enabled});
   });
 }
 function migrateCartRules(cart=[]){
-  const oldLabels={'สูตรที่ผ่าน':'หวานปกติ','100%':'หวานปกติ','50%':'หวานน้อย','0%':'ไม่หวาน','ปกติ':'หวานปกติ'};
+  const oldLabels={'สูตรที่ผ่าน':'หวานปกติ','ปกติ':'หวานปกติ'};
   const rows=(Array.isArray(cart)?cart:[]).map(c=>{
     const master=DEFAULT_MENU.find(m=>m.id===c.id);
-    const mapped=oldLabels[c.variant]||c.variant;
+    const signatureLabels={'หวานปกติ':'100%','หวานน้อย':'50%','ไม่หวาน':'0%'};
+    const mapped=c.id==='matcha-signature'?(signatureLabels[c.variant]||c.variant):(oldLabels[c.variant]||c.variant);
     const label=master?.variants.some(v=>v.label===mapped)?mapped:c.variant;
     return label===c.variant?c:Object.assign({},c,{variant:label,key:c.id+'|'+label});
   }).filter(c=>{const master=DEFAULT_MENU.find(m=>m.id===c.id);return !master||master.enabled&&master.variants.some(v=>v.label===c.variant)});
   const merged=[];for(const item of rows){const prior=merged.find(x=>x.key===item.key);if(prior)prior.qty=Number(prior.qty)+Number(item.qty);else merged.push(item)}return merged;
 }
 function normalizeState(s){
+  const applyApprovedRelease=!s||s.dataVersion!==FIELD_DATA_VERSION;
+  const menu=enforceFieldMenuRules(mergeMenuDefaults(s?.menu||[],applyApprovedRelease));
+  const ingredients=mergeIngredientDefaults(s?.ingredients||{},applyApprovedRelease);
   return Object.assign(defaultState(),s||{},{
     version:4.3,
     dataVersion:FIELD_DATA_VERSION,
-    menu:enforceFieldMenuRules(mergeMenuDefaults(s?.menu||[])),
+    menu,
     cart:migrateCartRules(s?.cart||[]),
     customers:Array.isArray(s?.customers)?s.customers:[],
     costLog:Array.isArray(s?.costLog)?s.costLog:[],
     settings:Object.assign(deepClone(DEFAULT_SETTINGS),s?.settings||{}),
-    ingredients:mergeIngredientDefaults(s?.ingredients||{})
+    ingredients,
+    menuCostRecords:buildMenuCostRecords(menu,ingredients),
+    archivedRecipes:deepClone(ARCHIVED_RECIPES),
+    estimatedVariableCost:ESTIMATED_VARIABLE_COST
   });
 }
 function loadState(){try{const raw=localStorage.getItem(APP_KEY);if(!raw)return defaultState();return normalizeState(JSON.parse(raw))}catch(e){return defaultState()}}
@@ -728,7 +754,7 @@ function deleteFieldDb(){return new Promise(resolve=>{try{const req=indexedDB.de
 function updateDbUi(ok=dbReady){const pill=document.getElementById('dbPill'),status=document.getElementById('dbStatusText'),meta=document.getElementById('dbMeta');if(pill){pill.textContent=ok?'ฐานข้อมูล: IndexedDB พร้อมใช้':'ฐานข้อมูล: LocalStorage สำรอง';pill.classList.toggle('ready',!!ok)}if(status)status.textContent=ok?'ข้อมูลร้านถูกเก็บทั้ง IndexedDB และ LocalStorage สำรองบนอุปกรณ์นี้':'IndexedDB ใช้ไม่ได้ในเบราว์เซอร์นี้ ระบบยังเก็บด้วย LocalStorage';if(meta){const active=state.sales.filter(s=>s.status==='paid').length;meta.innerHTML=`<div><span>บิล</span><b>${active.toLocaleString('th-TH')}</b></div><div><span>ค่าใช้จ่าย</span><b>${state.expenses.length.toLocaleString('th-TH')}</b></div><div><span>เมนู</span><b>${state.menu.length.toLocaleString('th-TH')}</b></div><div><span>Master Data</span><b>${esc(state.dataVersion||FIELD_DATA_VERSION)}</b></div><div><span>ซิงก์ล่าสุด</span><b>${dbLastSync?nowTime(dbLastSync):'รอซิงก์'}</b></div>`}}
 let dbSyncTimer=null,dbWrite=Promise.resolve(),bootEditCount=0;
 function scheduleDbSync(){clearTimeout(dbSyncTimer);dbSyncTimer=setTimeout(()=>{dbWrite=dbWrite.then(()=>dbHydrationPromise).then(()=>persistDatabase()).catch(e=>console.warn(e))},180)}
-function saveState(){bootEditCount++;state.updatedAt=Date.now();try{localStorage.setItem(APP_KEY,JSON.stringify(state))}catch(e){console.warn('LocalStorage backup failed',e)}scheduleDbSync();renderActionAlerts()}
+function saveState(){bootEditCount++;state.updatedAt=Date.now();state.menuCostRecords=buildMenuCostRecords(state.menu,state.ingredients);state.estimatedVariableCost=ESTIMATED_VARIABLE_COST;try{localStorage.setItem(APP_KEY,JSON.stringify(state))}catch(e){console.warn('LocalStorage backup failed',e)}scheduleDbSync();renderActionAlerts()}
 const bootLocalUpdatedAt=Number(state.updatedAt)||0;
 const dbHydrationPromise=dbPromise.then(async db=>{if(!db){updateDbUi(false);return}try{
   const fromDb=await readDatabaseState();
@@ -785,18 +811,11 @@ function openVariant(id){if(!requireView('order'))return;const m=state.menu.find
 function selectVariant(i){selectedVariant=selectedProduct.variants[i];document.querySelectorAll('#variantButtons .variant-btn').forEach((b,j)=>b.style.background=j===i?'var(--matcha-lt)':'#fff');document.getElementById('variantRecipe').innerHTML=orderVariantHtml(selectedVariant);document.getElementById('addVariantBtn').disabled=!recipeAvailable(selectedVariant.recipe)}
 function orderVariantHtml(variant){return `<div class="variant-choice"><div><span>ตัวเลือก</span><br><b>${esc(variant.label)}</b></div><div style="text-align:right"><span>ราคาขาย</span><br><b>${money(selectedProduct?.price||0)}</b></div></div>`}
 function recipeCostInfo(variant){
-  let raw=0,pack=0,missing=[];
-  Object.entries(variant.recipe.items||{}).forEach(([k,q])=>{
-    if(Number(q)<=0)return;
-    const ing=state.ingredients[k],cost=Number(ing?.unitCost);
-    if(!ing||!Number.isFinite(cost)||cost<=0){missing.push(k);return}
-    const line=Number(q)*cost;
-    if(PACKAGING_KEYS.has(k))pack+=line;else raw+=line;
-  });
-  const waste=raw*0.05,complete=missing.length===0&&(raw+pack)>0;
-  if(complete)return {cost:raw+waste+pack,raw,waste,pack,missing,complete:true,source:'วัตถุดิบ + Waste 5% + บรรจุภัณฑ์'};
+  const parts=costParts(variant,state.ingredients),raw=parts.recipeCost,pack=parts.packagingCost,ice=parts.iceCost,missing=parts.missing;
+  const complete=missing.length===0&&(raw+pack+ice)>0;
+  if(complete)return {cost:parts.totalCost,raw,pack,ice,estimatedVariableCost:ESTIMATED_VARIABLE_COST,missing,complete:true,source:'วัตถุดิบ + บรรจุภัณฑ์ + น้ำแข็ง (ไม่รวม estimated variable cost)'};
   const baseline=Number(variant.baselineCogs)||0;
-  return {cost:baseline>0?baseline:0,raw,waste,pack,missing,complete:false,baseline,source:baseline>0?'COGS อ้างอิงเดิม · ต้นทุนยังไม่ครบ':'ยังตั้งต้นทุนไม่ครบ: '+missing.map(k=>state.ingredients[k]?.name||k).join(', ')};
+  return {cost:baseline>0?baseline:0,raw,pack,ice,estimatedVariableCost:ESTIMATED_VARIABLE_COST,missing,complete:false,baseline,source:baseline>0?'COGS อ้างอิงเดิม · ต้นทุนยังไม่ครบ':'ยังตั้งต้นทุนไม่ครบ: '+missing.map(k=>state.ingredients[k]?.name||k).join(', ')};
 }
 function recipeHtml(variant){const rows=Object.entries(variant.recipe.items||{}).filter(([,q])=>Number(q)>0).map(([k,q])=>{const ing=state.ingredients[k];return `<div class="recipe-row"><span>${esc(ing?.name||k)}</span><b>${q} ${esc(ing?.unit||'')}</b></div>`}).join('');const ci=recipeCostInfo(variant);return `<div class="recipe"><div style="font-weight:800;margin-bottom:5px">สูตร ${esc(variant.label)}</div>${rows}${variant.recipe.note?`<div class="muted" style="margin-top:7px">${esc(variant.recipe.note)}</div>`:''}<div class="recipe-row" style="margin-top:6px"><span>ต้นทุน</span><b>${ci.cost?money(ci.cost):'—'}</b></div><div class="muted">${esc(ci.source)}</div></div>`}
 document.getElementById('addVariantBtn').onclick=()=>{if(!selectedProduct||!selectedVariant)return;const key=selectedProduct.id+'|'+selectedVariant.label;const existing=state.cart.find(x=>x.key===key);if(existing)existing.qty++;else state.cart.push({key,id:selectedProduct.id,name:selectedProduct.name,variant:selectedVariant.label,price:Number(selectedProduct.price),qty:1});const shortage=cartStockShortage();if(shortage){if(existing)existing.qty--;else state.cart.pop();alert('วัตถุดิบไม่พอ: '+shortage);return}saveState();hideModal('variantModal');renderCart()};
@@ -1133,7 +1152,7 @@ function queueLabel(o){const m=String(o.queueNo||o.billNo||'').match(/(?:^A|^FIE
 function activeQueue(){return state.orders.filter(o=>o.status!=='returned').sort((a,b)=>(Number(a.time)||0)-(Number(b.time)||0)||String(a.billNo||'').localeCompare(String(b.billNo||'')))}
 function fifoHead(){return activeQueue()[0]}
 function renderQueue(){const max=Number(state.settings.pagerCount)||10,pool=document.getElementById('pagerPool'),active=activeQueue();pool.innerHTML='';for(let i=1;i<=max;i++){const o=active.find(x=>x.pagerNo===i),d=document.createElement('div');d.className='pager'+(o?(o.status==='ready'?' ready':' busy'):'');d.textContent=i;d.title=o?'บัตร '+i+' · คิว '+queueLabel(o):'บัตร '+i+' ว่าง';pool.appendChild(d)}const stage=document.getElementById('stagingGrid');stage.innerHTML=Array.from({length:6},(_,i)=>{const o=active[i];if(!o)return `<div class="staging-slot empty"><b>—</b><small>ช่อง ${i+1} ว่าง</small></div>`;const done=queueItemProgress(o).reduce((n,x)=>n+x.readyQty,0),qty=o.items.reduce((n,x)=>n+Number(x.qty||0),0);return `<div class="staging-slot ${i===0?'next':''}"><b>${esc(queueLabel(o))}</b><small>${i===0?'คิวถัดไป · ':''}${o.status==='assigned'?'รอทำ':o.status==='ready'?'พร้อมส่ง':'กำลังทำ'} · ${done}/${qty} แก้ว</small></div>`}).join('');const list=document.getElementById('queueList');list.innerHTML='';active.forEach(o=>list.appendChild(queueCard(o)));if(!active.length)list.innerHTML='<div class="empty">ไม่มีคิวค้าง</div>';renderPrepPlan(active);const old=active.filter(o=>Date.now()-Number(o.time||Date.now())>=10*60*1000);document.getElementById('queueAlert').textContent=old.length?'⏱ คิวค้างเกิน 10 นาที '+old.map(o=>queueLabel(o)).join(', ')+' · ตรวจว่าไม่มีแก้วตกหล่น':'';updateQueueBadge()}
-function prepClass(x){const m=state.menu.find(v=>v.id===x.id||v.name===x.name),c=m?.category||'';if(c==='TEA')return [10,'ชา','ชงหรือชั่งน้ำชารอไว้ก่อน ประกอบแก้วใกล้ส่ง'];if(c==='COCOA')return [20,'โกโก้','ทำโกโก้เพสต์และฐานนมก่อน'];if(c==='MILK')return [30,'นม','ชั่งและผสมฐานนมก่อน'];if(c==='MATCHA'||c==='HOT MATCHA')return [40,'มัทฉะ','ชั่งฐานไว้ ตีมัทฉะใกล้เวลาประกอบแก้ว'];if(c==='COFFEE')return [50,'กาแฟ','เตรียมแก้วก่อน สกัดช็อตใกล้เวลาส่ง'];if(c==='SODA')return [60,'โซดา','ผสมไซรัปก่อน เติมโซดาและน้ำแข็งท้ายสุด'];return [45,'อื่น ๆ','เตรียมฐานก่อน ประกอบแก้วใกล้ส่ง']}
+function prepClass(x){const m=state.menu.find(v=>v.id===x.id||v.name===x.name),c=m?.category||'';if(c==='TEA')return [10,'ชา','ชงหรือชั่งน้ำชารอไว้ก่อน ประกอบแก้วใกล้ส่ง'];if(c==='COCOA')return [20,'โกโก้','ทำโกโก้เพสต์และฐานนมก่อน'];if(c==='MILK')return [30,'นม','ชั่งและผสมฐานนมก่อน'];if(c==='MATCHA'||c==='HOT MATCHA')return [40,'มัทฉะ','ชั่งฐานไว้ ตีมัทฉะใกล้เวลาประกอบแก้ว'];if(c==='COFFEE')return [50,'กาแฟ','เตรียมแก้วก่อน สกัดช็อตใกล้เวลาส่ง'];if(c==='FRUIT')return [55,'ผลไม้','ผสมหัวเชื้อกับน้ำเย็นก่อน แล้วเทใส่น้ำแข็ง'];if(c==='SODA')return [60,'โซดา','ผสมไซรัปก่อน เติมโซดาและน้ำแข็งท้ายสุด'];return [45,'อื่น ๆ','เตรียมฐานก่อน ประกอบแก้วใกล้ส่ง']}
 function orderPrepTasks(o){return queueItemProgress(o).map((x,i)=>({o,x,i,remaining:Math.max(0,Number(x.qty||0)-Number(x.readyQty||0)),group:prepClass(x)})).filter(t=>t.remaining>0).sort((a,b)=>a.group[0]-b.group[0]||a.x.name.localeCompare(b.x.name,'th')||a.x.variant.localeCompare(b.x.variant,'th'))}
 function firstPrepIndex(o){return orderPrepTasks(o)[0]?.i ?? -1}
 function selectPrepItem(orderId,itemIndex){if(!requireView('queue'))return false;const o=state.orders.find(v=>v.id===orderId),x=o?.items?.[itemIndex];if(!o||!x||fifoHead()!==o||Number(x.readyQty||0)>=Number(x.qty||0))return false;const wasSelected=!!x.prepSelected;state.orders.forEach(order=>(order.items||[]).forEach(item=>{item.prepSelected=false}));x.prepSelected=!wasSelected;saveState();renderQueue();return true}
@@ -1275,7 +1294,7 @@ function renderMenuCostDetail(){
     return `<tr><td>${esc(ing?.name||key)} <small class="muted">${PACKAGING_KEYS.has(key)?'บรรจุภัณฑ์':'วัตถุดิบ'}</small></td><td class="num">${Number(q)} ${esc(ing?.unit||'')}</td><td class="num">${known?unit.toLocaleString('th-TH',{maximumFractionDigits:6}):'ยังไม่มีราคา'}</td><td class="num">${known?money(Number(q)*unit):'—'}</td><td class="source-note">${esc(source.label)}${ref.length?`<br><small>ลิงก์ตรวจราคาเพิ่มเติม: ${ref.map(x=>`<a href="${esc(x.url)}" target="_blank" rel="noopener noreferrer">${esc(x.shop)}</a>`).join(', ')} (ยังไม่ใช่ราคาที่ใช้คำนวณ)</small>`:''}</td></tr>`
   }).join('');
   const total=ci.complete?ci.cost:null,withExpenses=total!==null&&allocation.perCup!==null?total+allocation.perCup:null,target=total!==null?Math.ceil(total/.4/5)*5:null;
-  el.innerHTML=`<h3>🧾 ${esc(m.name)} · ${esc(vr.label)}</h3><div class="muted">${m.enabled?'เปิดขาย':'พักขาย'} · ราคาขาย ${price?money(price):'ยังไม่ตั้งราคา'} · สูตรปัจจุบันในเครื่อง</div><div class="table-wrap"><table><thead><tr><th>รายการ</th><th>ใช้ต่อแก้ว</th><th>บาท/หน่วย</th><th>บาท/แก้ว</th><th>ที่มาของราคาที่ใช้</th></tr></thead><tbody>${rows}</tbody></table></div><div class="summary-row"><span>วัตถุดิบที่มีราคา</span><b>${money(ci.raw)}</b></div><div class="summary-row"><span>Waste 5% ของวัตถุดิบ</span><b>${money(ci.waste)}</b></div><div class="summary-row"><span>บรรจุภัณฑ์</span><b>${money(ci.pack)}</b></div><div class="summary-row total"><span>ต้นทุนสูตรต่อแก้ว</span><b>${total===null?'ยังไม่ครบ':money(total)}</b></div>${ci.missing.length?`<div class="notice">⚠ ขาดราคา ${ci.missing.map(k=>esc(state.ingredients[k]?.name||k)).join(', ')}${ci.baseline?' · มี COGS อ้างอิงเดิม '+money(ci.baseline)+' แต่ไม่ใช้คำนวณกำไร':''}</div>`:''}<div class="summary-row"><span>ค่าใช้จ่ายร้านเฉลี่ยต่อแก้วเดือนนี้</span><b>${allocation.perCup===null?'ยังไม่มีข้อมูล':money(allocation.perCup)}</b></div><div class="summary-row total"><span>ต้นทุนรวมที่คำนวณได้</span><b>${withExpenses===null?'รอข้อมูลต้นทุน/ค่าใช้จ่าย':money(withExpenses)}</b></div>${target!==null?`<div class="source-note">ถ้าตั้งเป้าต้นทุนสูตรไม่เกิน 40% ของราคาขาย ราคาขั้นต่ำปัดทีละ 5 บาท = ${money(target)} (เกณฑ์เดิมของร้าน ยังไม่รวมค่าใช้จ่ายร้าน; ไม่เปลี่ยนราคาขายให้อัตโนมัติ)</div>`:''}<div class="source-note">ต้นทุนสูตรนี้ใช้ราคาวัตถุดิบปัจจุบัน บิลย้อนหลังเก็บต้นทุน ณ วันขายและไม่ถูกแก้ไข</div>`;
+  el.innerHTML=`<h3>🧾 ${esc(m.name)} · ${esc(vr.label)}</h3><div class="muted">${m.enabled?'เปิดขาย':'พักขาย'} · ราคาขาย ${price?money(price):'ยังไม่ตั้งราคา'} · สูตรปัจจุบันในเครื่อง</div><div class="table-wrap"><table><thead><tr><th>รายการ</th><th>ใช้ต่อแก้ว</th><th>บาท/หน่วย</th><th>บาท/แก้ว</th><th>ที่มาของราคาที่ใช้</th></tr></thead><tbody>${rows}</tbody></table></div><div class="summary-row"><span>วัตถุดิบ</span><b>${money(ci.raw)}</b></div><div class="summary-row"><span>บรรจุภัณฑ์</span><b>${money(ci.pack)}</b></div><div class="summary-row"><span>น้ำแข็ง 210g (provisional)</span><b>${money(ci.ice)}</b></div><div class="summary-row total"><span>Actual COGS ต่อแก้ว</span><b>${total===null?'ยังไม่ครบ':money(total)}</b></div><div class="summary-row"><span>Estimated variable cost (ไม่รวมใน COGS)</span><b>${money(ci.estimatedVariableCost)}</b></div>${ci.missing.length?`<div class="notice">⚠ ขาดราคา ${ci.missing.map(k=>esc(state.ingredients[k]?.name||k)).join(', ')}${ci.baseline?' · มี COGS อ้างอิงเดิม '+money(ci.baseline)+' แต่ไม่ใช้คำนวณกำไร':''}</div>`:''}<div class="summary-row"><span>ค่าใช้จ่ายร้านเฉลี่ยต่อแก้วเดือนนี้</span><b>${allocation.perCup===null?'ยังไม่มีข้อมูล':money(allocation.perCup)}</b></div><div class="summary-row total"><span>Actual COGS + ค่าใช้จ่ายร้านที่บันทึก</span><b>${withExpenses===null?'รอข้อมูลต้นทุน/ค่าใช้จ่าย':money(withExpenses)}</b></div>${target!==null?`<div class="source-note">ถ้าตั้งเป้า Actual COGS ไม่เกิน 40% ของราคาขาย ราคาขั้นต่ำปัดทีละ 5 บาท = ${money(target)} (ไม่รวม estimated variable cost และค่าใช้จ่ายร้าน; ไม่เปลี่ยนราคาขายอัตโนมัติ)</div>`:''}<div class="source-note">ยอดขายเดิมไม่ถูกคำนวณย้อนหลัง บิลแต่ละใบเก็บต้นทุน ณ วันขาย</div>`;
 }
 function renderMenuCosts(){const body=document.getElementById('menuCostBody');if(!body)return;renderCostDashboard();renderCostAllocation();const rows=[];state.menu.forEach(m=>m.variants.forEach(vr=>{const info=recipeCostInfo(vr),cost=Number(info.cost)||0,price=Number(m.price)||0,complete=info.complete,gross=price-cost,margin=price>0?(gross/price*100):0;rows.push(`<tr><td>${esc(CAT_LABEL[m.category]||m.category)}</td><td>${esc(m.name)}</td><td>${esc(vr.label)}</td><td class="num">${price>0?money(price):'—'}</td><td class="num">${complete?money(cost):'<span class="cost-status pending">ยังไม่ครบ</span>'}</td><td class="num ${gross>=0?'cost-good':'cost-warn'}">${price>0&&complete?money(gross):'—'}</td><td class="num">${price>0&&complete?margin.toFixed(1)+'%':'—'}</td><td><button type="button" class="btn ghost sm cost-breakdown-button" data-cost-id="${esc(m.id)}" data-cost-variant="${esc(vr.label)}">แจกแจง</button></td></tr>`)}));body.innerHTML=rows.length?rows.join(''):'<tr><td colspan="8" class="empty">ยังไม่มีข้อมูลต้นทุน</td></tr>';body.querySelectorAll('[data-cost-id]').forEach(btn=>btn.onclick=()=>{selectedCostDetail={id:btn.dataset.costId,variant:btn.dataset.costVariant};renderMenuCostDetail();document.getElementById('menuCostDetail').scrollIntoView({behavior:'smooth',block:'start'})});renderMenuCostDetail()}
 
@@ -1367,6 +1386,7 @@ function startAuth(){if(authData?.corrupt){document.getElementById('authTitle').
 document.getElementById('reportDate').value=isoDate();renderCategories();renderMenuGrid();renderCart();renderQueue();updateQueueBadge();renderActionAlerts();updateDbUi();loadPosterPhotos();startAuth();
 setInterval(()=>{if(document.getElementById('v-queue').classList.contains('active'))renderQueue()},60000);
 </script>
+<script src="/fast-ui.js" defer></script>
 <script src="/online.js" defer></script>
 </body>
 </html>
