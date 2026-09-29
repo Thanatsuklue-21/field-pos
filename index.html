@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#211E19">
-<title>FIELD CAFÉ POS v5.0 · Master Clean</title>
+<title>FIELD CAFÉ POS v5.1 · Media & Bell Repair</title>
 <style>
 :root{
  --matcha:#5C7A3D;--matcha-dk:#3F5729;--matcha-lt:#DDE8CF;
@@ -266,6 +266,14 @@ body.auth-locked>header,body.auth-locked>nav,body.auth-locked>main{visibility:hi
 }
 </style>
 
+
+<style id="field-v51-media-repair">
+.product-media{background:#f3efe3!important;display:flex!important;align-items:center!important;justify-content:center!important}
+.product-media img{display:block!important;width:100%!important;height:100%!important;object-fit:contain!important;opacity:1!important;visibility:visible!important}
+.variant-thumb{display:block!important;width:100%!important;height:82px!important;object-fit:contain!important;background:#f3efe3;border-radius:10px;margin-bottom:5px}
+#testBellBtn{border:2px solid var(--matcha)!important}
+</style>
+
 </head>
 <body class="auth-locked">
 <div id="authGate" class="auth-gate" role="dialog" aria-modal="true" aria-labelledby="authTitle">
@@ -277,7 +285,7 @@ body.auth-locked>header,body.auth-locked>nav,body.auth-locked>main{visibility:hi
  </div>
 </div>
 <header>
- <div class="brand"><span id="fieldVersionBadge" style="font-size:.62rem;font-weight:800;padding:3px 7px;border-radius:999px;background:#F6F1E4;color:#3F5729;margin-right:4px">v5.0</span><div class="mark" id="brandMark">F</div><div><h1>FIELD CAFÉ POS</h1><small>Simple · Fresh · Everyday</small></div></div>
+ <div class="brand"><span id="fieldVersionBadge" style="font-size:.62rem;font-weight:800;padding:3px 7px;border-radius:999px;background:#F6F1E4;color:#3F5729;margin-right:4px">v5.1</span><div class="mark" id="brandMark">F</div><div><h1>FIELD CAFÉ POS</h1><small>Simple · Fresh · Everyday</small></div></div>
  <div class="header-right"><button id="lockNowBtn" class="auth-lock-button no-print" type="button" hidden>🔒 ล็อก</button><b id="clockText">—</b><span id="dateText">—</span></div>
 </header>
 <nav id="mainNav" aria-label="เมนูหลัก">
@@ -532,7 +540,7 @@ body.auth-locked>header,body.auth-locked>nav,body.auth-locked>main{visibility:hi
   <div class="form-row two"><div><label>ชื่อร้านบนใบเสร็จ</label><input id="shopName"></div><div><label>PromptPay ID สำหรับสร้าง QR</label><input id="promptpayId" inputmode="numeric" autocomplete="off" placeholder="เบอร์ 10 หลัก หรือเลขบัตร 13 หลัก"><div class="muted" style="margin-top:5px">QR จะแสดงยอดบิลอัตโนมัติและสร้างภายในเครื่อง ไม่ส่ง PromptPay ID หรือยอดบิลไปยังเว็บสร้าง QR ภายนอก</div></div></div>
   <div class="form-row two"><div><label>จำนวนบัตรคิว</label><input type="number" id="pagerCount" min="1" max="50"></div><div><label>ข้อความท้ายใบเสร็จ</label><input id="receiptFooter"></div></div>
   <button class="btn green" id="saveSettingsBtn">บันทึกการตั้งค่า</button>
-  <button class="btn ghost" id="testBellBtn" type="button">🔔 ทดสอบเสียงกระดิ่ง</button>
+  <button class="btn ghost" id="testBellBtn" type="button">🔔 ทดสอบเสียงกระดิ่ง</button><div class="muted" style="margin-top:6px">สถานะเสียง: <b id="bellStatus">ยังไม่ได้ทดสอบ</b></div>
  </div>
  <div class="card" id="accessSettings"><h3>🔐 ผู้ใช้และสิทธิ์ · Admin</h3><p class="muted">Admin สร้างบัญชีและรีเซ็ตรหัสผ่านให้ผู้ใช้ บัญชีบนไฟล์ออฟไลน์นี้อยู่ในเบราว์เซอร์เครื่องนี้ และยังไม่ซิงก์กับเซิร์ฟเวอร์</p>
   <div class="form-row three"><div><label>ชื่อผู้ใช้ใหม่</label><input id="newUserName" autocomplete="off" autocapitalize="none" placeholder="เช่น barista01"></div><div><label>รหัสผ่านใหม่</label><input id="newUserPassword" type="password" autocomplete="new-password" placeholder="อย่างน้อย 10 ตัวอักษร"></div><div><label>บทบาท</label><select id="newUserRole"><option value="staff">พนักงาน</option><option value="admin">Admin</option></select></div></div>
@@ -575,7 +583,8 @@ body.auth-locked>header,body.auth-locked>nav,body.auth-locked>main{visibility:hi
  <div class="card"><h3>✅ System Health · v5.0</h3>
  <div class="summary-row"><span>Order / Payment</span><b>พร้อม</b></div>
  <div class="summary-row"><span>Queue FIFO</span><b>พร้อม · ไม่มี QC</b></div>
- <div class="summary-row"><span>Bell</span><b>WebAudio + ปุ่มทดสอบ</b></div>
+ <div class="summary-row"><span>Bell</span><b id="systemBellStatus">ยังไม่ได้ทดสอบ</b></div>
+  <div class="summary-row"><span>รูปเมนู</span><b id="mediaStatus">กำลังตรวจ</b></div>
  <div class="summary-row"><span>Stock</span><b>ตัดสูตร + Safety stock + รับเข้า/ตัดออก</b></div>
  <div class="summary-row"><span>Report / Expense / Close day</span><b>พร้อม</b></div>
  <div class="summary-row"><span>Menu / Recipe Builder / Custom</span><b>พร้อม</b></div>
@@ -628,7 +637,7 @@ body.auth-locked>header,body.auth-locked>nav,body.auth-locked>main{visibility:hi
 <script>
 'use strict';
 const APP_KEY='field_pos_v2_state'; // ใช้ key เดิมเพื่อรักษาข้อมูลลูกค้าเมื่ออัปเกรด
-const FIELD_DATA_VERSION='2026-09-29.50';
+const FIELD_DATA_VERSION='2026-09-30.51';
 document.getElementById('masterDataVersion').textContent=FIELD_DATA_VERSION;
 const FIELD_IMAGE_VERSION='2026-09-28.4';
 const posterPhotos={};
@@ -637,7 +646,7 @@ const FIELD_DATA_INFO={
  recipe:'FIELD Master Recipe · 29 ก.ย. 2026',
  costs:'ฐานต้นทุนวัตถุดิบ · 23 ก.ย. 2026',
  brand:'FIELD Brand Identity · 27 ก.ย. 2026',
- correction:'FIELD POS v5.0 · Full requirement audit + Clean Operations + No QC + Bell + Latest Approved Recipes · 29 ก.ย. 2026'
+ correction:'FIELD POS v5.1 · Full requirement audit + Clean Operations + No QC + Bell + Latest Approved Recipes · 29 ก.ย. 2026'
 };
 const PACKAGING_KEYS=new Set(['cup16','lid16','straw','sticker','ice','hotCupSet','cupHot','lidHot']);
 const CATEGORIES=['MATCHA','REFRESH','HOT MATCHA','COFFEE','TEA','COCOA','MILK','SODA','ALL'];
@@ -664,8 +673,32 @@ function generatedMenuThumb(m,variantLabel=''){
  <g fill="#d6ebbd" stroke="#f9fdf2" stroke-width="3" opacity=".88"><path d="M177 102l19-12 16 16-10 17-21-1z"/><path d="M218 86l21-6 13 17-13 19-19-5z"/><path d="M263 97l18-12 19 13-8 21-22-2z"/><path d="M229 119l19-12 17 14-9 20-21-1z"/></g><ellipse cx="240" cy="76" rx="102" ry="16" fill="#eaf3e4" opacity=".92" stroke="#a8bca3" stroke-width="4"/><ellipse cx="240" cy="75" rx="82" ry="10" fill="#3b6c29" opacity=".9"/>
  <path d="M170 70h140" stroke="#fbfff8" stroke-width="7" stroke-linecap="round"/><rect x="191" y="181" width="98" height="48" rx="24" fill="#fffdf4" stroke="#b4bd93" stroke-width="3"/><text x="240" y="204" text-anchor="middle" font-family="Arial" font-weight="900" font-size="19" fill="#244b2a">FIELD</text><text x="240" y="218" text-anchor="middle" font-family="Arial" letter-spacing="3" font-size="7" fill="#765c39">CAFÉ</text><rect x="24" y="20" width="122" height="36" rx="18" fill="#335d35"/><text x="85" y="44" text-anchor="middle" font-family="Arial" font-size="15" font-weight="bold" fill="#fff">${safe}</text></svg>`);
 }
-function menuThumb(m){return (m?.imageData&&m?.imageVersion===FIELD_IMAGE_VERSION?m.imageData:null)||posterPhotos[m?.id]||m?.imageData||generatedMenuThumb(m)}
-function variantThumb(m,label){return (m?.imageData&&m?.imageVersion===FIELD_IMAGE_VERSION?m.imageData:null)||posterPhotos[m?.id+'|'+label]||menuThumb(m)}
+function usableImageData(value){
+  return typeof value==='string' && /^(data:image\/|https?:\/\/|\/)/i.test(value) && value.length>24;
+}
+function menuThumb(m){
+  // Approved FIELD poster/photo crops always win. This prevents old LocalStorage imageData
+  // from hiding the current menu artwork after an upgrade.
+  if(posterPhotos[m?.id])return posterPhotos[m.id];
+  if(usableImageData(m?.imageData))return m.imageData;
+  return generatedMenuThumb(m);
+}
+function variantThumb(m,label){
+  const key=m?.id+'|'+label;
+  if(posterPhotos[key])return posterPhotos[key];
+  return menuThumb(m);
+}
+function installMenuImageFallbacks(root=document){
+  root.querySelectorAll('.product-media img,.variant-thumb,.menu-thumb').forEach(img=>{
+    img.addEventListener('error',()=>{
+      if(img.dataset.fallbackApplied==='1')return;
+      img.dataset.fallbackApplied='1';
+      const id=img.closest('[data-id]')?.dataset?.id;
+      const m=id?state.menu.find(x=>x.id===id):null;
+      img.src=generatedMenuThumb(m||{id:'fallback',category:'ALL'});
+    },{once:true});
+  });
+}
 function loadPosterPhotos(){
  const bytes=document.getElementById('matchaPosterBytes')?.textContent.trim();if(!bytes)return;
  const img=new Image();img.onload=()=>{
@@ -678,7 +711,8 @@ function loadPosterPhotos(){
   const logo=crop(449,0,360,100,true),mark=document.getElementById('brandMark');mark.innerHTML=`<img src="${logo}" alt="โลโก้ FIELD">`;
   renderMenuGrid();if(document.getElementById('v-menu').classList.contains('active'))renderMenuAdmin();
   if(document.getElementById('v-report').classList.contains('active'))renderReport();
- };img.onerror=()=>console.warn('โหลดรูปเมนูมัทฉะไม่ได้');img.src='data:image/jpeg;base64,'+bytes;
+   const st=document.getElementById('mediaStatus');if(st)st.textContent='พร้อม · FIELD poster + fallback';
+ };img.onerror=()=>{console.warn('โหลดรูปเมนูมัทฉะไม่ได้');const st=document.getElementById('mediaStatus');if(st)st.textContent='ใช้ภาพ fallback';renderMenuGrid()};img.src='data:image/jpeg;base64,'+bytes;
 }
 
 const basePackagingIced={cup16:1,lid16:1,straw:1,sticker:1,ice:1};
@@ -948,10 +982,10 @@ function renderMenuGrid(){
    <span class="menu-life ${lifeClass}">${lifeText}</span><div class="menu-recipe-quick">${esc(recipeQuickText(m))}</div>
    <div class="price">${m.price>0?money(m.price):'ยังไม่ตั้งราคา'}</div><span class="product-state ${st.ok?'':'bad'}">${esc(st.text)}</span></div></button>`
  }).join('');
- g.querySelectorAll('.product').forEach(btn=>btn.onclick=()=>openVariant(btn.dataset.id))
+ installMenuImageFallbacks(g);g.querySelectorAll('.product').forEach(btn=>btn.onclick=()=>openVariant(btn.dataset.id))
 }
 function getMenuBaseline(m){const vals=m.variants.map(x=>x.baselineCogs).filter(x=>Number(x)>0);return vals.length?vals[0]:0}
-function openVariant(id){if(!requireView('order'))return;const m=state.menu.find(x=>x.id===id);if(!m||!m.enabled||m.price<=0){alert(m?.price<=0?'เมนูนี้ยังไม่ตั้งราคา':'เมนูนี้ปิดขายอยู่');return}selectedProduct=m;selectedVariant=null;document.getElementById('variantTitle').textContent=m.name;document.getElementById('variantSub').textContent=`${CAT_LABEL[m.category]||m.category} · ${money(m.price)}`;const wrap=document.getElementById('variantButtons');wrap.innerHTML=m.variants.map((x,i)=>`<button class="variant-btn" data-i="${i}" ${recipeAvailable(x.recipe)?'':'disabled'}><img class="variant-thumb" src="${variantThumb(selectedProduct,x.label)}" alt=""><span>${esc(x.label)}</span></button>`).join('');wrap.querySelectorAll('button').forEach(b=>b.onclick=()=>selectVariant(Number(b.dataset.i)));document.getElementById('variantRecipe').innerHTML='<div class="muted">เลือกความหวานเพื่อดูสูตร</div>';document.getElementById('addVariantBtn').disabled=true;showModal('variantModal')}
+function openVariant(id){if(!requireView('order'))return;const m=state.menu.find(x=>x.id===id);if(!m||!m.enabled||m.price<=0){alert(m?.price<=0?'เมนูนี้ยังไม่ตั้งราคา':'เมนูนี้ปิดขายอยู่');return}selectedProduct=m;selectedVariant=null;document.getElementById('variantTitle').textContent=m.name;document.getElementById('variantSub').textContent=`${CAT_LABEL[m.category]||m.category} · ${money(m.price)}`;const wrap=document.getElementById('variantButtons');wrap.innerHTML=m.variants.map((x,i)=>`<button class="variant-btn" data-i="${i}" ${recipeAvailable(x.recipe)?'':'disabled'}><img class="variant-thumb" src="${variantThumb(selectedProduct,x.label)}" alt=""><span>${esc(x.label)}</span></button>`).join('');installMenuImageFallbacks(wrap);wrap.querySelectorAll('button').forEach(b=>b.onclick=()=>selectVariant(Number(b.dataset.i)));document.getElementById('variantRecipe').innerHTML='<div class="muted">เลือกความหวานเพื่อดูสูตร</div>';document.getElementById('addVariantBtn').disabled=true;showModal('variantModal')}
 function selectVariant(i){selectedVariant=selectedProduct.variants[i];document.querySelectorAll('#variantButtons .variant-btn').forEach((b,j)=>b.style.background=j===i?'var(--matcha-lt)':'#fff');document.getElementById('variantRecipe').innerHTML=orderVariantHtml(selectedVariant);document.getElementById('addVariantBtn').disabled=!recipeAvailable(selectedVariant.recipe)}
 function orderVariantHtml(variant){return `<div class="variant-choice"><div><span>ตัวเลือก</span><br><b>${esc(variant.label)}</b></div><div style="text-align:right"><span>ราคาขาย</span><br><b>${money(selectedProduct?.price||0)}</b></div></div>`}
 const ESTIMATED_VARIABLE_COST_PER_CUP=2.50;
@@ -990,56 +1024,79 @@ function changeQty(i,d){const c=state.cart[i];if(!c)return;c.qty+=d;if(c.qty<=0)
 document.getElementById('clearCartBtn').onclick=()=>{if(state.cart.length&&confirm('ล้างรายการในตะกร้า?')){state.cart=[];saveState();renderCart()}};
 
 
-// FIELD POS v5.0 — New-order bell (mobile-safe WebAudio)
+// FIELD POS v5.1 — Bell Manager
 let FIELD_AUDIO_CTX=null;
+let FIELD_AUDIO_READY=false;
 function getFieldAudioContext(){
- const AC=window.AudioContext||window.webkitAudioContext;
- if(!AC)return null;
- if(!FIELD_AUDIO_CTX)FIELD_AUDIO_CTX=new AC();
- return FIELD_AUDIO_CTX;
+  const AC=window.AudioContext||window.webkitAudioContext;
+  if(!AC)return null;
+  if(!FIELD_AUDIO_CTX)FIELD_AUDIO_CTX=new AC();
+  return FIELD_AUDIO_CTX;
 }
 async function unlockFieldAudio(){
- const ctx=getFieldAudioContext();
- if(!ctx)return false;
- try{
-  if(ctx.state==='suspended')await ctx.resume();
-  return ctx.state==='running';
- }catch(e){console.warn('FIELD audio unlock failed',e);return false}
+  const ctx=getFieldAudioContext();
+  if(!ctx){FIELD_AUDIO_READY=false;updateBellStatus('ไม่รองรับ WebAudio');return false}
+  try{
+    if(ctx.state==='suspended')await ctx.resume();
+    FIELD_AUDIO_READY=ctx.state==='running';
+    updateBellStatus(FIELD_AUDIO_READY?'พร้อม':'ถูก Browser ระงับ');
+    return FIELD_AUDIO_READY;
+  }catch(e){
+    FIELD_AUDIO_READY=false;
+    updateBellStatus('เปิดเสียงไม่ได้');
+    console.warn('FIELD audio unlock failed',e);
+    return false;
+  }
+}
+function updateBellStatus(text){
+  const a=document.getElementById('bellStatus');
+  const b=document.getElementById('systemBellStatus');
+  if(a)a.textContent=text;
+  if(b)b.textContent=text;
 }
 async function playNewOrderBell(){
- const ctx=getFieldAudioContext();
- if(!ctx)return false;
- try{
-  if(ctx.state==='suspended')await ctx.resume();
-  const t=ctx.currentTime+0.01;
-  const master=ctx.createGain();
-  master.gain.setValueAtTime(0.0001,t);
-  master.gain.exponentialRampToValueAtTime(0.28,t+0.015);
-  master.gain.exponentialRampToValueAtTime(0.0001,t+0.75);
-  master.connect(ctx.destination);
+  const ctx=getFieldAudioContext();
+  if(!ctx)return false;
+  try{
+    if(ctx.state!=='running' && !(await unlockFieldAudio()))return false;
+    const now=ctx.currentTime;
+    const master=ctx.createGain();
+    master.gain.setValueAtTime(0.0001,now);
+    master.gain.exponentialRampToValueAtTime(0.55,now+0.012);
+    master.gain.exponentialRampToValueAtTime(0.0001,now+1.05);
+    master.connect(ctx.destination);
 
-  const notes=[
-   [880,0.00,0.18,0.16],
-   [1320,0.16,0.20,0.13],
-   [1046.5,0.38,0.28,0.11]
-  ];
-  for(const [freq,offset,duration,level] of notes){
-   const o=ctx.createOscillator(),g=ctx.createGain();
-   o.type='sine';o.frequency.setValueAtTime(freq,t+offset);
-   g.gain.setValueAtTime(0.0001,t+offset);
-   g.gain.exponentialRampToValueAtTime(level,t+offset+0.012);
-   g.gain.exponentialRampToValueAtTime(0.0001,t+offset+duration);
-   o.connect(g);g.connect(master);
-   o.start(t+offset);o.stop(t+offset+duration+0.03);
+    // Two-note shop bell + short tail; intentionally louder than previous build.
+    const notes=[
+      {f:1046.50,t:0.00,d:0.30,g:0.48},
+      {f:1567.98,t:0.18,d:0.44,g:0.40},
+      {f:1318.51,t:0.48,d:0.48,g:0.30}
+    ];
+    notes.forEach(n=>{
+      const osc=ctx.createOscillator(),gain=ctx.createGain();
+      osc.type='sine';
+      osc.frequency.setValueAtTime(n.f,now+n.t);
+      gain.gain.setValueAtTime(0.0001,now+n.t);
+      gain.gain.exponentialRampToValueAtTime(n.g,now+n.t+0.01);
+      gain.gain.exponentialRampToValueAtTime(0.0001,now+n.t+n.d);
+      osc.connect(gain);gain.connect(master);
+      osc.start(now+n.t);osc.stop(now+n.t+n.d+0.04);
+    });
+    if(navigator.vibrate)navigator.vibrate([90,40,120]);
+    FIELD_AUDIO_READY=true;
+    updateBellStatus('พร้อม · ได้ยินเสียงล่าสุด');
+    return true;
+  }catch(e){
+    console.warn('FIELD bell failed',e);
+    updateBellStatus('เกิดข้อผิดพลาด');
+    return false;
   }
-  if(navigator.vibrate)navigator.vibrate([60,35,80]);
-  return true;
- }catch(e){console.warn('FIELD bell failed',e);return false}
 }
-// Browsers require one user gesture before audio can play reliably.
-for(const ev of ['pointerdown','touchstart','keydown']){
- document.addEventListener(ev,unlockFieldAudio,{once:true,passive:true});
-}
+// Unlock during normal touch activity before checkout.
+// Do not use once:true because some Android browsers may recreate/suspend AudioContext.
+['pointerdown','touchstart','keydown'].forEach(ev=>{
+  document.addEventListener(ev,()=>{ if(!FIELD_AUDIO_READY) unlockFieldAudio(); },{passive:true});
+});
 
 // payment
 let paymentMethod='cash';
@@ -1315,7 +1372,7 @@ function updatePaymentState(){
  }
 }
 
-document.getElementById('checkoutBtn').onclick=()=>{
+document.getElementById('checkoutBtn').onclick=async()=>{await unlockFieldAudio();
  if(!state.cart.length)return;
  const shortage=cartStockShortage();if(shortage){alert('วัตถุดิบไม่พอ: '+shortage);return}
  setCartOpen(false);paymentMethod='cash';
@@ -1348,7 +1405,7 @@ function nextBillNo(){const d=isoDate(),n=(state.billSeq[d]||0)+1;state.billSeq[
 function nextFreePager(){const max=Number(state.settings.pagerCount)||10,used=new Set(state.orders.filter(o=>o.status!=='returned').map(o=>o.pagerNo));for(let i=1;i<=max;i++)if(!used.has(i))return i;return null}
 function costForCartItem(c){const m=state.menu.find(x=>x.id===c.id),vr=m?.variants.find(x=>x.label===c.variant);if(!vr)return 0;return recipeCostInfo(vr).cost*c.qty}
 function deductRecipe(vr,qty,sign=-1){Object.entries(vr.recipe.items||{}).forEach(([k,n])=>{if(!state.ingredients[k])return;state.ingredients[k].qty=Number(state.ingredients[k].qty)+(sign*Number(n)*qty)})}
-document.getElementById('confirmPaymentBtn').onclick=()=>{if(!requireView('order'))return;const btn=document.getElementById('confirmPaymentBtn');if(btn.dataset.processing==='yes')return;const shortage=cartStockShortage();if(shortage){alert('วัตถุดิบไม่พอ: '+shortage);return}const total=cartTotal();if(paymentMethod==='cash'&&Number(document.getElementById('cashReceived').value)<total){updatePaymentState();alert('จำนวนเงินสดที่รับมายังไม่พอ');return}if(paymentMethod==='promptpay'&&(!validPromptPayId(state.settings.promptpayId)||!document.getElementById('promptPaidConfirm').checked)){updatePaymentState();alert('กรุณาตรวจสอบว่าได้รับเงิน PromptPay แล้วจึงยืนยัน');return}const pager=nextFreePager();if(pager===null){alert('บัตรคิวถูกใช้งานครบแล้ว กรุณารอคืนบัตรก่อน');return}btn.dataset.processing='yes';let totalCost=0;const items=state.cart.map(c=>{const m=state.menu.find(x=>x.id===c.id),vr=m.variants.find(x=>x.label===c.variant);const unitCost=recipeCostInfo(vr).cost;deductRecipe(vr,c.qty,-1);totalCost+=unitCost*c.qty;return {...c,unitCost,recipe:deepClone(vr.recipe)}});const received=paymentMethod==='cash'?Number(document.getElementById('cashReceived').value):total;const chosenCustomer=document.getElementById('payCustomer').value,member=(state.customers||[]).find(c=>c.id===chosenCustomer),spend=Number(state.settings.pointsSpend)||0;const sale={id:'s'+Date.now(),createdBy:authActor(),billNo:nextBillNo(),time:Date.now(),date:isoDate(),items,total,costTotal:totalCost,payment:paymentMethod,received,change:paymentMethod==='cash'?received-total:0,status:'paid',pagerNo:pager,customerId:member?.id||null,pointsAwarded:member&&spend>0?Math.floor(total/spend):0};sale.queueNo=queueLabel(sale);state.sales.push(sale);state.orders.push({id:'o'+Date.now(),createdBy:authActor(),saleId:sale.id,billNo:sale.billNo,queueNo:sale.queueNo,items:items.map(x=>({id:x.id,name:x.name,variant:x.variant,qty:x.qty,readyQty:0,calledQty:0})),total,pagerNo:pager,status:'assigned',time:Date.now()});state.cart=[];saveState();playNewOrderBell();hideModal('payModal');renderCart();renderMenuGrid();document.getElementById('pagerShow').textContent=pager;document.getElementById('queueShow').textContent=sale.queueNo;document.getElementById('pagerModal').dataset.orderid=state.orders[state.orders.length-1].id;showModal('pagerModal');updateQueueBadge();btn.dataset.processing='no'};
+document.getElementById('confirmPaymentBtn').onclick=async()=>{if(!requireView('order'))return;await unlockFieldAudio();const btn=document.getElementById('confirmPaymentBtn');if(btn.dataset.processing==='yes')return;const shortage=cartStockShortage();if(shortage){alert('วัตถุดิบไม่พอ: '+shortage);return}const total=cartTotal();if(paymentMethod==='cash'&&Number(document.getElementById('cashReceived').value)<total){updatePaymentState();alert('จำนวนเงินสดที่รับมายังไม่พอ');return}if(paymentMethod==='promptpay'&&(!validPromptPayId(state.settings.promptpayId)||!document.getElementById('promptPaidConfirm').checked)){updatePaymentState();alert('กรุณาตรวจสอบว่าได้รับเงิน PromptPay แล้วจึงยืนยัน');return}const pager=nextFreePager();if(pager===null){alert('บัตรคิวถูกใช้งานครบแล้ว กรุณารอคืนบัตรก่อน');return}btn.dataset.processing='yes';let totalCost=0;const items=state.cart.map(c=>{const m=state.menu.find(x=>x.id===c.id),vr=m.variants.find(x=>x.label===c.variant);const unitCost=recipeCostInfo(vr).cost;deductRecipe(vr,c.qty,-1);totalCost+=unitCost*c.qty;return {...c,unitCost,recipe:deepClone(vr.recipe)}});const received=paymentMethod==='cash'?Number(document.getElementById('cashReceived').value):total;const chosenCustomer=document.getElementById('payCustomer').value,member=(state.customers||[]).find(c=>c.id===chosenCustomer),spend=Number(state.settings.pointsSpend)||0;const sale={id:'s'+Date.now(),createdBy:authActor(),billNo:nextBillNo(),time:Date.now(),date:isoDate(),items,total,costTotal:totalCost,payment:paymentMethod,received,change:paymentMethod==='cash'?received-total:0,status:'paid',pagerNo:pager,customerId:member?.id||null,pointsAwarded:member&&spend>0?Math.floor(total/spend):0};sale.queueNo=queueLabel(sale);state.sales.push(sale);state.orders.push({id:'o'+Date.now(),createdBy:authActor(),saleId:sale.id,billNo:sale.billNo,queueNo:sale.queueNo,items:items.map(x=>({id:x.id,name:x.name,variant:x.variant,qty:x.qty,readyQty:0,calledQty:0})),total,pagerNo:pager,status:'assigned',time:Date.now()});state.cart=[];saveState();const bellOK=await playNewOrderBell();if(!bellOK)console.warn('FIELD: order saved but bell could not play');hideModal('payModal');renderCart();renderMenuGrid();document.getElementById('pagerShow').textContent=pager;document.getElementById('queueShow').textContent=sale.queueNo;document.getElementById('pagerModal').dataset.orderid=state.orders[state.orders.length-1].id;showModal('pagerModal');updateQueueBadge();btn.dataset.processing='no'};
 document.getElementById('pagerHandedBtn').onclick=()=>{const id=document.getElementById('pagerModal').dataset.orderid,o=state.orders.find(x=>x.id===id);if(o)saveState();hideModal('pagerModal');showView('queue')};
 
 // queue
@@ -1620,7 +1677,7 @@ state.lastMasterImport=String(obj.schema_version);state.dataVersion=FIELD_DATA_V
 
 // settings/backup
 function renderSettings(){renderAccessSettings();document.getElementById('shopName').value=state.settings.shopName;document.getElementById('promptpayId').value=state.settings.promptpayId;document.getElementById('pagerCount').value=state.settings.pagerCount;document.getElementById('receiptFooter').value=state.settings.receiptFooter;updateDbUi()}
-const testBellBtn=document.getElementById('testBellBtn');if(testBellBtn)testBellBtn.onclick=async()=>{const ok=await playNewOrderBell();if(!ok)alert('เบราว์เซอร์ยังไม่อนุญาตเสียง กรุณาแตะหน้าจอหนึ่งครั้ง แล้วลองใหม่')};
+const testBellBtn=document.getElementById('testBellBtn');if(testBellBtn)testBellBtn.onclick=async()=>{const ok=await playNewOrderBell();if(!ok)alert('เบราว์เซอร์ยังไม่อนุญาตเสียง หรือเครื่องถูกปิดเสียง กรุณาเปิด Media volume แล้วกดทดสอบอีกครั้ง')};
 document.getElementById('saveSettingsBtn').onclick=()=>{if(!requireRole())return;const rawPP=document.getElementById('promptpayId').value.trim(),pp=sanitizePromptPayId(rawPP);if(rawPP&& !validPromptPayId(pp)){alert('PromptPay ID ต้องเป็นเบอร์มือถือ 10 หลักขึ้นต้นด้วย 0 หรือเลขบัตรประชาชน/เลขผู้เสียภาษี 13 หลัก');document.getElementById('promptpayId').focus();return}state.settings.shopName=document.getElementById('shopName').value.trim()||'FIELD';state.settings.promptpayId=pp;state.settings.pagerCount=Math.min(50,Math.max(1,Number(document.getElementById('pagerCount').value)||10));state.settings.receiptFooter=document.getElementById('receiptFooter').value.trim();saveState();renderQueue();renderSettings();alert('บันทึกการตั้งค่าแล้ว')};
 document.getElementById('exportBtn').onclick=()=>{if(!requireRole())return;const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='FIELD_POS_backup_'+isoDate()+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)};
 document.getElementById('importFile').onchange=e=>{if(!requireRole())return;const f=e.target.files[0];if(!f)return;const rd=new FileReader();rd.onload=()=>{try{const obj=JSON.parse(rd.result);if(String(obj.schema_version||'').startsWith('FIELD_POS_MASTER_IMPORT')){if(confirm('นำเข้า FIELD Master Data โดยไม่ลบยอดขาย/ออเดอร์เดิม?')){importFieldMaster(obj);location.reload()}return}if(!obj.menu||!obj.ingredients)throw new Error('รูปแบบไม่ถูกต้อง');if(confirm('นำเข้า Backup และแทนที่ข้อมูลปัจจุบัน?')){state=normalizeState(obj);state.updatedAt=Date.now();localStorage.setItem(APP_KEY,JSON.stringify(state));dbWrite=dbWrite.then(()=>persistDatabase());dbWrite.finally(()=>location.reload())}}catch(err){console.error(err);alert('ไฟล์ JSON ไม่ถูกต้องหรือไม่รองรับ')}};rd.readAsText(f)};
@@ -1710,9 +1767,9 @@ setInterval(()=>{if(document.getElementById('v-queue').classList.contains('activ
 window.addEventListener('load',()=>{try{
  const critical=['renderMenuGrid','renderMenuAdmin','renderQueue','renderReport','renderCrm','persistDatabase','importFieldMaster','addCustomMenu'];
  const missing=critical.filter(k=>typeof window[k]!=='function');
- if(missing.length)console.error('[FIELD POS v5.0] missing critical functions',missing);
- else console.info('[FIELD POS v5.0] core self-check passed');
-}catch(e){console.error('[FIELD POS v5.0] self-check error',e)}});
+ if(missing.length)console.error('[FIELD POS v5.1] missing critical functions',missing);
+ else console.info('[FIELD POS v5.1] core self-check passed');
+}catch(e){console.error('[FIELD POS v5.1] self-check error',e)}});
 </script>
 
 
