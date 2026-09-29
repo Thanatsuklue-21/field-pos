@@ -1,39 +1,21 @@
-# FIELD CAFÉ POS — production
+# FIELD CAFÉ POS — Vercel + Turso deployment package
 
-Single-shop POS backed by Turso, with device-local IndexedDB/LocalStorage recovery copies and Vercel deployment from `main`.
+This package serves the current standalone POS HTML at `/` and runs the Admin account and import API on Vercel Functions, backed by Turso (libSQL). The POS screen itself still stores sales, queue, stock and customers on its device. Publishing this package **does not turn checkout into a shared online POS**. Account management in the HTML is also device-local; the API Admin is provisioned separately. Do not rely on the API database as an automatic backup of live sales.
 
-## Configuration
+## Before deployment
 
-- Production Vercel environment: `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN`, `PUBLIC_ORIGIN=https://field-pos.vercel.app`, and a random, one-time `FIELD_SETUP_TOKEN` of at least 12 characters. Prefer a password manager generated value; after the first Admin is created, setup is disabled.
-- The Turso schema must be initialized with `npm run bootstrap -- schema` or the previously initialized database. Keep these server secrets out of Git and HTML.
-- Preview must use a separate Turso database and its exact preview origin. Otherwise its `/api/health` responds `origin_not_configured` and the page blocks operation.
+1. Create/link a verified Vercel project and a Turso database through the Vercel Marketplace. Associate the resource with that project. The integration exposes `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN` as server environment variables. Never add these secrets to the HTML or Git.
+2. Configure `PUBLIC_ORIGIN` to the exact HTTPS origin of the deployment, such as `https://field-pos.example.com`, in Vercel project settings. Preview domains need a matching setting too, or writes are rejected.
+3. From the `vercel-turso` directory, install dependencies (`npm install`), run `npm test`, and use Vercel's project link/deploy workflow. The root directory of the Vercel project must be **this** directory.
+4. Run `npm run bootstrap -- admin` from a secure terminal with the Turso environment variables to initialize schema and create the first API Admin. It prompts for a password. On a noninteractive runner, provide `FIELD_ADMIN_PASSWORD` as an ephemeral secret for that one command and remove it immediately.
+5. Check `GET /api/health` and the protected API after deployment. Keep a backup of the device's JSON export and test database restore.
 
-## First use
+## Controlled historical data migration
 
-1. Open the production URL on the device that has the authoritative historical POS data. Export a local JSON backup first.
-2. Create the first server Admin with the Vercel setup token. The server rejects a second setup after an active Admin exists. Log in with the new credentials.
-3. Compare local bill/queue/expense counts. Import that device's data only after saving its backup. An empty new device waits for migration or requires explicit confirmation to start fresh.
-4. Open another device and log in with the server Admin. It reads the Turso state and polls for changes when idle.
+Export JSON from the offline POS Admin settings. Obtain an API session with `POST /api/auth/login` and use its `csrf` response in `X-CSRF-Token` for subsequent writes (same HTTPS origin). Submit the JSON as `state` to `POST /api/import/preview`. Compare `counts` with the device. Check `GET /api/state` for its `revision`, then call `POST /api/import/commit` with `{ "state": <export>, "expectedRevision": 0 }`. Replacing an already imported state requires the current revision and `"replace": true`. Every import preserves the prior version in `field_state_versions`. Server accounts are never imported from the browser. The JSON includes customer and sales information; handle it as private data.
 
-Every edit is saved locally immediately, then a versioned snapshot is sent to Turso in the background. Ordinary network delays no longer block the POS; a status badge reports pending sync and retries automatically. Authentication failures and revision conflicts still stop remote writes so two devices cannot silently overwrite each other. The local IndexedDB/LocalStorage copies are recovery copies, not the shared source of truth.
+## What remains for a production online POS
 
-## Approved menu and cost-scenario release 2026-09-29.32
+The backend needs server-authoritative sales, payments, queue, stock, expenses, close day and loyalty operations with atomic transactions and idempotency keys. Then the HTML needs to use server login and those APIs, reconcile the existing offline data once, and handle offline conflict/retry. Until that work and a browser/device test pass, use the current HTML on one device and its JSON backups. Publicly hosting the current HTML alone provides no shared transactions.
 
-The active approved set is Pure Matcha Iced, Matcha Latte, FIELD Matcha Signature (100% / 50% / 0%), FIELD Coconut Matcha, and FIELD Orange. Honey Matcha is cut, Strawberry Matcha is on hold, and the previous Coconut recipe is archived. Actual COGS includes ingredients, packaging, and provisional ice 210g; `estimated_variable_cost` is stored separately and excluded from Actual COGS. Historical sales and orders are never recalculated by the menu migration.
-
-Stock quantity and cost management are separate. The Cost Center requires only the owner-entered purchase amount, usable quantity in the recipe unit, and purchase date. Supplier/receipt information is optional, and pressing the confirmation button records the authenticated owner as confirmer. It keeps an append-only price history while the latest confirmed record supplies the unit cost used for new calculations. The app does not fetch product prices from the web.
-
-Recipes are weighed in grams. Liquid costs carried forward from package labels in millilitres remain numerically available so the POS does not suddenly lose its cost baseline, but they are explicitly marked `PROVISIONAL_ML_AS_G`. The owner must weigh the usable net contents in grams and reconfirm; newly confirmed records use `MEASURED_BASE_UNIT`. Existing stock quantities, sales, and orders are preserved during this migration.
-
-The menu workspace is split into Recipe, Cost, Sale Price, and Profit tabs. Accounting definitions are:
-
-- Actual COGS = recipe ingredients + packaging + ice.
-- Full cost per cup = Actual COGS + other variable cost + monthly fixed cost allocation + hidden cost.
-- Gross profit = sale price - Actual COGS.
-- Contribution profit = sale price - Actual COGS - other variable cost.
-- Estimated net profit = sale price - full cost per cup. It is shown at low (50%), target (100%), and high (150%) monthly cup scenarios because fixed cost per cup changes with volume.
-- Suggested price is the higher of the target-COGS price and target-net-margin price, rounded up to the next 5 baht. Prices are never changed automatically.
-
-## Verification
-
-Run `npm test` and check the page, `/api/health`, `/api/setup/status`, login, first import, second-device read, sale, refresh, and conflict handling before promotion. An unauthenticated `/api/state` must return 401. Preserve the earlier production deployment for rollback.
+The former `server/` package in this workspace targeted PostgreSQL. This is a separate Turso package; never run the PostgreSQL migration against Turso.

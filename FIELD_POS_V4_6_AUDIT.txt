@@ -1,0 +1,31 @@
+FIELD POS v4.6 AUDIT
+======================
+Base: v4.5 Recipe Master Current
+Method: additive upgrade; no legacy core function removed.
+
+Validated from v4.2 -> v4.5:
+- v4.2 unique named functions: 167
+- v4.5 unique named functions: 172
+- functions lost in v4.5 vs v4.2: 0
+- added in v4.5: addCustomMenu, bindRecipeRow, importFieldMaster, recipeEditorRows, salesMix30
+
+v4.6 keeps the latest base and adds:
+- FIELD Menu Control Center
+- status/search/category filters in menu admin
+- APPROVED / ACTIVE / R&D-HOLD / CUSTOM / CUT labels
+- approved menus surfaced first in Order
+- recipe summary directly on menu cards
+- version marker and runtime self-check
+- latest FIELD Orange 25/145
+- keeps order/queue/stock/report/CRM/settings/server sync code from v4.5
+
+Core functions intentionally preserved:
+- order/cart/checkout/payment
+- queue FIFO / prep recommendation / QC / delivery gating
+- stock / safety stock / cost log
+- daily-weekly-monthly report / expense / close day
+- CRM
+- login/roles
+- IndexedDB/LocalStorage backup
+- online database persistence hooks
+- Recipe Builder / Custom / Master Import
