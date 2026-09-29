@@ -6,7 +6,7 @@ import {previewSnapshot} from '../lib/migration.mjs';
 const html=await readFile(new URL('../public/index.html',import.meta.url),'utf8');
 
 test('approved menu release is the only active master recipe',()=>{
-  assert.match(html,/FIELD_DATA_VERSION='2026-09-28\.31'/);
+  assert.match(html,/FIELD_DATA_VERSION='2026-09-29\.32'/);
   assert.match(html,/id:'pure-matcha'.*enabled:true.*iced\(\{matcha:4,water:170\}\)/);
   assert.match(html,/id:'matcha-latte'.*enabled:true.*iced\(\{matcha:5,water:40,milk:110,syrup:15\}\)/);
   assert.match(html,/id:'matcha-signature'.*name:'FIELD Matcha Signature'.*v\('100%'.*condensed:30,evaporated:30,milk:70.*v\('50%'.*condensed:15,evaporated:30,milk:70.*v\('0%'.*milk:110,evaporated:15/);
@@ -65,7 +65,9 @@ test('Turso snapshot migration accepts cost rows and preserves historical sales 
 test('cost center is separated from stock and uses owner-confirmed purchase inputs',()=>{
   const stockSection=html.match(/<section id="v-stock"[\s\S]*?<\/section>/)?.[0]||'';
   assert.doesNotMatch(stockSection,/costPurchasePrice|ต้นทุน\/หน่วย|confirmCostBtn/);
-  assert.match(html,/id="menuCostPanel"[\s\S]*?id="costPurchasePrice"[\s\S]*?id="costPackageQty"[\s\S]*?id="costPurchaseDate"[\s\S]*?id="costOwnerConfirm"/);
+  assert.match(html,/id="menuCostPanel"[\s\S]*?id="costPurchasePrice"[\s\S]*?id="costPackageQty"[\s\S]*?id="costPurchaseDate"[\s\S]*?id="nextCostItemBtn"/);
+  assert.doesNotMatch(html,/id="costOwnerConfirm"/);
+  assert.match(html,/quantityBasis:'MEASURED_BASE_UNIT'/);
   assert.match(html,/function confirmedCostEntry\(key\)/);
   assert.doesNotMatch(html,/COST_REFERENCES|makro\.pro|lotuss\.com|shopee\.co\.th/);
 });
@@ -75,7 +77,21 @@ test('accounting and marketing views expose separate cost, price and profit form
   assert.match(html,/data-menu-panel="menuCostPanel">2 · ต้นทุน/);
   assert.match(html,/data-menu-panel="menuPricePanel">3 · ราคาขาย/);
   assert.match(html,/data-menu-panel="menuProfitPanel">4 · กำไร/);
-  assert.match(html,/actual\+p\.estimatedVariableCost\+p\.fixedPerCup\+p\.hiddenCostPerCup/);
+  assert.match(html,/actual\+p\.estimatedVariableCost\+scenario\.fixedPerCup\+p\.hiddenCostPerCup/);
+  assert.match(html,/function costScenarios\(\)/);
+  assert.match(html,/monthlyCupTarget\*\.5/);
+  assert.match(html,/monthlyCupTarget\*1\.5/);
+  assert.match(html,/id="profitScenarioSummary"/);
   assert.match(html,/actual\/\(p\.targetCogsPercent\/100\)/);
   assert.match(html,/full\/\(1-p\.targetNetMarginPercent\/100\)/);
+});
+
+test('recipe-weighted liquids use grams and legacy ml costs are visibly provisional',()=>{
+  for(const key of ['water','milk','syrup','evaporated','coconutSyrup','orangeMix']){
+    assert.match(html,new RegExp(`${key}:\\{name:.*?unit:'g'`));
+  }
+  assert.match(html,/const LEGACY_ML_KEYS=new Set/);
+  assert.match(html,/PROVISIONAL_ML_AS_G/);
+  assert.match(html,/สมมติ 1 ml = 1 g/);
+  assert.match(html,/ของเหลวให้ชั่งน้ำหนักสุทธิเป็นกรัม/);
 });
