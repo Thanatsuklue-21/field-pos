@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#211E19">
-<title>FIELD CAFÉ POS v6.2 · Anti-Loop Runtime Fix</title>
+<title>FIELD CAFÉ POS v6.3 · Stock Queue Payment Fix</title>
 <style>
 :root{
  --matcha:#5C7A3D;--matcha-dk:#3F5729;--matcha-lt:#DDE8CF;
@@ -562,6 +562,58 @@ main{width:min(100%,var(--field-content));max-width:var(--field-content);margin-
 #v-order .layout,#v-order .menu-grid,#v-order .product,#v-order .product-body{min-width:0}
 </style>
 
+
+<style id="field-v63-payment-stock-queue">
+/* compact payment sheet */
+#payModal{align-items:center!important}
+#payModal .payment-modal{
+ width:min(620px,calc(100vw - 24px))!important;
+ max-height:88dvh!important;
+ overflow:auto!important;
+ padding:14px!important;
+ border-radius:18px!important;
+}
+#payModal .payment-modal>h3{margin-bottom:4px!important}
+#payModal .payment-hero{padding:8px 12px!important;margin:4px 0 8px!important;border-radius:12px!important}
+#payModal .payment-hero .money{font-size:1.55rem!important}
+#payModal .pay-order-check{max-height:72px!important;overflow:auto!important;margin:0 0 8px!important;padding:7px 9px!important;font-size:.72rem!important}
+#payModal .payment-extra{margin:0 0 8px;border:1px solid var(--line);border-radius:10px;background:#fff}
+#payModal .payment-extra summary{padding:8px 10px;font-size:.76rem;font-weight:800;cursor:pointer}
+#payModal .payment-extra-body{padding:0 10px 10px}
+#payModal .pay-tabs{gap:6px!important}
+#payModal .paytab{padding:7px 4px!important;min-height:44px!important}
+#payModal #cashArea{margin-top:8px!important}
+#payModal .cash-input{padding:9px!important;font-size:1.18rem!important}
+#payModal .quick-cash{margin:6px 0!important}
+#payModal .quick-cash button{padding:7px 6px!important;min-height:42px!important}
+#payModal .payment-status{padding:7px 9px!important;margin-top:6px!important}
+#payModal .changebox{padding:7px!important;margin-top:6px!important}
+#payModal #confirmPaymentBtn{position:sticky;bottom:0;z-index:3;margin-top:8px!important;box-shadow:0 -8px 20px rgba(255,253,247,.95)}
+@media(min-width:900px){
+ #payModal .payment-modal{max-height:82dvh!important}
+}
+
+/* stock numbers / units */
+.stock-number{font-variant-numeric:tabular-nums;font-size:1.05em}
+.stock-unit{font-size:.72em;color:var(--muted);font-weight:800}
+.stock-unit-line{display:grid;grid-template-columns:auto 1fr auto 1fr;gap:8px;align-items:center;padding:8px 10px;background:#f6f3e9;border-radius:10px;margin:8px 0;font-size:.76rem}
+.stock-unit-line strong{color:var(--matcha-dk)}
+@media(max-width:620px){.stock-unit-line{grid-template-columns:1fr 1fr}.stock-purchase-row{grid-template-columns:1fr!important}}
+
+/* queue status buttons */
+.queue-do,.queue-finish{min-height:44px;border-radius:10px;padding:0 12px;font-weight:900;border:1px solid var(--line)}
+.queue-do{background:#fff;color:var(--matcha-dk)}
+.queue-do.active{background:#fff0cf;border-color:#ddb55e;color:#795719}
+.queue-finish{background:#245f38;color:#fff;border-color:#245f38}
+.queue-finish.done{background:#e5f2e7;color:#28613a;border-color:#75ad80}
+.queue-slow{box-shadow:0 0 0 3px rgba(178,74,58,.12);border-color:#c56758!important}
+
+/* slow order popup */
+.slow-order-card{width:min(500px,calc(100vw - 24px))}
+.slow-order-age{font-size:1.7rem;font-weight:900;color:var(--red);margin:8px 0}
+.slow-order-items{background:#f7f4eb;border-radius:10px;padding:10px;font-size:.8rem}
+</style>
+
 </head>
 <body class="auth-locked">
 <div id="authGate" class="auth-gate" role="dialog" aria-modal="true" aria-labelledby="authTitle">
@@ -573,7 +625,7 @@ main{width:min(100%,var(--field-content));max-width:var(--field-content);margin-
  </div>
 </div>
 <header>
- <div class="brand"><span id="fieldVersionBadge" style="font-size:.62rem;font-weight:800;padding:3px 7px;border-radius:999px;background:#F6F1E4;color:#3F5729;margin-right:4px">v6.2</span><div class="mark" id="brandMark">F</div><div><h1>FIELD CAFÉ POS</h1><small>Simple · Fresh · Everyday</small></div></div>
+ <div class="brand"><span id="fieldVersionBadge" style="font-size:.62rem;font-weight:800;padding:3px 7px;border-radius:999px;background:#F6F1E4;color:#3F5729;margin-right:4px">v6.3</span><div class="mark" id="brandMark">F</div><div><h1>FIELD CAFÉ POS</h1><small>Simple · Fresh · Everyday</small></div></div>
  <div class="header-right"><button id="lockNowBtn" class="auth-lock-button no-print" type="button" hidden>🔒 ล็อก</button><b id="clockText">—</b><span id="dateText">—</span></div>
 </header>
 <nav id="mainNav" aria-label="เมนูหลัก">
@@ -674,12 +726,17 @@ main{width:min(100%,var(--field-content));max-width:var(--field-content);margin-
   <div class="card">
    <h3>แก้ต้นทุนต่อหน่วยฐานโดยตรง</h3>
    <p class="muted">ใช้เฉพาะกรณีแก้ข้อมูลย้อนหลัง; การซื้อของใหม่ให้ใช้ “+ รับเข้า” ซึ่งคำนวณให้อัตโนมัติ</p>
-   <div class="form-row three">
+   <div class="form-row four">
     <div><label>วัตถุดิบ</label><select id="costIngredient"></select></div>
-    <div><label>ต้นทุน/หน่วยฐาน (บาท)</label><input id="costPrice" type="number" min="0.0001" step="0.0001"></div>
-    <div><label>แหล่งราคา/เหตุผล</label><input id="costSource" placeholder="เช่น ใบเสร็จ 30/09/2026"></div>
+    <div><label>ราคาซื้อรวม (บาท)</label><input id="costPrice" type="number" min="0.01" step="0.01" inputmode="decimal" placeholder="เช่น 519"></div>
+    <div><label>ปริมาณที่ซื้อ</label><input id="costPurchaseQty" type="number" min="0.0001" step="0.01" inputmode="decimal" placeholder="เช่น 250"></div>
+    <div><label>หน่วยที่ซื้อ</label><select id="costPurchaseUnit"></select></div>
    </div>
-   <button class="btn green sm" id="confirmCostBtn">บันทึกต้นทุนฐาน</button>
+   <div class="form-row two">
+    <div><label>แหล่งราคา/เหตุผล</label><input id="costSource" placeholder="เช่น Makro / ใบเสร็จ 30/09/2026"></div>
+    <div class="stock-cost-preview" id="directCostPreview">กรอกราคา ปริมาณ และหน่วย เพื่อคำนวณต้นทุนฐาน</div>
+   </div>
+   <button class="btn green sm" id="confirmCostBtn">บันทึกและอัปเดตต้นทุนทันที</button>
    <div id="costReference" class="cost-reference"></div><div class="cost-log" id="costLog"></div>
   </div>
 
@@ -883,7 +940,7 @@ main{width:min(100%,var(--field-content));max-width:var(--field-content);margin-
 </section>
 
 <section id="printArea" class="view"></section>
-<div class="footer-note">FIELD CAFÉ POS v6.2 — Anti-Loop Runtime Fix · Local-first · Backup ก่อนอัปเดตทุกครั้ง</div>
+<div class="footer-note">FIELD CAFÉ POS v6.3 — Anti-Loop Runtime Fix · Local-first · Backup ก่อนอัปเดตทุกครั้ง</div>
 </main>
 
 
@@ -894,10 +951,12 @@ main{width:min(100%,var(--field-content));max-width:var(--field-content);margin-
   <h3>📥 รับสต๊อกเข้า</h3>
   <div id="stockReceiveName" class="stock-receive-name"></div>
   <div class="stock-cost-preview" id="stockCostPreview">กรอกจำนวนและราคารวมเพื่อคำนวณต้นทุน</div>
-  <div class="form-row two">
-   <div><label>จำนวนที่รับเข้า <span id="stockReceiveUnitLabel"></span></label><input id="stockReceiveQty" type="number" min="0.0001" step="0.01" inputmode="decimal"></div>
-   <div><label>ราคารวมที่ซื้อ (บาท)</label><input id="stockReceiveTotalPrice" type="number" min="0.01" step="0.01" inputmode="decimal"></div>
+  <div class="form-row three stock-purchase-row">
+   <div><label>จำนวนที่ซื้อ</label><input id="stockReceiveQty" type="number" min="0.0001" step="0.01" inputmode="decimal" placeholder="เช่น 250"></div>
+   <div><label>หน่วยที่ซื้อ</label><select id="stockReceivePurchaseUnit"></select></div>
+   <div><label>ราคารวม (บาท)</label><input id="stockReceiveTotalPrice" type="number" min="0.01" step="0.01" inputmode="decimal" placeholder="เช่น 519"></div>
   </div>
+  <div class="stock-unit-line"><span>หน่วยฐานในระบบ</span><strong id="stockReceiveBaseUnit">—</strong><span>ปริมาณหลังแปลง</span><strong id="stockReceiveBaseQty">—</strong></div>
   <div class="form-row two">
    <div><label>แหล่งซื้อ / เลขใบเสร็จ</label><input id="stockReceiveSource" placeholder="เช่น Makro / ใบเสร็จ 30/09"></div>
    <div><label>วันที่ซื้อ</label><input id="stockReceiveDate" type="date"></div>
@@ -914,7 +973,7 @@ main{width:min(100%,var(--field-content));max-width:var(--field-content);margin-
 <div class="modal-bg" id="payModal" role="dialog" aria-modal="true" aria-hidden="true"><div class="modal payment-modal"><button class="closex" data-close="payModal">×</button><h3>รับชำระเงิน</h3>
  <div class="payment-hero"><small>ยอดที่ต้องชำระ</small><div class="money" id="payTotal">0 บาท</div></div>
  <div class="pay-order-check" id="payOrderCheck" aria-label="ตรวจรายการก่อนรับเงิน"></div>
- <div style="margin:0 0 12px"><label for="payCustomer">สมาชิกสะสมแต้ม POS (ไม่บังคับ)</label><select id="payCustomer"><option value="">ไม่ระบุสมาชิก</option></select><div class="muted" id="payPointsPreview" style="margin-top:4px"></div></div>
+ <details class="payment-extra"><summary>👤 สมาชิก/แต้ม (ไม่บังคับ)</summary><div class="payment-extra-body"><label for="payCustomer">สมาชิก</label><select id="payCustomer"><option value="">ไม่ระบุสมาชิก</option></select><div class="muted" id="payPointsPreview"></div></div></details>
  <div class="pay-tabs"><button class="paytab active" data-pay="cash">💵 เงินสด</button><button class="paytab" data-pay="promptpay">▦ PromptPay QR</button><button class="paytab" data-pay="other">อื่น ๆ</button></div>
  <div id="cashArea" style="margin-top:12px">
   <label>รับเงินสดมา</label>
@@ -937,6 +996,21 @@ main{width:min(100%,var(--field-content));max-width:var(--field-content);margin-
  <button class="btn green" id="confirmPaymentBtn" disabled>ยืนยันรับชำระ</button>
 </div></div>
 
+<!-- slow order alert modal -->
+<div class="modal-bg" id="slowOrderModal" role="dialog" aria-modal="true" aria-hidden="true">
+ <div class="modal slow-order-card">
+  <button class="closex" data-close="slowOrderModal">×</button>
+  <h3>⏱ ออเดอร์ต้องดูแล</h3>
+  <div class="slow-order-age" id="slowOrderAge">—</div>
+  <div id="slowOrderQueue" style="font-weight:900;font-size:1.15rem"></div>
+  <div class="slow-order-items" id="slowOrderItems"></div>
+  <div class="form-row two" style="margin-top:10px">
+   <button class="btn green" id="slowOrderGoBtn" type="button">ไปที่คิวนี้</button>
+   <button class="btn ghost" id="slowOrderAckBtn" type="button">รับทราบ</button>
+  </div>
+ </div>
+</div>
+
 <!-- pager modal -->
 <div class="modal-bg" id="pagerModal" role="dialog" aria-modal="true" aria-hidden="true"><div class="modal" style="text-align:center"><h3>ยื่นบัตรคิวให้ลูกค้า</h3><div style="font-size:4rem;font-weight:900;color:var(--matcha-dk)" id="queueShow">A001</div><div class="muted">เลขคิวลูกค้า · บัตรเรียกคืนหมายเลข <b id="pagerShow">1</b></div><button class="btn dark" id="pagerHandedBtn">ยื่นบัตรแล้ว → ดูคิว</button></div></div>
 
@@ -947,7 +1021,7 @@ main{width:min(100%,var(--field-content));max-width:var(--field-content);margin-
 <script>
 'use strict';
 const APP_KEY='field_pos_v2_state'; // ใช้ key เดิมเพื่อรักษาข้อมูลลูกค้าเมื่ออัปเกรด
-const FIELD_DATA_VERSION='2026-09-30.62';
+const FIELD_DATA_VERSION='2026-09-30.63';
 document.getElementById('masterDataVersion').textContent=FIELD_DATA_VERSION;
 const FIELD_IMAGE_VERSION='2026-09-28.4';
 const posterPhotos={};
@@ -1002,7 +1076,7 @@ const FIELD_DATA_INFO={
  recipe:'FIELD Master Recipe · 29 ก.ย. 2026',
  costs:'ฐานต้นทุนวัตถุดิบ · 23 ก.ย. 2026',
  brand:'FIELD Brand Identity · 27 ก.ย. 2026',
- correction:'FIELD POS v6.2 · Anti-loop runtime fix: sellable categories + stable variant modal + version sweep · 30 ก.ย. 2026'
+ correction:'FIELD POS v6.3 · stock unit-cost propagation + compact payment + ทำ/เสร็จ queue + slow-order popup · 30 ก.ย. 2026'
 };
 const PACKAGING_KEYS=new Set(['cup16','lid16','straw','sticker','ice','hotCupSet','cupHot','lidHot']);
 const CATEGORIES=['MATCHA','REFRESH','HOT MATCHA','COFFEE','TEA','COCOA','MILK','SODA','ALL'];
@@ -1392,7 +1466,7 @@ function changeQty(i,d){const c=state.cart[i];if(!c)return;c.qty+=d;if(c.qty<=0)
 document.getElementById('clearCartBtn').onclick=()=>{if(state.cart.length&&confirm('ล้างรายการในตะกร้า?')){state.cart=[];saveState();renderCart()}};
 
 
-// FIELD POS v6.2 — Three-chime order bell
+// FIELD POS v6.3 — Three-chime order bell
 let FIELD_AUDIO_CTX=null;
 let FIELD_BELL_READY=false;
 function getFieldAudioContext(){
@@ -1771,9 +1845,9 @@ document.getElementById('pagerHandedBtn').onclick=()=>{const id=document.getElem
 function queueLabel(o){const m=String(o.queueNo||o.billNo||'').match(/(?:^A|^FIELD-\d{8}-)(\d+)$/);return o.queueNo&&/^A\d+$/.test(o.queueNo)?o.queueNo:m?'A'+m[1].padStart(3,'0'):'#'+(o.pagerNo||'?')}
 function activeQueue(){return state.orders.filter(o=>o.status!=='returned').sort((a,b)=>(Number(a.time)||0)-(Number(b.time)||0)||String(a.billNo||'').localeCompare(String(b.billNo||'')))}
 function fifoHead(){return activeQueue()[0]}
-function renderQueue(){const max=Number(state.settings.pagerCount)||10,pool=document.getElementById('pagerPool'),active=activeQueue();pool.innerHTML='';for(let i=1;i<=max;i++){const o=active.find(x=>x.pagerNo===i),d=document.createElement('div');d.className='pager'+(o?(o.status==='ready'?' ready':' busy'):'');d.textContent=i;d.title=o?'บัตร '+i+' · คิว '+queueLabel(o):'บัตร '+i+' ว่าง';pool.appendChild(d)}const stage=document.getElementById('stagingGrid');stage.innerHTML=Array.from({length:6},(_,i)=>{const o=active[i];if(!o)return `<div class="staging-slot empty"><b>—</b><small>ช่อง ${i+1} ว่าง</small></div>`;const done=queueItemProgress(o).reduce((n,x)=>n+x.readyQty,0),qty=o.items.reduce((n,x)=>n+Number(x.qty||0),0);return `<div class="staging-slot ${i===0?'next':''}"><b>${esc(queueLabel(o))}</b><small>${i===0?'คิวถัดไป · ':''}${o.status==='assigned'?'รอทำ':o.status==='ready'?'พร้อมส่ง':'กำลังทำ'} · ${done}/${qty} แก้ว</small></div>`}).join('');const list=document.getElementById('queueList');list.innerHTML='';active.forEach(o=>list.appendChild(queueCard(o)));if(!active.length)list.innerHTML='<div class="empty">ไม่มีคิวค้าง</div>';renderPrepPlan(active);const old=active.filter(o=>Date.now()-Number(o.time||Date.now())>=10*60*1000);document.getElementById('queueAlert').textContent=old.length?'⏱ คิวค้างเกิน 10 นาที '+old.map(o=>queueLabel(o)).join(', ')+' · ตรวจว่าไม่มีแก้วตกหล่น':'';updateQueueBadge()}
+function renderQueue(){const max=Number(state.settings.pagerCount)||10,pool=document.getElementById('pagerPool'),active=activeQueue();pool.innerHTML='';for(let i=1;i<=max;i++){const o=active.find(x=>x.pagerNo===i),d=document.createElement('div');d.className='pager'+(o?(o.status==='ready'?' ready':' busy'):'');d.textContent=i;d.title=o?'บัตร '+i+' · คิว '+queueLabel(o):'บัตร '+i+' ว่าง';pool.appendChild(d)}const stage=document.getElementById('stagingGrid');stage.innerHTML=Array.from({length:6},(_,i)=>{const o=active[i];if(!o)return `<div class="staging-slot empty"><b>—</b><small>ช่อง ${i+1} ว่าง</small></div>`;const done=queueItemProgress(o).reduce((n,x)=>n+x.calledQty,0),qty=o.items.reduce((n,x)=>n+Number(x.qty||0),0);return `<div class="staging-slot ${i===0?'next':''}"><b>${esc(queueLabel(o))}</b><small>${i===0?'คิวถัดไป · ':''}${o.status==='assigned'?'รอทำ':o.status==='ready'?'พร้อมส่ง':'กำลังทำ'} · ${done}/${qty} แก้ว</small></div>`}).join('');const list=document.getElementById('queueList');list.innerHTML='';active.forEach(o=>list.appendChild(queueCard(o)));if(!active.length)list.innerHTML='<div class="empty">ไม่มีคิวค้าง</div>';renderPrepPlan(active);const old=active.filter(o=>Date.now()-Number(o.time||Date.now())>=10*60*1000);document.getElementById('queueAlert').textContent=old.length?'⏱ คิวค้างเกิน 10 นาที '+old.map(o=>queueLabel(o)).join(', ')+' · ตรวจว่าไม่มีแก้วตกหล่น':'';updateQueueBadge()}
 function prepClass(x){const m=state.menu.find(v=>v.id===x.id||v.name===x.name),c=m?.category||'';if(c==='TEA')return [10,'ชา','ชงหรือชั่งน้ำชารอไว้ก่อน ประกอบแก้วใกล้ส่ง'];if(c==='COCOA')return [20,'โกโก้','ทำโกโก้เพสต์และฐานนมก่อน'];if(c==='MILK')return [30,'นม','ชั่งและผสมฐานนมก่อน'];if(c==='MATCHA'||c==='HOT MATCHA')return [40,'มัทฉะ','ชั่งฐานไว้ ตีมัทฉะใกล้เวลาประกอบแก้ว'];if(c==='COFFEE')return [50,'กาแฟ','เตรียมแก้วก่อน สกัดช็อตใกล้เวลาส่ง'];if(c==='SODA')return [60,'โซดา','ผสมไซรัปก่อน เติมโซดาและน้ำแข็งท้ายสุด'];return [45,'อื่น ๆ','เตรียมฐานก่อน ประกอบแก้วใกล้ส่ง']}
-function orderPrepTasks(o){return queueItemProgress(o).map((x,i)=>({o,x,i,remaining:Math.max(0,Number(x.qty||0)-Number(x.readyQty||0)),group:prepClass(x)})).filter(t=>t.remaining>0).sort((a,b)=>a.group[0]-b.group[0]||a.x.name.localeCompare(b.x.name,'th')||a.x.variant.localeCompare(b.x.variant,'th'))}
+function orderPrepTasks(o){return queueItemProgress(o).map((x,i)=>({o,x,i,remaining:Math.max(0,Number(x.qty||0)-Number(x.calledQty||0)),group:prepClass(x)})).filter(t=>t.remaining>0).sort((a,b)=>a.group[0]-b.group[0]||a.x.name.localeCompare(b.x.name,'th')||a.x.variant.localeCompare(b.x.variant,'th'))}
 function firstPrepIndex(o){return orderPrepTasks(o)[0]?.i ?? -1}
 function selectPrepItem(orderId,itemIndex){if(!requireView('queue'))return false;const o=state.orders.find(v=>v.id===orderId),x=o?.items?.[itemIndex];if(!o||!x||fifoHead()!==o||Number(x.readyQty||0)>=Number(x.qty||0))return false;const wasSelected=!!x.prepSelected;state.orders.forEach(order=>(order.items||[]).forEach(item=>{item.prepSelected=false}));x.prepSelected=!wasSelected;saveState();renderQueue();return true}
 function renderPrepPlan(active){const el=document.getElementById('prepList');if(!el)return;el.innerHTML=active.length?active.map((o,queueIndex)=>{const tasks=orderPrepTasks(o);return `<section class="prep-order"><h4>คิว ${esc(queueLabel(o))}<small>${queueIndex===0?'ทำและส่งคิวนี้ก่อน':'รอส่งหลังคิวก่อนหน้า'}</small></h4>${tasks.length?tasks.map((t,n)=>`<div class="prep-row ${t.x.prepSelected?'selected':''}"><span class="prep-rank">${n+1}</span><div><b>${esc(t.x.name)} · ${esc(queueFormulaLabel(t.x))} ×${t.remaining}</b>${queueIndex===0&&n===0?'<span class="prep-recommended">✦ แนะนำให้ทำก่อน</span>':''}<small>${esc(t.group[1])} · ${esc(t.group[2])}</small></div><div class="prep-actions"><button type="button" class="prep-select ${t.x.prepSelected?'selected':''}" data-prep-select="${esc(o.id)}" data-prep-item="${t.i}" aria-pressed="${!!t.x.prepSelected}" ${queueIndex===0?'':'disabled'}>${t.x.prepSelected?'✓ เลือกแล้ว':queueIndex===0?'เลือกทำ':'รอคิว'}</button><button type="button" data-prep-order="${esc(o.id)}">ไปติ๊ก</button></div></div>`).join(''):'<div class="queue-progress">ทุกแก้วทำเสร็จแล้ว · รอส่งตามลำดับคิว</div>'}</section>`}).join(''):'<div class="empty">ไม่มีคิวค้าง</div>';el.querySelectorAll('[data-prep-select]').forEach(b=>b.onclick=()=>selectPrepItem(b.dataset.prepSelect,Number(b.dataset.prepItem)));el.querySelectorAll('[data-prep-order]').forEach(b=>b.onclick=()=>{const card=Array.from(document.querySelectorAll('.queue-list .kcard')).find(d=>d.dataset.orderId===b.dataset.prepOrder);card?.scrollIntoView({behavior:'smooth',block:'center'})})}
@@ -1792,7 +1866,7 @@ function queueItemProgress(o){
 function queueDeliveryBlockers(o){
  const blockers=[];
  for(const [i,x] of queueItemProgress(o).entries()){
-  const qty=Math.max(0,Number(x.qty)||0),made=Math.min(qty,Number(x.readyQty)||0);
+  const qty=Math.max(0,Number(x.qty)||0),made=Math.min(qty,Number(x.calledQty)||0);
   const label=x.name+' · '+queueFormulaLabel(x)+' ('+Array.from({length:qty},(_,n)=>queueCupCode(o,i,n+1)).join(', ')+')';
   if(qty>made)blockers.push(label+' — ยังไม่ทำ '+(qty-made)+' แก้ว');
  }
@@ -1801,12 +1875,12 @@ function queueDeliveryBlockers(o){
  return blockers
 }
 function queueCard(o){
- const d=document.createElement('div');d.className='kcard '+o.status;d.dataset.orderId=o.id;
- const items=queueItemProgress(o),recommended=firstPrepIndex(o),total=items.reduce((n,x)=>n+Number(x.qty||0),0),ready=items.reduce((n,x)=>n+Number(x.readyQty||0),0),first=fifoHead()===o,head=fifoHead(),blockers=queueDeliveryBlockers(o);
- d.innerHTML=`<div class="no">คิว ${esc(queueLabel(o))}</div><div class="muted mono">บัตร ${o.pagerNo} · ${esc(o.billNo||'')} · ${o.status==='assigned'?'รอทำ':o.status==='ready'?'พร้อมส่ง':'กำลังทำ'}</div>${first?'<div class="queue-hint">คิวนี้ต้องส่งก่อน</div>':'<div class="queue-hint">เตรียมล่วงหน้าได้ · ห้ามส่งก่อนคิว '+esc(queueLabel(head))+' ก่อน</div>'}<div class="queue-progress">ทำเสร็จ ${ready}/${total} แก้ว ${Date.now()-Number(o.time||Date.now())>=10*60*1000?'<span class="queue-age">· ค้างเกิน 10 นาที</span>':''}</div>${blockers.length?`<div class="queue-blockers" role="status"><b>ยังส่งไม่ได้ เพราะ</b><ul>${blockers.map(reason=>`<li>${esc(reason)}</li>`).join('')}</ul></div>`:'<div class="queue-clear">✓ ทำครบแล้ว · พร้อมเรียก/ส่งตามคิว</div>'}<div class="items">${items.map((x,i)=>{const qty=Number(x.qty)||0;return `<div class="queue-item ${x.prepSelected?'selected':''}"><div class="queue-item-name">${esc(x.name)} ×${qty} <span class="queue-formula">${esc(queueFormulaLabel(x))}</span>${first&&recommended===i?'<span class="prep-recommended">✦ แนะนำให้ทำก่อน</span>':''}${x.prepSelected?'<span class="queue-selected">✓ เลือกทำ</span>':''}</div><div class="queue-item-actions">${Array.from({length:qty},(_,j)=>{const unit=j+1,code=queueCupCode(o,i,unit),checked=unit<=x.readyQty,called=unit<=x.calledQty,editable=unit===x.readyQty+1||unit===x.readyQty&&unit>x.calledQty;return `<button type="button" class="queue-done ${checked?'checked':''} ${called?'called':''}" data-done="${i}" data-unit="${unit}" aria-label="แก้ว ${esc(code)} ${esc(x.name)} ${checked?'ทำเสร็จแล้ว':'ยังไม่เสร็จ'}" aria-pressed="${checked}" ${editable?'':'disabled'}>${checked?'✓':'□'} ${esc(code)}</button>`}).join('')}<button type="button" class="queue-call" data-call="${i}" ${first&&(x.readyQty||x.calledQty)?'':'disabled'}>${x.readyQty>x.calledQty?'📢 เรียก '+(x.readyQty-x.calledQty):x.calledQty?'📢 เรียกซ้ำ':'📢 เรียก'}</button></div></div>`}).join('')}</div><button type="button" class="btn ${!blockers.length?'red':'ghost'} sm" data-advance>${!blockers.length?'📦 ส่งแล้ว · คืนบัตร':'⚠ ดูสิ่งที่ขาด ('+blockers.length+')'}</button>`;
- d.querySelectorAll('[data-done]').forEach(b=>b.onclick=()=>{if(!requireView('queue'))return;const x=items[Number(b.dataset.done)],unit=Number(b.dataset.unit);if(unit===x.readyQty+1)x.readyQty=unit;else if(unit===x.readyQty&&unit>x.calledQty)x.readyQty=unit-1;else return;if(x.readyQty>=Number(x.qty))x.prepSelected=false;o.status=items.every(v=>Number(v.readyQty)>=Number(v.qty))?'ready':'making';saveState();renderQueue()});
- d.querySelectorAll('[data-call]').forEach(b=>b.onclick=()=>{if(!requireView('queue'))return;const x=items[Number(b.dataset.call)],pending=x.readyQty-x.calledQty,count=pending||x.calledQty;if(!count||fifoHead()!==o)return;if(pending){x.calledQty=x.readyQty;saveState();renderQueue()}alert('📢 คิว '+queueLabel(o)+' · '+x.name+' '+x.variant+' จำนวน '+count+' แก้ว พร้อมรับแล้ว')});
- d.querySelector('[data-advance]').onclick=()=>{if(!requireView('queue'))return;const missing=queueDeliveryBlockers(o);if(missing.length){alert('คิว '+queueLabel(o)+' ยังส่งไม่ได้:\n• '+missing.join('\n• '));return}const summary=items.map(x=>x.name+' '+queueFormulaLabel(x)+' ×'+x.qty).join('\n');if(!confirm('ตรวจเลขคิว '+queueLabel(o)+' และส่งครบ '+total+' แก้วแล้ว?\n'+summary))return;o.status='returned';o.deliveredAt=Date.now();saveState();renderQueue()};
+ const d=document.createElement('div');d.className='kcard '+o.status+(Date.now()-Number(o.time||Date.now())>=5*60*1000?' queue-slow':'');d.dataset.orderId=o.id;
+ const items=queueItemProgress(o),recommended=firstPrepIndex(o),total=items.reduce((n,x)=>n+Number(x.qty||0),0),started=items.reduce((n,x)=>n+Number(x.readyQty||0),0),finished=items.reduce((n,x)=>n+Number(x.calledQty||0),0),first=fifoHead()===o,head=fifoHead(),blockers=queueDeliveryBlockers(o);
+ d.innerHTML=`<div class="no">คิว ${esc(queueLabel(o))}</div><div class="muted mono">บัตร ${o.pagerNo} · ${esc(o.billNo||'')} · ${finished>=total?'เสร็จ':started>finished?'กำลังทำ':'รอทำ'}</div>${first?'<div class="queue-hint">คิวนี้ต้องส่งก่อน</div>':'<div class="queue-hint">เตรียมล่วงหน้าได้ · ห้ามส่งก่อนคิว '+esc(queueLabel(head))+'</div>'}<div class="queue-progress">กำลังทำ ${Math.max(0,started-finished)} · เสร็จ ${finished}/${total} แก้ว ${Date.now()-Number(o.time||Date.now())>=10*60*1000?'<span class="queue-age">· ล่าช้าเกิน 10 นาที</span>':Date.now()-Number(o.time||Date.now())>=5*60*1000?'<span class="queue-age">· เริ่มช้า</span>':''}</div>${blockers.length?`<div class="queue-blockers" role="status"><b>ยังส่งไม่ได้ เพราะ</b><ul>${blockers.map(reason=>`<li>${esc(reason)}</li>`).join('')}</ul></div>`:'<div class="queue-clear">✓ ทุกแก้วเสร็จ · พร้อมส่งตามคิว</div>'}<div class="items">${items.map((x,i)=>{const qty=Number(x.qty)||0;return `<div class="queue-item ${x.prepSelected?'selected':''}"><div class="queue-item-name">${esc(x.name)} ×${qty} <span class="queue-formula">${esc(queueFormulaLabel(x))}</span>${first&&recommended===i?'<span class="prep-recommended">✦ แนะนำให้ทำก่อน</span>':''}</div><div class="queue-item-actions">${Array.from({length:qty},(_,j)=>{const unit=j+1,code=queueCupCode(o,i,unit),isStarted=unit<=x.readyQty,isFinished=unit<=x.calledQty,canStart=unit===x.readyQty+1&&!isFinished,canFinish=isStarted&&!isFinished&&unit===x.calledQty+1;return `<button type="button" class="queue-do ${isStarted&&!isFinished?'active':''}" data-start="${i}" data-unit="${unit}" ${canStart?'':'disabled'}>${isFinished?'ทำแล้ว':isStarted?'กำลังทำ':'ทำ'} ${esc(code)}</button><button type="button" class="queue-finish ${isFinished?'done':''}" data-finish="${i}" data-unit="${unit}" ${canFinish?'':'disabled'}>${isFinished?'✓ เสร็จ':'เสร็จ'}</button>`}).join('')}</div></div>`}).join('')}</div><button type="button" class="btn ${!blockers.length?'red':'ghost'} sm" data-advance>${!blockers.length?'📦 ส่งแล้ว · คืนบัตร':'⚠ ยังไม่ครบ ('+blockers.length+')'}</button>`;
+ d.querySelectorAll('[data-start]').forEach(b=>b.onclick=()=>{if(!requireView('queue'))return;const x=items[Number(b.dataset.start)],unit=Number(b.dataset.unit);if(unit!==x.readyQty+1)return;x.readyQty=unit;o.status='making';saveState();renderQueue()});
+ d.querySelectorAll('[data-finish]').forEach(b=>b.onclick=()=>{if(!requireView('queue'))return;const x=items[Number(b.dataset.finish)],unit=Number(b.dataset.unit);if(unit>x.readyQty||unit!==x.calledQty+1)return;x.calledQty=unit;if(x.calledQty>=Number(x.qty))x.prepSelected=false;const allDone=items.every(v=>Number(v.calledQty)>=Number(v.qty));o.status=allDone?'ready':'making';saveState();renderQueue()});
+ d.querySelector('[data-advance]').onclick=()=>{if(!requireView('queue'))return;const missing=queueDeliveryBlockers(o);if(missing.length){alert('คิว '+queueLabel(o)+' ยังส่งไม่ได้:\\n• '+missing.join('\\n• '));return}const summary=items.map(x=>x.name+' '+queueFormulaLabel(x)+' ×'+x.qty).join('\\n');if(!confirm('ส่งคิว '+queueLabel(o)+' ครบ '+total+' แก้วแล้ว?\\n'+summary))return;o.status='returned';o.deliveredAt=Date.now();saveState();renderQueue()};
  return d
 }
 function updateQueueBadge(){const n=state.orders.filter(o=>o.status!=='returned').length,b=document.getElementById('queueBadge');b.style.display=n?'inline-block':'none';b.textContent=n;document.getElementById('orderQueueCount').textContent=n}
@@ -1841,22 +1915,72 @@ const COST_REFERENCES={
 function renderCostReference(key){const el=document.getElementById('costReference'),refs=COST_REFERENCES[key]||[];el.innerHTML=refs.length?'<b>แหล่งให้ตรวจราคาก่อนบันทึก · พบข้อมูล 28 ก.ย. 2026</b>'+refs.map(x=>`<div>${esc(x.description)} · <a href="${esc(x.url)}" target="_blank" rel="noopener noreferrer">เปิด ${esc(x.shop)} ↗</a></div>`).join('')+'<small>ราคาเว็บเป็นข้อมูลประกอบ อาจเปลี่ยนตามสาขา ส่วนลด ค่าส่ง และขนาดสินค้า กรอกต้นทุนจากใบเสร็จจริงต่อหน่วยที่ POS ใช้</small>':'<span>ยังไม่มีลิงก์สินค้าที่ตรงรุ่น กรุณาใช้ใบเสร็จหรือหน้าสินค้าจริง</span>'}
 function renderCostReview(){const select=document.getElementById('costIngredient'),selected=select.value;select.innerHTML=Object.entries(state.ingredients).map(([k,v])=>`<option value="${esc(k)}">${esc(v.name)} (${esc(v.unit)}) ${v.costCheckedAt===isoDate()?'✓ วันนี้':''}</option>`).join('');select.value=state.ingredients[selected]?selected:Object.keys(state.ingredients)[0]||'';const ing=state.ingredients[select.value];document.getElementById('costPrice').value=ing&&Number(ing.unitCost)>0?Number(ing.unitCost):'';document.getElementById('costSource').value=ing?.costSource||'';renderCostReference(select.value);document.getElementById('costLog').innerHTML='<b>ประวัติราคาล่าสุด</b>'+(state.costLog||[]).slice(-12).reverse().map(x=>`<div>${esc(x.date)} · ${esc(state.ingredients[x.key]?.name||x.name||x.key)} ${money(x.unitCost)}/${esc(x.unit)} · ${esc(x.source)}</div>`).join('')}
 document.getElementById('costIngredient').onchange=()=>{const ing=state.ingredients[document.getElementById('costIngredient').value];document.getElementById('costPrice').value=ing&&Number(ing.unitCost)>0?Number(ing.unitCost):'';document.getElementById('costSource').value=ing?.costSource||'';renderCostReference(document.getElementById('costIngredient').value)};
-document.getElementById('confirmCostBtn').onclick=()=>{if(!requireRole())return;const key=document.getElementById('costIngredient').value,ing=state.ingredients[key],price=Number(document.getElementById('costPrice').value),source=document.getElementById('costSource').value.trim();if(!ing||!Number.isFinite(price)||price<=0||!source){alert('กรอกต้นทุนต่อหน่วยฐานที่มากกว่า 0 และเหตุผล/แหล่งราคา');return}const previous=Number(ing.unitCost)||0;ing.unitCost=price;ing.costSource=source;ing.costCheckedAt=isoDate();state.costLog.push({id:'cost'+Date.now(),date:isoDate(),time:Date.now(),key,name:ing.name,unit:ing.unit,previous,unitCost:price,source});saveState();renderStock();renderMenuCosts();renderMenuGrid();renderReport();alert('อัปเดตต้นทุน '+ing.name+' = '+price.toFixed(4)+' บาท/'+ing.unit+' แล้ว')};
+function refreshDirectCostEditor(){
+ const key=document.getElementById('costIngredient').value,ing=state.ingredients[key];
+ if(!ing)return;
+ const unitSel=document.getElementById('costPurchaseUnit');
+ renderUnitSelect(unitSel,ing.unit,ing.lastPurchaseUnit||ing.unit);
+ updateDirectCostPreview()
+}
+function updateDirectCostPreview(){
+ const key=document.getElementById('costIngredient').value,ing=state.ingredients[key],price=Number(document.getElementById('costPrice').value),qty=Number(document.getElementById('costPurchaseQty').value),purchaseUnit=document.getElementById('costPurchaseUnit').value,box=document.getElementById('directCostPreview');
+ if(!ing||!box)return;
+ const baseQty=toBaseQty(qty,purchaseUnit,ing.unit),unitCost=unitCostFromPurchase(price,qty,purchaseUnit,ing.unit);
+ box.innerHTML=unitCost>0?`<b>${unitCost.toFixed(4)} บาท/${esc(ing.unit)}</b><br><span class="muted">${money(price)} ÷ ${baseQty.toLocaleString('th-TH',{maximumFractionDigits:2})} ${esc(ing.unit)}</span>`:`ต้นทุนปัจจุบัน ${Number(ing.unitCost||0).toFixed(4)} บาท/${esc(ing.unit)}`
+}
+document.getElementById('costIngredient').addEventListener('change',refreshDirectCostEditor);
+['costPrice','costPurchaseQty'].forEach(id=>document.getElementById(id).addEventListener('input',updateDirectCostPreview));
+document.getElementById('costPurchaseUnit').addEventListener('change',updateDirectCostPreview);
+document.getElementById('confirmCostBtn').onclick=()=>{
+ if(!requireRole())return;
+ const key=document.getElementById('costIngredient').value,ing=state.ingredients[key],total=Number(document.getElementById('costPrice').value),qty=Number(document.getElementById('costPurchaseQty').value),purchaseUnit=document.getElementById('costPurchaseUnit').value,source=document.getElementById('costSource').value.trim();
+ const baseQty=ing?toBaseQty(qty,purchaseUnit,ing.unit):0,price=ing?unitCostFromPurchase(total,qty,purchaseUnit,ing.unit):0;
+ if(!ing||price<=0||baseQty<=0||!source){alert('กรอกราคาซื้อ ปริมาณ หน่วย และแหล่งราคาให้ครบ');return}
+ const previous=Number(ing.unitCost)||0;
+ ing.unitCost=price;ing.lastPurchaseQty=qty;ing.lastPurchaseUnit=purchaseUnit;ing.lastPurchaseBaseQty=baseQty;ing.lastPurchasePrice=total;ing.lastPurchaseUnitCost=price;ing.lastPurchaseDate=isoDate();ing.costSource=`${source} · ${money(total)} / ${qty} ${purchaseUnit}`;ing.costCheckedAt=isoDate();
+ state.costLog.push({id:'cost'+Date.now(),date:isoDate(),time:Date.now(),key,name:ing.name,unit:ing.unit,previous,unitCost:price,purchaseQty:qty,purchaseUnit,purchaseBaseQty:baseQty,purchasePrice:total,source});
+ saveState();renderStock();renderMenuCosts();renderMenuGrid();renderReport();refreshDirectCostEditor();
+ alert('อัปเดตต้นทุน '+ing.name+' = '+price.toFixed(4)+' บาท/'+ing.unit+' แล้ว')
+};
 function procurementForecast(horizon=Number(state.settings.forecastDays)||7){const today=isoDate(),start=addDaysIso(today,-28),sales=state.sales.filter(s=>s.status==='paid'&&s.date>=start&&s.date<today),usage={};sales.forEach(s=>{const day=usage[s.date]||(usage[s.date]={});(s.items||[]).forEach(i=>Object.entries(i.recipe?.items||{}).forEach(([key,amount])=>{day[key]=(day[key]||0)+Number(amount)*Number(i.qty||0)}))});const dates=Object.keys(usage),days=Math.max(1,Math.min(30,Number(horizon)||7));return {dates:dates.length,days,rows:activeIngredientKeys().map(key=>{const ing=state.ingredients[key];if(!ing)return null;const total=dates.reduce((n,d)=>n+(usage[d][key]||0),0),average=dates.length?total/dates.length:0;let forecast=0;for(let i=1;i<=days;i++){const future=addDaysIso(today,i),weekday=localDateFromIso(future).getDay(),same=dates.filter(d=>localDateFromIso(d).getDay()===weekday);forecast+=same.length>=2?same.reduce((n,d)=>n+(usage[d][key]||0),0)/same.length:average}const reserve=Math.max(0,Number(ing.low)||0),current=Math.max(0,Number(ing.qty)||0),buy=Math.max(0,Math.ceil((dates.length>=3?forecast:0)+reserve-current));return {key,name:ing.name,unit:ing.unit,current,reserve,forecast:dates.length>=3?forecast:null,buy}}).filter(Boolean)}}
 function renderProcurement(){const input=document.getElementById('forecastDays');input.value=Number(state.settings.forecastDays)||7;const data=procurementForecast(),el=document.getElementById('procurementPlan');el.innerHTML=`<div class="forecast-note">ข้อมูลวันขายจริง ${data.dates} วันใน 28 วันย้อนหลัง · ${data.dates>=3?'ประมาณการใช้ '+data.days+' วันถัดไป':'ยังไม่พอคาดการณ์ยอดใช้ (ต้องมีอย่างน้อย 3 วันขาย) แสดงเฉพาะยอดเติมถึง safety stock'} · ใช้คงเหลือที่กรอกในเครื่อง</div><div class="table-wrap"><table><thead><tr><th>วัตถุดิบ</th><th>คงเหลือ</th><th>คาดว่าจะใช้</th><th>สำรองขั้นต่ำ</th><th>แนะนำซื้อเพิ่ม</th></tr></thead><tbody>${data.rows.map(r=>`<tr><td>${esc(r.name)}</td><td>${r.current} ${esc(r.unit)}</td><td>${r.forecast===null?'ข้อมูลไม่พอ':r.forecast.toFixed(1)+' '+esc(r.unit)}</td><td>${r.reserve} ${esc(r.unit)}</td><td><b>${r.buy} ${esc(r.unit)}</b></td></tr>`).join('')}</tbody></table></div><div class="forecast-note">สูตรแนะนำซื้อ = ความต้องการคาดการณ์ + safety stock − คงเหลือ ปัดขึ้นตามหน่วย · ไม่ทราบขนาดแพ็ก วันหยุด และเวลาส่งของ ให้ตรวจยอดจริงก่อนสั่งซื้อ</div>`}
 document.getElementById('forecastDays').onchange=()=>{if(!requireRole())return;const n=Number(document.getElementById('forecastDays').value);state.settings.forecastDays=Math.max(1,Math.min(30,Number.isFinite(n)?Math.round(n):7));saveState();renderProcurement()};
 
 // stock
 let stockReceiveKey=null;
+function stockUnitOptions(baseUnit){
+ const u=String(baseUnit||'').toLowerCase();
+ if(u==='g')return ['g','kg'];
+ if(u==='ml')return ['ml','L'];
+ if(u==='pcs'||u==='pc'||u==='ชิ้น')return ['pcs'];
+ return [baseUnit||'unit'];
+}
+function toBaseQty(qty,purchaseUnit,baseUnit){
+ const q=Number(qty);
+ if(!Number.isFinite(q)||q<=0)return 0;
+ const p=String(purchaseUnit||'').toLowerCase(),b=String(baseUnit||'').toLowerCase();
+ if(b==='g'&&p==='kg')return q*1000;
+ if(b==='ml'&&(p==='l'||p==='liter'||p==='litre'))return q*1000;
+ return q;
+}
+function renderUnitSelect(select,baseUnit,preferred=''){
+ const opts=stockUnitOptions(baseUnit);
+ select.innerHTML=opts.map(u=>`<option value="${esc(u)}">${esc(u)}</option>`).join('');
+ select.value=opts.includes(preferred)?preferred:opts[0];
+}
+function unitCostFromPurchase(total,qty,purchaseUnit,baseUnit){
+ const baseQty=toBaseQty(qty,purchaseUnit,baseUnit);
+ return baseQty>0&&Number(total)>0?Number(total)/baseQty:0;
+}
 function baseCostLabel(ing){
  const unit=String(ing?.unit||'unit');
  const cost=Number(ing?.unitCost)||0;
  return cost>0?`${money(cost)} / ${esc(unit)}`:'ยังไม่มีต้นทุน';
 }
 function lastPurchaseText(ing){
- const p=Number(ing?.lastPurchasePrice)||0,q=Number(ing?.lastPurchaseQty)||0;
+ const p=Number(ing?.lastPurchasePrice)||0,q=Number(ing?.lastPurchaseQty)||0,u=ing?.lastPurchaseUnit||ing?.unit;
  if(!p||!q)return 'ยังไม่มีข้อมูลซื้อครั้งล่าสุด';
- return `${money(p)} / ${q.toLocaleString('th-TH',{maximumFractionDigits:2})} ${esc(ing.unit)}`
+ return `${money(p)} / ${q.toLocaleString('th-TH',{maximumFractionDigits:2})} ${esc(u)}`
 }
 function renderStock(){
  renderStockAlerts();renderCostReview();renderProcurement();
@@ -1872,8 +1996,8 @@ function renderStock(){
     <span class="stock-badge ${level}">${status}</span>
    </div>
    <div class="stock-metrics">
-    <div><span>คงเหลือ</span><strong>${qty.toLocaleString('th-TH',{maximumFractionDigits:2})} ${esc(x.unit)}</strong></div>
-    <div><span>ต้นทุน/${esc(x.unit)}</span><strong>${Number(x.unitCost)>0?money(Number(x.unitCost)):'—'}</strong></div>
+    <div><span>คงเหลือ (หน่วยฐาน)</span><strong><span class="stock-number">${qty.toLocaleString('th-TH',{maximumFractionDigits:2})}</span> <span class="stock-unit">${esc(x.unit)}</span></strong></div>
+    <div><span>ต้นทุนต่อหน่วยฐาน</span><strong>${Number(x.unitCost)>0?Number(x.unitCost).toFixed(4):'—'} <span class="stock-unit">บาท/${esc(x.unit)}</span></strong></div>
     <div><span>ซื้อครั้งล่าสุด</span><strong>${lastPurchaseText(x)}</strong></div>
    </div>
    <div class="stock-actions">
@@ -1911,7 +2035,9 @@ function openStockReceive(k){
  const ing=state.ingredients[k];if(!ing)return;
  stockReceiveKey=k;
  document.getElementById('stockReceiveName').innerHTML=`<b>${esc(ing.name)}</b><small>คงเหลือ ${Number(ing.qty)||0} ${esc(ing.unit)} · ต้นทุนปัจจุบัน ${baseCostLabel(ing)}</small>`;
- document.getElementById('stockReceiveUnitLabel').textContent='('+ing.unit+')';
+ const unitSel=document.getElementById('stockReceivePurchaseUnit');
+ renderUnitSelect(unitSel,ing.unit,ing.lastPurchaseUnit||ing.unit);
+ document.getElementById('stockReceiveBaseUnit').textContent=ing.unit;
  document.getElementById('stockReceiveQty').value='';
  document.getElementById('stockReceiveTotalPrice').value='';
  document.getElementById('stockReceiveSource').value='';
@@ -1920,33 +2046,37 @@ function openStockReceive(k){
  showModal('stockReceiveModal')
 }
 function updateStockCostPreview(){
- const ing=state.ingredients[stockReceiveKey],qty=Number(document.getElementById('stockReceiveQty')?.value),total=Number(document.getElementById('stockReceiveTotalPrice')?.value),box=document.getElementById('stockCostPreview');
+ const ing=state.ingredients[stockReceiveKey],qty=Number(document.getElementById('stockReceiveQty')?.value),total=Number(document.getElementById('stockReceiveTotalPrice')?.value),purchaseUnit=document.getElementById('stockReceivePurchaseUnit')?.value,box=document.getElementById('stockCostPreview');
  if(!box||!ing)return;
- if(qty>0&&total>0){
-  const unitCost=total/qty;
-  box.innerHTML=`ต้นทุนใหม่จากบิลนี้ <strong>${money(unitCost)} / ${esc(ing.unit)}</strong> · สต๊อกหลังรับเข้า ${(Number(ing.qty||0)+qty).toLocaleString('th-TH',{maximumFractionDigits:2})} ${esc(ing.unit)}`
- }else box.textContent='กรอกจำนวนและราคารวมเพื่อคำนวณต้นทุน'
+ const baseQty=toBaseQty(qty,purchaseUnit,ing.unit),unitCost=unitCostFromPurchase(total,qty,purchaseUnit,ing.unit);
+ document.getElementById('stockReceiveBaseQty').textContent=baseQty>0?`${baseQty.toLocaleString('th-TH',{maximumFractionDigits:2})} ${ing.unit}`:'—';
+ if(unitCost>0){
+  box.innerHTML=`ต้นทุนใหม่ <strong>${unitCost.toFixed(4)} บาท/${esc(ing.unit)}</strong> · ${money(total)} ÷ ${baseQty.toLocaleString('th-TH',{maximumFractionDigits:2})} ${esc(ing.unit)} · คงเหลือหลังรับ ${(Number(ing.qty||0)+baseQty).toLocaleString('th-TH',{maximumFractionDigits:2})} ${esc(ing.unit)}`
+ }else box.textContent='กรอกจำนวน หน่วย และราคารวม ระบบจะคำนวณต้นทุนต่อหน่วยฐานทันที'
 }
-document.getElementById('stockReceiveQty').addEventListener('input',updateStockCostPreview);
-document.getElementById('stockReceiveTotalPrice').addEventListener('input',updateStockCostPreview);
+['stockReceiveQty','stockReceiveTotalPrice','stockReceivePurchaseUnit'].forEach(id=>document.getElementById(id).addEventListener('input',updateStockCostPreview));
+document.getElementById('stockReceivePurchaseUnit').addEventListener('change',updateStockCostPreview);
 document.getElementById('confirmStockReceiveBtn').onclick=()=>{
  if(!requireRole())return;
- const ing=state.ingredients[stockReceiveKey],qty=Number(document.getElementById('stockReceiveQty').value),total=Number(document.getElementById('stockReceiveTotalPrice').value),source=document.getElementById('stockReceiveSource').value.trim(),date=document.getElementById('stockReceiveDate').value||isoDate();
- if(!ing||!Number.isFinite(qty)||qty<=0||!Number.isFinite(total)||total<=0||!source){alert('กรอกจำนวนรับเข้า ราคารวม และแหล่งซื้อให้ครบ');return}
- const previous=Number(ing.unitCost)||0,newUnitCost=total/qty;
- ing.qty=Math.max(0,Number(ing.qty)||0)+qty;
+ const ing=state.ingredients[stockReceiveKey],qty=Number(document.getElementById('stockReceiveQty').value),purchaseUnit=document.getElementById('stockReceivePurchaseUnit').value,total=Number(document.getElementById('stockReceiveTotalPrice').value),source=document.getElementById('stockReceiveSource').value.trim(),date=document.getElementById('stockReceiveDate').value||isoDate();
+ const baseQty=ing?toBaseQty(qty,purchaseUnit,ing.unit):0,newUnitCost=ing?unitCostFromPurchase(total,qty,purchaseUnit,ing.unit):0;
+ if(!ing||baseQty<=0||newUnitCost<=0||!source){alert('กรอกจำนวน หน่วย ราคารวม และแหล่งซื้อให้ครบ');return}
+ const previous=Number(ing.unitCost)||0;
+ ing.qty=Math.max(0,Number(ing.qty)||0)+baseQty;
  ing.unitCost=newUnitCost;
  ing.lastPurchaseQty=qty;
+ ing.lastPurchaseUnit=purchaseUnit;
+ ing.lastPurchaseBaseQty=baseQty;
  ing.lastPurchasePrice=total;
  ing.lastPurchaseUnitCost=newUnitCost;
  ing.lastPurchaseDate=date;
- ing.costSource=source;
+ ing.costSource=`${source} · ${money(total)} / ${qty} ${purchaseUnit}`;
  ing.costCheckedAt=date;
- state.costLog.push({id:'cost'+Date.now(),date,time:Date.now(),key:stockReceiveKey,name:ing.name,unit:ing.unit,previous,unitCost:newUnitCost,purchaseQty:qty,purchasePrice:total,source});
+ state.costLog.push({id:'cost'+Date.now(),date,time:Date.now(),key:stockReceiveKey,name:ing.name,unit:ing.unit,previous,unitCost:newUnitCost,purchaseQty:qty,purchaseUnit,purchaseBaseQty:baseQty,purchasePrice:total,source});
  saveState();
  hideModal('stockReceiveModal');
- renderStock();renderMenuCosts();renderMenuGrid();renderActionAlerts();
- alert(`รับ ${ing.name} +${qty} ${ing.unit}\nต้นทุนใหม่ ${newUnitCost.toFixed(4)} บาท/${ing.unit}`)
+ renderStock();renderMenuCosts();renderMenuGrid();renderActionAlerts();renderReport();
+ alert(`รับ ${ing.name} +${baseQty.toLocaleString('th-TH',{maximumFractionDigits:2})} ${ing.unit}\\nต้นทุนใหม่ ${newUnitCost.toFixed(4)} บาท/${ing.unit}`)
 }
 function adjustStockCount(k){
  if(!requireRole())return;
@@ -2122,7 +2252,7 @@ const testBellBtn=document.getElementById('testBellBtn');if(testBellBtn)testBell
 document.getElementById('saveSettingsBtn').onclick=()=>{if(!requireRole())return;const rawPP=document.getElementById('promptpayId').value.trim(),pp=sanitizePromptPayId(rawPP);if(rawPP&& !validPromptPayId(pp)){alert('PromptPay ID ต้องเป็นเบอร์มือถือ 10 หลักขึ้นต้นด้วย 0 หรือเลขบัตรประชาชน/เลขผู้เสียภาษี 13 หลัก');document.getElementById('promptpayId').focus();return}state.settings.shopName=document.getElementById('shopName').value.trim()||'FIELD';state.settings.promptpayId=pp;state.settings.pagerCount=Math.min(50,Math.max(1,Number(document.getElementById('pagerCount').value)||10));state.settings.receiptFooter=document.getElementById('receiptFooter').value.trim();saveState();renderQueue();renderSettings();alert('บันทึกการตั้งค่าแล้ว')};
 document.getElementById('exportBtn').onclick=()=>{if(!requireRole())return;const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='FIELD_POS_backup_'+isoDate()+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)};
 document.getElementById('importFile').onchange=e=>{if(!requireRole())return;const f=e.target.files[0];if(!f)return;const rd=new FileReader();rd.onload=()=>{try{const obj=JSON.parse(rd.result);if(String(obj.schema_version||'').startsWith('FIELD_POS_MASTER_IMPORT')){if(confirm('นำเข้า FIELD Master Data โดยไม่ลบยอดขาย/ออเดอร์เดิม?')){importFieldMaster(obj);location.reload()}return}if(!obj.menu||!obj.ingredients)throw new Error('รูปแบบไม่ถูกต้อง');if(confirm('นำเข้า Backup และแทนที่ข้อมูลปัจจุบัน?')){state=normalizeState(obj);state.updatedAt=Date.now();localStorage.setItem(APP_KEY,JSON.stringify(state));dbWrite=dbWrite.then(()=>persistDatabase());dbWrite.finally(()=>location.reload())}}catch(err){console.error(err);alert('ไฟล์ JSON ไม่ถูกต้องหรือไม่รองรับ')}};rd.readAsText(f)};
-document.getElementById('resetAllBtn').onclick=async()=>{if(!requireRole())return;if(confirm('รีเซ็ต FIELD CAFÉ POS v6.2 ทั้งหมด? การกระทำนี้ย้อนกลับไม่ได้หากไม่มี Backup')&&confirm('ยืนยันอีกครั้ง: ลบยอดขาย สต๊อก การตั้งค่า และฐานข้อมูลทั้งหมด?')){localStorage.removeItem(APP_KEY);await deleteFieldDb();location.reload()}};
+document.getElementById('resetAllBtn').onclick=async()=>{if(!requireRole())return;if(confirm('รีเซ็ต FIELD CAFÉ POS v6.3 ทั้งหมด? การกระทำนี้ย้อนกลับไม่ได้หากไม่มี Backup')&&confirm('ยืนยันอีกครั้ง: ลบยอดขาย สต๊อก การตั้งค่า และฐานข้อมูลทั้งหมด?')){localStorage.removeItem(APP_KEY);await deleteFieldDb();location.reload()}};
 
 const syncDbBtn=document.getElementById('syncDbBtn');if(syncDbBtn)syncDbBtn.onclick=async()=>{if(!requireRole())return;syncDbBtn.disabled=true;syncDbBtn.textContent='กำลังซิงก์…';const ok=await persistDatabase();syncDbBtn.textContent=ok?'ซิงก์สำเร็จ ✓':'ซิงก์ไม่สำเร็จ';setTimeout(()=>{syncDbBtn.disabled=false;syncDbBtn.textContent='ซิงก์ข้อมูลลงฐานข้อมูลตอนนี้'},1200)};
 
@@ -2199,27 +2329,54 @@ document.getElementById('toggleUserBtn').onclick=()=>{if(!requireRole())return;c
 document.getElementById('saveStaffViewsBtn').onclick=()=>{if(!requireRole())return;const user=authData.users.find(u=>u.id===document.getElementById('managedUser').value);if(user?.role!=='staff')return;const views={};document.querySelectorAll('[data-staff-view]').forEach(x=>views[x.dataset.staffView]=x.checked);if(!views.order&&!views.queue){alert('เลือกอย่างน้อยหน้ารับออเดอร์หรือคิว');return}user.views=views;saveAuthData();alert('บันทึกสิทธิ์ '+user.username+' แล้ว')};
 function startAuth(){if(authData?.corrupt){document.getElementById('authTitle').textContent='ข้อมูลบัญชีเสียหาย';document.getElementById('authHelp').textContent='ตรวจสอบข้อมูลบัญชีในเบราว์เซอร์';return}lockApp(authData?.users?.length?'กรอกชื่อผู้ใช้และรหัสผ่าน':'สร้างบัญชี Admin ครั้งแรก')}
 
+const SLOW_ORDER_WARN_MS=5*60*1000;
+const SLOW_ORDER_REPEAT_MS=3*60*1000;
+function slowOrderCandidates(){
+ const now=Date.now();
+ return activeQueue().filter(o=>now-Number(o.time||now)>=SLOW_ORDER_WARN_MS)
+}
+function maybeShowSlowOrderAlert(){
+ if(document.getElementById('slowOrderModal').classList.contains('show'))return;
+ const now=Date.now(),o=slowOrderCandidates().find(o=>now-Number(o.lastSlowAlertAt||0)>=SLOW_ORDER_REPEAT_MS);
+ if(!o)return;
+ const ageMs=now-Number(o.time||now),mins=Math.max(1,Math.floor(ageMs/60000));
+ o.lastSlowAlertAt=now;saveState();
+ document.getElementById('slowOrderModal').dataset.orderid=o.id;
+ document.getElementById('slowOrderAge').textContent=mins>=10?`ล่าช้า ${mins} นาที`:`เริ่มช้า ${mins} นาที`;
+ document.getElementById('slowOrderQueue').textContent='คิว '+queueLabel(o)+' · บัตร '+o.pagerNo;
+ document.getElementById('slowOrderItems').innerHTML=(o.items||[]).map(x=>`${esc(x.name)} ${esc(queueFormulaLabel(x))} ×${Number(x.qty)||0}`).join('<br>');
+ showModal('slowOrderModal');
+ playNewOrderBell();
+}
+document.getElementById('slowOrderAckBtn').onclick=()=>hideModal('slowOrderModal');
+document.getElementById('slowOrderGoBtn').onclick=()=>{
+ const id=document.getElementById('slowOrderModal').dataset.orderid;
+ hideModal('slowOrderModal');showView('queue');
+ setTimeout(()=>document.querySelector(`[data-order-id="${CSS.escape(id)}"]`)?.scrollIntoView({behavior:'smooth',block:'center'}),100)
+};
+
 // init
 document.getElementById('reportDate').value=isoDate();renderCategories();renderMenuGrid();renderCart();renderQueue();updateQueueBadge();renderActionAlerts();updateDbUi();startAuth();
-setInterval(()=>{if(document.getElementById('v-queue').classList.contains('active'))renderQueue()},60000);
+setInterval(()=>{if(document.getElementById('v-queue').classList.contains('active'))renderQueue();maybeShowSlowOrderAlert()},30000);
 </script>
 
 <script id="field-v46-selfcheck">
 window.addEventListener('load',()=>{try{
  const critical=['renderMenuGrid','renderMenuAdmin','renderQueue','renderReport','renderCrm','persistDatabase','importFieldMaster','addCustomMenu'];
  const missing=critical.filter(k=>typeof window[k]!=='function');
- if(missing.length)console.error('[FIELD POS v6.2] missing critical functions',missing);
- else console.info('[FIELD POS v6.2] core self-check passed');
-}catch(e){console.error('[FIELD POS v6.2] self-check error',e)}});
+ if(missing.length)console.error('[FIELD POS v6.3] missing critical functions',missing);
+ else console.info('[FIELD POS v6.3] core self-check passed');
+}catch(e){console.error('[FIELD POS v6.3] self-check error',e)}});
 </script>
 
 
-<script id="field-v62-manifest" type="application/json">
+<script id="field-v63-manifest" type="application/json">
 {
- "version":"6.2",
- "anti_loop_gate":"FIELD_POS_V6_2_ANTI_LOOP_GATE.md",
- "fixes":["hide empty sell categories","normalize active category","variant card vertical layout","stale-version sweep","overflow guard"],
- "required_runtime_viewports":["390x844","768x1024","1024x768","1536x1024"]
+ "version":"6.3",
+ "precode_flow":"FIELD_POS_V6_3_PRECODE_FLOW.md",
+ "fixes":["stock purchase-unit conversion","instant base-unit cost","compact payment sheet","queue ทำ/เสร็จ","slow-order popup"],
+ "slow_order_minutes":5,
+ "repeat_alert_minutes":3
 }
 </script>
 
