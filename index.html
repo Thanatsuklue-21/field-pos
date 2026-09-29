@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#211E19">
-<title>FIELD CAFÉ POS v6.1 · UI Proportion Repair</title>
+<title>FIELD CAFÉ POS v6.2 · Anti-Loop Runtime Fix</title>
 <style>
 :root{
  --matcha:#5C7A3D;--matcha-dk:#3F5729;--matcha-lt:#DDE8CF;
@@ -505,6 +505,63 @@ main{width:min(100%,var(--field-content));max-width:var(--field-content);margin-
 }
 </style>
 
+
+<style id="field-v62-variant-runtime-fix">
+.modal.variant-modal,.modal:has(#variantButtons){width:min(720px,calc(100vw - 24px));}
+#variantButtons.variant-grid{
+ display:grid!important;
+ grid-template-columns:repeat(3,minmax(0,1fr))!important;
+ gap:12px!important;
+ align-items:stretch!important;
+}
+#variantButtons .variant-btn{
+ display:grid!important;
+ grid-template-rows:auto minmax(1.5em,auto)!important;
+ align-items:start!important;
+ justify-items:stretch!important;
+ gap:8px!important;
+ width:100%!important;
+ min-width:0!important;
+ padding:8px!important;
+ text-align:center!important;
+ overflow:hidden!important;
+}
+#variantButtons .variant-thumb{
+ display:block!important;
+ width:100%!important;
+ height:auto!important;
+ aspect-ratio:4/3!important;
+ object-fit:contain!important;
+ margin:0!important;
+ border-radius:10px!important;
+ background:#f3efe5!important;
+}
+#variantButtons .variant-btn>span{
+ display:block!important;
+ width:100%!important;
+ min-width:0!important;
+ font-size:.92rem!important;
+ line-height:1.25!important;
+ font-weight:800!important;
+ text-align:center!important;
+ overflow-wrap:anywhere!important;
+}
+@media(max-width:560px){
+ #variantButtons.variant-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+ #variantButtons .variant-btn>span{font-size:.84rem!important}
+}
+@media(max-width:340px){
+ #variantButtons.variant-grid{grid-template-columns:1fr!important}
+}
+</style>
+
+
+<style id="field-v62-overflow-guard">
+#variantModal .modal{overflow-x:hidden}
+#variantModal *{min-width:0}
+#v-order .layout,#v-order .menu-grid,#v-order .product,#v-order .product-body{min-width:0}
+</style>
+
 </head>
 <body class="auth-locked">
 <div id="authGate" class="auth-gate" role="dialog" aria-modal="true" aria-labelledby="authTitle">
@@ -516,7 +573,7 @@ main{width:min(100%,var(--field-content));max-width:var(--field-content);margin-
  </div>
 </div>
 <header>
- <div class="brand"><span id="fieldVersionBadge" style="font-size:.62rem;font-weight:800;padding:3px 7px;border-radius:999px;background:#F6F1E4;color:#3F5729;margin-right:4px">v6.1</span><div class="mark" id="brandMark">F</div><div><h1>FIELD CAFÉ POS</h1><small>Simple · Fresh · Everyday</small></div></div>
+ <div class="brand"><span id="fieldVersionBadge" style="font-size:.62rem;font-weight:800;padding:3px 7px;border-radius:999px;background:#F6F1E4;color:#3F5729;margin-right:4px">v6.2</span><div class="mark" id="brandMark">F</div><div><h1>FIELD CAFÉ POS</h1><small>Simple · Fresh · Everyday</small></div></div>
  <div class="header-right"><button id="lockNowBtn" class="auth-lock-button no-print" type="button" hidden>🔒 ล็อก</button><b id="clockText">—</b><span id="dateText">—</span></div>
 </header>
 <nav id="mainNav" aria-label="เมนูหลัก">
@@ -725,7 +782,7 @@ main{width:min(100%,var(--field-content));max-width:var(--field-content);margin-
 
  <div id="menuListPanel" class="menu-panel active">
   <div class="card menu-control-center">
-   <div class="menu-control-head"><div><h3>FIELD Menu Control Center</h3><p class="muted">Master ล่าสุด · สูตรที่ผ่านแล้วล็อกแยกจากเมนู R&D/HOLD · Custom เพิ่มเองได้</p></div><span class="pill" id="menuMasterVersion">v4.6.2</span></div>
+   <div class="menu-control-head"><div><h3>FIELD Menu Control Center</h3><p class="muted">Master ล่าสุด · สูตรที่ผ่านแล้วล็อกแยกจากเมนู R&D/HOLD · Custom เพิ่มเองได้</p></div><span class="pill" id="menuMasterVersion">v6.2</span></div>
    <div class="stats menu-master-stats">
     <div class="statbox green"><small>พร้อมขาย</small><strong id="menuActiveCount">0</strong></div>
     <div class="statbox"><small>สูตร APPROVED</small><strong id="menuApprovedCount">0</strong></div>
@@ -786,7 +843,7 @@ main{width:min(100%,var(--field-content));max-width:var(--field-content);margin-
    <h3>🌐 สถานะออนไลน์ / หลายอุปกรณ์</h3>
    <div class="summary-row"><span>โหมดหลัก</span><b>Local-first · IndexedDB + LocalStorage</b></div>
    <div class="summary-row"><span>ความเร็วหน้าร้าน</span><b>ไม่รอเครือข่ายทุกครั้งที่กด</b></div>
-   <div class="summary-row"><span>หลายอุปกรณ์แบบ realtime</span><b>ยังไม่เปิดใน v5.0</b></div>
+   <div class="summary-row"><span>หลายอุปกรณ์แบบ realtime</span><b>ยังไม่เปิดใน v6.2</b></div>
    <p class="muted">Backend/Turso ที่เคยเตรียมไว้ยังไม่ควรถูกเรียกว่า “ซิงก์หลายเครื่องพร้อมใช้” จนกว่าจะทดสอบ conflict, login server และ transaction ตัดสต๊อกจริงครบก่อน</p>
    <button class="btn ghost sm" id="exportMigrationBtn" type="button">⬇️ Export Snapshot สำหรับย้าย/สำรอง</button>
   </div>
@@ -812,7 +869,7 @@ main{width:min(100%,var(--field-content));max-width:var(--field-content);margin-
   <div class="db-meta" id="dbMeta"></div>
   <button class="btn ghost" id="syncDbBtn" type="button">ซิงก์ข้อมูลลงฐานข้อมูลตอนนี้</button>
  </div>
- <div class="card"><h3>✅ System Health · v5.0</h3>
+ <div class="card"><h3>✅ System Health · v6.2</h3>
  <div class="summary-row"><span>Order / Payment</span><b>พร้อม</b></div>
  <div class="summary-row"><span>Queue FIFO</span><b>พร้อม · ไม่มี QC</b></div>
  <div class="summary-row"><span>เสียงกระดิ่ง</span><b id="systemBellStatus">ยังไม่ได้ทดสอบ</b></div>
@@ -826,7 +883,7 @@ main{width:min(100%,var(--field-content));max-width:var(--field-content);margin-
 </section>
 
 <section id="printArea" class="view"></section>
-<div class="footer-note">FIELD CAFÉ POS v5.0 — Master Clean · Local-first · Backup ก่อนอัปเดตทุกครั้ง</div>
+<div class="footer-note">FIELD CAFÉ POS v6.2 — Anti-Loop Runtime Fix · Local-first · Backup ก่อนอัปเดตทุกครั้ง</div>
 </main>
 
 
@@ -890,7 +947,7 @@ main{width:min(100%,var(--field-content));max-width:var(--field-content);margin-
 <script>
 'use strict';
 const APP_KEY='field_pos_v2_state'; // ใช้ key เดิมเพื่อรักษาข้อมูลลูกค้าเมื่ออัปเกรด
-const FIELD_DATA_VERSION='2026-09-30.61';
+const FIELD_DATA_VERSION='2026-09-30.62';
 document.getElementById('masterDataVersion').textContent=FIELD_DATA_VERSION;
 const FIELD_IMAGE_VERSION='2026-09-28.4';
 const posterPhotos={};
@@ -945,7 +1002,7 @@ const FIELD_DATA_INFO={
  recipe:'FIELD Master Recipe · 29 ก.ย. 2026',
  costs:'ฐานต้นทุนวัตถุดิบ · 23 ก.ย. 2026',
  brand:'FIELD Brand Identity · 27 ก.ย. 2026',
- correction:'FIELD POS v6.1 · Bell + Proportional Menu Cards + New Matcha Illustration Set · 30 ก.ย. 2026'
+ correction:'FIELD POS v6.2 · Anti-loop runtime fix: sellable categories + stable variant modal + version sweep · 30 ก.ย. 2026'
 };
 const PACKAGING_KEYS=new Set(['cup16','lid16','straw','sticker','ice','hotCupSet','cupHot','lidHot']);
 const CATEGORIES=['MATCHA','REFRESH','HOT MATCHA','COFFEE','TEA','COCOA','MILK','SODA','ALL'];
@@ -1223,7 +1280,20 @@ let activeCategory='MATCHA', selectedProduct=null, selectedVariant=null, activeO
 document.getElementById('menuSearch').oninput=renderMenuGrid;
 document.getElementById('activeOnlyBtn').onclick=()=>{activeOnly=!activeOnly;const b=document.getElementById('activeOnlyBtn');b.setAttribute('aria-pressed',String(activeOnly));b.textContent=activeOnly?'✓ พร้อมขาย':'▦ ทุกเมนู';renderMenuGrid()};
 document.getElementById('goQueueBtn').onclick=()=>showView('queue');
-function renderCategories(){const bar=document.getElementById('categoryBar');bar.innerHTML=CATEGORIES.map(c=>`<button class="chip ${c===activeCategory?'active':''} ${c==='ALL'?'all-chip':''}" data-cat="${c}" aria-label="${esc(CAT_LABEL[c])}"><img src="${categoryThumb(c)}" alt=""><span>${esc(CAT_LABEL[c])}</span></button>`).join('');bar.querySelectorAll('button').forEach(b=>b.onclick=()=>{activeCategory=b.dataset.cat;renderCategories();renderMenuGrid()})}
+function sellableCategories(){
+ const cats=CATEGORIES.filter(c=>c!=='ALL'&&state.menu.some(m=>m.category===c&&m.enabled&&Number(m.price)>0));
+ return cats.length?[...cats,'ALL']:['ALL']
+}
+function normalizeActiveCategory(){
+ const cats=sellableCategories();
+ if(!cats.includes(activeCategory))activeCategory=cats.includes('MATCHA')?'MATCHA':cats[0]
+}
+function renderCategories(){
+ normalizeActiveCategory();
+ const bar=document.getElementById('categoryBar'),cats=sellableCategories();
+ bar.innerHTML=cats.map(c=>`<button class="chip ${c===activeCategory?'active':''} ${c==='ALL'?'all-chip':''}" data-cat="${c}" aria-label="${esc(CAT_LABEL[c])}"><img src="${categoryThumb(c)}" alt=""><span>${esc(CAT_LABEL[c])}</span></button>`).join('');
+ bar.querySelectorAll('button').forEach(b=>b.onclick=()=>{activeCategory=b.dataset.cat;renderCategories();renderMenuGrid()})
+}
 function productStockStatus(m){if(!m.enabled||m.price<=0)return {ok:false,text:m.price<=0?'ยังไม่ตั้งราคา':'ปิดขาย'};const workable=m.variants.some(x=>recipeAvailable(x.recipe));return {ok:workable,text:workable?'พร้อมขาย':'วัตถุดิบไม่พอ'}}
 function cartStockShortage(cart=state.cart){const needed={};for(const c of cart){const m=state.menu.find(x=>x.id===c.id),v=m?.variants.find(x=>x.label===c.variant);if(!m?.enabled||!(m.price>0)||!v)return c.name+' '+c.variant;for(const [key,amount] of Object.entries(v.recipe.items||{}))needed[key]=(needed[key]||0)+Number(amount)*Number(c.qty)}for(const [key,amount] of Object.entries(needed)){if(!state.ingredients[key]||Number(state.ingredients[key].qty)<amount)return state.ingredients[key]?.name||key}return null}
 function recipeAvailable(recipe,qty=1){return Object.entries(recipe.items||{}).every(([k,n])=>{if(!n)return true;const ing=state.ingredients[k];return ing && Number(ing.qty)>=Number(n)*qty})}
@@ -1255,7 +1325,7 @@ function refreshMenuControlCenter(){
  const custom=menu.filter(m=>menuLifecycleStatus(m)==='CUSTOM').length;
  const set=(id,v)=>{const e=document.getElementById(id);if(e)e.textContent=v};
  set('menuActiveCount',active);set('menuApprovedCount',approved);set('menuHoldCount',hold);set('menuCustomCount',custom);
- const ver=document.getElementById('menuMasterVersion');if(ver)ver.textContent='v4.6 · 29 ก.ย. 2026';
+ const ver=document.getElementById('menuMasterVersion');if(ver)ver.textContent='v6.2 · 30 ก.ย. 2026';
  const cat=document.getElementById('menuCategoryFilter');
  if(cat&&cat.options.length<=1){
   CATEGORIES.filter(c=>c!=='ALL').forEach(c=>{const o=document.createElement('option');o.value=c;o.textContent=CAT_LABEL[c]||c;cat.appendChild(o)});
@@ -1266,10 +1336,10 @@ function renderMenuGrid(){
  const query=document.getElementById('menuSearch').value.trim().toLocaleLowerCase();
  const catOrder=new Map(CATEGORIES.map((c,i)=>[c,i]));
  const list=state.menu
-  .filter(m=>(activeCategory==='ALL'||m.category===activeCategory)&&(!activeOnly||productStockStatus(m).ok)&&(!query||m.name.toLocaleLowerCase().includes(query)))
+  .filter(m=>(activeCategory==='ALL'||m.category===activeCategory)&&(!activeOnly||(m.enabled&&Number(m.price)>0))&&(!query||m.name.toLocaleLowerCase().includes(query)))
   .sort((a,b)=>(catOrder.get(a.category)??99)-(catOrder.get(b.category)??99)||(FIELD_APPROVED_MENU_IDS.has(b.id)-FIELD_APPROVED_MENU_IDS.has(a.id))||a.name.localeCompare(b.name,'th'));
  const g=document.getElementById('menuGrid');
- if(!list.length){g.innerHTML='<div class="empty">ไม่มีเมนูในหมวดนี้</div>';return}
+ if(!list.length){g.innerHTML='<div class="empty">ไม่มีเมนูที่เปิดขายในหมวดนี้</div>';return}
  g.innerHTML=list.map(m=>{
   const st=productStockStatus(m),life=menuLifecycleStatus(m);
   const lifeClass=['HOLD','CUT'].includes(life)?'hold':'';
@@ -1322,7 +1392,7 @@ function changeQty(i,d){const c=state.cart[i];if(!c)return;c.qty+=d;if(c.qty<=0)
 document.getElementById('clearCartBtn').onclick=()=>{if(state.cart.length&&confirm('ล้างรายการในตะกร้า?')){state.cart=[];saveState();renderCart()}};
 
 
-// FIELD POS v6.1 — Three-chime order bell
+// FIELD POS v6.2 — Three-chime order bell
 let FIELD_AUDIO_CTX=null;
 let FIELD_BELL_READY=false;
 function getFieldAudioContext(){
@@ -2052,7 +2122,7 @@ const testBellBtn=document.getElementById('testBellBtn');if(testBellBtn)testBell
 document.getElementById('saveSettingsBtn').onclick=()=>{if(!requireRole())return;const rawPP=document.getElementById('promptpayId').value.trim(),pp=sanitizePromptPayId(rawPP);if(rawPP&& !validPromptPayId(pp)){alert('PromptPay ID ต้องเป็นเบอร์มือถือ 10 หลักขึ้นต้นด้วย 0 หรือเลขบัตรประชาชน/เลขผู้เสียภาษี 13 หลัก');document.getElementById('promptpayId').focus();return}state.settings.shopName=document.getElementById('shopName').value.trim()||'FIELD';state.settings.promptpayId=pp;state.settings.pagerCount=Math.min(50,Math.max(1,Number(document.getElementById('pagerCount').value)||10));state.settings.receiptFooter=document.getElementById('receiptFooter').value.trim();saveState();renderQueue();renderSettings();alert('บันทึกการตั้งค่าแล้ว')};
 document.getElementById('exportBtn').onclick=()=>{if(!requireRole())return;const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='FIELD_POS_backup_'+isoDate()+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)};
 document.getElementById('importFile').onchange=e=>{if(!requireRole())return;const f=e.target.files[0];if(!f)return;const rd=new FileReader();rd.onload=()=>{try{const obj=JSON.parse(rd.result);if(String(obj.schema_version||'').startsWith('FIELD_POS_MASTER_IMPORT')){if(confirm('นำเข้า FIELD Master Data โดยไม่ลบยอดขาย/ออเดอร์เดิม?')){importFieldMaster(obj);location.reload()}return}if(!obj.menu||!obj.ingredients)throw new Error('รูปแบบไม่ถูกต้อง');if(confirm('นำเข้า Backup และแทนที่ข้อมูลปัจจุบัน?')){state=normalizeState(obj);state.updatedAt=Date.now();localStorage.setItem(APP_KEY,JSON.stringify(state));dbWrite=dbWrite.then(()=>persistDatabase());dbWrite.finally(()=>location.reload())}}catch(err){console.error(err);alert('ไฟล์ JSON ไม่ถูกต้องหรือไม่รองรับ')}};rd.readAsText(f)};
-document.getElementById('resetAllBtn').onclick=async()=>{if(!requireRole())return;if(confirm('รีเซ็ต FIELD CAFÉ POS v5.0 ทั้งหมด? การกระทำนี้ย้อนกลับไม่ได้หากไม่มี Backup')&&confirm('ยืนยันอีกครั้ง: ลบยอดขาย สต๊อก การตั้งค่า และฐานข้อมูลทั้งหมด?')){localStorage.removeItem(APP_KEY);await deleteFieldDb();location.reload()}};
+document.getElementById('resetAllBtn').onclick=async()=>{if(!requireRole())return;if(confirm('รีเซ็ต FIELD CAFÉ POS v6.2 ทั้งหมด? การกระทำนี้ย้อนกลับไม่ได้หากไม่มี Backup')&&confirm('ยืนยันอีกครั้ง: ลบยอดขาย สต๊อก การตั้งค่า และฐานข้อมูลทั้งหมด?')){localStorage.removeItem(APP_KEY);await deleteFieldDb();location.reload()}};
 
 const syncDbBtn=document.getElementById('syncDbBtn');if(syncDbBtn)syncDbBtn.onclick=async()=>{if(!requireRole())return;syncDbBtn.disabled=true;syncDbBtn.textContent='กำลังซิงก์…';const ok=await persistDatabase();syncDbBtn.textContent=ok?'ซิงก์สำเร็จ ✓':'ซิงก์ไม่สำเร็จ';setTimeout(()=>{syncDbBtn.disabled=false;syncDbBtn.textContent='ซิงก์ข้อมูลลงฐานข้อมูลตอนนี้'},1200)};
 
@@ -2138,22 +2208,18 @@ setInterval(()=>{if(document.getElementById('v-queue').classList.contains('activ
 window.addEventListener('load',()=>{try{
  const critical=['renderMenuGrid','renderMenuAdmin','renderQueue','renderReport','renderCrm','persistDatabase','importFieldMaster','addCustomMenu'];
  const missing=critical.filter(k=>typeof window[k]!=='function');
- if(missing.length)console.error('[FIELD POS v6.1] missing critical functions',missing);
- else console.info('[FIELD POS v6.1] core self-check passed');
-}catch(e){console.error('[FIELD POS v6.1] self-check error',e)}});
+ if(missing.length)console.error('[FIELD POS v6.2] missing critical functions',missing);
+ else console.info('[FIELD POS v6.2] core self-check passed');
+}catch(e){console.error('[FIELD POS v6.2] self-check error',e)}});
 </script>
 
 
-<script id="field-v61-manifest" type="application/json">
+<script id="field-v62-manifest" type="application/json">
 {
- "version":"6.1",
- "date":"2026-09-30",
- "precode_flow":"FIELD_POS_V6_1_PRECODE_FLOW.md",
- "order_alert":"three_chime_web_audio",
- "matcha_visual":"consistent FIELD illustration 4:3",
- "responsive":{"small_phone":"1-2 columns","phone":"2 columns","tablet":"2-3 columns","desktop":"3-4 columns"},
- "card_rules":{"title_lines":2,"recipe_lines":2,"image_ratio":"4:3"},
- "queue":{"fifo":true,"qc_removed":true}
+ "version":"6.2",
+ "anti_loop_gate":"FIELD_POS_V6_2_ANTI_LOOP_GATE.md",
+ "fixes":["hide empty sell categories","normalize active category","variant card vertical layout","stale-version sweep","overflow guard"],
+ "required_runtime_viewports":["390x844","768x1024","1024x768","1536x1024"]
 }
 </script>
 
