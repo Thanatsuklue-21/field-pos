@@ -17,11 +17,13 @@ Single-shop POS backed by Turso, with device-local IndexedDB/LocalStorage recove
 
 Every edit is saved locally immediately, then a versioned snapshot is sent to Turso in the background. Ordinary network delays no longer block the POS; a status badge reports pending sync and retries automatically. Authentication failures and revision conflicts still stop remote writes so two devices cannot silently overwrite each other. The local IndexedDB/LocalStorage copies are recovery copies, not the shared source of truth.
 
-## Approved menu and cost-center release 2026-09-28.31
+## Approved menu and cost-scenario release 2026-09-29.32
 
 The active approved set is Pure Matcha Iced, Matcha Latte, FIELD Matcha Signature (100% / 50% / 0%), FIELD Coconut Matcha, and FIELD Orange. Honey Matcha is cut, Strawberry Matcha is on hold, and the previous Coconut recipe is archived. Actual COGS includes ingredients, packaging, and provisional ice 210g; `estimated_variable_cost` is stored separately and excluded from Actual COGS. Historical sales and orders are never recalculated by the menu migration.
 
-Stock quantity and cost management are separate. The Cost Center accepts only owner-entered purchase amounts, package quantities, supplier/receipt references, purchase dates, and owner confirmation. It keeps an append-only price history while the latest confirmed record supplies the unit cost used for new calculations. The app does not fetch product prices from the web.
+Stock quantity and cost management are separate. The Cost Center requires only the owner-entered purchase amount, usable quantity in the recipe unit, and purchase date. Supplier/receipt information is optional, and pressing the confirmation button records the authenticated owner as confirmer. It keeps an append-only price history while the latest confirmed record supplies the unit cost used for new calculations. The app does not fetch product prices from the web.
+
+Recipes are weighed in grams. Liquid costs carried forward from package labels in millilitres remain numerically available so the POS does not suddenly lose its cost baseline, but they are explicitly marked `PROVISIONAL_ML_AS_G`. The owner must weigh the usable net contents in grams and reconfirm; newly confirmed records use `MEASURED_BASE_UNIT`. Existing stock quantities, sales, and orders are preserved during this migration.
 
 The menu workspace is split into Recipe, Cost, Sale Price, and Profit tabs. Accounting definitions are:
 
@@ -29,7 +31,7 @@ The menu workspace is split into Recipe, Cost, Sale Price, and Profit tabs. Acco
 - Full cost per cup = Actual COGS + other variable cost + monthly fixed cost allocation + hidden cost.
 - Gross profit = sale price - Actual COGS.
 - Contribution profit = sale price - Actual COGS - other variable cost.
-- Estimated net profit = sale price - full cost per cup.
+- Estimated net profit = sale price - full cost per cup. It is shown at low (50%), target (100%), and high (150%) monthly cup scenarios because fixed cost per cup changes with volume.
 - Suggested price is the higher of the target-COGS price and target-net-margin price, rounded up to the next 5 baht. Prices are never changed automatically.
 
 ## Verification
