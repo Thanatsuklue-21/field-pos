@@ -234,6 +234,22 @@ body.auth-locked>header,body.auth-locked>nav,body.auth-locked>main{visibility:hi
 #mainNav [hidden],#accessSettings[hidden],#lockNowBtn[hidden]{display:none!important}
 .user-account-list{display:grid;gap:6px;margin:12px 0}.user-account-row{display:flex;justify-content:space-between;gap:10px;border:1px solid var(--line);border-radius:9px;padding:8px;font-size:.78rem}.user-account-row small{color:var(--muted)}
 </style>
+
+<style id="field-v46-menu-style">
+.menu-control-center{margin-bottom:12px;background:linear-gradient(145deg,#fffdf7,#f2eddf)}
+.menu-control-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:10px}
+.menu-control-head h3{margin:0 0 3px}.menu-control-head p{margin:0}
+.menu-master-stats{margin-bottom:10px}.menu-master-stats .statbox strong{font-size:1.05rem}
+.menu-admin-tools{margin-bottom:0}.menu-status{display:inline-flex;align-items:center;white-space:nowrap;padding:4px 7px;border-radius:999px;font-size:.62rem;font-weight:900;border:1px solid transparent}
+.menu-status.approved{background:#e4efd6;color:#385b27;border-color:#bfd4a8}.menu-status.active{background:#dcecf1;color:#28566a;border-color:#b7d3de}
+.menu-status.hold{background:#f3ead3;color:#775c21;border-color:#dec997}.menu-status.custom{background:#ece2f3;color:#654578;border-color:#d5c0e3}
+.menu-status.cut{background:#f3ded9;color:#8f392f;border-color:#e2bdb5}.menu-status.draft{background:#eee;color:#555;border-color:#ddd}
+.product .menu-life{display:inline-flex;margin-top:5px;font-size:.56rem;font-weight:900;padding:2px 6px;border-radius:999px;background:#e4efd6;color:#385b27;width:max-content}
+.product .menu-life.hold{background:#f3ead3;color:#775c21}
+.menu-recipe-quick{font-size:.64rem;color:var(--muted);margin-top:3px;line-height:1.35}
+@media(max-width:760px){.menu-control-head{align-items:center}.menu-admin-tools{grid-template-columns:1fr!important}.menu-master-stats{grid-template-columns:repeat(2,1fr)!important}}
+</style>
+
 </head>
 <body class="auth-locked">
 <div id="authGate" class="auth-gate" role="dialog" aria-modal="true" aria-labelledby="authTitle">
@@ -245,7 +261,7 @@ body.auth-locked>header,body.auth-locked>nav,body.auth-locked>main{visibility:hi
   </div>
 </div>
 <header>
-  <div class="brand"><div class="mark" id="brandMark">F</div><div><h1>FIELD CAFÉ POS</h1><small>Coffee · Fast · Simple</small></div></div>
+  <div class="brand"><div class="mark" id="brandMark">F</div><div><h1>FIELD CAFÉ POS</h1><small>Simple · Fresh · Everyday</small></div></div>
   <div class="header-right"><button id="lockNowBtn" class="auth-lock-button no-print" type="button" hidden>🔒 ล็อก</button><b id="clockText">—</b><span id="dateText">—</span></div>
 </header>
 <nav id="mainNav" aria-label="เมนูหลัก">
@@ -412,13 +428,27 @@ body.auth-locked>header,body.auth-locked>nav,body.auth-locked>main{visibility:hi
   </div>
 
   <div id="menuListPanel" class="menu-panel active">
-    <div class="form-row three"><button class="btn green" id="addCustomMenuBtn" type="button">＋ เพิ่มเมนู / Custom</button><button class="btn dark" id="applyLatestMasterBtn" type="button">✅ ใช้ FIELD Master ล่าสุด</button><label class="btn ghost" style="text-align:center;margin-top:9px">⬆️ Import FIELD Master JSON<input type="file" id="masterImportFile" accept="application/json" style="display:none"></label></div>
+    <div class="card menu-control-center">
+      <div class="menu-control-head"><div><h3>FIELD Menu Control Center</h3><p class="muted">Master ล่าสุด · สูตรที่ผ่านแล้วล็อกแยกจากเมนู R&D/HOLD · Custom เพิ่มเองได้</p></div><span class="pill" id="menuMasterVersion">v4.6</span></div>
+      <div class="stats menu-master-stats">
+        <div class="statbox green"><small>พร้อมขาย</small><strong id="menuActiveCount">0</strong></div>
+        <div class="statbox"><small>สูตร APPROVED</small><strong id="menuApprovedCount">0</strong></div>
+        <div class="statbox"><small>พัก / R&D</small><strong id="menuHoldCount">0</strong></div>
+        <div class="statbox"><small>Custom</small><strong id="menuCustomCount">0</strong></div>
+      </div>
+      <div class="form-row three menu-admin-tools">
+        <div><label>ค้นหาเมนู</label><input id="menuAdminSearch" type="search" placeholder="ชื่อเมนู / หมวด"></div>
+        <div><label>กรองสถานะ</label><select id="menuStatusFilter"><option value="ALL">ทั้งหมด</option><option value="ACTIVE">พร้อมขาย</option><option value="APPROVED">APPROVED</option><option value="HOLD">พัก / R&D</option><option value="CUSTOM">Custom</option></select></div>
+        <div><label>กรองหมวด</label><select id="menuCategoryFilter"><option value="ALL">ทุกหมวด</option></select></div>
+      </div>
+    </div>
+    <div class="form-row three"><button class="btn green" id="addCustomMenuBtn" type="button">＋ เพิ่มเมนู / Custom</button><button class="btn dark" id="applyLatestMasterBtn" type="button">✅ ซิงก์ FIELD Master ล่าสุด</button><label class="btn ghost" style="text-align:center;margin-top:9px">⬆️ Import FIELD Master JSON<input type="file" id="masterImportFile" accept="application/json" style="display:none"></label></div>
     <div class="notice">เมนูที่เพิ่มเองจะถูกเก็บเป็น Custom และสามารถแก้สูตรได้จากปุ่ม “สูตร” · Import Master จะอัปเดตเฉพาะเมนู/วัตถุดิบโดยไม่ลบยอดขายหรือออเดอร์เดิม</div>
     <div class="notice">ราคาแนะนำที่เพิ่ม 27 ก.ย. 2026: Americano ฿40, Latte ฿55, Cocoa ฿55, Fresh Milk ฿40 คำนวณจากต้นทุนสูตรปัจจุบันรวม Waste 5% และบรรจุภัณฑ์ แล้วปัดขึ้นทีละ ฿5 ให้ต้นทุนไม่เกิน 40% ของราคาขาย ร้านแก้ราคาได้เอง และเมนูที่พักขายยังคงพักขาย</div>
     <details class="notice"><summary>แหล่งราคาและรายการที่รอยืนยัน</summary><p>ราคาอ้างอิงเดิมใน POS คือกาแฟช่อลดา Extra Espresso 500g ฿225 และโกโก้ช่อลดา 500g ฿285; หน้าเว็บร้านช่อลดาที่ตรวจ 28 ก.ย. 2026 แสดง Extra Espresso ฿290 และโกโก้ 100% ฿300 ต่อ 500g (กรุณาตรวจรุ่นและยอดชำระจริง) จาก <a href="https://shopee.co.th/cholada.coffee" target="_blank" rel="noopener noreferrer">ร้านบริษัทช่อลดา</a> ราคาที่พบจากหน้าร้านออนไลน์อาจเปลี่ยนตามช่วงเวลา/พื้นที่และยังไม่รวมค่าส่ง ต้นทุนนมและบรรจุภัณฑ์ใช้ค่าที่ร้านบันทึกไว้เดิม ตรวจสินค้าขนาดจริงก่อนซื้อ</p><p>ชาไทยรินชาสูตร 3 ขนาด 1 กก. ฿204 หลังใช้โค้ดส่วนลด ตามภาพหน้าสินค้าที่เจ้าของส่ง 28 ก.ย. 2026 (<a href="https://th.shp.ee/uWhvss8E" target="_blank" rel="noopener noreferrer">ลิงก์สินค้า</a>) เท่ากับ ฿0.204/กรัมใบชา ยังไม่รวมค่าส่งและราคาอาจเปลี่ยนเมื่อไม่มีโค้ด สูตร POS ใช้น้ำชาชงแล้ว 105g จึงยังต้องทราบกรัมใบชาต่อน้ำชงที่ได้จริงก่อนคิดต้นทุนต่อแก้วและกำหนดราคาขาย ชาเขียวรินชายังไม่มีราคาสินค้าที่ระบุรุ่นชัดเจน เมนูน้ำผึ้ง มะนาว น้ำแดง ลิ้นจี่ และโซดายังคงรอราคาซื้อจริง</p></details>
     <div class="table-wrap">
       <table>
-        <thead><tr><th>รูป</th><th>ขาย</th><th>หมวด</th><th>เมนู</th><th>ราคาขาย</th><th>สูตร</th></tr></thead>
+        <thead><tr><th>รูป</th><th>ขาย</th><th>สถานะ</th><th>หมวด</th><th>เมนู</th><th>ราคาขาย</th><th>สูตร</th></tr></thead>
         <tbody id="menuAdminBody"></tbody>
       </table>
     </div>
@@ -531,7 +561,7 @@ const FIELD_DATA_INFO={
   recipe:'FIELD Master Recipe · 29 ก.ย. 2026',
   costs:'ฐานต้นทุนวัตถุดิบ · 23 ก.ย. 2026',
   brand:'FIELD Brand Identity · 27 ก.ย. 2026',
-  correction:'FIELD POS v4.5 · Embedded Master Update + Safer Recipe Builder + Orange 25/145 · 29 ก.ย. 2026'
+  correction:'FIELD POS v4.6 · Latest Field Sync + Menu Control Center + Orange 25/145 · 29 ก.ย. 2026'
 };
 const PACKAGING_KEYS=new Set(['cup16','lid16','straw','sticker','ice','hotCupSet','cupHot','lidHot']);
 const CATEGORIES=['MATCHA','REFRESH','HOT MATCHA','COFFEE','TEA','COCOA','MILK','SODA','ALL'];
@@ -766,9 +796,12 @@ document.getElementById('dateText').textContent=currentDateLabel();
 // navigation
 const nav=document.getElementById('mainNav');
 nav.querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>showView(b.dataset.view)));
+const menuAdminSearch=document.getElementById('menuAdminSearch');if(menuAdminSearch)menuAdminSearch.oninput=renderMenuAdmin;
+const menuStatusFilter=document.getElementById('menuStatusFilter');if(menuStatusFilter)menuStatusFilter.onchange=renderMenuAdmin;
+const menuCategoryFilter=document.getElementById('menuCategoryFilter');if(menuCategoryFilter)menuCategoryFilter.onchange=renderMenuAdmin;
 const addCustomMenuBtn=document.getElementById('addCustomMenuBtn');if(addCustomMenuBtn)addCustomMenuBtn.onclick=addCustomMenu;const applyLatestMasterBtn=document.getElementById('applyLatestMasterBtn');if(applyLatestMasterBtn)applyLatestMasterBtn.onclick=()=>{if(!requireRole())return;if(!confirm('อัปเดตสูตรและต้นทุน FIELD ล่าสุด โดยคงยอดขาย ออเดอร์ ลูกค้า ค่าใช้จ่าย และสต๊อกคงเหลือเดิมไว้?'))return;try{importFieldMaster(deepClone(FIELD_MASTER_LATEST));alert('อัปเดต FIELD Master ล่าสุดสำเร็จ');location.reload()}catch(err){console.error(err);alert('อัปเดต FIELD Master ไม่สำเร็จ: '+err.message)}};const masterImportFile=document.getElementById('masterImportFile');if(masterImportFile)masterImportFile.onchange=e=>{if(!requireRole())return;const f=e.target.files?.[0];if(!f)return;const rd=new FileReader();rd.onload=()=>{try{const obj=JSON.parse(rd.result);if(confirm('อัปเดต FIELD Master Data โดยคงยอดขาย ออเดอร์ ลูกค้า และค่าใช้จ่ายเดิมไว้?')){importFieldMaster(obj);alert('อัปเดต Master Data สำเร็จ');location.reload()}}catch(err){console.error(err);alert('Import FIELD Master ไม่สำเร็จ: '+err.message)}finally{e.target.value=''}};rd.readAsText(f)};
 document.querySelectorAll('[data-menu-panel]').forEach(btn=>btn.addEventListener('click',()=>{document.querySelectorAll('[data-menu-panel]').forEach(x=>x.classList.toggle('active',x===btn));document.querySelectorAll('#v-menu .menu-panel').forEach(p=>p.classList.toggle('active',p.id===btn.dataset.menuPanel));if(btn.dataset.menuPanel==='menuCostPanel')renderMenuCosts()}));
-function showView(name){if(!allowedView(name))return false;setCartOpen(false);nav.querySelectorAll('button').forEach(b=>b.classList.toggle('active',b.dataset.view===name));document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));document.getElementById('v-'+name).classList.add('active');if(name==='queue')renderQueue();if(name==='stock')renderStock();if(name==='report')renderReport();if(name==='crm')renderCrm();if(name==='menu'){renderMenuAdmin();renderMenuCosts();}if(name==='settings')renderSettings();refreshAccessUi();return true}
+function showView(name){if(!allowedView(name))return false;setCartOpen(false);nav.querySelectorAll('button').forEach(b=>b.classList.toggle('active',b.dataset.view===name));document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));document.getElementById('v-'+name).classList.add('active');if(name==='queue')renderQueue();if(name==='stock')renderStock();if(name==='report')renderReport();if(name==='crm')renderCrm();if(name==='menu'){renderMenuAdmin();renderMenuCosts();refreshMenuControlCenter();}if(name==='settings')renderSettings();refreshAccessUi();return true}
 
 // order/menu
 function syncOverlayState(){document.body.classList.toggle('overlay-open',!!document.querySelector('.modal-bg.show')||(window.innerWidth<=760&&document.getElementById('v-order').classList.contains('cart-open')))}
@@ -786,7 +819,61 @@ function renderCategories(){const bar=document.getElementById('categoryBar');bar
 function productStockStatus(m){if(!m.enabled||m.price<=0)return {ok:false,text:m.price<=0?'ยังไม่ตั้งราคา':'ปิดขาย'};const workable=m.variants.some(x=>recipeAvailable(x.recipe));return {ok:workable,text:workable?'พร้อมขาย':'วัตถุดิบไม่พอ'}}
 function cartStockShortage(cart=state.cart){const needed={};for(const c of cart){const m=state.menu.find(x=>x.id===c.id),v=m?.variants.find(x=>x.label===c.variant);if(!m?.enabled||!(m.price>0)||!v)return c.name+' '+c.variant;for(const [key,amount] of Object.entries(v.recipe.items||{}))needed[key]=(needed[key]||0)+Number(amount)*Number(c.qty)}for(const [key,amount] of Object.entries(needed)){if(!state.ingredients[key]||Number(state.ingredients[key].qty)<amount)return state.ingredients[key]?.name||key}return null}
 function recipeAvailable(recipe,qty=1){return Object.entries(recipe.items||{}).every(([k,n])=>{if(!n)return true;const ing=state.ingredients[k];return ing && Number(ing.qty)>=Number(n)*qty})}
-function renderMenuGrid(){const query=document.getElementById('menuSearch').value.trim().toLocaleLowerCase();const list=state.menu.filter(m=>(activeCategory==='ALL'||m.category===activeCategory)&&(!activeOnly||productStockStatus(m).ok)&&(!query||m.name.toLocaleLowerCase().includes(query)));const g=document.getElementById('menuGrid');if(!list.length){g.innerHTML='<div class="empty">ไม่มีเมนูในหมวดนี้</div>';return}g.innerHTML=list.map(m=>{const st=productStockStatus(m);return `<button class="product ${st.ok?'':'off'}" data-id="${esc(m.id)}" ${st.ok?'':'disabled'}><div class="product-media"><img src="${menuThumb(m)}" alt="${esc(m.name)}"></div><div class="product-body"><span class="cat">${esc(CAT_LABEL[m.category]||m.category)}</span><b>${esc(m.name)}</b><div class="price">${m.price>0?money(m.price):'ยังไม่ตั้งราคา'}</div><span class="product-state ${st.ok?'':'bad'}">${esc(st.text)}</span></div></button>`}).join('');g.querySelectorAll('.product').forEach(btn=>btn.onclick=()=>openVariant(btn.dataset.id))}
+
+const FIELD_APPROVED_MENU_IDS=new Set(['pure-matcha','matcha-latte','matcha-signature','coconut-matcha','field-orange']);
+function menuLifecycleStatus(m){
+  if(FIELD_APPROVED_MENU_IDS.has(m.id))return m.enabled&&Number(m.price)>0?'APPROVED':'HOLD';
+  if(m.id==='honey-matcha'||m.category==='ARCHIVED')return 'CUT';
+  if(String(m.id||'').startsWith('custom-')||m.custom===true)return m.enabled?'CUSTOM':'HOLD';
+  if(m.enabled&&Number(m.price)>0)return 'ACTIVE';
+  return 'HOLD';
+}
+function menuStatusHtml(m){
+  const st=menuLifecycleStatus(m),cls=st==='APPROVED'?'approved':st==='ACTIVE'?'active':st==='CUSTOM'?'custom':st==='CUT'?'cut':'hold';
+  const label=st==='APPROVED'?'APPROVED':st==='ACTIVE'?'พร้อมขาย':st==='CUSTOM'?'CUSTOM':st==='CUT'?'CUT':'R&D / HOLD';
+  return `<span class="menu-status ${cls}">${label}</span>`;
+}
+function recipeQuickText(m){
+  const vars=Array.isArray(m.variants)?m.variants:[];
+  if(!vars.length)return 'ยังไม่มีสูตร';
+  const labels=vars.map(v=>v.label).filter(Boolean).slice(0,3).join(' · ');
+  return `${vars.length} สูตร${labels?' · '+labels:''}`;
+}
+function refreshMenuControlCenter(){
+  const menu=Array.isArray(state?.menu)?state.menu:[];
+  const active=menu.filter(m=>m.enabled&&Number(m.price)>0).length;
+  const approved=menu.filter(m=>FIELD_APPROVED_MENU_IDS.has(m.id)&&m.enabled&&Number(m.price)>0).length;
+  const hold=menu.filter(m=>['HOLD','CUT'].includes(menuLifecycleStatus(m))).length;
+  const custom=menu.filter(m=>menuLifecycleStatus(m)==='CUSTOM').length;
+  const set=(id,v)=>{const e=document.getElementById(id);if(e)e.textContent=v};
+  set('menuActiveCount',active);set('menuApprovedCount',approved);set('menuHoldCount',hold);set('menuCustomCount',custom);
+  const ver=document.getElementById('menuMasterVersion');if(ver)ver.textContent='v4.6 · 29 ก.ย. 2026';
+  const cat=document.getElementById('menuCategoryFilter');
+  if(cat&&cat.options.length<=1){
+    CATEGORIES.filter(c=>c!=='ALL').forEach(c=>{const o=document.createElement('option');o.value=c;o.textContent=CAT_LABEL[c]||c;cat.appendChild(o)});
+  }
+}
+
+function renderMenuGrid(){
+  const query=document.getElementById('menuSearch').value.trim().toLocaleLowerCase();
+  const catOrder=new Map(CATEGORIES.map((c,i)=>[c,i]));
+  const list=state.menu
+    .filter(m=>(activeCategory==='ALL'||m.category===activeCategory)&&(!activeOnly||productStockStatus(m).ok)&&(!query||m.name.toLocaleLowerCase().includes(query)))
+    .sort((a,b)=>(catOrder.get(a.category)??99)-(catOrder.get(b.category)??99)||(FIELD_APPROVED_MENU_IDS.has(b.id)-FIELD_APPROVED_MENU_IDS.has(a.id))||a.name.localeCompare(b.name,'th'));
+  const g=document.getElementById('menuGrid');
+  if(!list.length){g.innerHTML='<div class="empty">ไม่มีเมนูในหมวดนี้</div>';return}
+  g.innerHTML=list.map(m=>{
+    const st=productStockStatus(m),life=menuLifecycleStatus(m);
+    const lifeClass=['HOLD','CUT'].includes(life)?'hold':'';
+    const lifeText=life==='APPROVED'?'APPROVED':life==='CUSTOM'?'CUSTOM':life==='ACTIVE'?'พร้อมขาย':life==='CUT'?'CUT':'R&D / HOLD';
+    return `<button class="product ${st.ok?'':'off'}" data-id="${esc(m.id)}" ${st.ok?'':'disabled'}>
+      <div class="product-media"><img src="${menuThumb(m)}" alt="${esc(m.name)}"></div>
+      <div class="product-body"><span class="cat">${esc(CAT_LABEL[m.category]||m.category)}</span><b>${esc(m.name)}</b>
+      <span class="menu-life ${lifeClass}">${lifeText}</span><div class="menu-recipe-quick">${esc(recipeQuickText(m))}</div>
+      <div class="price">${m.price>0?money(m.price):'ยังไม่ตั้งราคา'}</div><span class="product-state ${st.ok?'':'bad'}">${esc(st.text)}</span></div></button>`
+  }).join('');
+  g.querySelectorAll('.product').forEach(btn=>btn.onclick=()=>openVariant(btn.dataset.id))
+}
 function getMenuBaseline(m){const vals=m.variants.map(x=>x.baselineCogs).filter(x=>Number(x)>0);return vals.length?vals[0]:0}
 function openVariant(id){if(!requireView('order'))return;const m=state.menu.find(x=>x.id===id);if(!m||!m.enabled||m.price<=0){alert(m?.price<=0?'เมนูนี้ยังไม่ตั้งราคา':'เมนูนี้ปิดขายอยู่');return}selectedProduct=m;selectedVariant=null;document.getElementById('variantTitle').textContent=m.name;document.getElementById('variantSub').textContent=`${CAT_LABEL[m.category]||m.category} · ${money(m.price)}`;const wrap=document.getElementById('variantButtons');wrap.innerHTML=m.variants.map((x,i)=>`<button class="variant-btn" data-i="${i}" ${recipeAvailable(x.recipe)?'':'disabled'}><img class="variant-thumb" src="${variantThumb(selectedProduct,x.label)}" alt=""><span>${esc(x.label)}</span></button>`).join('');wrap.querySelectorAll('button').forEach(b=>b.onclick=()=>selectVariant(Number(b.dataset.i)));document.getElementById('variantRecipe').innerHTML='<div class="muted">เลือกความหวานเพื่อดูสูตร</div>';document.getElementById('addVariantBtn').disabled=true;showModal('variantModal')}
 function selectVariant(i){selectedVariant=selectedProduct.variants[i];document.querySelectorAll('#variantButtons .variant-btn').forEach((b,j)=>b.style.background=j===i?'var(--matcha-lt)':'#fff');document.getElementById('variantRecipe').innerHTML=orderVariantHtml(selectedVariant);document.getElementById('addVariantBtn').disabled=!recipeAvailable(selectedVariant.recipe)}
@@ -1239,7 +1326,32 @@ document.getElementById('closeDayBtn').onclick=()=>{if(!requireRole())return;con
 function renderCloseHistory(date){const c=state.closes.find(x=>x.date===date),el=document.getElementById('closeHistory');el.innerHTML=`<h3>บันทึกปิดยอด</h3>${c?`<div class="summary-row"><span>บันทึกล่าสุด</span><b>${new Date(c.time).toLocaleString('th-TH')}</b></div><div class="summary-row"><span>ยอดขาย</span><b>${money(c.sales)}</b></div><div class="summary-row"><span>COGS</span><b>${money(c.cogs)}</b></div><div class="summary-row"><span>ค่าใช้จ่าย</span><b>${money(c.expenses)}</b></div><div class="summary-row total"><span>เงินเหลือเชิงดำเนินงาน</span><b>${money(c.sales-c.cogs-c.expenses)}</b></div>`:'<div class="empty">ยังไม่ได้ปิดยอดวันที่นี้</div>'}`}
 
 // menu admin
-function renderMenuAdmin(){const body=document.getElementById('menuAdminBody');body.innerHTML=state.menu.map(m=>`<tr><td><button class="menu-photo-btn" data-photo="${m.id}" title="เปลี่ยนรูปเมนู"><img src="${menuThumb(m)}" alt=""></button></td><td><input type="checkbox" data-enable="${m.id}" ${m.enabled?'checked':''}></td><td>${esc(CAT_LABEL[m.category]||m.category)}</td><td>${esc(m.name)}</td><td><input class="inline-input" type="number" min="0" step="1" data-price="${m.id}" value="${Number(m.price)||0}"></td><td><button class="btn ghost sm" data-recipe="${m.id}">${m.variants.length} สูตร</button></td></tr>`).join('');body.querySelectorAll('[data-enable]').forEach(x=>x.onchange=()=>{if(!requireRole())return;const m=state.menu.find(a=>a.id===x.dataset.enable);m.enabled=x.checked;saveState();renderMenuGrid();renderMenuCosts()});body.querySelectorAll('[data-price]').forEach(x=>x.onchange=()=>{if(!requireRole())return;const m=state.menu.find(a=>a.id===x.dataset.price);m.price=Number(x.value)||0;saveState();renderMenuGrid();renderMenuCosts()});body.querySelectorAll('[data-recipe]').forEach(x=>x.onclick=()=>showRecipeAdmin(x.dataset.recipe));body.querySelectorAll('[data-photo]').forEach(x=>x.onclick=()=>chooseMenuPhoto(x.dataset.photo));renderMenuCosts()}
+function renderMenuAdmin(){
+  refreshMenuControlCenter();
+  const body=document.getElementById('menuAdminBody');
+  const q=(document.getElementById('menuAdminSearch')?.value||'').trim().toLocaleLowerCase();
+  const status=document.getElementById('menuStatusFilter')?.value||'ALL';
+  const cat=document.getElementById('menuCategoryFilter')?.value||'ALL';
+  const rows=state.menu.filter(m=>{
+    const life=menuLifecycleStatus(m);
+    const text=((CAT_LABEL[m.category]||m.category)+' '+m.name).toLocaleLowerCase();
+    const statusOk=status==='ALL'||(status==='ACTIVE'&&m.enabled&&Number(m.price)>0)||(status==='APPROVED'&&life==='APPROVED')||(status==='HOLD'&&['HOLD','CUT'].includes(life))||(status==='CUSTOM'&&life==='CUSTOM');
+    return (!q||text.includes(q))&&(cat==='ALL'||m.category===cat)&&statusOk;
+  });
+  body.innerHTML=rows.map(m=>`<tr>
+    <td><button class="menu-photo-btn" data-photo="${m.id}" title="เปลี่ยนรูปเมนู"><img src="${menuThumb(m)}" alt=""></button></td>
+    <td><input type="checkbox" data-enable="${m.id}" ${m.enabled?'checked':''}></td>
+    <td>${menuStatusHtml(m)}</td><td>${esc(CAT_LABEL[m.category]||m.category)}</td>
+    <td><b>${esc(m.name)}</b><div class="menu-recipe-quick">${esc(recipeQuickText(m))}</div></td>
+    <td><input class="inline-input" type="number" min="0" step="1" data-price="${m.id}" value="${Number(m.price)||0}"></td>
+    <td><button class="btn ghost sm" data-recipe="${m.id}">${m.variants.length} สูตร</button></td></tr>`).join('');
+  if(!rows.length)body.innerHTML='<tr><td colspan="7"><div class="empty">ไม่พบเมนูตามตัวกรอง</div></td></tr>';
+  body.querySelectorAll('[data-enable]').forEach(x=>x.onchange=()=>{if(!requireRole())return;const m=state.menu.find(a=>a.id===x.dataset.enable);m.enabled=x.checked;saveState();renderMenuGrid();renderMenuAdmin();renderMenuCosts()});
+  body.querySelectorAll('[data-price]').forEach(x=>x.onchange=()=>{if(!requireRole())return;const m=state.menu.find(a=>a.id===x.dataset.price);m.price=Number(x.value)||0;saveState();renderMenuGrid();renderMenuAdmin();renderMenuCosts()});
+  body.querySelectorAll('[data-recipe]').forEach(x=>x.onclick=()=>showRecipeAdmin(x.dataset.recipe));
+  body.querySelectorAll('[data-photo]').forEach(x=>x.onclick=()=>chooseMenuPhoto(x.dataset.photo));
+  renderMenuCosts()
+}
 function chooseMenuPhoto(id){const m=state.menu.find(x=>x.id===id);if(!m)return;const input=document.createElement('input');input.type='file';input.accept='image/*';input.onchange=()=>{const file=input.files?.[0];if(!file)return;const reader=new FileReader();reader.onload=()=>{const img=new Image();img.onload=()=>{const maxW=640,maxH=420,scale=Math.min(1,maxW/img.width,maxH/img.height),canvas=document.createElement('canvas');canvas.width=Math.max(1,Math.round(img.width*scale));canvas.height=Math.max(1,Math.round(img.height*scale));canvas.getContext('2d').drawImage(img,0,0,canvas.width,canvas.height);m.imageData=canvas.toDataURL('image/jpeg',.78);m.imageVersion=FIELD_IMAGE_VERSION;saveState();renderMenuAdmin();renderMenuGrid()};img.src=reader.result};reader.readAsDataURL(file)};input.click()}
 
 let selectedCostDetail=null;
@@ -1337,7 +1449,7 @@ function renderSettings(){renderAccessSettings();document.getElementById('shopNa
 document.getElementById('saveSettingsBtn').onclick=()=>{if(!requireRole())return;const rawPP=document.getElementById('promptpayId').value.trim(),pp=sanitizePromptPayId(rawPP);if(rawPP&& !validPromptPayId(pp)){alert('PromptPay ID ต้องเป็นเบอร์มือถือ 10 หลักขึ้นต้นด้วย 0 หรือเลขบัตรประชาชน/เลขผู้เสียภาษี 13 หลัก');document.getElementById('promptpayId').focus();return}state.settings.shopName=document.getElementById('shopName').value.trim()||'FIELD';state.settings.promptpayId=pp;state.settings.pagerCount=Math.min(50,Math.max(1,Number(document.getElementById('pagerCount').value)||10));state.settings.receiptFooter=document.getElementById('receiptFooter').value.trim();saveState();renderQueue();renderSettings();alert('บันทึกการตั้งค่าแล้ว')};
 document.getElementById('exportBtn').onclick=()=>{if(!requireRole())return;const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='FIELD_POS_backup_'+isoDate()+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)};
 document.getElementById('importFile').onchange=e=>{if(!requireRole())return;const f=e.target.files[0];if(!f)return;const rd=new FileReader();rd.onload=()=>{try{const obj=JSON.parse(rd.result);if(String(obj.schema_version||'').startsWith('FIELD_POS_MASTER_IMPORT')){if(confirm('นำเข้า FIELD Master Data โดยไม่ลบยอดขาย/ออเดอร์เดิม?')){importFieldMaster(obj);location.reload()}return}if(!obj.menu||!obj.ingredients)throw new Error('รูปแบบไม่ถูกต้อง');if(confirm('นำเข้า Backup และแทนที่ข้อมูลปัจจุบัน?')){state=normalizeState(obj);state.updatedAt=Date.now();localStorage.setItem(APP_KEY,JSON.stringify(state));dbWrite=dbWrite.then(()=>persistDatabase());dbWrite.finally(()=>location.reload())}}catch(err){console.error(err);alert('ไฟล์ JSON ไม่ถูกต้องหรือไม่รองรับ')}};rd.readAsText(f)};
-document.getElementById('resetAllBtn').onclick=async()=>{if(!requireRole())return;if(confirm('รีเซ็ต FIELD CAFÉ POS v4.5 ทั้งหมด? การกระทำนี้ย้อนกลับไม่ได้หากไม่มี Backup')&&confirm('ยืนยันอีกครั้ง: ลบยอดขาย สต๊อก การตั้งค่า และฐานข้อมูลทั้งหมด?')){localStorage.removeItem(APP_KEY);await deleteFieldDb();location.reload()}};
+document.getElementById('resetAllBtn').onclick=async()=>{if(!requireRole())return;if(confirm('รีเซ็ต FIELD CAFÉ POS v4.6 ทั้งหมด? การกระทำนี้ย้อนกลับไม่ได้หากไม่มี Backup')&&confirm('ยืนยันอีกครั้ง: ลบยอดขาย สต๊อก การตั้งค่า และฐานข้อมูลทั้งหมด?')){localStorage.removeItem(APP_KEY);await deleteFieldDb();location.reload()}};
 
 const syncDbBtn=document.getElementById('syncDbBtn');if(syncDbBtn)syncDbBtn.onclick=async()=>{if(!requireRole())return;syncDbBtn.disabled=true;syncDbBtn.textContent='กำลังซิงก์…';const ok=await persistDatabase();syncDbBtn.textContent=ok?'ซิงก์สำเร็จ ✓':'ซิงก์ไม่สำเร็จ';setTimeout(()=>{syncDbBtn.disabled=false;syncDbBtn.textContent='ซิงก์ข้อมูลลงฐานข้อมูลตอนนี้'},1200)};
 
@@ -1418,5 +1530,15 @@ function startAuth(){if(authData?.corrupt){document.getElementById('authTitle').
 document.getElementById('reportDate').value=isoDate();renderCategories();renderMenuGrid();renderCart();renderQueue();updateQueueBadge();renderActionAlerts();updateDbUi();loadPosterPhotos();startAuth();
 setInterval(()=>{if(document.getElementById('v-queue').classList.contains('active'))renderQueue()},60000);
 </script>
+
+<script id="field-v46-selfcheck">
+window.addEventListener('load',()=>{try{
+  const critical=['renderMenuGrid','renderMenuAdmin','renderQueue','renderReport','renderCrm','persistDatabase','importFieldMaster','addCustomMenu'];
+  const missing=critical.filter(k=>typeof window[k]!=='function');
+  if(missing.length)console.error('[FIELD POS v4.6] missing critical functions',missing);
+  else console.info('[FIELD POS v4.6] core self-check passed');
+}catch(e){console.error('[FIELD POS v4.6] self-check error',e)}});
+</script>
+
 </body>
 </html>
