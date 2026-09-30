@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#211E19">
-<title>FIELD CAFÉ POS v6.7 · Mobile Smooth & Swipe</title>
+<title>FIELD CAFÉ POS v6.8 · Mobile Taster & Add-On Queue</title>
 <style>
 :root{
  --matcha:#5C7A3D;--matcha-dk:#3F5729;--matcha-lt:#DDE8CF;
@@ -778,6 +778,90 @@ body.overlay-open,html.overlay-open{overflow:hidden!important}
 .swipe-toast{position:fixed;left:50%;bottom:calc(70px + env(safe-area-inset-bottom));transform:translate(-50%,8px);z-index:500;background:rgba(33,30,25,.9);color:#fff;padding:6px 10px;border-radius:999px;font-size:.62rem;opacity:0;pointer-events:none;transition:opacity .12s ease,transform .12s ease}.swipe-toast.show{opacity:1;transform:translate(-50%,0)}
 @media(prefers-reduced-motion:reduce){.product,.chip,.btn,.paytab,.variant-btn,nav button,#v-order .cart,.swipe-toast{transition:none!important}}
 </style>
+
+<style id="field-v68-mobile-taster">
+:root{--vv-top:0px;--vv-height:100dvh}
+html,body{overscroll-behavior-y:auto;overscroll-behavior-x:none}
+main{contain:layout style}
+.view{content-visibility:auto;contain-intrinsic-size:800px}
+.view.active{content-visibility:visible}
+
+/* order target */
+.cart-target-row{display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-top:6px}
+.order-target-status{font-size:.62rem;padding:6px 7px;border-radius:8px;background:#f5f1e6;color:var(--matcha-dk);margin:5px 0;text-align:center}
+.existing-order-list{display:grid;gap:6px;margin-top:8px}
+.existing-order-option{display:flex;justify-content:space-between;gap:8px;align-items:center;border:1px solid var(--line);background:#fff;border-radius:10px;padding:10px;text-align:left;color:var(--ink)}
+.existing-order-option span{font-size:.68rem;color:var(--muted)}
+
+/* Android phone payment: fixed to the VisualViewport, not the layout viewport */
+@media(max-width:760px){
+ #payModal{display:none!important;position:fixed!important;left:0!important;right:0!important;top:var(--vv-top)!important;height:var(--vv-height)!important;bottom:auto!important;z-index:560!important;padding:6px!important;align-items:stretch!important;justify-content:stretch!important;overflow:hidden!important}
+ #payModal.show{display:block!important}
+ #payModal .payment-modal{
+  position:absolute!important;left:6px!important;right:6px!important;top:6px!important;bottom:6px!important;
+  width:auto!important;max-width:none!important;height:auto!important;max-height:none!important;margin:0!important;
+  overflow-y:auto!important;overscroll-behavior:contain!important;border-radius:14px!important;padding:8px!important;
+  transform:none!important
+ }
+ #payModal .closex{position:sticky!important;top:0!important;z-index:7!important;float:right!important;background:#fff!important}
+}
+
+/* Phone cart becomes bottom sheet; no giant side drawer. */
+@media(max-width:760px){
+ #v-order .cart{
+  position:fixed!important;left:6px!important;right:6px!important;bottom:max(6px,env(safe-area-inset-bottom))!important;top:auto!important;
+  width:auto!important;max-width:none!important;max-height:min(58dvh,520px)!important;
+  transform:translateY(calc(100% + 18px))!important;visibility:hidden!important;
+  border-radius:14px!important;padding:9px!important;transition:transform .12s ease,visibility .12s!important;
+  display:flex!important;flex-direction:column!important
+ }
+ #v-order.cart-open .cart{transform:translateY(0)!important;visibility:visible!important}
+ #v-order .cart-list{overflow-y:auto!important;min-height:0!important;max-height:34dvh!important}
+ #v-order .cart-backdrop{z-index:300!important}
+ #v-order .cart{z-index:310!important}
+ .cart-mobile-bar{z-index:250!important}
+}
+
+/* Much denser one-hand menu */
+@media(min-width:380px) and (max-width:760px){
+ #v-order .menu-grid{grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:5px!important}
+ #v-order .product{display:flex!important;flex-direction:column!important;min-height:100px!important;height:100px!important;border-radius:9px!important;overflow:hidden!important}
+ #v-order .product-media{width:100%!important;height:44px!important;max-height:44px!important;flex:0 0 44px!important;aspect-ratio:auto!important;border:0!important}
+ #v-order .product-media img{object-fit:contain!important}
+ #v-order .product-body{padding:4px 5px!important;display:flex!important;flex-direction:column!important;min-height:0!important;gap:1px!important}
+ #v-order .product .cat{display:none!important}
+ #v-order .product b{font-size:.62rem!important;line-height:1.08!important;min-height:2.16em!important;max-height:2.16em!important;-webkit-line-clamp:2!important}
+ #v-order .product .price{font-size:.72rem!important;margin-top:auto!important;line-height:1!important}
+ #v-order .product-state,.menu-life{display:none!important}
+}
+@media(max-width:379px){
+ #v-order .menu-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+}
+
+/* Make the top chrome less dominant */
+@media(max-width:760px){
+ header{min-height:42px!important;padding:4px 7px!important}
+ .brand h1{font-size:.72rem!important}.brand small{display:none!important}.mark{width:24px!important;height:24px!important}
+ #fieldVersionBadge{font-size:.5rem!important;padding:2px 5px!important}
+ .auth-lock-button{padding:4px 7px!important;font-size:.58rem!important}
+ nav{top:42px!important;min-height:40px!important;height:40px!important}
+ nav button{min-width:58px!important;min-height:40px!important;padding:2px 4px!important;font-size:.5rem!important}
+ nav .nav-icon{font-size:.82rem!important}
+ main{padding-top:6px!important}
+ .page-title{display:none!important}
+ .attention-panel{margin-bottom:6px!important}
+ .order-tools{gap:4px!important;margin-bottom:6px!important}
+ .order-tools .search-label{min-width:0!important}
+ .order-tools input{min-height:36px!important;padding:5px 7px!important;font-size:14px!important}
+ .order-tools .btn{min-height:36px!important;font-size:.55rem!important;padding:4px 6px!important}
+ .section-kicker{font-size:.55rem!important;margin:6px 0 4px!important}
+}
+
+/* lightweight interaction */
+.product,.chip,.btn,.paytab,.variant-btn,.existing-order-option{will-change:auto!important;box-shadow:none!important}
+.product:active,.chip:active,.btn:active,.paytab:active,.variant-btn:active,.existing-order-option:active{transform:scale(.98)!important}
+</style>
+
 </head>
 <body class="auth-locked">
 <div id="authGate" class="auth-gate" role="dialog" aria-modal="true" aria-labelledby="authTitle">
@@ -789,7 +873,7 @@ body.overlay-open,html.overlay-open{overflow:hidden!important}
  </div>
 </div>
 <header>
- <div class="brand"><span id="fieldVersionBadge" style="font-size:.62rem;font-weight:800;padding:3px 7px;border-radius:999px;background:#F6F1E4;color:#3F5729;margin-right:4px">v6.7</span><div class="mark" id="brandMark">F</div><div><h1>FIELD CAFÉ POS</h1><small>Simple · Fresh · Everyday</small></div></div>
+ <div class="brand"><span id="fieldVersionBadge" style="font-size:.62rem;font-weight:800;padding:3px 7px;border-radius:999px;background:#F6F1E4;color:#3F5729;margin-right:4px">v6.8</span><div class="mark" id="brandMark">F</div><div><h1>FIELD CAFÉ POS</h1><small>Simple · Fresh · Everyday</small></div></div>
  <div class="header-right"><button id="lockNowBtn" class="auth-lock-button no-print" type="button" hidden>🔒 ล็อก</button><b id="clockText">—</b><span id="dateText">—</span></div>
 </header>
 <nav id="mainNav" aria-label="เมนูหลัก">
@@ -818,6 +902,11 @@ body.overlay-open,html.overlay-open{overflow:hidden!important}
     <div class="summary-row"><span>จำนวนแก้ว</span><span id="cupCount">0</span></div>
     <div class="summary-row total"><span>รวม</span><span id="cartTotal">0 บาท</span></div>
    </div>
+   <div class="cart-target-row">
+    <button class="btn ghost sm" id="addToExistingBtn" type="button">➕ เพิ่มเข้าคิวเดิม</button>
+    <button class="btn ghost sm" id="resetOrderTargetBtn" type="button" hidden>↩ บิลใหม่</button>
+   </div>
+   <div id="orderTargetStatus" class="order-target-status">บิลใหม่ · สร้างคิวใหม่</div>
    <button class="btn dark" id="checkoutBtn">💳 รับชำระ</button>
    <button class="btn ghost" id="clearCartBtn" aria-label="ล้างรายการในตะกร้า">ล้างบิล</button>
   </aside>
@@ -1108,7 +1197,7 @@ body.overlay-open,html.overlay-open{overflow:hidden!important}
 </section>
 
 <section id="printArea" class="view"></section>
-<div class="footer-note">FIELD CAFÉ POS v6.7 — Anti-Loop Runtime Fix · Local-first · Backup ก่อนอัปเดตทุกครั้ง</div>
+<div class="footer-note">FIELD CAFÉ POS v6.8 — Anti-Loop Runtime Fix · Local-first · Backup ก่อนอัปเดตทุกครั้ง</div>
 </main>
 
 
@@ -1136,6 +1225,16 @@ body.overlay-open,html.overlay-open{overflow:hidden!important}
 
 <!-- variant modal -->
 <div class="modal-bg" id="variantModal" role="dialog" aria-modal="true" aria-hidden="true"><div class="modal"><button class="closex" data-close="variantModal">×</button><h3 id="variantTitle">เลือกความหวาน</h3><div class="muted" id="variantSub"></div><div class="variant-grid" id="variantButtons"></div><div id="variantRecipe"></div><button class="btn dark" id="addVariantBtn" disabled>เพิ่มลงตะกร้า</button></div></div>
+
+<!-- choose existing queue modal -->
+<div class="modal-bg" id="existingOrderModal" role="dialog" aria-modal="true" aria-hidden="true">
+ <div class="modal existing-order-modal">
+  <button class="closex" data-close="existingOrderModal">×</button>
+  <h3>➕ เพิ่มรายการเข้าคิวเดิม</h3>
+  <p class="muted">เลือกคิวที่ยังไม่ส่งคืนบัตร รายการใหม่จะชำระเป็นบิลเพิ่ม แต่ใช้คิวและบัตรเดิม</p>
+  <div id="existingOrderList" class="existing-order-list"></div>
+ </div>
+</div>
 
 <!-- payment modal -->
 <div class="modal-bg" id="payModal" role="dialog" aria-modal="true" aria-hidden="true"><div class="modal payment-modal"><button class="closex" data-close="payModal">×</button><h3>รับชำระเงิน</h3>
@@ -1191,7 +1290,7 @@ body.overlay-open,html.overlay-open{overflow:hidden!important}
 <script>
 'use strict';
 const APP_KEY='field_pos_v2_state'; // ใช้ key เดิมเพื่อรักษาข้อมูลลูกค้าเมื่ออัปเกรด
-const FIELD_DATA_VERSION='2026-09-30.67';
+const FIELD_DATA_VERSION='2026-09-30.68';
 document.getElementById('masterDataVersion').textContent=FIELD_DATA_VERSION;
 const FIELD_IMAGE_VERSION='2026-09-28.4';
 const posterPhotos={};
@@ -1246,7 +1345,7 @@ const FIELD_DATA_INFO={
  recipe:'FIELD Master Recipe · 29 ก.ย. 2026',
  costs:'ฐานต้นทุนวัตถุดิบ · 23 ก.ย. 2026',
  brand:'FIELD Brand Identity · 27 ก.ย. 2026',
- correction:'FIELD POS v6.7 · mobile payment recovery + native vertical scroll + document swipe + touch performance · 30 ก.ย. 2026'
+ correction:'FIELD POS v6.8 · Android visual-viewport payment + compact 3-column phone UI + smoother swipe + add-on to existing queue · 30 ก.ย. 2026'
 };
 const PACKAGING_KEYS=new Set(['cup16','lid16','straw','sticker','ice','hotCupSet','cupHot','lidHot']);
 const CATEGORIES=['MATCHA','REFRESH','HOT MATCHA','COFFEE','TEA','COCOA','MILK','SODA','ALL'];
@@ -1544,11 +1643,33 @@ function showView(name){if(!allowedView(name))return false;setCartOpen(false);na
 const FIELD_SWIPE_VIEWS=['order','stock','queue','report','crm','menu','settings'];
 let FIELD_SWIPE_START=null;
 function activeMainView(){return document.querySelector('.view.active')?.id?.replace('v-','')||'order'}
-function swipeBlockedTarget(target){return !!target.closest('input,select,textarea,button,a,[contenteditable="true"],.modal-bg.show,.category-bar,nav,.table-wrap,.cart-open .cart')}
-function showSwipeToast(text){let el=document.getElementById('fieldSwipeToast');if(!el){el=document.createElement('div');el.id='fieldSwipeToast';el.className='swipe-toast';document.body.appendChild(el)}el.textContent=text;el.classList.add('show');clearTimeout(el._t);el._t=setTimeout(()=>el.classList.remove('show'),700)}
-document.addEventListener('touchstart',e=>{if(e.touches.length!==1||document.querySelector('.modal-bg.show')||swipeBlockedTarget(e.target)){FIELD_SWIPE_START=null;return}const t=e.touches[0];FIELD_SWIPE_START={x:t.clientX,y:t.clientY,time:performance.now()}},{passive:true});
-document.addEventListener('touchmove',e=>{if(!FIELD_SWIPE_START||e.touches.length!==1)return;const t=e.touches[0],dx=t.clientX-FIELD_SWIPE_START.x,dy=t.clientY-FIELD_SWIPE_START.y;if(Math.abs(dy)>12&&Math.abs(dy)>Math.abs(dx)){FIELD_SWIPE_START=null;return}},{passive:true});
-document.addEventListener('touchend',e=>{if(!FIELD_SWIPE_START||e.changedTouches.length!==1)return;const t=e.changedTouches[0],dx=t.clientX-FIELD_SWIPE_START.x,dy=t.clientY-FIELD_SWIPE_START.y,dt=performance.now()-FIELD_SWIPE_START.time;FIELD_SWIPE_START=null;if(dt>900||Math.abs(dx)<48||Math.abs(dx)<Math.abs(dy)*1.15)return;const idx=FIELD_SWIPE_VIEWS.indexOf(activeMainView());if(idx<0)return;const next=dx<0?idx+1:idx-1;if(next<0||next>=FIELD_SWIPE_VIEWS.length)return;const target=FIELD_SWIPE_VIEWS[next];if(!allowedView(target))return;requestAnimationFrame(()=>{showView(target);showSwipeToast((dx<0?'← ':'→ ')+(document.querySelector(`#mainNav [data-view="${target}"]`)?.innerText?.replace(/\s+/g,' ').trim()||target))})},{passive:true});
+function swipeBlockedTarget(target){
+ return !!target.closest('input,select,textarea,button,a,[contenteditable="true"],.modal-bg.show,.category-bar,nav,.table-wrap')
+}
+function showSwipeToast(text){
+ let el=document.getElementById('fieldSwipeToast');
+ if(!el){el=document.createElement('div');el.id='fieldSwipeToast';el.className='swipe-toast';document.body.appendChild(el)}
+ el.textContent=text;el.classList.add('show');clearTimeout(el._t);el._t=setTimeout(()=>el.classList.remove('show'),650)
+}
+document.addEventListener('touchstart',e=>{
+ if(e.touches.length!==1||document.querySelector('.modal-bg.show')||swipeBlockedTarget(e.target)){FIELD_SWIPE_START=null;return}
+ const t=e.touches[0];FIELD_SWIPE_START={x:t.clientX,y:t.clientY,time:performance.now()}
+},{passive:true});
+document.addEventListener('touchmove',e=>{
+ if(!FIELD_SWIPE_START||e.touches.length!==1)return;
+ const t=e.touches[0],dx=t.clientX-FIELD_SWIPE_START.x,dy=t.clientY-FIELD_SWIPE_START.y;
+ if(Math.abs(dy)>16&&Math.abs(dy)>Math.abs(dx)*1.05)FIELD_SWIPE_START=null
+},{passive:true});
+document.addEventListener('touchend',e=>{
+ if(!FIELD_SWIPE_START||e.changedTouches.length!==1)return;
+ const t=e.changedTouches[0],dx=t.clientX-FIELD_SWIPE_START.x,dy=t.clientY-FIELD_SWIPE_START.y,dt=performance.now()-FIELD_SWIPE_START.time;
+ FIELD_SWIPE_START=null;
+ if(dt>950||Math.abs(dx)<36||Math.abs(dx)<Math.abs(dy)*1.10)return;
+ const idx=FIELD_SWIPE_VIEWS.indexOf(activeMainView());if(idx<0)return;
+ const next=dx<0?idx+1:idx-1;if(next<0||next>=FIELD_SWIPE_VIEWS.length)return;
+ const target=FIELD_SWIPE_VIEWS[next];if(!allowedView(target))return;
+ requestAnimationFrame(()=>{showView(target);showSwipeToast((dx<0?'← ':'→ ')+(document.querySelector(`#mainNav [data-view="${target}"]`)?.innerText?.replace(/\s+/g,' ').trim()||target))})
+},{passive:true});
 
 // order/menu
 function syncOverlayState(){
@@ -1669,6 +1790,34 @@ function selectVariant(i){selectedVariant=selectedProduct.variants[i];document.q
 function orderVariantHtml(variant){return `<div class="variant-choice compact-choice"><div><span>ตัวเลือก</span><b>${esc(variant.label)}</b></div><div><span>ราคา</span><b>${money(selectedProduct?.price||0)}</b></div></div>`}
 document.getElementById('addVariantBtn').onclick=()=>{if(addVariantToCart(selectedProduct,selectedVariant))hideModal('variantModal')};
 function variantTone(label){return label==='ไม่หวาน'?'none':label==='หวานน้อย'?'less':label==='หวานปกติ'?'normal':'other'}
+let checkoutTargetOrderId=null;
+function activeAppendableOrders(){
+ return (state.orders||[]).filter(o=>o.status!=='returned')
+}
+function refreshOrderTargetUi(){
+ const o=(state.orders||[]).find(x=>x.id===checkoutTargetOrderId);
+ const status=document.getElementById('orderTargetStatus'),reset=document.getElementById('resetOrderTargetBtn');
+ if(o){
+  status.innerHTML=`เพิ่มเข้าคิว <b>${esc(queueLabel(o))}</b> · บัตร ${esc(o.pagerNo)} · ชำระเป็นบิลเพิ่ม`;
+  reset.hidden=false
+ }else{
+  checkoutTargetOrderId=null;status.textContent='บิลใหม่ · สร้างคิวใหม่';reset.hidden=true
+ }
+}
+function renderExistingOrderPicker(){
+ const box=document.getElementById('existingOrderList'),orders=activeAppendableOrders();
+ box.innerHTML=orders.length?orders.map(o=>{
+  const cups=(o.items||[]).reduce((n,x)=>n+Number(x.qty||0),0);
+  const age=Math.max(0,Math.floor((Date.now()-Number(o.time||Date.now()))/60000));
+  return `<button type="button" class="existing-order-option" data-order="${esc(o.id)}"><b>คิว ${esc(queueLabel(o))}</b><span>บัตร ${esc(o.pagerNo)} · ${cups} แก้ว · ${age} นาที</span></button>`
+ }).join(''):'<div class="empty">ยังไม่มีคิวที่รับรายการเพิ่มได้</div>';
+ box.querySelectorAll('[data-order]').forEach(b=>b.onclick=()=>{
+  checkoutTargetOrderId=b.dataset.order;refreshOrderTargetUi();hideModal('existingOrderModal');setCartOpen(true)
+ })
+}
+document.getElementById('addToExistingBtn').onclick=()=>{if(!state.cart.length){alert('เลือกเมนูก่อน');return}renderExistingOrderPicker();showModal('existingOrderModal')};
+document.getElementById('resetOrderTargetBtn').onclick=()=>{checkoutTargetOrderId=null;refreshOrderTargetUi()};
+
 function renderCart(){
  const list=document.getElementById('cartList');
  if(!state.cart.length)list.innerHTML='<div class="empty">ยังไม่มีรายการ<br>แตะเมนูเพื่อเพิ่มลงบิล</div>';
@@ -1681,13 +1830,13 @@ function renderCart(){
  document.getElementById('mobileCartCount').textContent=cups+' แก้ว';
  document.getElementById('mobileCartTotal').textContent=compactMoney(total);
  document.getElementById('checkoutBtn').disabled=!cups;
- document.getElementById('clearCartBtn').disabled=!cups;
+ document.getElementById('clearCartBtn').disabled=!cups;refreshOrderTargetUi();
 }
 function changeQty(i,d){const c=state.cart[i];if(!c)return;c.qty+=d;if(c.qty<=0)state.cart.splice(i,1);else if(d>0){const shortage=cartStockShortage();if(shortage){c.qty-=d;alert('วัตถุดิบไม่พอ: '+shortage);return}}saveState();renderCart()}
 document.getElementById('clearCartBtn').onclick=()=>{if(state.cart.length&&confirm('ล้างรายการในตะกร้า?')){state.cart=[];saveState();renderCart()}};
 
 
-// FIELD POS v6.7 — Three-chime order bell
+// FIELD POS v6.8 — Three-chime order bell
 let FIELD_AUDIO_CTX=null;
 let FIELD_BELL_READY=false;
 function getFieldAudioContext(){
@@ -2079,15 +2228,66 @@ function nextFreePager(){const max=Number(state.settings.pagerCount)||10,used=ne
 function costForCartItem(c){const m=state.menu.find(x=>x.id===c.id),vr=m?.variants.find(x=>x.label===c.variant);if(!vr)return 0;return recipeCostInfo(vr).cost*c.qty}
 function deductRecipe(vr,qty,sign=-1){Object.entries(vr.recipe.items||{}).forEach(([k,n])=>{if(!state.ingredients[k])return;state.ingredients[k].qty=Number(state.ingredients[k].qty)+(sign*Number(n)*qty)})}
 document.getElementById('confirmPaymentBtn').onclick=async()=>{
- if(!requireView('order'))return;unlockOrderVoice();const btn=document.getElementById('confirmPaymentBtn');if(btn.dataset.processing==='yes')return;
- const shortage=cartStockShortage();if(shortage){alert('วัตถุดิบไม่พอ: '+shortage);return}const total=cartTotal();
+ if(!requireView('order'))return;unlockOrderVoice();
+ const btn=document.getElementById('confirmPaymentBtn');if(btn.dataset.processing==='yes')return;
+ const shortage=cartStockShortage();if(shortage){alert('วัตถุดิบไม่พอ: '+shortage);return}
+ const total=cartTotal();
  if(paymentMethod==='cash'&&Number(document.getElementById('cashReceived').value)<total){updatePaymentState();alert('จำนวนเงินสดที่รับมายังไม่พอ');return}
- if(paymentMethod==='promptpay'){const apiMode=state.settings.promptpayProvider==='merchant_api',manualOk=document.getElementById('promptPaidConfirm').checked;if(!validPromptPayId(state.settings.promptpayId)||!(apiMode?promptPayAutoPaid:manualOk)){updatePaymentState();alert(apiMode?'ยังไม่พบยอด PromptPay ที่ยืนยันจาก Merchant API':'กรุณาตรวจสอบว่าได้รับเงิน PromptPay แล้วจึงยืนยัน');return}}
- const pager=nextFreePager();if(pager===null){alert('บัตรคิวถูกใช้งานครบแล้ว กรุณารอคืนบัตรก่อน');return}btn.dataset.processing='yes';stopPromptPayMonitor();
- const items=state.cart.map(c=>{const m=state.menu.find(x=>x.id===c.id),vr=m.variants.find(x=>x.label===c.variant),unitCost=recipeCostInfo(vr).cost;deductRecipe(vr,c.qty,-1);return {...c,unitCost,recipe:deepClone(vr.recipe)}}),received=paymentMethod==='cash'?Number(document.getElementById('cashReceived').value):total,chosenCustomer=document.getElementById('payCustomer').value,member=(state.customers||[]).find(c=>c.id===chosenCustomer),spend=Number(state.settings.pointsSpend)||0,paymentGroupId='pg'+Date.now(),groups=checkoutBillMode==='split-row'?items.map(x=>[x]):[items],sales=[];
- groups.forEach((group,idx)=>{const subTotal=group.reduce((n,x)=>n+Number(x.price)*Number(x.qty),0),subCost=group.reduce((n,x)=>n+Number(x.unitCost)*Number(x.qty),0),sale={id:'s'+Date.now()+'-'+idx,createdBy:authActor(),billNo:nextBillNo(),time:Date.now()+idx,date:isoDate(),items:group,total:subTotal,costTotal:subCost,payment:paymentMethod,received:idx===0?received:0,change:idx===0&&paymentMethod==='cash'?received-total:0,status:'paid',pagerNo:pager,customerId:member?.id||null,pointsAwarded:idx===0&&member&&spend>0?Math.floor(total/spend):0,paymentGroupId,paymentReference:paymentMethod==='promptpay'?pendingPaymentReference:null,paymentVerified:paymentMethod==='promptpay'?(state.settings.promptpayProvider==='merchant_api'?'api':'manual'):true};sales.push(sale);state.sales.push(sale)});
- const primary=sales[0],order={id:'o'+Date.now(),createdBy:authActor(),saleId:primary.id,saleIds:sales.map(x=>x.id),billNo:primary.billNo,queueNo:queueLabel(primary),items:items.map(x=>({id:x.id,name:x.name,variant:x.variant,qty:x.qty,readyQty:0,calledQty:0})),total,pagerNo:pager,status:'assigned',time:Date.now(),paymentGroupId};
- state.orders.push(order);sales.forEach(x=>x.queueNo=order.queueNo);state.cart=[];saveState();await playNewOrderBell();hideModal('payModal');renderCart();renderMenuGrid();document.getElementById('pagerShow').textContent=pager;document.getElementById('queueShow').textContent=order.queueNo;document.getElementById('pagerModal').dataset.orderid=order.id;showModal('pagerModal');updateQueueBadge();btn.dataset.processing='no'
+ if(paymentMethod==='promptpay'){
+  const apiMode=state.settings.promptpayProvider==='merchant_api',manualOk=document.getElementById('promptPaidConfirm').checked;
+  if(!validPromptPayId(state.settings.promptpayId)||!(apiMode?promptPayAutoPaid:manualOk)){updatePaymentState();alert(apiMode?'ยังไม่พบยอด PromptPay ที่ยืนยันจาก Merchant API':'กรุณาตรวจสอบว่าได้รับเงิน PromptPay แล้วจึงยืนยัน');return}
+ }
+ const targetOrder=(state.orders||[]).find(o=>o.id===checkoutTargetOrderId&&o.status!=='returned');
+ const pager=targetOrder?targetOrder.pagerNo:nextFreePager();
+ if(pager===null){alert('บัตรคิวถูกใช้งานครบแล้ว กรุณารอคืนบัตรก่อน');return}
+ btn.dataset.processing='yes';stopPromptPayMonitor();
+
+ const items=state.cart.map(c=>{
+  const m=state.menu.find(x=>x.id===c.id),vr=m.variants.find(x=>x.label===c.variant),unitCost=recipeCostInfo(vr).cost;
+  deductRecipe(vr,c.qty,-1);
+  return {...c,unitCost,recipe:deepClone(vr.recipe)}
+ });
+ const received=paymentMethod==='cash'?Number(document.getElementById('cashReceived').value):total,
+  chosenCustomer=document.getElementById('payCustomer').value,
+  member=(state.customers||[]).find(c=>c.id===chosenCustomer),
+  spend=Number(state.settings.pointsSpend)||0,
+  paymentGroupId='pg'+Date.now(),
+  groups=checkoutBillMode==='split-row'?items.map(x=>[x]):[items],
+  sales=[];
+
+ groups.forEach((group,idx)=>{
+  const subTotal=group.reduce((n,x)=>n+Number(x.price)*Number(x.qty),0),
+   subCost=group.reduce((n,x)=>n+Number(x.unitCost)*Number(x.qty),0),
+   sale={id:'s'+Date.now()+'-'+idx,createdBy:authActor(),billNo:nextBillNo(),time:Date.now()+idx,date:isoDate(),items:group,total:subTotal,costTotal:subCost,payment:paymentMethod,received:idx===0?received:0,change:idx===0&&paymentMethod==='cash'?received-total:0,status:'paid',pagerNo:pager,customerId:member?.id||null,pointsAwarded:idx===0&&member&&spend>0?Math.floor(total/spend):0,paymentGroupId,parentOrderId:targetOrder?.id||null,paymentReference:paymentMethod==='promptpay'?pendingPaymentReference:null,paymentVerified:paymentMethod==='promptpay'?(state.settings.promptpayProvider==='merchant_api'?'api':'manual'):true};
+  sales.push(sale);state.sales.push(sale)
+ });
+
+ let order;
+ if(targetOrder){
+  const added=items.map(x=>({id:x.id,name:x.name,variant:x.variant,qty:x.qty,readyQty:0,calledQty:0,addedAt:Date.now(),saleIds:sales.map(v=>v.id)}));
+  targetOrder.items=[...(targetOrder.items||[]),...added];
+  targetOrder.saleIds=[...(targetOrder.saleIds||[targetOrder.saleId]).filter(Boolean),...sales.map(x=>x.id)];
+  targetOrder.total=Number(targetOrder.total||0)+total;
+  targetOrder.lastAddedAt=Date.now();
+  if(targetOrder.status==='ready')targetOrder.status='making';
+  if(!targetOrder.status||targetOrder.status==='assigned')targetOrder.status='assigned';
+  order=targetOrder;
+  sales.forEach(x=>x.queueNo=queueLabel(order))
+ }else{
+  const primary=sales[0];
+  order={id:'o'+Date.now(),createdBy:authActor(),saleId:primary.id,saleIds:sales.map(x=>x.id),billNo:primary.billNo,queueNo:queueLabel(primary),items:items.map(x=>({id:x.id,name:x.name,variant:x.variant,qty:x.qty,readyQty:0,calledQty:0})),total,pagerNo:pager,status:'assigned',time:Date.now(),paymentGroupId};
+  state.orders.push(order);sales.forEach(x=>x.queueNo=order.queueNo)
+ }
+
+ state.cart=[];checkoutTargetOrderId=null;saveState();
+ await playNewOrderBell();
+ hideModal('payModal');renderCart();renderMenuGrid();renderQueue();
+ document.getElementById('pagerShow').textContent=pager;
+ document.getElementById('queueShow').textContent=queueLabel(order);
+ const pagerTitle=document.querySelector('#pagerModal h3');
+ if(pagerTitle)pagerTitle.textContent=targetOrder?'เพิ่มรายการเข้าคิวเดิมแล้ว':'ยื่นบัตรคิวให้ลูกค้า';
+ document.getElementById('pagerModal').dataset.orderid=order.id;
+ showModal('pagerModal');updateQueueBadge();btn.dataset.processing='no'
 };
 document.getElementById('pagerHandedBtn').onclick=()=>{const id=document.getElementById('pagerModal').dataset.orderid,o=state.orders.find(x=>x.id===id);if(o)saveState();hideModal('pagerModal');showView('queue')};
 
@@ -2503,12 +2703,25 @@ const testBellBtn=document.getElementById('testBellBtn');if(testBellBtn)testBell
 document.getElementById('saveSettingsBtn').onclick=()=>{if(!requireRole())return;const rawPP=document.getElementById('promptpayId').value.trim(),pp=sanitizePromptPayId(rawPP);if(rawPP&& !validPromptPayId(pp)){alert('PromptPay ID ต้องเป็นเบอร์มือถือ 10 หลักขึ้นต้นด้วย 0 หรือเลขบัตรประชาชน/เลขผู้เสียภาษี 13 หลัก');document.getElementById('promptpayId').focus();return}state.settings.shopName=document.getElementById('shopName').value.trim()||'FIELD';state.settings.promptpayId=pp;state.settings.pagerCount=Math.min(50,Math.max(1,Number(document.getElementById('pagerCount').value)||10));state.settings.receiptFooter=document.getElementById('receiptFooter').value.trim();saveState();renderQueue();renderSettings();alert('บันทึกการตั้งค่าแล้ว')};
 document.getElementById('exportBtn').onclick=()=>{if(!requireRole())return;const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='FIELD_POS_backup_'+isoDate()+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)};
 document.getElementById('importFile').onchange=e=>{if(!requireRole())return;const f=e.target.files[0];if(!f)return;const rd=new FileReader();rd.onload=()=>{try{const obj=JSON.parse(rd.result);if(String(obj.schema_version||'').startsWith('FIELD_POS_MASTER_IMPORT')){if(confirm('นำเข้า FIELD Master Data โดยไม่ลบยอดขาย/ออเดอร์เดิม?')){importFieldMaster(obj);location.reload()}return}if(!obj.menu||!obj.ingredients)throw new Error('รูปแบบไม่ถูกต้อง');if(confirm('นำเข้า Backup และแทนที่ข้อมูลปัจจุบัน?')){state=normalizeState(obj);state.updatedAt=Date.now();localStorage.setItem(APP_KEY,JSON.stringify(state));dbWrite=dbWrite.then(()=>persistDatabase());dbWrite.finally(()=>location.reload())}}catch(err){console.error(err);alert('ไฟล์ JSON ไม่ถูกต้องหรือไม่รองรับ')}};rd.readAsText(f)};
-document.getElementById('resetAllBtn').onclick=async()=>{if(!requireRole())return;if(confirm('รีเซ็ต FIELD CAFÉ POS v6.7 ทั้งหมด? การกระทำนี้ย้อนกลับไม่ได้หากไม่มี Backup')&&confirm('ยืนยันอีกครั้ง: ลบยอดขาย สต๊อก การตั้งค่า และฐานข้อมูลทั้งหมด?')){localStorage.removeItem(APP_KEY);await deleteFieldDb();location.reload()}};
+document.getElementById('resetAllBtn').onclick=async()=>{if(!requireRole())return;if(confirm('รีเซ็ต FIELD CAFÉ POS v6.8 ทั้งหมด? การกระทำนี้ย้อนกลับไม่ได้หากไม่มี Backup')&&confirm('ยืนยันอีกครั้ง: ลบยอดขาย สต๊อก การตั้งค่า และฐานข้อมูลทั้งหมด?')){localStorage.removeItem(APP_KEY);await deleteFieldDb();location.reload()}};
 
 const syncDbBtn=document.getElementById('syncDbBtn');if(syncDbBtn)syncDbBtn.onclick=async()=>{if(!requireRole())return;syncDbBtn.disabled=true;syncDbBtn.textContent='กำลังซิงก์…';const ok=await persistDatabase();syncDbBtn.textContent=ok?'ซิงก์สำเร็จ ✓':'ซิงก์ไม่สำเร็จ';setTimeout(()=>{syncDbBtn.disabled=false;syncDbBtn.textContent='ซิงก์ข้อมูลลงฐานข้อมูลตอนนี้'},1200)};
 
 // modals
-function showModal(id){const el=document.getElementById(id);if(!el)return;if(id==='payModal')forceCloseCartForPayment();el._returnFocus=document.activeElement;el.classList.add('show');el.setAttribute('aria-hidden','false');syncOverlayState();requestAnimationFrame(()=>{(el.querySelector('[data-close]')||el.querySelector('button:not([disabled])'))?.focus({preventScroll:true})})}
+function syncVisualViewport(){
+ const vv=window.visualViewport;
+ const top=vv?Math.max(0,vv.offsetTop):0;
+ const height=vv?vv.height:window.innerHeight;
+ document.documentElement.style.setProperty('--vv-top',top+'px');
+ document.documentElement.style.setProperty('--vv-height',height+'px');
+}
+syncVisualViewport();
+if(window.visualViewport){
+ visualViewport.addEventListener('resize',syncVisualViewport,{passive:true});
+ visualViewport.addEventListener('scroll',syncVisualViewport,{passive:true})
+}
+
+function showModal(id){const el=document.getElementById(id);if(!el)return;if(id==='payModal'){forceCloseCartForPayment();syncVisualViewport();}el._returnFocus=document.activeElement;el.classList.add('show');el.setAttribute('aria-hidden','false');syncOverlayState();requestAnimationFrame(()=>{(el.querySelector('[data-close]')||el.querySelector('button:not([disabled])'))?.focus({preventScroll:true})})}
 function hideModal(id){const el=document.getElementById(id);if(!el)return;el.classList.remove('show');el.setAttribute('aria-hidden','true');if(id==='payModal'&&typeof stopPromptPayMonitor==='function')stopPromptPayMonitor();syncOverlayState();requestAnimationFrame(()=>syncOverlayState());if(el._returnFocus?.isConnected)el._returnFocus.focus({preventScroll:true})}
 document.addEventListener('keydown',e=>{const modal=document.querySelector('.modal-bg.show');if(!modal)return;if(e.key==='Escape'&&modal.id!=='pagerModal'){hideModal(modal.id);return}if(e.key!=='Tab')return;const controls=[...modal.querySelectorAll('button:not([disabled]),input:not([disabled]),select:not([disabled]),a[href]')].filter(x=>x.getClientRects().length);if(!controls.length)return;const first=controls[0],last=controls[controls.length-1];if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus()}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus()}})
 document.querySelectorAll('[data-close]').forEach(b=>b.onclick=()=>hideModal(b.dataset.close));document.querySelectorAll('.modal-bg').forEach(bg=>bg.addEventListener('click',e=>{if(e.target===bg&&bg.id!=='pagerModal')hideModal(bg.id)}));
@@ -2615,13 +2828,15 @@ setInterval(()=>{if(document.getElementById('v-queue').classList.contains('activ
 window.addEventListener('load',()=>{try{
  const critical=['renderMenuGrid','renderMenuAdmin','renderQueue','renderReport','renderCrm','persistDatabase','importFieldMaster','addCustomMenu'];
  const missing=critical.filter(k=>typeof window[k]!=='function');
- if(missing.length)console.error('[FIELD POS v6.7] missing critical functions',missing);
- else console.info('[FIELD POS v6.7] core self-check passed');
-}catch(e){console.error('[FIELD POS v6.7] self-check error',e)}});
+ if(missing.length)console.error('[FIELD POS v6.8] missing critical functions',missing);
+ else console.info('[FIELD POS v6.8] core self-check passed');
+}catch(e){console.error('[FIELD POS v6.8] self-check error',e)}});
 </script>
 
 
-<script id="field-v67-manifest" type="application/json">{"version":"6.7","mobile":{"payment_bottom_sheet":true,"native_vertical_scroll":true,"compact_order":true},"swipe":{"document_level":true,"threshold_px":48,"vertical_priority":true},"layers":{"payment":340,"cart":220},"touch":{"passive_listeners":true,"no_prevent_default":true}}</script>
+<script id="field-v68-manifest" type="application/json">
+{"version":"6.8","mobile":{"visualViewportPayment":true,"phone_menu_columns":3,"cart_bottom_sheet":true},"swipe":{"threshold_px":36,"vertical_priority":true},"orders":{"append_to_active_queue":true,"same_queue_pager":true,"add_on_new_sale":true},"performance":{"content_visibility":true,"passive_touch":true}}
+</script>
 
 </body>
 </html>
