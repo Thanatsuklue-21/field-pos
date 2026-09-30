@@ -9,7 +9,7 @@ test('approved menu release keeps FIELD approved recipes active',()=>{
   assert.match(html,/FIELD_DATA_VERSION='2026-09-30\.74'/);
   assert.match(html,/id:'pure-matcha'.*enabled:true.*iced\(\{matcha:4,water:170\}\)/);
   assert.match(html,/id:'matcha-latte'.*enabled:true.*iced\(\{matcha:5,water:40,milk:110,syrup:15\}\)/);
-  assert.match(html,/id:'matcha-signature'.*name:'FIELD Matcha Signature'.*v\('100%'.*condensed:30,evaporated:30,milk:70.*v\('50%'.*condensed:15,evaporated:30,milk:70.*v\('0%'.*milk:110,evaporated:15/);
+  assert.match(html,/id:'matcha-signature'.*name:'FIELD Matcha Signature'.*v\('100%'.*condensed:30,evaporated:30,milk:70.*v\('50%'.*condensed:15,evaporated:30,milk:70.*v\('0%'.*evaporated:15,milk:110/);
   assert.match(html,/id:'coconut-matcha'.*price:60,enabled:true.*coconutSyrup:20/);
   assert.match(html,/id:'field-orange'.*price:45,enabled:true.*orangeMix:25,water:145/);
   assert.match(html,/id:'strawberry-matcha'.*enabled:false/);
