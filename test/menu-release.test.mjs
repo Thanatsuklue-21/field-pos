@@ -11,7 +11,7 @@ test('approved menu release is the only active master recipe',()=>{
   assert.match(html,/id:'matcha-latte'.*enabled:true.*iced\(\{matcha:5,water:40,milk:110,syrup:15\}\)/);
   assert.match(html,/id:'matcha-signature'.*name:'FIELD Matcha Signature'.*v\('100%'.*condensed:30,evaporated:30,milk:70.*v\('50%'.*condensed:15,evaporated:30,milk:70.*v\('0%'.*milk:110,evaporated:15/);
   assert.match(html,/id:'coconut-matcha'.*price:60,enabled:true.*coconutSyrup:20/);
-  assert.match(html,/id:'field-orange'.*price:45,enabled:true.*orangeMix:35,water:135/);
+  assert.match(html,/id:'field-orange'.*price:45,enabled:true.*orangeMix:25,water:145/);
   assert.match(html,/id:'strawberry-matcha'.*enabled:false,status:'HOLD'/);
   assert.match(html,/id:'honey-matcha'.*price:0,enabled:false,status:'CUT \/ INACTIVE'/);
   const activeCoconut=html.match(/\{id:'coconut-matcha'.*?\},\n/)?.[0]||'';
@@ -45,10 +45,10 @@ test('actual COGS excludes estimated variable cost',()=>{
     signature50:5*unit.matcha+40*unit.water+15*unit.condensed+30*unit.evaporated+70*unit.milk+fixed,
     signature0:5*unit.matcha+40*unit.water+110*unit.milk+15*unit.evaporated+fixed,
     coconut:5*unit.matcha+145*unit.water+20*unit.coconut+fixed,
-    orange:35*unit.orange+135*unit.water+fixed
+    orange:25*unit.orange+145*unit.water+fixed
   };
   assert.deepEqual(Object.fromEntries(Object.entries(totals).map(([k,v])=>[k,Number(v.toFixed(4))])),{
-    pure:13.104,latte:20.6738,signature100:22.785,signature50:21.8175,signature0:21.465,coconut:20.2985,orange:12.4125
+    pure:13.104,latte:20.6738,signature100:22.785,signature50:21.8175,signature0:21.465,coconut:20.2985,orange:10.2375
   });
 });
 
