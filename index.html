@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#211E19">
-<title>FIELD CAFÉ POS v7.2 · Fullscreen Confirm</title>
+<title>FIELD CAFÉ POS v7.3 · Two-Step Checkout</title>
 <style>
 :root{
  --matcha:#5C7A3D;--matcha-dk:#3F5729;--matcha-lt:#DDE8CF;
@@ -1230,6 +1230,399 @@ main{contain:layout style}
 }
 </style>
 
+
+<style id="field-v73-two-step-checkout">
+/* Shared step header */
+.checkout-step-topbar{
+ display:grid;
+ grid-template-columns:minmax(110px,1fr) auto minmax(110px,1fr);
+ align-items:center;
+ gap:8px;
+ min-height:52px;
+ border-bottom:1px solid var(--line);
+ background:var(--card);
+}
+.checkout-step-back{
+ justify-self:start;
+ min-height:40px;
+ border:1px solid var(--line);
+ background:#fff;
+ color:var(--matcha-dk);
+ border-radius:11px;
+ padding:6px 10px;
+ font-weight:900;
+}
+.checkout-step-progress{text-align:center;line-height:1.05}
+.checkout-step-progress b{display:block;font-size:.75rem;color:var(--matcha-dk)}
+.checkout-step-progress span{display:block;margin-top:3px;font-size:.62rem;color:var(--muted)}
+.checkout-step-spacer{min-width:1px}
+
+/* Desktop keeps dialog behavior, but flow is still sequential. */
+@media(min-width:761px){
+ .checkout-step-page .modal{max-width:760px}
+}
+
+/* Mobile: these are full application pages, not floating modal cards. */
+@media(max-width:760px){
+ body[data-checkout-step="confirm"] header,
+ body[data-checkout-step="confirm"] nav#mainNav,
+ body[data-checkout-step="payment"] header,
+ body[data-checkout-step="payment"] nav#mainNav{
+  visibility:hidden!important;
+  pointer-events:none!important;
+ }
+
+ #confirmOrderModal,
+ #payModal{
+  position:fixed!important;
+  inset:0!important;
+  top:0!important;
+  left:0!important;
+  right:0!important;
+  bottom:0!important;
+  width:100vw!important;
+  height:100dvh!important;
+  max-width:none!important;
+  max-height:none!important;
+  padding:0!important;
+  margin:0!important;
+  background:var(--bg)!important;
+  backdrop-filter:none!important;
+  -webkit-backdrop-filter:none!important;
+  overflow:hidden!important;
+  z-index:700!important;
+  align-items:stretch!important;
+  justify-content:stretch!important;
+ }
+ #confirmOrderModal.show,
+ #payModal.show{display:block!important}
+
+ #confirmOrderModal .confirm-order-modal,
+ #payModal .payment-modal{
+  position:absolute!important;
+  inset:0!important;
+  width:100%!important;
+  height:100%!important;
+  max-width:none!important;
+  max-height:none!important;
+  margin:0!important;
+  border:0!important;
+  border-radius:0!important;
+  box-shadow:none!important;
+  background:var(--bg)!important;
+  overflow:hidden!important;
+  transform:none!important;
+ }
+
+ .checkout-step-topbar{
+  min-height:56px!important;
+  padding:6px 10px!important;
+  background:#fff!important;
+  position:relative!important;
+  z-index:5!important;
+ }
+ .checkout-step-back{
+  min-height:42px!important;
+  padding:5px 10px!important;
+  font-size:.72rem!important;
+ }
+ .checkout-step-progress b{font-size:.7rem!important}
+ .checkout-step-progress span{font-size:.56rem!important}
+
+ /* STEP 1: Confirm Order */
+ #confirmOrderModal .confirm-order-modal{
+  display:grid!important;
+  grid-template-rows:56px auto 1fr auto auto!important;
+  gap:0!important;
+  padding:0 10px calc(10px + env(safe-area-inset-bottom))!important;
+ }
+ #confirmOrderModal .checkout-step-topbar{
+  margin:0 -10px!important;
+ }
+ #confirmOrderModal .confirm-order-head{
+  padding:10px 2px 8px!important;
+  border-bottom:0!important;
+ }
+ #confirmOrderModal .confirm-order-head h3{
+  font-size:1.05rem!important;
+ }
+ #confirmOrderModal .confirm-order-head p{
+  font-size:.62rem!important;
+  margin-top:4px!important;
+ }
+ #confirmOrderModal .confirm-order-table-head{display:none!important}
+ #confirmOrderModal .confirm-order-list{
+  min-height:0!important;
+  overflow:hidden!important;
+  align-content:start!important;
+  gap:8px!important;
+  margin:0!important;
+  padding:2px 0 6px!important;
+ }
+ #confirmOrderModal .confirm-order-row{
+  min-height:var(--confirm-row-h,108px)!important;
+  height:auto!important;
+  grid-template-columns:30px minmax(0,1fr) 84px 40px!important;
+  grid-template-rows:auto auto!important;
+  grid-template-areas:
+   "index main total remove"
+   "index unit controls controls"!important;
+  gap:8px!important;
+  padding:11px 10px!important;
+  border-radius:14px!important;
+  border:1px solid #dfe4d7!important;
+  background:#fff!important;
+ }
+ #confirmOrderModal .confirm-order-index{
+  grid-area:index!important;
+  align-self:start!important;
+  font-size:.9rem!important;
+  padding-top:2px!important;
+ }
+ #confirmOrderModal .confirm-order-main{grid-area:main!important}
+ #confirmOrderModal .confirm-order-name{
+  font-size:1rem!important;
+  line-height:1.1!important;
+  -webkit-line-clamp:2!important;
+ }
+ #confirmOrderModal .confirm-order-variant{
+  font-size:.72rem!important;
+  padding:3px 9px!important;
+  margin-top:7px!important;
+ }
+ #confirmOrderModal .confirm-order-unit{
+  grid-area:unit!important;
+  text-align:left!important;
+  color:var(--muted)!important;
+  font-size:.82rem!important;
+ }
+ #confirmOrderModal .confirm-order-price{
+  grid-area:total!important;
+  justify-self:end!important;
+  align-self:start!important;
+  font-size:1.05rem!important;
+  color:var(--matcha-dk)!important;
+ }
+ #confirmOrderModal .confirm-order-controls{
+  grid-area:controls!important;
+  justify-self:end!important;
+  grid-template-columns:42px 32px 42px!important;
+  gap:6px!important;
+ }
+ #confirmOrderModal .confirm-order-controls b{
+  font-size:.92rem!important;
+ }
+ #confirmOrderModal .confirm-qty{
+  min-height:42px!important;
+  height:42px!important;
+  font-size:1.15rem!important;
+  border-radius:12px!important;
+ }
+ #confirmOrderModal .confirm-remove{
+  grid-area:remove!important;
+  width:40px!important;
+  min-height:40px!important;
+  height:40px!important;
+  border-radius:12px!important;
+  font-size:1rem!important;
+ }
+ #confirmOrderModal .confirm-order-summary{
+  margin:0!important;
+  padding:9px 12px!important;
+  border-radius:13px!important;
+  background:#edf4e6!important;
+ }
+ #confirmOrderModal .confirm-order-summary span{font-size:.78rem!important}
+ #confirmOrderModal .confirm-order-summary b{font-size:1.15rem!important}
+ #confirmOrderModal .confirm-order-actions{
+  margin-top:7px!important;
+  gap:7px!important;
+  grid-template-columns:1fr 1.2fr!important;
+ }
+ #confirmOrderModal .confirm-order-actions .btn{
+  min-height:50px!important;
+  border-radius:14px!important;
+  font-size:.82rem!important;
+ }
+
+ /* STEP 2: Payment */
+ #payModal .payment-modal{
+  display:grid!important;
+  grid-template-rows:56px auto auto auto auto 1fr auto!important;
+  gap:6px!important;
+  padding:0 10px calc(10px + env(safe-area-inset-bottom))!important;
+ }
+ #payModal .checkout-step-topbar{
+  margin:0 -10px!important;
+ }
+ #payModal .payment-title{
+  font-size:.98rem!important;
+  margin:8px 0 0!important;
+  min-height:0!important;
+  height:auto!important;
+  line-height:1.1!important;
+ }
+ #payModal .payment-hero{
+  margin:0!important;
+  min-height:56px!important;
+  padding:7px 10px!important;
+  border-radius:12px!important;
+ }
+ #payModal .payment-hero small{font-size:.58rem!important}
+ #payModal .payment-hero .money{font-size:1.35rem!important}
+ #payModal .pay-order-check{
+  min-height:30px!important;
+  height:30px!important;
+  max-height:30px!important;
+  padding:6px 8px!important;
+  margin:0!important;
+  font-size:.62rem!important;
+  border-radius:9px!important;
+ }
+ #payModal .payment-extra{display:none!important}
+ #payModal .bill-mode{
+  margin:0!important;
+  gap:5px!important;
+ }
+ #payModal .billmode{
+  min-height:38px!important;
+  height:38px!important;
+  font-size:.66rem!important;
+  border-radius:10px!important;
+ }
+ #payModal .bill-mode-note{
+  margin:0!important;
+  font-size:.54rem!important;
+  line-height:1!important;
+ }
+ #payModal .pay-tabs{
+  margin:0!important;
+  gap:5px!important;
+ }
+ #payModal .paytab{
+  min-height:42px!important;
+  height:42px!important;
+  font-size:.68rem!important;
+  border-radius:10px!important;
+ }
+
+ #payModal #cashArea,
+ #payModal #promptArea,
+ #payModal #otherArea{
+  min-height:0!important;
+  overflow:hidden!important;
+  margin:0!important;
+ }
+
+ #payModal[data-method="cash"] #cashArea{
+  display:grid!important;
+  grid-template-rows:auto 48px 38px 34px 40px!important;
+  gap:6px!important;
+  align-content:start!important;
+ }
+ #payModal #cashArea>label{font-size:.62rem!important}
+ #payModal .cash-input{
+  height:48px!important;
+  min-height:48px!important;
+  font-size:1.05rem!important;
+  border-radius:11px!important;
+ }
+ #payModal .quick-cash{
+  height:38px!important;
+  min-height:38px!important;
+  display:grid!important;
+  grid-template-columns:repeat(4,1fr)!important;
+  gap:5px!important;
+  margin:0!important;
+ }
+ #payModal .quick-cash button{
+  min-height:38px!important;
+  height:38px!important;
+  font-size:.62rem!important;
+ }
+ #payModal .payment-status{
+  min-height:34px!important;
+  max-height:34px!important;
+  padding:6px 8px!important;
+  margin:0!important;
+  font-size:.58rem!important;
+ }
+ #payModal .changebox{
+  min-height:40px!important;
+  height:40px!important;
+  padding:7px 8px!important;
+  margin:0!important;
+  font-size:.62rem!important;
+ }
+ #payModal .changebox strong{font-size:.9rem!important}
+
+ #payModal[data-method="promptpay"] #promptArea{
+  display:flex!important;
+  flex-direction:column!important;
+  gap:6px!important;
+ }
+ #payModal .qr-card{
+  flex:1 1 auto!important;
+  min-height:0!important;
+  display:grid!important;
+  grid-template-rows:auto auto minmax(90px,1fr) auto auto!important;
+  gap:3px!important;
+  align-items:center!important;
+  overflow:hidden!important;
+  margin:0!important;
+  padding:7px!important;
+  border-radius:12px!important;
+ }
+ #payModal .qr-card img{
+  width:auto!important;
+  height:100%!important;
+  max-height:190px!important;
+  max-width:52vw!important;
+  object-fit:contain!important;
+  margin:0 auto!important;
+ }
+ #payModal .qr-note{display:none!important}
+ #payModal .confirm-row{
+  min-height:40px!important;
+  max-height:40px!important;
+  padding:6px 8px!important;
+  margin:0!important;
+  overflow:hidden!important;
+  font-size:.56rem!important;
+ }
+ #payModal #confirmPaymentBtn{
+  position:static!important;
+  min-height:50px!important;
+  height:50px!important;
+  margin:0!important;
+  border-radius:14px!important;
+  font-size:.82rem!important;
+  box-shadow:none!important;
+ }
+
+ /* There is no gray modal backdrop in checkout steps. */
+ #confirmOrderModal::before,
+ #payModal::before{display:none!important}
+}
+
+/* Short phones: slightly compress payment, but keep the two-page structure. */
+@media(max-width:760px) and (max-height:720px){
+ .checkout-step-topbar{min-height:50px!important}
+ #confirmOrderModal .confirm-order-modal{
+  grid-template-rows:50px auto 1fr auto auto!important;
+ }
+ #payModal .payment-modal{
+  grid-template-rows:50px auto auto auto auto 1fr auto!important;
+ }
+ #payModal .payment-title{display:none!important}
+ #payModal .payment-hero{min-height:48px!important}
+ #payModal .payment-hero .money{font-size:1.15rem!important}
+ #payModal .paytab{height:36px!important;min-height:36px!important}
+ #payModal .billmode{height:34px!important;min-height:34px!important}
+ #payModal #confirmPaymentBtn{height:46px!important;min-height:46px!important}
+}
+</style>
+
 </head>
 <body class="auth-locked">
 <div id="authGate" class="auth-gate" role="dialog" aria-modal="true" aria-labelledby="authTitle">
@@ -1241,7 +1634,7 @@ main{contain:layout style}
  </div>
 </div>
 <header>
- <div class="brand"><span id="fieldVersionBadge" style="font-size:.62rem;font-weight:800;padding:3px 7px;border-radius:999px;background:#F6F1E4;color:#3F5729;margin-right:4px">v7.2</span><div class="mark" id="brandMark">F</div><div><h1>FIELD CAFÉ POS</h1><small>Simple · Fresh · Everyday</small></div></div>
+ <div class="brand"><span id="fieldVersionBadge" style="font-size:.62rem;font-weight:800;padding:3px 7px;border-radius:999px;background:#F6F1E4;color:#3F5729;margin-right:4px">v7.3</span><div class="mark" id="brandMark">F</div><div><h1>FIELD CAFÉ POS</h1><small>Simple · Fresh · Everyday</small></div></div>
  <div class="header-right"><button id="lockNowBtn" class="auth-lock-button no-print" type="button" hidden>🔒 ล็อก</button><b id="clockText">—</b><span id="dateText">—</span></div>
 </header>
 <nav id="mainNav" aria-label="เมนูหลัก">
@@ -1565,7 +1958,7 @@ main{contain:layout style}
 </section>
 
 <section id="printArea" class="view"></section>
-<div class="footer-note">FIELD CAFÉ POS v7.2 — Anti-Loop Runtime Fix · Local-first · Backup ก่อนอัปเดตทุกครั้ง</div>
+<div class="footer-note">FIELD CAFÉ POS v7.3 — Anti-Loop Runtime Fix · Local-first · Backup ก่อนอัปเดตทุกครั้ง</div>
 </main>
 
 
@@ -1605,11 +1998,15 @@ main{contain:layout style}
 </div>
 
 <!-- confirm order modal -->
-<div class="modal-bg" id="confirmOrderModal" role="dialog" aria-modal="true" aria-hidden="true">
+<div class="modal-bg checkout-step-page" id="confirmOrderModal" role="dialog" aria-modal="true" aria-hidden="true">
  <div class="modal confirm-order-modal">
-  <button class="closex" data-close="confirmOrderModal">×</button>
+  <div class="checkout-step-topbar">
+   <button type="button" class="checkout-step-back" id="confirmOrderBackBtn">← เมนู</button>
+   <div class="checkout-step-progress"><b>ขั้นตอน 1/2</b><span>ยืนยันออเดอร์</span></div>
+   <div class="checkout-step-spacer"></div>
+  </div>
   <div class="confirm-order-head">
-   <div><h3>ยืนยันออเดอร์</h3><p>ตรวจเมนู · ตัวเลือก · จำนวน ก่อนชำระเงิน</p></div>
+   <div><h3>ตรวจออเดอร์</h3><p>แก้จำนวน ลบรายการ หรือเพิ่มเมนูก่อนชำระเงิน</p></div>
   </div>
   <div class="confirm-order-table-head" aria-hidden="true">
    <span>#</span><span>รายการ</span><span>ราคา</span><span>จำนวน</span><span>รวม</span><span></span>
@@ -1627,7 +2024,13 @@ main{contain:layout style}
 </div>
 
 <!-- payment modal -->
-<div class="modal-bg" id="payModal" role="dialog" aria-modal="true" aria-hidden="true"><div class="modal payment-modal"><button class="closex" data-close="payModal">×</button><h3>รับชำระเงิน</h3>
+<div class="modal-bg checkout-step-page" id="payModal" role="dialog" aria-modal="true" aria-hidden="true"><div class="modal payment-modal">
+ <div class="checkout-step-topbar">
+  <button type="button" class="checkout-step-back" id="payBackToConfirmBtn">← ตรวจออเดอร์</button>
+  <div class="checkout-step-progress"><b>ขั้นตอน 2/2</b><span>ชำระเงิน</span></div>
+  <div class="checkout-step-spacer"></div>
+ </div>
+ <h3 class="payment-title">รับชำระเงิน</h3>
  <div class="payment-hero"><small>ยอดที่ต้องชำระ</small><div class="money" id="payTotal">0 บาท</div></div>
  <div class="pay-order-check" id="payOrderCheck" aria-label="ตรวจรายการก่อนรับเงิน"></div>
  <details class="payment-extra"><summary>👤 สมาชิก/แต้ม (ไม่บังคับ)</summary><div class="payment-extra-body"><label for="payCustomer">สมาชิก</label><select id="payCustomer"><option value="">ไม่ระบุสมาชิก</option></select><div class="muted" id="payPointsPreview"></div></div></details>
@@ -1680,7 +2083,7 @@ main{contain:layout style}
 <script>
 'use strict';
 const APP_KEY='field_pos_v2_state'; // ใช้ key เดิมเพื่อรักษาข้อมูลลูกค้าเมื่ออัปเกรด
-const FIELD_DATA_VERSION='2026-09-30.72';
+const FIELD_DATA_VERSION='2026-09-30.73';
 document.getElementById('masterDataVersion').textContent=FIELD_DATA_VERSION;
 const FIELD_IMAGE_VERSION='2026-09-28.4';
 const posterPhotos={};
@@ -1735,7 +2138,7 @@ const FIELD_DATA_INFO={
  recipe:'FIELD Master Recipe · 29 ก.ย. 2026',
  costs:'ฐานต้นทุนวัตถุดิบ · 23 ก.ย. 2026',
  brand:'FIELD Brand Identity · 27 ก.ย. 2026',
- correction:'FIELD POS v7.2 · mobile confirm order fullscreen with larger rows and no-scroll layout · 30 ก.ย. 2026'
+ correction:'FIELD POS v7.3 · two-step full-page checkout: confirm order then payment · 30 ก.ย. 2026'
 };
 const PACKAGING_KEYS=new Set(['cup16','lid16','straw','sticker','ice','hotCupSet','cupHot','lidHot']);
 const CATEGORIES=['MATCHA','REFRESH','HOT MATCHA','COFFEE','TEA','COCOA','MILK','SODA','ALL'];
@@ -2254,11 +2657,11 @@ function renderConfirmOrder(){
  list.querySelectorAll('.confirm-qty').forEach(b=>b.onclick=()=>{
   changeQty(Number(b.dataset.i),Number(b.dataset.d));
   renderConfirmOrder();
-  if(!state.cart.length){hideModal('confirmOrderModal');setCartOpen(false)}
+  if(!state.cart.length){hideModal('confirmOrderModal');setCheckoutStep('');setCartOpen(false)}
  });
  list.querySelectorAll('.confirm-remove').forEach(b=>b.onclick=()=>{
   state.cart.splice(Number(b.dataset.r),1);saveState();renderCart();renderConfirmOrder();
-  if(!state.cart.length){hideModal('confirmOrderModal');setCartOpen(false)}
+  if(!state.cart.length){hideModal('confirmOrderModal');setCheckoutStep('');setCartOpen(false)}
  });
 }
 function refreshConfirmOrderViewport(){
@@ -2267,16 +2670,42 @@ function refreshConfirmOrderViewport(){
 if(window.visualViewport)visualViewport.addEventListener('resize',refreshConfirmOrderViewport,{passive:true});
 window.addEventListener('orientationchange',()=>setTimeout(refreshConfirmOrderViewport,120),{passive:true});
 
+function setCheckoutStep(step){
+ document.body.dataset.checkoutStep=step||'';
+ document.documentElement.dataset.checkoutStep=step||'';
+}
+function leaveCheckoutSteps(){
+ setCheckoutStep('');
+ hideModal('confirmOrderModal');
+ hideModal('payModal')
+}
 function openConfirmOrder(){
  if(!state.cart.length)return;
+ stopPromptPayMonitor?.();
  forceCloseCartForPayment();
+ hideModal('payModal');
  renderConfirmOrder();
+ setCheckoutStep('confirm');
  showModal('confirmOrderModal')
 }
+document.getElementById('confirmOrderBackBtn').onclick=()=>{
+ hideModal('confirmOrderModal');
+ setCheckoutStep('');
+ setCartOpen(false);
+ showView('order')
+};
 document.getElementById('confirmAddMoreBtn').onclick=()=>{
  hideModal('confirmOrderModal');
+ setCheckoutStep('');
  setCartOpen(false);
- showView('order');
+ showView('order')
+};
+document.getElementById('payBackToConfirmBtn').onclick=()=>{
+ stopPromptPayMonitor?.();
+ hideModal('payModal');
+ renderConfirmOrder();
+ setCheckoutStep('confirm');
+ showModal('confirmOrderModal')
 };
 
 function renderCart(){
@@ -2297,7 +2726,7 @@ function changeQty(i,d){const c=state.cart[i];if(!c)return;c.qty+=d;if(c.qty<=0)
 document.getElementById('clearCartBtn').onclick=()=>{if(state.cart.length&&confirm('ล้างรายการในตะกร้า?')){state.cart=[];saveState();renderCart()}};
 
 
-// FIELD POS v7.2 — Three-chime order bell
+// FIELD POS v7.3 — Three-chime order bell
 let FIELD_AUDIO_CTX=null;
 let FIELD_BELL_READY=false;
 function getFieldAudioContext(){
@@ -2656,6 +3085,7 @@ async function openPaymentFromConfirmedOrder(){
  if(!state.cart.length)return;
  const shortage=cartStockShortage();if(shortage){alert('วัตถุดิบไม่พอ: '+shortage);return}
  hideModal('confirmOrderModal');
+ setCheckoutStep('payment');
  setCartOpen(false);
  paymentMethod='cash';checkoutBillMode='combined';pendingPaymentReference=makePaymentReference();promptPayAutoPaid=false;promptPayAutoAmount=0;
  document.querySelectorAll('.billmode').forEach(x=>x.classList.toggle('active',x.dataset.billmode==='combined'));
@@ -2744,7 +3174,7 @@ document.getElementById('confirmPaymentBtn').onclick=async()=>{
 
  state.cart=[];checkoutTargetOrderId=null;saveState();
  await playNewOrderBell();
- hideModal('payModal');renderCart();renderMenuGrid();renderQueue();
+ hideModal('payModal');setCheckoutStep('');renderCart();renderMenuGrid();renderQueue();
  document.getElementById('pagerShow').textContent=pager;
  document.getElementById('queueShow').textContent=queueLabel(order);
  const pagerTitle=document.querySelector('#pagerModal h3');
@@ -3166,7 +3596,7 @@ const testBellBtn=document.getElementById('testBellBtn');if(testBellBtn)testBell
 document.getElementById('saveSettingsBtn').onclick=()=>{if(!requireRole())return;const rawPP=document.getElementById('promptpayId').value.trim(),pp=sanitizePromptPayId(rawPP);if(rawPP&& !validPromptPayId(pp)){alert('PromptPay ID ต้องเป็นเบอร์มือถือ 10 หลักขึ้นต้นด้วย 0 หรือเลขบัตรประชาชน/เลขผู้เสียภาษี 13 หลัก');document.getElementById('promptpayId').focus();return}state.settings.shopName=document.getElementById('shopName').value.trim()||'FIELD';state.settings.promptpayId=pp;state.settings.pagerCount=Math.min(50,Math.max(1,Number(document.getElementById('pagerCount').value)||10));state.settings.receiptFooter=document.getElementById('receiptFooter').value.trim();saveState();renderQueue();renderSettings();alert('บันทึกการตั้งค่าแล้ว')};
 document.getElementById('exportBtn').onclick=()=>{if(!requireRole())return;const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='FIELD_POS_backup_'+isoDate()+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)};
 document.getElementById('importFile').onchange=e=>{if(!requireRole())return;const f=e.target.files[0];if(!f)return;const rd=new FileReader();rd.onload=()=>{try{const obj=JSON.parse(rd.result);if(String(obj.schema_version||'').startsWith('FIELD_POS_MASTER_IMPORT')){if(confirm('นำเข้า FIELD Master Data โดยไม่ลบยอดขาย/ออเดอร์เดิม?')){importFieldMaster(obj);location.reload()}return}if(!obj.menu||!obj.ingredients)throw new Error('รูปแบบไม่ถูกต้อง');if(confirm('นำเข้า Backup และแทนที่ข้อมูลปัจจุบัน?')){state=normalizeState(obj);state.updatedAt=Date.now();localStorage.setItem(APP_KEY,JSON.stringify(state));dbWrite=dbWrite.then(()=>persistDatabase());dbWrite.finally(()=>location.reload())}}catch(err){console.error(err);alert('ไฟล์ JSON ไม่ถูกต้องหรือไม่รองรับ')}};rd.readAsText(f)};
-document.getElementById('resetAllBtn').onclick=async()=>{if(!requireRole())return;if(confirm('รีเซ็ต FIELD CAFÉ POS v7.2 ทั้งหมด? การกระทำนี้ย้อนกลับไม่ได้หากไม่มี Backup')&&confirm('ยืนยันอีกครั้ง: ลบยอดขาย สต๊อก การตั้งค่า และฐานข้อมูลทั้งหมด?')){localStorage.removeItem(APP_KEY);await deleteFieldDb();location.reload()}};
+document.getElementById('resetAllBtn').onclick=async()=>{if(!requireRole())return;if(confirm('รีเซ็ต FIELD CAFÉ POS v7.3 ทั้งหมด? การกระทำนี้ย้อนกลับไม่ได้หากไม่มี Backup')&&confirm('ยืนยันอีกครั้ง: ลบยอดขาย สต๊อก การตั้งค่า และฐานข้อมูลทั้งหมด?')){localStorage.removeItem(APP_KEY);await deleteFieldDb();location.reload()}};
 
 const syncDbBtn=document.getElementById('syncDbBtn');if(syncDbBtn)syncDbBtn.onclick=async()=>{if(!requireRole())return;syncDbBtn.disabled=true;syncDbBtn.textContent='กำลังซิงก์…';const ok=await persistDatabase();syncDbBtn.textContent=ok?'ซิงก์สำเร็จ ✓':'ซิงก์ไม่สำเร็จ';setTimeout(()=>{syncDbBtn.disabled=false;syncDbBtn.textContent='ซิงก์ข้อมูลลงฐานข้อมูลตอนนี้'},1200)};
 
@@ -3291,14 +3721,14 @@ setInterval(()=>{if(document.getElementById('v-queue').classList.contains('activ
 window.addEventListener('load',()=>{try{
  const critical=['renderMenuGrid','renderMenuAdmin','renderQueue','renderReport','renderCrm','persistDatabase','importFieldMaster','addCustomMenu'];
  const missing=critical.filter(k=>typeof window[k]!=='function');
- if(missing.length)console.error('[FIELD POS v7.2] missing critical functions',missing);
- else console.info('[FIELD POS v7.2] core self-check passed');
-}catch(e){console.error('[FIELD POS v7.2] self-check error',e)}});
+ if(missing.length)console.error('[FIELD POS v7.3] missing critical functions',missing);
+ else console.info('[FIELD POS v7.3] core self-check passed');
+}catch(e){console.error('[FIELD POS v7.3] self-check error',e)}});
 </script>
 
 
-<script id="field-v72-manifest" type="application/json">
-{"version":"7.2","confirm_order":{"mobile_fullscreen":true,"layout":"expanded_list","no_internal_scroll":true,"bigger_rows":true,"close_background_gray":true}}
+<script id="field-v73-manifest" type="application/json">
+{"version":"7.3","checkout":{"type":"two_step_full_page","steps":["confirm_order","payment"],"mobile_modal_backdrop":false,"back_preserves_cart":true,"add_more_preserves_cart":true}}
 </script>
 
 </body>
