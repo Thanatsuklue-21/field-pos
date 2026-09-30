@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#211E19">
-<title>FIELD CAFÉ POS v7.0 · Confirm Order First</title>
+<title>FIELD CAFÉ POS v7.1 · Confirm Table</title>
 <style>
 :root{
  --matcha:#5C7A3D;--matcha-dk:#3F5729;--matcha-lt:#DDE8CF;
@@ -1078,61 +1078,58 @@ main{contain:layout style}
 </style>
 
 
-<style id="field-v70-confirm-order">
-/* Confirm order is a dedicated step before payment */
+<style id="field-v71-confirm-table">
 .confirm-order-modal{display:flex;flex-direction:column}
-.confirm-order-head h3{margin:0;font-size:1.05rem}
-.confirm-order-head p{margin:2px 0 0;color:var(--muted);font-size:.7rem}
-.confirm-order-list{display:grid;gap:7px;margin:8px 0}
-.confirm-order-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;padding:9px;border:1px solid var(--line);border-radius:10px;background:#fff}
-.confirm-order-main{min-width:0}
-.confirm-order-name{font-weight:900;font-size:.85rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.confirm-order-variant{display:inline-block;margin-top:3px;padding:2px 6px;border-radius:999px;background:#f1f3ed;font-size:.62rem;color:var(--matcha-dk)}
-.confirm-order-unit{margin-top:4px;color:var(--muted);font-size:.62rem}
-.confirm-order-price{font-weight:900;font-size:.9rem;white-space:nowrap}
-.confirm-order-controls{grid-column:1/-1;display:grid;grid-template-columns:42px 34px 42px minmax(42px,1fr);gap:6px;align-items:center}
-.confirm-order-controls b{text-align:center;font-size:.85rem}
-.confirm-qty,.confirm-remove{min-height:40px;border:1px solid var(--line);border-radius:9px;background:#fff;font-size:1rem;font-weight:900}
-.confirm-remove{justify-self:end;width:42px;color:#a33}
-.confirm-order-summary{display:grid;grid-template-columns:1fr 1fr;gap:8px;background:#f5f7f2;border-radius:10px;padding:10px;margin-top:auto}
+.confirm-order-head h3{margin:0;font-size:1.02rem}
+.confirm-order-head p{margin:2px 0 0;color:var(--muted);font-size:.68rem}
+.confirm-order-table-head{display:grid;grid-template-columns:28px minmax(0,1.8fr) 64px 116px 70px 36px;gap:5px;align-items:center;padding:5px 7px;border-bottom:1px solid var(--line);color:var(--muted);font-size:.58rem;font-weight:800}
+.confirm-order-table-head span:nth-child(n+3){text-align:center}
+.confirm-order-list{display:grid;gap:4px;margin:5px 0;min-height:0}
+.confirm-order-row{display:grid;grid-template-columns:28px minmax(0,1.8fr) 64px 116px 70px 36px;gap:5px;align-items:center;min-height:var(--confirm-row-h,52px);height:var(--confirm-row-h,52px);padding:4px 7px;border:1px solid var(--line);border-radius:8px;background:#fff;overflow:hidden}
+.confirm-order-index{font-weight:900;color:var(--matcha-dk);text-align:center;font-size:.72rem}
+.confirm-order-main{min-width:0;overflow:hidden}
+.confirm-order-name{font-weight:900;font-size:.72rem;line-height:1.05;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.confirm-order-variant{display:inline-block;margin-top:2px;padding:1px 5px;border-radius:999px;background:#f1f3ed;font-size:.52rem;line-height:1.15;color:var(--matcha-dk);max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.confirm-order-unit,.confirm-order-price{font-weight:800;text-align:center;font-size:.65rem;white-space:nowrap}
+.confirm-order-controls{display:grid;grid-template-columns:34px 28px 34px;gap:4px;align-items:center;justify-content:center}
+.confirm-order-controls b{text-align:center;font-size:.72rem}
+.confirm-qty,.confirm-remove{min-height:32px;height:32px;border:1px solid var(--line);border-radius:8px;background:#fff;font-size:.9rem;font-weight:900;padding:0}
+.confirm-remove{width:32px;color:#a33}
+.confirm-order-summary{display:grid;grid-template-columns:1fr 1fr;gap:8px;background:#f5f7f2;border-radius:9px;padding:8px;margin-top:auto}
 .confirm-order-summary div{display:flex;justify-content:space-between;align-items:center}
-.confirm-order-summary span{font-size:.68rem;color:var(--muted)}
-.confirm-order-summary b{font-size:1rem}
-.confirm-order-actions{display:grid;grid-template-columns:1fr 1.15fr;gap:7px;margin-top:8px}
-
+.confirm-order-summary span{font-size:.62rem;color:var(--muted)}
+.confirm-order-summary b{font-size:.95rem}
+.confirm-order-actions{display:grid;grid-template-columns:1fr 1.15fr;gap:6px;margin-top:6px}
+.confirm-order-list[data-density="compact"] .confirm-order-name{font-size:.66rem}
+.confirm-order-list[data-density="compact"] .confirm-order-variant{font-size:.47rem}
+.confirm-order-list[data-density="compact"] .confirm-order-unit,.confirm-order-list[data-density="compact"] .confirm-order-price{font-size:.6rem}
+.confirm-order-list[data-density="compact"] .confirm-qty,.confirm-order-list[data-density="compact"] .confirm-remove{height:30px;min-height:30px}
+.confirm-order-list[data-density="ultra"]{gap:2px}
+.confirm-order-list[data-density="ultra"] .confirm-order-row{padding:2px 5px}
+.confirm-order-list[data-density="ultra"] .confirm-order-name{font-size:.58rem;-webkit-line-clamp:1}
+.confirm-order-list[data-density="ultra"] .confirm-order-variant{font-size:.42rem;margin-top:1px}
+.confirm-order-list[data-density="ultra"] .confirm-order-unit,.confirm-order-list[data-density="ultra"] .confirm-order-price{font-size:.54rem}
+.confirm-order-list[data-density="ultra"] .confirm-order-controls{grid-template-columns:28px 22px 28px;gap:2px}
+.confirm-order-list[data-density="ultra"] .confirm-qty,.confirm-order-list[data-density="ultra"] .confirm-remove{height:27px;min-height:27px;font-size:.75rem}
+.confirm-order-list[data-density="ultra"] .confirm-remove{width:27px}
 @media(max-width:760px){
  #confirmOrderModal{display:none!important;position:fixed!important;inset:0!important;z-index:590!important;padding:0!important;background:rgba(24,20,16,.56)!important}
  #confirmOrderModal.show{display:block!important}
- #confirmOrderModal .confirm-order-modal{
-  position:absolute!important;inset:0!important;width:100%!important;height:100%!important;max-width:none!important;max-height:none!important;
-  margin:0!important;border-radius:0!important;padding:10px 10px calc(10px + env(safe-area-inset-bottom))!important;
-  overflow:hidden!important;background:var(--card)!important;
- }
- #confirmOrderModal .closex{position:absolute!important;top:8px!important;right:8px!important;z-index:5!important}
- .confirm-order-head{flex:0 0 auto;padding:4px 34px 8px 0;border-bottom:1px solid var(--line)}
- .confirm-order-head h3{font-size:.95rem!important}.confirm-order-head p{font-size:.58rem!important}
- .confirm-order-list{
-  flex:1 1 auto!important;min-height:0!important;overflow-y:auto!important;-webkit-overflow-scrolling:touch!important;
-  margin:7px 0!important;padding-right:2px!important;overscroll-behavior:contain!important
- }
- .confirm-order-row{padding:7px!important;gap:5px!important;border-radius:9px!important}
- .confirm-order-name{font-size:.72rem!important}
- .confirm-order-variant{font-size:.52rem!important}
- .confirm-order-unit{font-size:.5rem!important}
- .confirm-order-price{font-size:.78rem!important}
- .confirm-order-controls{grid-template-columns:38px 30px 38px 1fr!important;gap:5px!important}
- .confirm-qty,.confirm-remove{min-height:36px!important;height:36px!important}
- .confirm-order-summary{flex:0 0 auto!important;padding:7px!important;margin-top:0!important}
- .confirm-order-summary span{font-size:.56rem!important}.confirm-order-summary b{font-size:.86rem!important}
- .confirm-order-actions{flex:0 0 auto!important;gap:5px!important;margin-top:6px!important}
- .confirm-order-actions .btn{min-height:42px!important;font-size:.62rem!important}
-
- /* Payment no longer repeats the long order list */
- #payModal .pay-order-check{
-  max-height:24px!important;min-height:24px!important;
-  padding:3px 5px!important;font-size:.5rem!important;
-  white-space:nowrap!important;overflow:hidden!important;
- }
+ #confirmOrderModal .confirm-order-modal{position:absolute!important;inset:0!important;width:100%!important;height:100%!important;max-width:none!important;max-height:none!important;margin:0!important;border-radius:0!important;padding:8px 8px calc(8px + env(safe-area-inset-bottom))!important;overflow:hidden!important;background:var(--card)!important}
+ #confirmOrderModal .closex{position:absolute!important;top:7px!important;right:7px!important;z-index:5!important}
+ .confirm-order-head{flex:0 0 auto;padding:2px 34px 6px 0;border-bottom:1px solid var(--line)}
+ .confirm-order-head h3{font-size:.9rem!important}.confirm-order-head p{font-size:.52rem!important}
+ .confirm-order-table-head{flex:0 0 auto!important;grid-template-columns:20px minmax(0,1.65fr) 46px 94px 54px 28px!important;gap:3px!important;padding:4px 3px!important;font-size:.46rem!important}
+ .confirm-order-list{flex:1 1 auto!important;min-height:0!important;overflow:hidden!important;margin:4px 0!important;padding:0!important;gap:3px!important;align-content:start!important}
+ .confirm-order-row{grid-template-columns:20px minmax(0,1.65fr) 46px 94px 54px 28px!important;gap:3px!important;padding:3px 3px!important;border-radius:7px!important}
+ .confirm-order-index{font-size:.58rem!important}.confirm-order-name{font-size:.62rem!important}.confirm-order-variant{font-size:.45rem!important}.confirm-order-unit,.confirm-order-price{font-size:.56rem!important}
+ .confirm-order-controls{grid-template-columns:28px 22px 28px!important;gap:2px!important}.confirm-order-controls b{font-size:.58rem!important}
+ .confirm-qty,.confirm-remove{height:28px!important;min-height:28px!important;font-size:.78rem!important}.confirm-remove{width:28px!important}
+ .confirm-order-summary{flex:0 0 auto!important;padding:6px!important;margin-top:0!important}.confirm-order-summary span{font-size:.52rem!important}.confirm-order-summary b{font-size:.8rem!important}
+ .confirm-order-actions{flex:0 0 auto!important;gap:4px!important;margin-top:5px!important}.confirm-order-actions .btn{min-height:38px!important;font-size:.56rem!important}
+ .confirm-order-list[data-density="compact"] .confirm-order-row{gap:2px!important;padding:2px 3px!important}
+ .confirm-order-list[data-density="ultra"] .confirm-order-row{gap:2px!important;padding:1px 2px!important}.confirm-order-list[data-density="ultra"] .confirm-order-name{font-size:.52rem!important}.confirm-order-list[data-density="ultra"] .confirm-order-variant{font-size:.38rem!important}.confirm-order-list[data-density="ultra"] .confirm-order-controls{grid-template-columns:24px 18px 24px!important}.confirm-order-list[data-density="ultra"] .confirm-qty,.confirm-order-list[data-density="ultra"] .confirm-remove{height:24px!important;min-height:24px!important;font-size:.68rem!important}.confirm-order-list[data-density="ultra"] .confirm-remove{width:24px!important}
+ #payModal .pay-order-check{max-height:24px!important;min-height:24px!important;padding:3px 5px!important;font-size:.5rem!important;white-space:nowrap!important;overflow:hidden!important}
 }
 </style>
 
@@ -1147,7 +1144,7 @@ main{contain:layout style}
  </div>
 </div>
 <header>
- <div class="brand"><span id="fieldVersionBadge" style="font-size:.62rem;font-weight:800;padding:3px 7px;border-radius:999px;background:#F6F1E4;color:#3F5729;margin-right:4px">v7.0</span><div class="mark" id="brandMark">F</div><div><h1>FIELD CAFÉ POS</h1><small>Simple · Fresh · Everyday</small></div></div>
+ <div class="brand"><span id="fieldVersionBadge" style="font-size:.62rem;font-weight:800;padding:3px 7px;border-radius:999px;background:#F6F1E4;color:#3F5729;margin-right:4px">v7.1</span><div class="mark" id="brandMark">F</div><div><h1>FIELD CAFÉ POS</h1><small>Simple · Fresh · Everyday</small></div></div>
  <div class="header-right"><button id="lockNowBtn" class="auth-lock-button no-print" type="button" hidden>🔒 ล็อก</button><b id="clockText">—</b><span id="dateText">—</span></div>
 </header>
 <nav id="mainNav" aria-label="เมนูหลัก">
@@ -1471,7 +1468,7 @@ main{contain:layout style}
 </section>
 
 <section id="printArea" class="view"></section>
-<div class="footer-note">FIELD CAFÉ POS v7.0 — Anti-Loop Runtime Fix · Local-first · Backup ก่อนอัปเดตทุกครั้ง</div>
+<div class="footer-note">FIELD CAFÉ POS v7.1 — Anti-Loop Runtime Fix · Local-first · Backup ก่อนอัปเดตทุกครั้ง</div>
 </main>
 
 
@@ -1516,6 +1513,9 @@ main{contain:layout style}
   <button class="closex" data-close="confirmOrderModal">×</button>
   <div class="confirm-order-head">
    <div><h3>ยืนยันออเดอร์</h3><p>ตรวจเมนู · ตัวเลือก · จำนวน ก่อนชำระเงิน</p></div>
+  </div>
+  <div class="confirm-order-table-head" aria-hidden="true">
+   <span>#</span><span>รายการ</span><span>ราคา</span><span>จำนวน</span><span>รวม</span><span></span>
   </div>
   <div id="confirmOrderList" class="confirm-order-list"></div>
   <div class="confirm-order-summary">
@@ -1583,7 +1583,7 @@ main{contain:layout style}
 <script>
 'use strict';
 const APP_KEY='field_pos_v2_state'; // ใช้ key เดิมเพื่อรักษาข้อมูลลูกค้าเมื่ออัปเกรด
-const FIELD_DATA_VERSION='2026-09-30.70';
+const FIELD_DATA_VERSION='2026-09-30.71';
 document.getElementById('masterDataVersion').textContent=FIELD_DATA_VERSION;
 const FIELD_IMAGE_VERSION='2026-09-28.4';
 const posterPhotos={};
@@ -1638,7 +1638,7 @@ const FIELD_DATA_INFO={
  recipe:'FIELD Master Recipe · 29 ก.ย. 2026',
  costs:'ฐานต้นทุนวัตถุดิบ · 23 ก.ย. 2026',
  brand:'FIELD Brand Identity · 27 ก.ย. 2026',
- correction:'FIELD POS v7.0 · confirm-order-first workflow with qty/remove/edit then payment · 30 ก.ย. 2026'
+ correction:'FIELD POS v7.1 · numbered confirm-order table with adaptive no-scroll rows · 30 ก.ย. 2026'
 };
 const PACKAGING_KEYS=new Set(['cup16','lid16','straw','sticker','ice','hotCupSet','cupHot','lidHot']);
 const CATEGORIES=['MATCHA','REFRESH','HOT MATCHA','COFFEE','TEA','COCOA','MILK','SODA','ALL'];
@@ -2114,24 +2114,31 @@ document.getElementById('resetOrderTargetBtn').onclick=()=>{checkoutTargetOrderI
 
 function renderConfirmOrder(){
  const list=document.getElementById('confirmOrderList');
- const cups=state.cart.reduce((sum,c)=>sum+Number(c.qty||0),0),total=cartTotal();
- if(!state.cart.length){
+ const cups=state.cart.reduce((sum,c)=>sum+Number(c.qty||0),0),total=cartTotal(),count=state.cart.length;
+ const vh=Math.max(520,Math.floor(window.visualViewport?.height||window.innerHeight||800));
+ const usable=Math.max(250,vh-245);
+ const rowH=Math.max(count>10?30:34,Math.min(62,Math.floor(usable/Math.max(1,count))));
+ list.style.setProperty('--confirm-row-h',rowH+'px');
+ list.style.setProperty('--confirm-count',String(Math.max(1,count)));
+ list.dataset.density=count>=9?'ultra':count>=5?'compact':'normal';
+ if(!count){
   list.innerHTML='<div class="empty">ไม่มีรายการในออเดอร์</div>';
  }else{
   list.innerHTML=state.cart.map((c,i)=>`
    <div class="confirm-order-row">
+    <div class="confirm-order-index">${i+1}.</div>
     <div class="confirm-order-main">
      <div class="confirm-order-name">${esc(c.name)}</div>
      <div class="confirm-order-variant">${esc(c.variant)}</div>
-     <div class="confirm-order-unit">${compactMoney(c.price)} / แก้ว</div>
     </div>
-    <div class="confirm-order-price">${compactMoney(c.price*c.qty)}</div>
+    <div class="confirm-order-unit">${compactMoney(c.price)}</div>
     <div class="confirm-order-controls">
      <button type="button" class="confirm-qty" data-i="${i}" data-d="-1" aria-label="ลดจำนวน">−</button>
      <b>${Number(c.qty)||0}</b>
      <button type="button" class="confirm-qty" data-i="${i}" data-d="1" aria-label="เพิ่มจำนวน">+</button>
-     <button type="button" class="confirm-remove" data-r="${i}" aria-label="ลบรายการ">×</button>
     </div>
+    <div class="confirm-order-price">${compactMoney(c.price*c.qty)}</div>
+    <button type="button" class="confirm-remove" data-r="${i}" aria-label="ลบรายการ">×</button>
    </div>`).join('');
  }
  document.getElementById('confirmOrderCups').textContent=cups;
@@ -2147,6 +2154,12 @@ function renderConfirmOrder(){
   if(!state.cart.length){hideModal('confirmOrderModal');setCartOpen(false)}
  });
 }
+function refreshConfirmOrderViewport(){
+ if(document.getElementById('confirmOrderModal')?.classList.contains('show'))renderConfirmOrder()
+}
+if(window.visualViewport)visualViewport.addEventListener('resize',refreshConfirmOrderViewport,{passive:true});
+window.addEventListener('orientationchange',()=>setTimeout(refreshConfirmOrderViewport,120),{passive:true});
+
 function openConfirmOrder(){
  if(!state.cart.length)return;
  forceCloseCartForPayment();
@@ -2177,7 +2190,7 @@ function changeQty(i,d){const c=state.cart[i];if(!c)return;c.qty+=d;if(c.qty<=0)
 document.getElementById('clearCartBtn').onclick=()=>{if(state.cart.length&&confirm('ล้างรายการในตะกร้า?')){state.cart=[];saveState();renderCart()}};
 
 
-// FIELD POS v7.0 — Three-chime order bell
+// FIELD POS v7.1 — Three-chime order bell
 let FIELD_AUDIO_CTX=null;
 let FIELD_BELL_READY=false;
 function getFieldAudioContext(){
@@ -3046,7 +3059,7 @@ const testBellBtn=document.getElementById('testBellBtn');if(testBellBtn)testBell
 document.getElementById('saveSettingsBtn').onclick=()=>{if(!requireRole())return;const rawPP=document.getElementById('promptpayId').value.trim(),pp=sanitizePromptPayId(rawPP);if(rawPP&& !validPromptPayId(pp)){alert('PromptPay ID ต้องเป็นเบอร์มือถือ 10 หลักขึ้นต้นด้วย 0 หรือเลขบัตรประชาชน/เลขผู้เสียภาษี 13 หลัก');document.getElementById('promptpayId').focus();return}state.settings.shopName=document.getElementById('shopName').value.trim()||'FIELD';state.settings.promptpayId=pp;state.settings.pagerCount=Math.min(50,Math.max(1,Number(document.getElementById('pagerCount').value)||10));state.settings.receiptFooter=document.getElementById('receiptFooter').value.trim();saveState();renderQueue();renderSettings();alert('บันทึกการตั้งค่าแล้ว')};
 document.getElementById('exportBtn').onclick=()=>{if(!requireRole())return;const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='FIELD_POS_backup_'+isoDate()+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)};
 document.getElementById('importFile').onchange=e=>{if(!requireRole())return;const f=e.target.files[0];if(!f)return;const rd=new FileReader();rd.onload=()=>{try{const obj=JSON.parse(rd.result);if(String(obj.schema_version||'').startsWith('FIELD_POS_MASTER_IMPORT')){if(confirm('นำเข้า FIELD Master Data โดยไม่ลบยอดขาย/ออเดอร์เดิม?')){importFieldMaster(obj);location.reload()}return}if(!obj.menu||!obj.ingredients)throw new Error('รูปแบบไม่ถูกต้อง');if(confirm('นำเข้า Backup และแทนที่ข้อมูลปัจจุบัน?')){state=normalizeState(obj);state.updatedAt=Date.now();localStorage.setItem(APP_KEY,JSON.stringify(state));dbWrite=dbWrite.then(()=>persistDatabase());dbWrite.finally(()=>location.reload())}}catch(err){console.error(err);alert('ไฟล์ JSON ไม่ถูกต้องหรือไม่รองรับ')}};rd.readAsText(f)};
-document.getElementById('resetAllBtn').onclick=async()=>{if(!requireRole())return;if(confirm('รีเซ็ต FIELD CAFÉ POS v7.0 ทั้งหมด? การกระทำนี้ย้อนกลับไม่ได้หากไม่มี Backup')&&confirm('ยืนยันอีกครั้ง: ลบยอดขาย สต๊อก การตั้งค่า และฐานข้อมูลทั้งหมด?')){localStorage.removeItem(APP_KEY);await deleteFieldDb();location.reload()}};
+document.getElementById('resetAllBtn').onclick=async()=>{if(!requireRole())return;if(confirm('รีเซ็ต FIELD CAFÉ POS v7.1 ทั้งหมด? การกระทำนี้ย้อนกลับไม่ได้หากไม่มี Backup')&&confirm('ยืนยันอีกครั้ง: ลบยอดขาย สต๊อก การตั้งค่า และฐานข้อมูลทั้งหมด?')){localStorage.removeItem(APP_KEY);await deleteFieldDb();location.reload()}};
 
 const syncDbBtn=document.getElementById('syncDbBtn');if(syncDbBtn)syncDbBtn.onclick=async()=>{if(!requireRole())return;syncDbBtn.disabled=true;syncDbBtn.textContent='กำลังซิงก์…';const ok=await persistDatabase();syncDbBtn.textContent=ok?'ซิงก์สำเร็จ ✓':'ซิงก์ไม่สำเร็จ';setTimeout(()=>{syncDbBtn.disabled=false;syncDbBtn.textContent='ซิงก์ข้อมูลลงฐานข้อมูลตอนนี้'},1200)};
 
@@ -3171,15 +3184,13 @@ setInterval(()=>{if(document.getElementById('v-queue').classList.contains('activ
 window.addEventListener('load',()=>{try{
  const critical=['renderMenuGrid','renderMenuAdmin','renderQueue','renderReport','renderCrm','persistDatabase','importFieldMaster','addCustomMenu'];
  const missing=critical.filter(k=>typeof window[k]!=='function');
- if(missing.length)console.error('[FIELD POS v7.0] missing critical functions',missing);
- else console.info('[FIELD POS v7.0] core self-check passed');
-}catch(e){console.error('[FIELD POS v7.0] self-check error',e)}});
+ if(missing.length)console.error('[FIELD POS v7.1] missing critical functions',missing);
+ else console.info('[FIELD POS v7.1] core self-check passed');
+}catch(e){console.error('[FIELD POS v7.1] self-check error',e)}});
 </script>
 
 
-<script id="field-v70-manifest" type="application/json">
-{"version":"7.0","checkout_flow":["cart","confirm_order","payment"],"confirm_order":{"qty_edit":true,"remove":true,"add_more":true,"full_order_view":true},"payment":{"order_summary_compact":true}}
-</script>
+<script id="field-v71-manifest" type="application/json">{"version":"7.1","confirm_order":{"layout":"numbered_table","no_internal_scroll":true,"adaptive_row_density":true,"columns":["index","item","unit_price","qty","line_total","remove"]}}</script>
 
 </body>
 </html>
