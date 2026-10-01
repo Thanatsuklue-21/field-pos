@@ -1,0 +1,4 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {reconcileCash} from '../lib/domain/cash-reconciliation.mjs';
+test('cash reconciliation includes opening float and reports overage',()=>{assert.deepEqual(reconcileCash({openingCash:500,cashSales:1250,countedCash:1760}),{openingCash:500,cashSales:1250,expectedCash:1750,countedCash:1760,cashVariance:10})});
+test('cash reconciliation reports shortage without mutating sales',()=>{assert.deepEqual(reconcileCash({openingCash:0,cashSales:800,countedCash:780}),{openingCash:0,cashSales:800,expectedCash:800,countedCash:780,cashVariance:-20})});
+test('cash reconciliation requires a real non-negative count',()=>{assert.throws(()=>reconcileCash({cashSales:100,countedCash:undefined}),/counted_cash_required/);assert.throws(()=>reconcileCash({openingCash:-1,cashSales:100,countedCash:100}),/invalid_opening_cash/)});
