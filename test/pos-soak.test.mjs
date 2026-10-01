@@ -239,7 +239,9 @@ test('checkout updates CRM visits spend and loyalty points exactly once',async()
 test('cash sale void before production restores stock exactly once and preserves cost snapshot',async()=>{
   const db=fakeDb();
   await checkoutPos({db,user,now:2000,body:{requestKey:'void-sale-checkout-001',cart,date,payment:'cash',received:100}});
-  let state=JSON.parse(db.storage.document),sale=state.sales[0];
+  let state=JSON.parse(db.storage.document),sale=state.sales[0],order=state.orders[0];
+  await queuePosAction({db,user,now:5050,body:{requestKey:'refund-cash-start-001',action:'start',orderId:order.id,itemIndex:0,unit:1}});
+  state=JSON.parse(db.storage.document);sale=state.sales[0];
   assert.equal(state.ingredients.matcha.qty,995);
   assert.equal(db.storage.stockTx.length,3);
   assert.equal(db.storage.costSnapshots.length,1);
@@ -268,6 +270,7 @@ test('cash sale cannot auto-void after production starts',async()=>{
   assert.equal(state.sales[0].status,'paid');
   assert.equal(state.ingredients.matcha.qty,995);
   assert.equal(db.storage.stockTx.length,3);
+  assert.equal(sale.refundStockRestored,false);
 });
 
 
@@ -313,7 +316,9 @@ test('full cash refund reverses revenue state and CRM but never restores consume
 test('refund replay is idempotent',async()=>{
   const db=fakeDb();
   await checkoutPos({db,user,now:5200,body:{requestKey:'refund-replay-checkout-001',cart,date,payment:'cash',received:100}});
-  const sale=JSON.parse(db.storage.document).sales[0],body={requestKey:'refund-replay-0001',saleId:sale.id,reason:'duplicate'};
+  let state=JSON.parse(db.storage.document),sale=state.sales[0],order=state.orders[0];
+  await queuePosAction({db,user,now:5205,body:{requestKey:'refund-replay-start-001',action:'start',orderId:order.id,itemIndex:0,unit:1}});
+  const body={requestKey:'refund-replay-0001',saleId:sale.id,reason:'duplicate'};
   const first=await refundSale({db,user,now:5210,body});
   const replay=await refundSale({db,user,now:5220,body});
   assert.equal(first.replayed,false);
@@ -330,7 +335,11 @@ test('PromptPay refund requires explicit external manual confirmation and refere
   assert.equal(ok.refundMethod,'manual_promptpay');
   const state=JSON.parse(db.storage.document);
   assert.equal(state.sales[0].refundReference,'bank-transfer-123');
-  assert.equal(state.ingredients.matcha.qty,995);
+  assert.equal(state.sales[0].refundStockRestored,true);
+  assert.equal(state.ingredients.matcha.qty,1000);
+  assert.equal(state.ingredients.milk.qty,30000);
+  assert.equal(state.ingredients.cup16.qty,500);
+  assert.equal(db.storage.stockTx.filter(args=>args[2]==='REFUND_REVERSAL').length,3);
 });
 
 test('refund is blocked after Close Day',async()=>{
@@ -349,4 +358,24 @@ test('voided order releases its pager immediately',async()=>{
   const second=await checkoutPos({db,user,now:5520,body:{requestKey:'pager-void-checkout-002',cart,date,payment:'cash',received:100}});
   assert.equal(first.pager,1);
   assert.equal(second.pager,1);
+});
+
+
+test('cash pre-production cancellation must use void so stock is restored',async()=>{
+  const db=fakeDb();
+  await checkoutPos({db,user,now:5600,body:{requestKey:'refund-preprod-checkout-001',cart,date,payment:'cash',received:100}});
+  const sale=JSON.parse(db.storage.document).sales[0];
+  await assert.rejects(()=>refundSale({db,user,now:5610,body:{requestKey:'refund-preprod-001',saleId:sale.id,reason:'cancel'}}),/use_void_before_production/);
+  const state=JSON.parse(db.storage.document);
+  assert.equal(state.sales[0].status,'paid');
+  assert.equal(state.ingredients.matcha.qty,995);
+});
+
+test('void cannot run on an already refunded sale',async()=>{
+  const db=fakeDb();
+  const checkout=await checkoutPos({db,user,now:5700,body:{requestKey:'void-after-refund-checkout-001',cart,date,payment:'cash',received:100}});
+  await queuePosAction({db,user,now:5705,body:{requestKey:'void-after-refund-start-001',action:'start',orderId:checkout.orderId,itemIndex:0,unit:1}});
+  const sale=JSON.parse(db.storage.document).sales[0];
+  await refundSale({db,user,now:5710,body:{requestKey:'void-after-refund-001',saleId:sale.id,reason:'refund'}});
+  await assert.rejects(()=>voidSale({db,user,now:5720,body:{requestKey:'void-after-refund-002',saleId:sale.id,reason:'wrong action'}}),/sale_not_voidable/);
 });
