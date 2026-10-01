@@ -168,6 +168,62 @@
     if (el('accessSettings')) el('accessSettings').hidden = true;
   }
 
+  function installOnlinePasswordCard() {
+    if (!serverUser || serverUser.role !== 'admin' || el('fieldOnlinePasswordAdminCard')) return;
+    const settings = el('v-settings');
+    if (!settings) return;
+    const card = document.createElement('div');
+    card.id = 'fieldOnlinePasswordAdminCard';
+    card.className = 'card';
+    card.innerHTML = `
+      <h3>🔐 รหัสผ่าน FIELD Online</h3>
+      <p class="muted">ใช้บัญชีออนไลน์เดียวกันเพื่อเข้า POS จากทุกเครื่อง การเปลี่ยนรหัสจะออกจากระบบทุกอุปกรณ์เพื่อความปลอดภัย</p>
+      <form id="fieldOnlinePasswordAdminForm">
+        <div class="form-row two">
+          <div><label>รหัสผ่านใหม่</label><input id="fieldOnlinePasswordNew" type="password" autocomplete="new-password" minlength="10" maxlength="128" required></div>
+          <div><label>ยืนยันรหัสผ่านใหม่</label><input id="fieldOnlinePasswordConfirm" type="password" autocomplete="new-password" minlength="10" maxlength="128" required></div>
+        </div>
+        <button class="btn dark" id="fieldOnlinePasswordSave" type="submit">ตั้งรหัสผ่านออนไลน์ใหม่</button>
+        <div id="fieldOnlinePasswordStatus" class="muted" style="margin-top:8px"></div>
+      </form>`;
+    const readiness = el('serverReadiness');
+    if (readiness?.parentElement) readiness.parentElement.insertAdjacentElement('afterend', card);
+    else settings.appendChild(card);
+
+    el('fieldOnlinePasswordAdminForm').onsubmit = async e => {
+      e.preventDefault();
+      const password = el('fieldOnlinePasswordNew').value;
+      const confirm = el('fieldOnlinePasswordConfirm').value;
+      const out = el('fieldOnlinePasswordStatus');
+      if (password.length < 10 || password.length > 128 || !/\p{L}/u.test(password)) {
+        out.textContent = 'รหัสผ่านต้องยาว 10–128 ตัว และมีตัวอักษรอย่างน้อย 1 ตัว';
+        return;
+      }
+      if (password !== confirm) {
+        out.textContent = 'รหัสผ่านทั้งสองช่องไม่ตรงกัน';
+        return;
+      }
+      const btn = el('fieldOnlinePasswordSave');
+      btn.disabled = true;
+      out.textContent = 'กำลังเปลี่ยนรหัสผ่านออนไลน์…';
+      try {
+        await request('admin/users/'+encodeURIComponent(serverUser.id), {
+          method:'PATCH',
+          body:JSON.stringify({password})
+        });
+        el('fieldOnlinePasswordNew').value = '';
+        el('fieldOnlinePasswordConfirm').value = '';
+        onlineReady = false;
+        out.textContent = 'เปลี่ยนสำเร็จ · กรุณาเข้าสู่ระบบใหม่ด้วยรหัสนี้ทุกเครื่อง';
+        setTimeout(()=>setLoginForm('เปลี่ยนรหัสผ่านสำเร็จ กรุณาเข้าสู่ระบบใหม่'),400);
+      } catch (err) {
+        out.textContent = err.status===400 ? 'รูปแบบรหัสผ่านไม่ถูกต้อง' : 'เปลี่ยนรหัสผ่านไม่สำเร็จ · '+(err.message||'server_error');
+      } finally {
+        btn.disabled = false;
+      }
+    };
+  }
+
   async function adopt(remote) {
     state = normalizeState(remote.state);
     revision = Number(remote.revision);
@@ -177,6 +233,7 @@
     await persistAdoptedState();
     markCleanRevision(revision);
     serverAuthIntoUi();
+    installOnlinePasswordCard();
 
     renderCategories();
     renderMenuGrid();
