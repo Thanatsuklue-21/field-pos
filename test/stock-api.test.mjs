@@ -10,31 +10,44 @@ test('stock write permissions are explicit', () => {
 });
 
 function fakeDb() {
-  const rows=[];
-  const audits=[];
-  const execute=async ({sql,args=[]})=>{
+  const storage={
+    rows:[],audits:[],revision:0,
+    document:JSON.stringify({ingredients:{matcha:{name:'Matcha',qty:1000,unit:'g',unitCost:2}}})
+  };
+  function executeOn(target,query){
+    const {sql,args=[]}=typeof query==='string'?{sql:query,args:[]}:query;
     if(sql.startsWith('SELECT * FROM field_stock_transactions')){
-      return {rows:rows.filter(row=>row.request_key===args[0])};
+      return {rows:target.rows.filter(row=>row.request_key===args[0])};
     }
     if(sql.includes('INSERT INTO field_stock_transactions')){
-      rows.push({
+      target.rows.push({
         id:args[0],ingredient_id:args[1],tx_type:args[2],qty_delta:args[3],unit:args[4],
         reference_type:args[5],reference_id:args[6],request_key:args[7],reason:args[8],
         actor_id:args[9],created_at:args[10],
-      });
-      return {rows:[]};
+      });return {rows:[]};
+    }
+    if(sql.startsWith('SELECT revision,document FROM field_state')){
+      return {rows:[{revision:target.revision,document:target.document}]};
+    }
+    if(sql.startsWith('UPDATE field_state SET revision=revision+1')){
+      target.revision+=1;target.document=String(args[0]);return {rowsAffected:1,rows:[]};
     }
     if(sql.startsWith('INSERT INTO field_audit')){
-      audits.push(args);
-      return {rows:[]};
+      target.audits.push(args);return {rows:[]};
     }
     throw new Error('Unexpected SQL: '+sql);
-  };
+  }
   return {
-    rows,
-    audits,
+    storage,
+    get rows(){return storage.rows},
+    get audits(){return storage.audits},
     async transaction(){
-      return {execute,async commit(){},async rollback(){}};
+      const draft={rows:storage.rows.map(x=>({...x})),audits:storage.audits.map(x=>[...x]),revision:storage.revision,document:storage.document};
+      return {
+        async execute(query){return executeOn(draft,query)},
+        async commit(){storage.rows=draft.rows;storage.audits=draft.audits;storage.revision=draft.revision;storage.document=draft.document},
+        async rollback(){}
+      };
     },
   };
 }
@@ -62,6 +75,7 @@ test('stock API creates and safely replays an idempotent write', async () => {
   assert.equal(replay.body.replayed,true);
   assert.equal(db.rows.length,1);
   assert.equal(db.audits.length,1);
+  assert.equal(JSON.parse(db.storage.document).ingredients.matcha.qty,1250);
 });
 
 test('stock API rejects request-key reuse with a different payload', async () => {
