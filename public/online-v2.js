@@ -445,6 +445,28 @@
     async promptPayStatus(chargeId) {
       if(!onlineReady) throw new Error('online_not_ready');
       return request('payments/promptpay/status',{method:'POST',body:JSON.stringify({chargeId})});
+    },
+    async splitStart(payload) {
+      if(!onlineReady) throw new Error('online_not_ready');
+      const result=await request('pos/split/start',{method:'POST',body:JSON.stringify(payload)});
+      await adopt(result);
+      return result;
+    },
+    async splitPay(payload) {
+      if(!onlineReady) throw new Error('online_not_ready');
+      const result=await request('pos/split/pay',{method:'POST',body:JSON.stringify(payload)});
+      await adopt(result);
+      return result;
+    },
+    async splitStatus(sessionId) {
+      if(!onlineReady) throw new Error('online_not_ready');
+      return request('pos/split/status',{method:'POST',body:JSON.stringify({sessionId})});
+    },
+    async splitCancel(payload) {
+      if(!onlineReady) throw new Error('online_not_ready');
+      const result=await request('pos/split/cancel',{method:'POST',body:JSON.stringify(payload)});
+      await adopt(result);
+      return result;
     }
   };
 
