@@ -1,0 +1,2 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {readFile} from 'node:fs/promises';const read=p=>readFile(new URL('../'+p,import.meta.url),'utf8');
+test('admin users UI manages roles without exposing destructive delete',async()=>{const s=await read('app/users/page.tsx');assert.match(s,/\/api\/admin\/users/);assert.match(s,/permissions/);assert.match(s,/RESET PASSWORD/);assert.match(s,/DISABLE/);assert.ok(!s.includes('method:"DELETE"'))});

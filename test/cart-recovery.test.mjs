@@ -1,0 +1,2 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {readFile} from 'node:fs/promises';const read=p=>readFile(new URL('../'+p,import.meta.url),'utf8');
+test('cart survives accidental refresh but clears on explicit sign out',async()=>{const cart=await read('stores/cart-store.ts'),settings=await read('app/settings/page.tsx');assert.match(cart,/persist/);assert.match(cart,/field-pos-cart-v1/);assert.match(settings,/clearCart\(\)/);assert.match(settings,/\/api\/auth\/logout/)});

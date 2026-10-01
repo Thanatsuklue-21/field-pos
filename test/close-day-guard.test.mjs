@@ -1,0 +1,3 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {readFile} from 'node:fs/promises';const read=p=>readFile(new URL('../'+p,import.meta.url),'utf8');
+test('server owns Bangkok sale date for direct and split checkouts',async()=>{const api=await read('lib/api.mjs');assert.match(api,/b\.date=bangkokDate\(now\)/);const matches=api.match(/b\.date=bangkokDate\(now\)/g)||[];assert.ok(matches.length>=2)});
+test('close day blocks while payments or customer orders are still open',async()=>{const api=await read('lib/api.mjs');assert.match(api,/close_day_pending_payments/);assert.match(api,/close_day_open_orders/);const ui=await read('app/close/page.tsx');assert.match(ui,/window\.confirm/);});

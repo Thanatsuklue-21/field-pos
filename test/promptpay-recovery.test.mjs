@@ -1,0 +1,4 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {readFile} from 'node:fs/promises';
+const read=p=>readFile(new URL('../'+p,import.meta.url),'utf8');
+test('PromptPay pending charge survives reload and reuses the original idempotency key',async()=>{const pos=await read('app/pos/page.tsx');assert.match(pos,/field-pos-pending-promptpay-v1/);assert.match(pos,/recoverPending/);assert.match(pos,/requestKey:p\.requestKey/);assert.match(pos,/pending_promptpay_exists/);assert.match(pos,/pendingClear\(\)/)});
+test('paid pending PromptPay finalizes through normal checkout API',async()=>{const pos=await read('app/pos/page.tsx');const seg=pos.slice(pos.indexOf('async function finalizePending'),pos.indexOf('async function recoverPending'));assert.match(seg,/\/api\/pos\/checkout/);assert.match(seg,/paymentReference:p\.paymentReference/);assert.match(seg,/cart\.clearCart\(\)/)});
