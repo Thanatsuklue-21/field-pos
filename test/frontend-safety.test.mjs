@@ -1,0 +1,6 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {readFile} from 'node:fs/promises';
+const read=p=>readFile(new URL('../'+p,import.meta.url),'utf8');
+test('offline safety caches reads but blocks writes',async()=>{const api=await read('lib/api-client.ts'),db=await read('lib/offline-db.ts');assert.match(api,/SAFE_GET_CACHE/);assert.match(api,/offline_write_blocked/);assert.match(db,/indexedDB\.open/);assert.ok(!api.includes('/api/customers"]'))});
+test('mobile shell exposes persistent operational navigation',async()=>{const shell=await read('components/app-shell.tsx');assert.match(shell,/mobileItems/);for(const p of ['/pos','/queue','/stock','/orders'])assert.ok(shell.includes(p))});
+test('backup restore requires preview revision and explicit replacement',async()=>{const page=await read('app/backup/page.tsx');assert.match(page,/\/api\/import\/preview/);assert.match(page,/expectedRevision/);assert.match(page,/replacement_requires_explicit_choice/);assert.match(page,/replace/)});
+test('expired sessions immediately return UI to sign in',async()=>{const gate=await read('components/auth-gate.tsx'),client=await read('lib/api-client.ts');assert.match(gate,/field:auth-expired/);assert.match(client,/res\.status===401/)});
