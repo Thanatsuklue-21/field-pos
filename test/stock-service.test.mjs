@@ -145,3 +145,18 @@ test('stock ledger and state balance move atomically for waste', async () => {
   assert.equal(JSON.parse(db.storage.document).ingredients.matcha.qty,975);
   assert.equal(db.storage.revision,1);
 });
+
+
+test('purchase cost updates unit cost and creates one expense only once', async () => {
+  const db=fakeDb();
+  const input={requestKey:'purchase-cost-0001',ingredientId:'matcha',type:'PURCHASE',qtyDelta:200,unit:'g',purchaseCost:400,referenceType:'purchase',referenceId:'po-cost-1'};
+  const first=await recordStockTransaction({db,actorId:'admin-1',input,now:500});
+  const replay=await recordStockTransaction({db,actorId:'admin-1',input,now:600});
+  assert.equal(first.status,'created');
+  assert.equal(replay.status,'replayed');
+  const state=JSON.parse(db.storage.document);
+  assert.equal(state.ingredients.matcha.qty,1200);
+  assert.equal(state.ingredients.matcha.unitCost,2);
+  assert.equal(state.expenses.length,1);
+  assert.equal(state.expenses[0].amount,400);
+});

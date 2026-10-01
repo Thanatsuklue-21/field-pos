@@ -15,7 +15,8 @@ function initialState(){
       milk:{qty:30000,unitCost:0.06},
       cup16:{qty:500,unitCost:2}
     },
-    settings:{pagerCount:10,pointsSpend:0},
+    settings:{pagerCount:10,pointsSpend:50},
+    customers:[{id:'cus-1',name:'Customer One',points:0,visits:0,totalSpend:0,lastVisit:0}],
     sales:[],orders:[],billSeq:{},paymentSessions:[]
   };
 }
@@ -218,4 +219,18 @@ test('split payment survives intermediate reloads and creates one sale + one que
   assert.equal(state.ingredients.cup16.qty,500-3);
   assert.equal(db.storage.stockTx.length,3);
   assert.equal(db.storage.costSnapshots.length,1);
+});
+
+
+test('checkout updates CRM visits spend and loyalty points exactly once',async()=>{
+  const db=fakeDb();
+  const body={requestKey:'checkout-crm-001',cart,date,payment:'cash',received:100,customerId:'cus-1'};
+  await checkoutPos({db,user,body,now:700});
+  await checkoutPos({db,user,body,now:800});
+  const state=JSON.parse(db.storage.document);
+  const customer=state.customers.find(x=>x.id==='cus-1');
+  assert.equal(customer.visits,1);
+  assert.equal(customer.totalSpend,55);
+  assert.equal(customer.points,1);
+  assert.equal(customer.lastVisit,700);
 });
