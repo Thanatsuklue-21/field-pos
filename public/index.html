@@ -1136,7 +1136,7 @@ main{contain:layout style}
   max-height:none!important;
   padding:0!important;
   margin:0!important;
-  background:var(--bg)!important;
+  background:var(--cream)!important;
   backdrop-filter:none!important;
   -webkit-backdrop-filter:none!important;
   overflow:hidden!important;
@@ -1159,7 +1159,7 @@ main{contain:layout style}
   border:0!important;
   border-radius:0!important;
   box-shadow:none!important;
-  background:var(--bg)!important;
+  background:var(--cream)!important;
   overflow:hidden!important;
   transform:none!important;
  }
@@ -1631,7 +1631,7 @@ main{contain:layout style}
  gap:7px!important;
  margin:0!important;
  padding:8px 0 calc(8px + env(safe-area-inset-bottom))!important;
- background:var(--bg)!important;
+ background:var(--cream)!important;
 }
 
 @media(max-width:760px){
@@ -3724,7 +3724,7 @@ if(window.visualViewport){
  visualViewport.addEventListener('scroll',syncVisualViewport,{passive:true})
 }
 
-function showModal(id){const el=document.getElementById(id);if(!el)return;if(id==='payModal'){forceCloseCartForPayment();syncVisualViewport();}el._returnFocus=document.activeElement;el.classList.add('show');el.setAttribute('aria-hidden','false');syncOverlayState();requestAnimationFrame(()=>{(el.querySelector('[data-close]')||el.querySelector('button:not([disabled])'))?.focus({preventScroll:true})})}
+function showModal(id){const el=document.getElementById(id);if(!el)return;if(id==='confirmOrderModal'||id==='payModal'){document.querySelectorAll('.checkout-step-page.show').forEach(x=>{if(x!==el){x.classList.remove('show');x.setAttribute('aria-hidden','true')}})}if(id==='payModal'){forceCloseCartForPayment();syncVisualViewport();}el._returnFocus=document.activeElement;el.classList.add('show');el.setAttribute('aria-hidden','false');syncOverlayState();requestAnimationFrame(()=>{(el.querySelector('[data-close]')||el.querySelector('button:not([disabled])'))?.focus({preventScroll:true})})}
 function hideModal(id){const el=document.getElementById(id);if(!el)return;el.classList.remove('show');el.setAttribute('aria-hidden','true');if(id==='payModal'&&typeof stopPromptPayMonitor==='function')stopPromptPayMonitor();syncOverlayState();requestAnimationFrame(()=>syncOverlayState());if(el._returnFocus?.isConnected)el._returnFocus.focus({preventScroll:true})}
 document.addEventListener('keydown',e=>{const modal=document.querySelector('.modal-bg.show');if(!modal)return;if(e.key==='Escape'&&modal.id!=='pagerModal'){hideModal(modal.id);return}if(e.key!=='Tab')return;const controls=[...modal.querySelectorAll('button:not([disabled]),input:not([disabled]),select:not([disabled]),a[href]')].filter(x=>x.getClientRects().length);if(!controls.length)return;const first=controls[0],last=controls[controls.length-1];if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus()}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus()}})
 document.querySelectorAll('[data-close]').forEach(b=>b.onclick=()=>hideModal(b.dataset.close));document.querySelectorAll('.modal-bg').forEach(bg=>bg.addEventListener('click',e=>{if(e.target===bg&&bg.id!=='pagerModal')hideModal(bg.id)}));
