@@ -12,11 +12,13 @@ export async function api<T>(path:string,init:RequestInit={}){
     if(method==="GET"&&SAFE_GET_CACHE.has(path))cachePut(path,data).catch(()=>{});
     emit("online");return data as T;
   }catch(error:any){
-    if(method==="GET"&&SAFE_GET_CACHE.has(path)){
-      const cached=await cacheGet<T>(path);
-      if(cached){emit("cached");return cached}
+    if(error?.status===undefined){
+      if(method==="GET"&&SAFE_GET_CACHE.has(path)){
+        const cached=await cacheGet<T>(path);
+        if(cached){emit("cached");return cached}
+      }
+      emit("offline");throw Object.assign(new Error("network_unavailable"),{status:0,cause:error});
     }
-    if(error?.status===undefined){emit("offline");throw Object.assign(new Error("network_unavailable"),{status:0,cause:error})}
     throw error;
   }
 }

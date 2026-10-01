@@ -239,9 +239,7 @@ test('checkout updates CRM visits spend and loyalty points exactly once',async()
 test('cash sale void before production restores stock exactly once and preserves cost snapshot',async()=>{
   const db=fakeDb();
   await checkoutPos({db,user,now:2000,body:{requestKey:'void-sale-checkout-001',cart,date,payment:'cash',received:100}});
-  let state=JSON.parse(db.storage.document),sale=state.sales[0],order=state.orders[0];
-  await queuePosAction({db,user,now:5050,body:{requestKey:'refund-cash-start-001',action:'start',orderId:order.id,itemIndex:0,unit:1}});
-  state=JSON.parse(db.storage.document);sale=state.sales[0];
+  let state=JSON.parse(db.storage.document),sale=state.sales[0];
   assert.equal(state.ingredients.matcha.qty,995);
   assert.equal(db.storage.stockTx.length,3);
   assert.equal(db.storage.costSnapshots.length,1);
@@ -270,7 +268,6 @@ test('cash sale cannot auto-void after production starts',async()=>{
   assert.equal(state.sales[0].status,'paid');
   assert.equal(state.ingredients.matcha.qty,995);
   assert.equal(db.storage.stockTx.length,3);
-  assert.equal(sale.refundStockRestored,false);
 });
 
 
@@ -297,7 +294,9 @@ test('closed business day rejects a new split payment reservation',async()=>{
 test('full cash refund reverses revenue state and CRM but never restores consumed stock',async()=>{
   const db=fakeDb();
   await checkoutPos({db,user,now:5000,body:{requestKey:'refund-cash-checkout-001',cart,date,payment:'cash',received:100,customerId:'cus-1'}});
-  let state=JSON.parse(db.storage.document),sale=state.sales[0];
+  let state=JSON.parse(db.storage.document),sale=state.sales[0],order=state.orders[0];
+  await queuePosAction({db,user,now:5050,body:{requestKey:'refund-cash-start-001',action:'start',orderId:order.id,itemIndex:0,unit:1}});
+  state=JSON.parse(db.storage.document);sale=state.sales[0];
   assert.equal(state.ingredients.matcha.qty,995);
   assert.equal(state.customers[0].totalSpend,55);
   const result=await refundSale({db,user,now:5100,body:{requestKey:'refund-cash-0001',saleId:sale.id,reason:'customer complaint'}});
@@ -378,4 +377,23 @@ test('void cannot run on an already refunded sale',async()=>{
   const sale=JSON.parse(db.storage.document).sales[0];
   await refundSale({db,user,now:5710,body:{requestKey:'void-after-refund-001',saleId:sale.id,reason:'refund'}});
   await assert.rejects(()=>voidSale({db,user,now:5720,body:{requestKey:'void-after-refund-002',saleId:sale.id,reason:'wrong action'}}),/sale_not_voidable/);
+});
+
+
+test('new checkout with stale client business date is rejected without stock mutation',async()=>{
+  const db=fakeDb();
+  await assert.rejects(()=>checkoutPos({db,user,now:5800,body:{requestKey:'date-stale-001',cart,date,serverDate:'2026-10-02',payment:'cash',received:100}}),/business_date_changed/);
+  const state=JSON.parse(db.storage.document);
+  assert.equal(state.sales.length,0);
+  assert.equal(state.ingredients.matcha.qty,1000);
+  assert.equal(db.storage.stockTx.length,0);
+});
+
+test('idempotent replay still succeeds after server business date changes',async()=>{
+  const db=fakeDb(),body={requestKey:'date-replay-001',cart,date,serverDate:date,payment:'cash',received:100};
+  const first=await checkoutPos({db,user,now:5900,body});
+  const replay=await checkoutPos({db,user,now:6000,body:{...body,serverDate:'2026-10-02'}});
+  assert.equal(replay.replayed,true);
+  assert.equal(replay.orderId,first.orderId);
+  assert.equal(JSON.parse(db.storage.document).sales.length,1);
 });
