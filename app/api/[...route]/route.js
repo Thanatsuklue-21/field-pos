@@ -1,4 +1,4 @@
-import {getDb} from "../../../lib/db.mjs";
+import {getDb,ensureDbSchema} from "../../../lib/db.mjs";
 import {createApi} from "../../../lib/api.mjs";
 
 export const runtime="nodejs";
@@ -22,6 +22,7 @@ async function handle(request,{params}){
     status(code){status=code;return this;},
     json(value){responseHeaders["Content-Type"]="application/json; charset=utf-8";chunks=[JSON.stringify(value)];return this;}
   };
+  await ensureDbSchema();
   const origin=process.env.PUBLIC_ORIGIN;
   if(!origin||!origin.startsWith("https://"))return Response.json({error:"origin_not_configured"},{status:503});
   await createApi({db:getDb(),origin})(req,res);
