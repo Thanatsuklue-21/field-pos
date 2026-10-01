@@ -134,6 +134,12 @@
   function markLocalDirty() {
     localStorage.removeItem(CLEAN_REVISION_KEY);
   }
+  function syncFingerprint(source=state) {
+    const copy=deepClone(source||{});
+    copy.cart=[]; // cart is intentionally device-local until checkout transaction
+    return stableSnapshot(copy);
+  }
+  let lastServerFingerprint='';
   function backupLocal() {
     const blob = new Blob([JSON.stringify(state,null,2)], {type:'application/json'});
     const url = URL.createObjectURL(blob);
@@ -235,6 +241,7 @@
     retryDelay = 3000;
     await persistAdoptedState();
     markCleanRevision(revision);
+    lastServerFingerprint=syncFingerprint(state);
     serverAuthIntoUi();
     installOnlinePasswordCard();
 
@@ -345,6 +352,7 @@
       retryDelay = 3000;
       clearTimeout(retryTimer);
       markCleanRevision(revision);
+      lastServerFingerprint=syncFingerprint(state);
       syncStatus('บันทึก Turso แล้ว · r'+revision);
       setTimeout(()=>{ if(!syncPending) syncStatus(''); },1500);
     } catch(e) {
@@ -383,6 +391,8 @@
   saveState = function() {
     originalSaveState();
     if (onlineReady) {
+      const currentFingerprint=syncFingerprint(state);
+      if(currentFingerprint===lastServerFingerprint)return;
       markLocalDirty();
       syncPending = true;
       editVersion++;
