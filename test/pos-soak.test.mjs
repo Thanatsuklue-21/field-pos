@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  checkoutPos,queuePosAction,startSplitPayment,paySplitPayment,getSplitPaymentStatus,voidSale
+  checkoutPos,queuePosAction,startSplitPayment,paySplitPayment,getSplitPaymentStatus,voidSale,refundSale
 } from '../lib/pos-api.mjs';
 
 function initialState(){
@@ -288,4 +288,54 @@ test('closed business day rejects a new split payment reservation',async()=>{
   const state=JSON.parse(db.storage.document);
   assert.equal(state.paymentSessions.length,0);
   assert.equal(state.ingredients.matcha.qty,1000);
+});
+
+
+test('full cash refund reverses revenue state and CRM but never restores consumed stock',async()=>{
+  const db=fakeDb();
+  await checkoutPos({db,user,now:5000,body:{requestKey:'refund-cash-checkout-001',cart,date,payment:'cash',received:100,customerId:'cus-1'}});
+  let state=JSON.parse(db.storage.document),sale=state.sales[0];
+  assert.equal(state.ingredients.matcha.qty,995);
+  assert.equal(state.customers[0].totalSpend,55);
+  const result=await refundSale({db,user,now:5100,body:{requestKey:'refund-cash-0001',saleId:sale.id,reason:'customer complaint'}});
+  state=JSON.parse(db.storage.document);sale=state.sales[0];
+  assert.equal(result.refundAmount,55);
+  assert.equal(sale.status,'refunded');
+  assert.equal(sale.refundMethod,'cash');
+  assert.equal(state.ingredients.matcha.qty,995);
+  assert.equal(state.ingredients.milk.qty,29890);
+  assert.equal(state.ingredients.cup16.qty,499);
+  assert.equal(state.customers[0].totalSpend,0);
+  assert.equal(state.customers[0].points,0);
+  assert.equal(db.storage.stockTx.length,3);
+});
+
+test('refund replay is idempotent',async()=>{
+  const db=fakeDb();
+  await checkoutPos({db,user,now:5200,body:{requestKey:'refund-replay-checkout-001',cart,date,payment:'cash',received:100}});
+  const sale=JSON.parse(db.storage.document).sales[0],body={requestKey:'refund-replay-0001',saleId:sale.id,reason:'duplicate'};
+  const first=await refundSale({db,user,now:5210,body});
+  const replay=await refundSale({db,user,now:5220,body});
+  assert.equal(first.replayed,false);
+  assert.equal(replay.replayed,true);
+  assert.equal(JSON.parse(db.storage.document).sales[0].status,'refunded');
+});
+
+test('PromptPay refund requires explicit external manual confirmation and reference',async()=>{
+  const db=fakeDb();
+  await checkoutPos({db,user,now:5300,body:{requestKey:'refund-pp-checkout-001',cart,date,payment:'promptpay',paymentVerified:'chrg_test_paid',paymentProviderAmount:55,paymentReference:'chrg_test_paid'}});
+  const sale=JSON.parse(db.storage.document).sales[0];
+  await assert.rejects(()=>refundSale({db,user,now:5310,body:{requestKey:'refund-pp-0001',saleId:sale.id}}),/promptpay_manual_refund_required/);
+  const ok=await refundSale({db,user,now:5320,body:{requestKey:'refund-pp-0002',saleId:sale.id,manualConfirmed:true,manualReference:'bank-transfer-123',reason:'manual returned'}});
+  assert.equal(ok.refundMethod,'manual_promptpay');
+  const state=JSON.parse(db.storage.document);
+  assert.equal(state.sales[0].refundReference,'bank-transfer-123');
+  assert.equal(state.ingredients.matcha.qty,995);
+});
+
+test('refund is blocked after Close Day',async()=>{
+  const db=fakeDb();
+  await checkoutPos({db,user,now:5400,body:{requestKey:'refund-close-checkout-001',cart,date,payment:'cash',received:100}});
+  const state=JSON.parse(db.storage.document),sale=state.sales[0];state.closes=[{id:'close-1',date}];db.storage.document=JSON.stringify(state);
+  await assert.rejects(()=>refundSale({db,user,now:5410,body:{requestKey:'refund-close-0001',saleId:sale.id}}),/refund_closed_day/);
 });

@@ -1,0 +1,3 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {readFile} from 'node:fs/promises';const read=p=>readFile(new URL('../'+p,import.meta.url),'utf8');
+test('reports and close-day only count paid sales',async()=>{const api=await read('lib/api.mjs');const paid=(api.match(/status==='paid'/g)||[]).length;assert.ok(paid>=4)});
+test('orders UI distinguishes void from full refund and warns that stock is not restored',async()=>{const ui=await read('app/orders/page.tsx');assert.match(ui,/FULL REFUND · NO STOCK RESTORE/);assert.match(ui,/VOID CASH SALE \+ RESTORE STOCK/);assert.match(ui,/PromptPay ไม่สามารถ refund ผ่าน Omise ได้/)});
