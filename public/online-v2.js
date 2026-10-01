@@ -106,8 +106,33 @@
   function counts(s) {
     return `${(s?.sales||[]).length} บิล · ${(s?.orders||[]).length} คิว · ${(s?.expenses||[]).length} ค่าใช้จ่าย`;
   }
+  const CLEAN_REVISION_KEY = 'field_pos_online_clean_revision_v1';
   function localHasData(s) {
     return !!((s?.sales||[]).length || (s?.orders||[]).length || (s?.expenses||[]).length || (s?.customers||[]).length);
+  }
+  function stableSnapshot(value) {
+    if (Array.isArray(value)) return '['+value.map(stableSnapshot).join(',')+']';
+    if (value && typeof value === 'object') {
+      return '{'+Object.keys(value).sort().map(k=>JSON.stringify(k)+':'+stableSnapshot(value[k])).join(',')+'}';
+    }
+    return JSON.stringify(value);
+  }
+  function snapshotsEqual(a,b) {
+    try {
+      return stableSnapshot(normalizeState(deepClone(a))) === stableSnapshot(normalizeState(deepClone(b)));
+    } catch (e) {
+      console.warn('FIELD snapshot compare failed',e);
+      return false;
+    }
+  }
+  function cleanRevision() {
+    return Number(localStorage.getItem(CLEAN_REVISION_KEY) || 0);
+  }
+  function markCleanRevision(rev) {
+    localStorage.setItem(CLEAN_REVISION_KEY, String(Number(rev)||0));
+  }
+  function markLocalDirty() {
+    localStorage.removeItem(CLEAN_REVISION_KEY);
   }
   function backupLocal() {
     const blob = new Blob([JSON.stringify(state,null,2)], {type:'application/json'});
@@ -150,6 +175,7 @@
     syncPending = false;
     retryDelay = 3000;
     await persistAdoptedState();
+    markCleanRevision(revision);
     serverAuthIntoUi();
 
     renderCategories();
@@ -221,6 +247,11 @@
       return;
     }
 
+    if (cleanRevision() === Number(remote.revision) || snapshotsEqual(local, remote.state)) {
+      await adopt(remote);
+      return;
+    }
+
     if (localHasData(local)) {
       show();
       el('fieldOnlineForm').hidden = true;
@@ -253,6 +284,7 @@
       }
       retryDelay = 3000;
       clearTimeout(retryTimer);
+      markCleanRevision(revision);
       syncStatus('บันทึก Turso แล้ว · r'+revision);
       setTimeout(()=>{ if(!syncPending) syncStatus(''); },1500);
     } catch(e) {
@@ -291,6 +323,7 @@
   saveState = function() {
     originalSaveState();
     if (onlineReady) {
+      markLocalDirty();
       syncPending = true;
       editVersion++;
       syncStatus('บันทึกในเครื่องแล้ว · กำลังซิงก์ Turso…','warn');
