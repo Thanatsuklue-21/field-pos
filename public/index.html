@@ -2237,6 +2237,24 @@ const FIELD_DATA_INFO={
  correction:'FIELD POS v7.4 · clean numbered confirm list with no overlapping cards and sticky summary/actions · 30 ก.ย. 2026'
 };
 const PACKAGING_KEYS=new Set(['cup16','lid16','straw','sticker','ice','hotCupSet','cupHot','lidHot']);
+function recipeCostInfo(vr){
+ const items=vr?.recipe?.items||{},missing=[];let raw=0,pack=0;
+ for(const [key,qtyValue] of Object.entries(items)){
+  const qty=Number(qtyValue)||0;if(qty<=0)continue;
+  const ing=state?.ingredients?.[key],unitCost=Number(ing?.unitCost);
+  if(!Number.isFinite(unitCost)||unitCost<=0){missing.push(key);continue}
+  const line=qty*unitCost;
+  if(PACKAGING_KEYS.has(key))pack+=line;else raw+=line;
+ }
+ const cost=raw+pack,variable=2.5,baseline=Number(vr?.baselineCogs);
+ return {
+  raw,pack,cost,variable,
+  fullVariable:cost+variable,
+  missing,
+  complete:missing.length===0,
+  baseline:Number.isFinite(baseline)&&baseline>0?baseline:null
+ };
+}
 const CATEGORIES=['MATCHA','REFRESH','HOT MATCHA','COFFEE','TEA','COCOA','MILK','SODA','ALL'];
 const CAT_LABEL={'ALL':'ทั้งหมด','MATCHA':'มัทฉะ','REFRESH':'รีเฟรช','HOT MATCHA':'มัทฉะร้อน','COFFEE':'กาแฟ','TEA':'ชา','COCOA':'โกโก้','MILK':'นม','SODA':'โซดา'};
 
