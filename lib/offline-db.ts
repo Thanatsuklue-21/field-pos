@@ -1,0 +1,5 @@
+const DB_NAME="field-pos-client",STORE="cache",VERSION=1;
+type Cached<T>={value:T,savedAt:number};
+function openDb():Promise<IDBDatabase|null>{if(typeof indexedDB==="undefined")return Promise.resolve(null);return new Promise(resolve=>{const r=indexedDB.open(DB_NAME,VERSION);r.onupgradeneeded=()=>{if(!r.result.objectStoreNames.contains(STORE))r.result.createObjectStore(STORE)};r.onsuccess=()=>resolve(r.result);r.onerror=()=>resolve(null)})}
+export async function cachePut<T>(key:string,value:T){const db=await openDb();if(!db)return;await new Promise<void>(resolve=>{const tx=db.transaction(STORE,"readwrite");tx.objectStore(STORE).put({value,savedAt:Date.now()},key);tx.oncomplete=()=>resolve();tx.onerror=()=>resolve()});db.close()}
+export async function cacheGet<T>(key:string,maxAgeMs=24*60*60*1000):Promise<T|null>{const db=await openDb();if(!db)return null;const row=await new Promise<Cached<T>|undefined>(resolve=>{const r=db.transaction(STORE,"readonly").objectStore(STORE).get(key);r.onsuccess=()=>resolve(r.result);r.onerror=()=>resolve(undefined)});db.close();if(!row||Date.now()-Number(row.savedAt||0)>maxAgeMs)return null;return row.value}
