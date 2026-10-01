@@ -1895,6 +1895,32 @@ main{contain:layout style}
  }
 }
 </style>
+
+<style id="field-v80-split-pay">
+#payModal .pay-mode-tabs{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+#payModal .paymode{min-height:50px;border:1px solid var(--line);background:#fff;border-radius:14px;font-weight:900;color:var(--ink)}
+#payModal .paymode.active{background:var(--matcha-dk);color:#fff;border-color:var(--matcha-dk)}
+#payModal .pay-remaining{margin-top:5px;font-size:.78rem;font-weight:800;opacity:.78}
+#payModal .split-item-list{display:grid;gap:8px}
+#payModal .split-item-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center;padding:10px 0;border-bottom:1px solid var(--line)}
+#payModal .split-item-row.done{opacity:.45}
+#payModal .split-item-main b{display:block;font-size:.9rem}
+#payModal .split-item-main span,#payModal .split-item-main small{display:block;color:var(--muted);font-size:.7rem;margin-top:3px}
+#payModal .split-qty{display:grid;grid-template-columns:42px 30px 42px;gap:5px;align-items:center}
+#payModal .split-qty button{height:42px;border:1px solid var(--line);background:#fff;border-radius:12px;font-size:1.15rem;font-weight:900}
+#payModal .split-qty strong{text-align:center}
+#payModal .split-current-summary{display:flex;justify-content:space-between;gap:12px;align-items:center;margin-top:10px;padding:11px 12px;border-radius:12px;background:#eef5e8}
+#payModal .split-current-summary strong{font-size:1.15rem;color:var(--matcha-dk)}
+#payModal .split-paid-list{margin-top:10px}
+#payModal .split-paid-title{font-size:.72rem;font-weight:900;color:var(--muted);margin-bottom:4px}
+#payModal .split-paid-row{display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-top:1px dashed var(--line);font-size:.76rem}
+@media(max-width:760px){
+ #payModal .payment-modal-simple{overflow-y:auto!important;padding:0 12px calc(92px + env(safe-area-inset-bottom))!important}
+ #payModal .pay-tabs{grid-template-columns:1fr!important}
+ #payModal .paymode,#payModal .paytab{min-height:54px!important}
+ #payModal .split-item-row{grid-template-columns:minmax(0,1fr) auto!important}
+}
+</style>
 </head>
 <body class="auth-locked">
 <div id="authGate" class="auth-gate" role="dialog" aria-modal="true" aria-labelledby="authTitle">
@@ -2297,24 +2323,38 @@ main{contain:layout style}
 
 <!-- payment modal -->
 <div class="modal-bg checkout-step-page" id="payModal" role="dialog" aria-modal="true" aria-hidden="true">
- <div class="modal payment-modal payment-modal-v2">
+ <div class="modal payment-modal payment-modal-simple">
   <div class="checkout-step-topbar">
    <button type="button" class="checkout-step-back" id="payBackToConfirmBtn">← ตรวจออเดอร์</button>
    <div class="checkout-step-progress"><b>ขั้นตอน 2/2</b><span>ชำระเงิน</span></div>
    <div class="checkout-step-spacer"></div>
   </div>
 
-  <section class="pay-section pay-total-section" aria-label="ยอดชำระ">
+  <section class="pay-section pay-total-section">
    <div class="pay-section-label">ยอดที่ต้องชำระ</div>
    <div class="money" id="payTotal">0 บาท</div>
+   <div class="pay-remaining" id="payRemaining"></div>
   </section>
 
-  <section class="pay-section pay-items-section" aria-label="รายการในบิล">
-   <div class="pay-section-title">รายการในบิล</div>
-   <div class="pay-order-check" id="payOrderCheck"></div>
+  <section class="pay-section pay-mode-section">
+   <div class="pay-section-title">รูปแบบการชำระ</div>
+   <div class="pay-mode-tabs">
+    <button type="button" class="paymode active" id="payModeFull" data-paymode="full">จ่ายทั้งหมด</button>
+    <button type="button" class="paymode" id="payModeSplit" data-paymode="split">แยกจ่าย</button>
+   </div>
   </section>
 
-  <section class="pay-section pay-method-section" aria-label="วิธีชำระ">
+  <section class="pay-section split-pay-section" id="splitPaySection" hidden>
+   <div class="pay-section-title">เลือกรายการของคนนี้</div>
+   <div id="splitItemList" class="split-item-list"></div>
+   <div class="split-current-summary">
+    <span>ยอดคนนี้</span>
+    <strong id="splitCurrentTotal">0 บาท</strong>
+   </div>
+   <div id="splitPaidList" class="split-paid-list"></div>
+  </section>
+
+  <section class="pay-section pay-method-section">
    <div class="pay-section-title">วิธีรับชำระ</div>
    <div class="pay-tabs">
     <button class="paytab active" data-pay="cash">💵 เงินสด</button>
@@ -2337,12 +2377,12 @@ main{contain:layout style}
      <img id="promptQrImg" alt="PromptPay QR Code" style="display:none">
      <div id="qrStatus" class="payment-status neutral">ตั้งค่า PromptPay ID ก่อนใช้งาน</div>
      <div id="promptAutoStatus" class="payment-status neutral">ตรวจยอดอัตโนมัติ: ยังไม่เชื่อม Merchant QR API</div>
-     <div class="qr-note">QR แบบ Static ใช้ได้ออฟไลน์ แต่การยืนยันยอดอัตโนมัติต้องเชื่อม Merchant QR API / Payment Callback</div>
+     <div class="qr-note">หากยังไม่เชื่อม Merchant API ให้ตรวจสอบยอดจริงแล้วติ๊กยืนยัน</div>
     </div>
-    <label class="confirm-row"><input type="checkbox" id="promptPaidConfirm"><span><b>ตรวจสอบแล้วว่าได้รับเงิน</b><br><span class="muted">ติ๊กหลังจากเห็นยอดเงินเข้าจริงก่อนปิดบิล</span></span></label>
+    <label class="confirm-row"><input type="checkbox" id="promptPaidConfirm"><span><b>ตรวจสอบแล้วว่าได้รับเงิน</b><br><span class="muted">ติ๊กหลังจากเห็นยอดเงินเข้าจริง</span></span></label>
    </div>
 
-   <div id="otherArea" class="notice pay-method-panel" style="display:none">ใช้สำหรับช่องทางอื่น เช่น บัตร หรือโอนเข้าบัญชีอื่น กรุณาตรวจสอบยอดก่อนยืนยัน</div>
+   <div id="otherArea" class="notice pay-method-panel" style="display:none">ใช้สำหรับช่องทางอื่น กรุณาตรวจสอบยอดก่อนยืนยัน</div>
   </section>
 
   <details class="payment-extra pay-section">
@@ -2353,6 +2393,9 @@ main{contain:layout style}
     <div class="muted" id="payPointsPreview"></div>
    </div>
   </details>
+
+  <div id="payOrderCheck" hidden></div>
+  <div id="billModeNote" hidden>1 บิล · 1 คิว</div>
 
   <section class="pay-confirm-section">
    <button class="btn green" id="confirmPaymentBtn" disabled>ยืนยันรับชำระ</button>
@@ -3307,7 +3350,7 @@ function renderQuickCash(total){
  });
 }
 function renderPromptPayQr(){
- const total=cartTotal(),id=sanitizePromptPayId(state.settings.promptpayId);
+ const total=paymentDueAmount(),id=sanitizePromptPayId(state.settings.promptpayId);
  const img=document.getElementById('promptQrImg'),status=document.getElementById('qrStatus');
  document.getElementById('qrAmount').textContent=money(total);
  document.getElementById('promptDisplay').textContent=maskPromptPayId(id);
@@ -3353,15 +3396,128 @@ async function checkPromptPayStatus(){
  if(state.settings.promptpayProvider!=='merchant_api'||!endpoint){el.className='payment-status neutral';el.textContent='ตรวจยอดอัตโนมัติ: ยังไม่เชื่อม Merchant QR API';return false}
  try{
   const sep=endpoint.includes('?')?'&':'?',res=await fetch(endpoint+sep+'reference='+encodeURIComponent(pendingPaymentReference),{cache:'no-store'});if(!res.ok)throw new Error('HTTP '+res.status);
-  const data=await res.json(),expected=cartTotal();
+  const data=await res.json(),expected=paymentDueAmount();
   if(data.status==='paid'&&Number(data.amount)>=expected){promptPayAutoPaid=true;promptPayAutoAmount=Number(data.amount);document.getElementById('promptPaidConfirm').checked=true;el.className='payment-status ok';el.textContent=`✅ ยอดเข้าแล้ว ${money(data.amount)}`;playNewOrderBell();updatePaymentState();return true}
   el.className='payment-status neutral';el.textContent='กำลังรอยอด PromptPay… '+pendingPaymentReference;return false
  }catch(e){el.className='payment-status bad';el.textContent='เชื่อมระบบตรวจยอดไม่ได้ · ใช้ Manual verify ได้';return false}
 }
 function startPromptPayMonitor(){stopPromptPayMonitor();promptPayAutoPaid=false;promptPayAutoAmount=0;if(state.settings.promptpayProvider!=='merchant_api')return checkPromptPayStatus();checkPromptPayStatus();promptPayPollTimer=setInterval(checkPromptPayStatus,3000)}
 
+let checkoutPayMode='full',splitPayments=[],splitRemaining=[],splitSelection=[];
+
+function resetSplitPayments(){
+ checkoutPayMode='full';splitPayments=[];
+ splitRemaining=state.cart.map(x=>Number(x.qty)||0);
+ splitSelection=state.cart.map(()=>0);
+}
+
+function splitRemainingAmount(){
+ return state.cart.reduce((sum,item,i)=>sum+(Number(item.price)||0)*(Number(splitRemaining[i])||0),0);
+}
+
+function splitCurrentAmount(){
+ return state.cart.reduce((sum,item,i)=>sum+(Number(item.price)||0)*(Number(splitSelection[i])||0),0);
+}
+
+function paymentDueAmount(){
+ return checkoutPayMode==='split'?splitCurrentAmount():cartTotal();
+}
+
+function splitComplete(){
+ return splitRemaining.every(q=>Number(q)<=0);
+}
+
+function renderSplitPaymentUi(){
+ const section=document.getElementById('splitPaySection');
+ const remainingBox=document.getElementById('payRemaining');
+ const fullBtn=document.getElementById('payModeFull');
+ const splitBtn=document.getElementById('payModeSplit');
+ if(!section||!remainingBox)return;
+
+ fullBtn?.classList.toggle('active',checkoutPayMode==='full');
+ splitBtn?.classList.toggle('active',checkoutPayMode==='split');
+ section.hidden=checkoutPayMode!=='split';
+
+ if(checkoutPayMode==='full'){
+  remainingBox.textContent='';
+  document.getElementById('payTotal').textContent=money(cartTotal());
+  return;
+ }
+
+ const remaining=splitRemainingAmount();
+ remainingBox.textContent='ยอดคงเหลือ '+money(remaining);
+ const list=document.getElementById('splitItemList');
+ list.innerHTML=state.cart.map((item,i)=>{
+  const remain=Number(splitRemaining[i])||0,selected=Number(splitSelection[i])||0;
+  return `<div class="split-item-row ${remain<=0?'done':''}">
+   <div class="split-item-main">
+    <b>${esc(item.name)}</b>
+    <span>${esc(item.variant)} · ${money(item.price)} / แก้ว</span>
+    <small>เหลือ ${remain} แก้ว</small>
+   </div>
+   <div class="split-qty">
+    <button type="button" data-split-dec="${i}" ${selected<=0?'disabled':''}>−</button>
+    <strong>${selected}</strong>
+    <button type="button" data-split-inc="${i}" ${selected>=remain?'disabled':''}>+</button>
+   </div>
+  </div>`;
+ }).join('');
+
+ list.querySelectorAll('[data-split-dec]').forEach(b=>b.onclick=()=>{
+  const i=Number(b.dataset.splitDec);if(splitSelection[i]>0)splitSelection[i]--;
+  renderSplitPaymentUi();resetPaymentEntryForAmount();
+ });
+ list.querySelectorAll('[data-split-inc]').forEach(b=>b.onclick=()=>{
+  const i=Number(b.dataset.splitInc);if(splitSelection[i]<splitRemaining[i])splitSelection[i]++;
+  renderSplitPaymentUi();resetPaymentEntryForAmount();
+ });
+
+ document.getElementById('splitCurrentTotal').textContent=money(splitCurrentAmount());
+ document.getElementById('payTotal').textContent=money(splitCurrentAmount());
+
+ const paid=document.getElementById('splitPaidList');
+ paid.innerHTML=splitPayments.length?'<div class="split-paid-title">รับชำระแล้ว</div>'+
+  splitPayments.map((p,i)=>`<div class="split-paid-row"><span>คนที่ ${i+1} · ${p.method==='cash'?'เงินสด':p.method==='promptpay'?'PromptPay':'อื่น ๆ'}</span><b>${money(p.amount)}</b></div>`).join(''):'';
+
+ const btn=document.getElementById('confirmPaymentBtn');
+ if(btn)btn.textContent=remaining===splitCurrentAmount()&&splitComplete()?'ยืนยันรับชำระและปิดออเดอร์':'บันทึกการจ่ายคนนี้';
+}
+
+function resetPaymentEntryForAmount(){
+ const due=paymentDueAmount();
+ const cash=document.getElementById('cashReceived');
+ if(cash)cash.value='';
+ const paid=document.getElementById('promptPaidConfirm');
+ if(paid)paid.checked=false;
+ promptPayAutoPaid=false;promptPayAutoAmount=0;pendingPaymentReference=makePaymentReference();
+ renderQuickCash(due);
+ if(paymentMethod==='promptpay')renderPromptPayQr();
+ updatePaymentState();
+}
+
+function currentSplitPayment(){
+ const amount=splitCurrentAmount();
+ if(amount<=0)throw new Error('split_nothing_selected');
+ const allocations=splitSelection.map((qty,index)=>({index,qty:Number(qty)||0})).filter(x=>x.qty>0);
+ const received=paymentMethod==='cash'?Number(document.getElementById('cashReceived').value):amount;
+ return {
+  method:paymentMethod,amount,received,
+  paymentReference:paymentMethod==='promptpay'?pendingPaymentReference:null,
+  paymentVerified:paymentMethod==='promptpay'?(state.settings.promptpayProvider==='merchant_api'?'api':'manual'):true,
+  allocations,label:'คนที่ '+(splitPayments.length+1)
+ };
+}
+
+function applyCurrentSplitPayment(payment){
+ payment.allocations.forEach(a=>{
+  splitRemaining[a.index]-=a.qty;
+  splitSelection[a.index]=0;
+ });
+ splitPayments.push(payment);
+}
+
 function updatePaymentState(){
- const total=cartTotal(),btn=document.getElementById('confirmPaymentBtn');
+ const total=paymentDueAmount(),btn=document.getElementById('confirmPaymentBtn');
  const payModal=document.getElementById('payModal');if(payModal)payModal.dataset.method=paymentMethod;
  const cashArea=document.getElementById('cashArea');
  const promptArea=document.getElementById('promptArea');
@@ -3403,28 +3559,15 @@ function updatePaymentState(){
 async function openPaymentFromConfirmedOrder(){
  if(!state.cart.length)return;
  const shortage=cartStockShortage();if(shortage){alert('วัตถุดิบไม่พอ: '+shortage);return}
- hideModal('confirmOrderModal');
- setCheckoutStep('payment');
- setCartOpen(false);
+ hideModal('confirmOrderModal');setCheckoutStep('payment');setCartOpen(false);
  paymentMethod='cash';checkoutBillMode='combined';pendingPaymentReference=makePaymentReference();promptPayAutoPaid=false;promptPayAutoAmount=0;
-  document.getElementById('billModeNote').textContent='1 บิล · 1 คิว';
+ resetSplitPayments();
  document.querySelectorAll('.paytab').forEach(x=>x.classList.toggle('active',x.dataset.pay==='cash'));
- const total=cartTotal();
- document.getElementById('payTotal').textContent=money(total);
- document.getElementById('payOrderCheck').innerHTML=state.cart.map(item=>`
-  <div class="pay-line-item">
-   <div class="pay-line-main">
-    <b class="pay-line-name">${esc(item.name)}</b>
-    <span class="pay-line-variant">${esc(item.variant)}</span>
-   </div>
-   <div class="pay-line-qty">×${Number(item.qty)||0}</div>
-   <div class="pay-line-total">${compactMoney(Number(item.price)*Number(item.qty||0))}</div>
-  </div>`).join('');
  renderPayCustomer();
  document.getElementById('cashReceived').value='';
  document.getElementById('changeAmount').textContent=money(0);
  document.getElementById('promptPaidConfirm').checked=false;
- renderQuickCash(total);renderPromptPayQr();updatePaymentState();
+ renderSplitPaymentUi();renderQuickCash(cartTotal());renderPromptPayQr();updatePaymentState();
  forceCloseCartForPayment();
  requestAnimationFrame(()=>requestAnimationFrame(()=>showModal('payModal')))
 }
@@ -3432,6 +3575,13 @@ document.getElementById('checkoutBtn').onclick=()=>{unlockOrderVoice();openConfi
 document.getElementById('confirmGoPayBtn').onclick=()=>{unlockOrderVoice();openPaymentFromConfirmedOrder()};
 
 function cartTotal(){return state.cart.reduce((s,c)=>s+c.price*c.qty,0)}
+
+document.querySelectorAll('.paymode').forEach(b=>b.onclick=()=>{
+ if(splitPayments.length&&b.dataset.paymode==='full'){alert('มีการบันทึกการจ่ายบางส่วนแล้ว ต้องชำระส่วนที่เหลือให้ครบก่อน');return}
+ checkoutPayMode=b.dataset.paymode;
+ if(checkoutPayMode==='split'&&!splitRemaining.length){splitRemaining=state.cart.map(x=>Number(x.qty)||0);splitSelection=state.cart.map(()=>0)}
+ renderSplitPaymentUi();resetPaymentEntryForAmount();
+});
 
 document.querySelectorAll('.paytab').forEach(b=>b.onclick=()=>{
  paymentMethod=b.dataset.pay;
@@ -3451,10 +3601,26 @@ document.getElementById('confirmPaymentBtn').onclick=async()=>{
  const btn=document.getElementById('confirmPaymentBtn');if(btn.dataset.processing==='yes')return;
  const shortage=cartStockShortage();if(shortage){alert('วัตถุดิบไม่พอ: '+shortage);return}
  const total=cartTotal();
- if(paymentMethod==='cash'&&Number(document.getElementById('cashReceived').value)<total){updatePaymentState();alert('จำนวนเงินสดที่รับมายังไม่พอ');return}
- if(paymentMethod==='promptpay'){
+ if(checkoutPayMode==='full'&&paymentMethod==='cash'&&Number(document.getElementById('cashReceived').value)<total){updatePaymentState();alert('จำนวนเงินสดที่รับมายังไม่พอ');return}
+ if(checkoutPayMode==='full'&&paymentMethod==='promptpay'){
   const apiMode=state.settings.promptpayProvider==='merchant_api',manualOk=document.getElementById('promptPaidConfirm').checked;
   if(!validPromptPayId(state.settings.promptpayId)||!(apiMode?promptPayAutoPaid:manualOk)){updatePaymentState();alert(apiMode?'ยังไม่พบยอด PromptPay ที่ยืนยันจาก Merchant API':'กรุณาตรวจสอบว่าได้รับเงิน PromptPay แล้วจึงยืนยัน');return}
+ }
+ let splitFinalPayments=null;
+ if(checkoutPayMode==='split'){
+  let current;
+  try{current=currentSplitPayment()}catch(e){alert('เลือกจำนวนเครื่องดื่มของคนนี้ก่อน');return}
+  if(paymentMethod==='cash'&&Number(current.received)<current.amount){updatePaymentState();alert('จำนวนเงินสดที่รับมายังไม่พอ');return}
+  if(paymentMethod==='promptpay'){
+   const apiMode=state.settings.promptpayProvider==='merchant_api',manualOk=document.getElementById('promptPaidConfirm').checked;
+   if(!validPromptPayId(state.settings.promptpayId)||!(apiMode?promptPayAutoPaid:manualOk)){updatePaymentState();alert(apiMode?'ยังไม่พบยอด PromptPay ที่ยืนยันจาก Merchant API':'กรุณาตรวจสอบว่าได้รับเงิน PromptPay แล้วจึงยืนยัน');return}
+  }
+  applyCurrentSplitPayment(current);
+  if(!splitComplete()){
+   renderSplitPaymentUi();resetPaymentEntryForAmount();
+   return;
+  }
+  splitFinalPayments=splitPayments.slice();
  }
  const targetOrder=(state.orders||[]).find(o=>o.id===checkoutTargetOrderId&&o.status!=='returned');
  const pager=targetOrder?targetOrder.pagerNo:nextFreePager();
@@ -3476,7 +3642,8 @@ document.getElementById('confirmPaymentBtn').onclick=async()=>{
     customerId,
     date:isoDate(),
     paymentReference:paymentMethod==='promptpay'?pendingPaymentReference:null,
-    paymentVerified:paymentMethod==='promptpay'?(state.settings.promptpayProvider==='merchant_api'?'api':'manual'):true
+    paymentVerified:paymentMethod==='promptpay'?(state.settings.promptpayProvider==='merchant_api'?'api':'manual'):true,
+    payments:splitFinalPayments
    });
    state.cart=[];checkoutTargetOrderId=null;
    localStorage.setItem(APP_KEY,JSON.stringify(state));
@@ -3490,6 +3657,15 @@ document.getElementById('confirmPaymentBtn').onclick=async()=>{
    document.getElementById('pagerModal').dataset.orderid=result.orderId;
    showModal('pagerModal');updateQueueBadge();
   }catch(e){
+   if(checkoutPayMode==='split'&&splitFinalPayments){
+    splitPayments=splitFinalPayments.slice(0,-1);
+    splitRemaining=state.cart.map((item,i)=>{
+      const paid=splitPayments.reduce((sum,p)=>sum+p.allocations.filter(a=>a.index===i).reduce((n,a)=>n+a.qty,0),0);
+      return Number(item.qty||0)-paid;
+    });
+    splitSelection=state.cart.map(()=>0);
+    renderSplitPaymentUi();
+   }
    const code=String(e?.message||'');
    const msg=code.startsWith('stock_shortage:')?'วัตถุดิบไม่พอ กรุณาตรวจสต๊อก':
     code==='no_pager_available'?'บัตรคิวถูกใช้งานครบแล้ว':
