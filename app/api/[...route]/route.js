@@ -1,5 +1,5 @@
-import {getDb} from "../../../../lib/db.mjs";
-import {createApi} from "../../../../lib/api.mjs";
+import {getDb} from "../../../lib/db.mjs";
+import {createApi} from "../../../lib/api.mjs";
 
 export const runtime="nodejs";
 export const dynamic="force-dynamic";
