@@ -225,7 +225,10 @@
   }
 
   async function adopt(remote) {
+    const localCart = deepClone(state?.cart||[]);
     state = normalizeState(remote.state);
+    // Cart is device-local work in progress and must never be overwritten by another register.
+    state.cart = localCart;
     revision = Number(remote.revision);
     onlineReady = true;
     syncPending = false;
@@ -386,6 +389,25 @@
       syncStatus('บันทึกในเครื่องแล้ว · กำลังซิงก์ Turso…','warn');
       clearTimeout(syncTimer);
       syncTimer = setTimeout(flush,120);
+    }
+  };
+
+  window.FIELD_ONLINE_POS = {
+    isReady:()=>onlineReady,
+    async checkout(payload) {
+      if(!onlineReady) throw new Error('online_not_ready');
+      if(syncPending){ await flush(); if(syncPending) throw new Error('pending_snapshot_sync'); }
+      syncStatus('กำลังบันทึกออเดอร์…','warn');
+      const result=await request('pos/checkout',{method:'POST',body:JSON.stringify(payload)});
+      await adopt(result);
+      return result;
+    },
+    async queueAction(payload) {
+      if(!onlineReady) throw new Error('online_not_ready');
+      if(syncPending){ await flush(); if(syncPending) throw new Error('pending_snapshot_sync'); }
+      const result=await request('pos/queue',{method:'POST',body:JSON.stringify(payload)});
+      await adopt(result);
+      return result;
     }
   };
 
