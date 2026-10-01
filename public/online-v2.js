@@ -358,8 +358,15 @@
     } catch(e) {
       syncPending = true;
       if (e.status === 409) {
-        syncStatus('หยุดซิงก์ · พบข้อมูลหลายเครื่องชนกัน','bad');
-        failure(e);
+        syncStatus('ข้อมูลเปลี่ยนจากอีกเครื่อง · กำลังโหลดล่าสุด','warn');
+        try {
+          const remote=await request('state');
+          await adopt(remote);
+        } catch(refreshError) {
+          syncStatus('โหลดข้อมูลล่าสุดไม่สำเร็จ · จะลองใหม่','warn');
+          clearTimeout(retryTimer);
+          retryTimer=setTimeout(flush,retryDelay);
+        }
       } else if (e.status === 401) {
         syncStatus('เซสชันหมดอายุ · ข้อมูลยังอยู่ในเครื่อง','warn');
         setLoginForm('เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่');
@@ -402,11 +409,13 @@
     }
   };
 
+  window.FIELD_LOCAL_SAVE = function(){ originalSaveState(); };
+
   window.FIELD_ONLINE_POS = {
     isReady:()=>onlineReady,
     async checkout(payload) {
       if(!onlineReady) throw new Error('online_not_ready');
-      if(syncPending){ await flush(); if(syncPending) throw new Error('pending_snapshot_sync'); }
+      if(syncPending && !syncing) flush().catch(()=>{});
       syncStatus('กำลังบันทึกออเดอร์…','warn');
       const result=await request('pos/checkout',{method:'POST',body:JSON.stringify(payload)});
       await adopt(result);
@@ -414,7 +423,7 @@
     },
     async queueAction(payload) {
       if(!onlineReady) throw new Error('online_not_ready');
-      if(syncPending){ await flush(); if(syncPending) throw new Error('pending_snapshot_sync'); }
+      if(syncPending && !syncing) flush().catch(()=>{});
       const result=await request('pos/queue',{method:'POST',body:JSON.stringify(payload)});
       await adopt(result);
       return result;
