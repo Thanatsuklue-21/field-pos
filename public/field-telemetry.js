@@ -6,6 +6,14 @@ const INGEST='https://us.i.posthog.com/i/v0/e/';
 const DEVICE_KEY='field_telemetry_device_v1';
 const SESSION_KEY='field_telemetry_session_v1';
 const startedAt=performance.now();
+window.FIELD_RUNTIME_HEALTH={
+  lastApiMs:null,
+  lastApiRoute:'',
+  lastApiAt:0,
+  lastError:'',
+  lastErrorAt:0,
+  online:navigator.onLine
+};
 
 function randomId(prefix){
   try{return prefix+crypto.randomUUID()}catch{return prefix+Date.now().toString(36)+Math.random().toString(36).slice(2)}
@@ -59,6 +67,8 @@ function capture(event,properties={}){
 window.FIELD_TELEMETRY={capture};
 
 window.addEventListener('error',event=>{
+  window.FIELD_RUNTIME_HEALTH.lastError=String(event.error?.message||event.message||'Error').slice(0,300);
+  window.FIELD_RUNTIME_HEALTH.lastErrorAt=Date.now();
   capture('field error',{
     source:'window_error',
     filename:String(event.filename||'').slice(-180),
@@ -68,10 +78,12 @@ window.addEventListener('error',event=>{
   });
 });
 window.addEventListener('unhandledrejection',event=>{
+  window.FIELD_RUNTIME_HEALTH.lastError=String(event.reason?.message||event.reason||'Unhandled rejection').slice(0,300);
+  window.FIELD_RUNTIME_HEALTH.lastErrorAt=Date.now();
   capture('field error',{source:'unhandled_rejection',...safeError(event.reason)});
 });
-window.addEventListener('online',()=>capture('field connectivity changed',{status:'online'}));
-window.addEventListener('offline',()=>capture('field connectivity changed',{status:'offline'}));
+window.addEventListener('online',()=>{window.FIELD_RUNTIME_HEALTH.online=true;capture('field connectivity changed',{status:'online'})});
+window.addEventListener('offline',()=>{window.FIELD_RUNTIME_HEALTH.online=false;capture('field connectivity changed',{status:'offline'})});
 
 const nativeFetch=window.fetch.bind(window);
 window.fetch=async function(input,init){
@@ -91,6 +103,13 @@ window.fetch=async function(input,init){
     const ms=Math.round(performance.now()-started);
     let route=url;
     try{route=new URL(url,location.origin).pathname}catch{}
+    window.FIELD_RUNTIME_HEALTH.lastApiMs=ms;
+    window.FIELD_RUNTIME_HEALTH.lastApiRoute=route;
+    window.FIELD_RUNTIME_HEALTH.lastApiAt=Date.now();
+    if(!ok&&status>=400){
+      window.FIELD_RUNTIME_HEALTH.lastError='HTTP '+status+' · '+route;
+      window.FIELD_RUNTIME_HEALTH.lastErrorAt=Date.now();
+    }
     const noisyMeta=route==='/api/state/meta'&&ok&&ms<800;
     if(!noisyMeta){
       capture('field api request',{
