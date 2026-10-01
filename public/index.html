@@ -3403,12 +3403,38 @@ async function checkPromptPayStatus(){
 }
 function startPromptPayMonitor(){stopPromptPayMonitor();promptPayAutoPaid=false;promptPayAutoAmount=0;if(state.settings.promptpayProvider!=='merchant_api')return checkPromptPayStatus();checkPromptPayStatus();promptPayPollTimer=setInterval(checkPromptPayStatus,3000)}
 
+const SPLIT_SESSION_KEY='field_split_payment_session_v1';
 let checkoutPayMode='full',splitPayments=[],splitRemaining=[],splitSelection=[];
+let splitSessionId=localStorage.getItem(SPLIT_SESSION_KEY)||'';
 
 function resetSplitPayments(){
  checkoutPayMode='full';splitPayments=[];
  splitRemaining=state.cart.map(x=>Number(x.qty)||0);
  splitSelection=state.cart.map(()=>0);
+}
+
+function hydrateSplitSession(session){
+ if(!session)return;
+ splitSessionId=session.id||'';
+ if(splitSessionId)localStorage.setItem(SPLIT_SESSION_KEY,splitSessionId);
+ splitRemaining=(session.remainingQty||[]).map(Number);
+ splitPayments=(session.payments||[]).map(p=>({...p}));
+ splitSelection=state.cart.map(()=>0);
+ checkoutPayMode='split';
+}
+
+async function resumeSplitSessionIfAny(){
+ if(!splitSessionId||!window.FIELD_ONLINE_POS?.isReady?.())return false;
+ try{
+  const result=await window.FIELD_ONLINE_POS.splitStatus(splitSessionId);
+  if(result?.session?.status!=='collecting'){
+   splitSessionId='';localStorage.removeItem(SPLIT_SESSION_KEY);return false;
+  }
+  hydrateSplitSession(result.session);
+  return true;
+ }catch{
+  splitSessionId='';localStorage.removeItem(SPLIT_SESSION_KEY);return false;
+ }
 }
 
 function splitRemainingAmount(){
@@ -3562,12 +3588,13 @@ async function openPaymentFromConfirmedOrder(){
  hideModal('confirmOrderModal');setCheckoutStep('payment');setCartOpen(false);
  paymentMethod='cash';checkoutBillMode='combined';pendingPaymentReference=makePaymentReference();promptPayAutoPaid=false;promptPayAutoAmount=0;
  resetSplitPayments();
+ await resumeSplitSessionIfAny();
  document.querySelectorAll('.paytab').forEach(x=>x.classList.toggle('active',x.dataset.pay==='cash'));
  renderPayCustomer();
  document.getElementById('cashReceived').value='';
  document.getElementById('changeAmount').textContent=money(0);
  document.getElementById('promptPaidConfirm').checked=false;
- renderSplitPaymentUi();renderQuickCash(cartTotal());renderPromptPayQr();updatePaymentState();
+ renderSplitPaymentUi();renderQuickCash(paymentDueAmount()||cartTotal());renderPromptPayQr();updatePaymentState();
  forceCloseCartForPayment();
  requestAnimationFrame(()=>requestAnimationFrame(()=>showModal('payModal')))
 }
@@ -3577,7 +3604,7 @@ document.getElementById('confirmGoPayBtn').onclick=()=>{unlockOrderVoice();openP
 function cartTotal(){return state.cart.reduce((s,c)=>s+c.price*c.qty,0)}
 
 document.querySelectorAll('.paymode').forEach(b=>b.onclick=()=>{
- if(splitPayments.length&&b.dataset.paymode==='full'){alert('มีการบันทึกการจ่ายบางส่วนแล้ว ต้องชำระส่วนที่เหลือให้ครบก่อน');return}
+ if((splitPayments.length||splitSessionId)&&b.dataset.paymode==='full'){alert('เริ่มแยกจ่ายแล้ว ต้องชำระส่วนที่เหลือให้ครบก่อน');return}
  checkoutPayMode=b.dataset.paymode;
  if(checkoutPayMode==='split'&&!splitRemaining.length){splitRemaining=state.cart.map(x=>Number(x.qty)||0);splitSelection=state.cart.map(()=>0)}
  renderSplitPaymentUi();resetPaymentEntryForAmount();
@@ -3606,8 +3633,8 @@ document.getElementById('confirmPaymentBtn').onclick=async()=>{
   const apiMode=state.settings.promptpayProvider==='merchant_api',manualOk=document.getElementById('promptPaidConfirm').checked;
   if(!validPromptPayId(state.settings.promptpayId)||!(apiMode?promptPayAutoPaid:manualOk)){updatePaymentState();alert(apiMode?'ยังไม่พบยอด PromptPay ที่ยืนยันจาก Merchant API':'กรุณาตรวจสอบว่าได้รับเงิน PromptPay แล้วจึงยืนยัน');return}
  }
- let splitFinalPayments=null;
  if(checkoutPayMode==='split'){
+  if(!window.FIELD_ONLINE_POS?.isReady?.()){alert('แยกจ่ายต้องเชื่อม FIELD Online');return}
   let current;
   try{current=currentSplitPayment()}catch(e){alert('เลือกจำนวนเครื่องดื่มของคนนี้ก่อน');return}
   if(paymentMethod==='cash'&&Number(current.received)<current.amount){updatePaymentState();alert('จำนวนเงินสดที่รับมายังไม่พอ');return}
@@ -3615,13 +3642,76 @@ document.getElementById('confirmPaymentBtn').onclick=async()=>{
    const apiMode=state.settings.promptpayProvider==='merchant_api',manualOk=document.getElementById('promptPaidConfirm').checked;
    if(!validPromptPayId(state.settings.promptpayId)||!(apiMode?promptPayAutoPaid:manualOk)){updatePaymentState();alert(apiMode?'ยังไม่พบยอด PromptPay ที่ยืนยันจาก Merchant API':'กรุณาตรวจสอบว่าได้รับเงิน PromptPay แล้วจึงยืนยัน');return}
   }
-  applyCurrentSplitPayment(current);
-  if(!splitComplete()){
-   renderSplitPaymentUi();resetPaymentEntryForAmount();
+
+  const splitBtn=document.getElementById('confirmPaymentBtn');
+  splitBtn.dataset.processing='yes';splitBtn.disabled=true;
+  const originalSplitText=splitBtn.textContent;splitBtn.textContent='กำลังบันทึกการจ่าย…';
+  try{
+   if(!splitSessionId){
+    const started=await window.FIELD_ONLINE_POS.splitStart({
+     requestKey:'split-start-'+crypto.randomUUID(),
+     cart:state.cart.map(x=>({id:x.id,variant:x.variant,qty:Number(x.qty)||1})),
+     targetOrderId:checkoutTargetOrderId||null,
+     customerId:document.getElementById('payCustomer').value||null,
+     date:isoDate()
+    });
+    hydrateSplitSession(started.session);
+   }
+
+   const result=await window.FIELD_ONLINE_POS.splitPay({
+    requestKey:'split-pay-'+crypto.randomUUID(),
+    sessionId:splitSessionId,
+    method:current.method,
+    received:current.received,
+    allocations:current.allocations,
+    label:current.label,
+    paymentReference:current.paymentReference,
+    paymentVerified:current.paymentVerified
+   });
+
+   hydrateSplitSession(result.session);
+   window.FIELD_TELEMETRY?.capture('split payment recorded',{
+    completed:!!result.completed,
+    amount:Number(current.amount)||0,
+    method:current.method,
+    payer_number:splitPayments.length
+   });
+
+   if(result.completed){
+    splitSessionId='';localStorage.removeItem(SPLIT_SESSION_KEY);
+    state.cart=[];checkoutTargetOrderId=null;
+    saveCartLocalOnly();
+    await playNewOrderBell();
+    hideModal('payModal');setCheckoutStep('');renderCart();renderMenuGrid();renderQueue();
+    document.getElementById('pagerShow').textContent=result.pager;
+    document.getElementById('queueShow').textContent=result.queueNo;
+    document.getElementById('pagerModal').dataset.orderid=result.orderId;
+    showModal('pagerModal');updateQueueBadge();
+    return;
+   }
+
+   renderSplitPaymentUi();
+   resetPaymentEntryForAmount();
    return;
+  }catch(e){
+   try{
+    if(splitSessionId){
+     const latest=await window.FIELD_ONLINE_POS.splitStatus(splitSessionId);
+     hydrateSplitSession(latest.session);renderSplitPaymentUi();
+    }
+   }catch(_){}
+   window.FIELD_TELEMETRY?.capture('field error',{source:'split_payment',error_message:String(e?.message||e)});
+   const code=String(e?.message||'');
+   const msg=code==='split_existing_order_unsupported'?'แยกจ่ายยังใช้กับการเพิ่มรายการเข้าคิวเดิมไม่ได้':
+    code==='split_session_expired'?'การแยกจ่ายหมดเวลา ระบบคืนสต๊อกแล้ว กรุณาเริ่มใหม่':
+    code==='split_session_unavailable'?'เซสชันแยกจ่ายไม่พร้อม กรุณาเปิดหน้าชำระใหม่':
+    'บันทึกแยกจ่ายไม่สำเร็จ: '+code;
+   alert(msg);return;
+  }finally{
+   splitBtn.dataset.processing='no';splitBtn.disabled=false;splitBtn.textContent=originalSplitText;
   }
-  splitFinalPayments=splitPayments.slice();
  }
+
  const targetOrder=(state.orders||[]).find(o=>o.id===checkoutTargetOrderId&&o.status!=='returned');
  const pager=targetOrder?targetOrder.pagerNo:nextFreePager();
  if(pager===null){alert('บัตรคิวถูกใช้งานครบแล้ว กรุณารอคืนบัตรก่อน');return}
@@ -3642,8 +3732,7 @@ document.getElementById('confirmPaymentBtn').onclick=async()=>{
     customerId,
     date:isoDate(),
     paymentReference:paymentMethod==='promptpay'?pendingPaymentReference:null,
-    paymentVerified:paymentMethod==='promptpay'?(state.settings.promptpayProvider==='merchant_api'?'api':'manual'):true,
-    payments:splitFinalPayments
+    paymentVerified:paymentMethod==='promptpay'?(state.settings.promptpayProvider==='merchant_api'?'api':'manual'):true
    });
    state.cart=[];checkoutTargetOrderId=null;
    localStorage.setItem(APP_KEY,JSON.stringify(state));
@@ -3657,15 +3746,6 @@ document.getElementById('confirmPaymentBtn').onclick=async()=>{
    document.getElementById('pagerModal').dataset.orderid=result.orderId;
    showModal('pagerModal');updateQueueBadge();
   }catch(e){
-   if(checkoutPayMode==='split'&&splitFinalPayments){
-    splitPayments=splitFinalPayments.slice(0,-1);
-    splitRemaining=state.cart.map((item,i)=>{
-      const paid=splitPayments.reduce((sum,p)=>sum+p.allocations.filter(a=>a.index===i).reduce((n,a)=>n+a.qty,0),0);
-      return Number(item.qty||0)-paid;
-    });
-    splitSelection=state.cart.map(()=>0);
-    renderSplitPaymentUi();
-   }
    const code=String(e?.message||'');
    const msg=code.startsWith('stock_shortage:')?'วัตถุดิบไม่พอ กรุณาตรวจสต๊อก':
     code==='no_pager_available'?'บัตรคิวถูกใช้งานครบแล้ว':
