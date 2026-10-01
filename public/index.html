@@ -1952,6 +1952,55 @@ main{contain:layout style}
 .split-recovery-row:last-child{border-bottom:0}.split-recovery-row b{display:block}.split-recovery-row small{display:block;margin-top:4px;color:var(--muted);font-size:.72rem;line-height:1.35}
 @media(max-width:520px){.split-recovery-row{grid-template-columns:1fr}.split-recovery-row .btn{width:100%}}
 </style>
+
+<style id="field-v83-mobile-viewport-hardening">
+@media(max-width:760px){
+ .checkout-step-page.show{
+  position:fixed!important;
+  left:0!important;right:0!important;
+  top:var(--vv-top,0px)!important;
+  width:100vw!important;
+  height:var(--vv-height,100dvh)!important;
+  min-height:0!important;
+  max-height:var(--vv-height,100dvh)!important;
+  overflow:hidden!important;
+  overscroll-behavior:none!important;
+ }
+ #confirmOrderModal .confirm-order-modal,
+ #payModal .payment-modal-simple{
+  position:absolute!important;
+  inset:0!important;
+  width:100%!important;
+  height:100%!important;
+  max-height:100%!important;
+  overflow-y:auto!important;
+  -webkit-overflow-scrolling:touch!important;
+  overscroll-behavior:contain!important;
+  scroll-padding-bottom:110px!important;
+ }
+ #confirmOrderModal .confirm-order-actions,
+ #payModal .pay-confirm-section{
+  position:sticky!important;
+  left:auto!important;right:auto!important;
+  bottom:0!important;
+  width:100%!important;
+  z-index:40!important;
+  background:rgba(246,241,228,.98)!important;
+  padding:10px 0 calc(10px + env(safe-area-inset-bottom))!important;
+  backdrop-filter:blur(10px)!important;
+ }
+ html.field-keyboard-open #confirmOrderModal .confirm-order-actions,
+ html.field-keyboard-open #payModal .pay-confirm-section{
+  position:sticky!important;
+  bottom:0!important;
+  padding-bottom:8px!important;
+ }
+ #payModal input,#payModal select,#confirmOrderModal input,#confirmOrderModal select{
+  scroll-margin-top:90px!important;
+  scroll-margin-bottom:130px!important;
+ }
+}
+</style>
 </head>
 <body class="auth-locked">
 <div id="authGate" class="auth-gate" role="dialog" aria-modal="true" aria-labelledby="authTitle">
@@ -4386,8 +4435,15 @@ function syncVisualViewport(){
  const height=vv?vv.height:window.innerHeight;
  document.documentElement.style.setProperty('--vv-top',top+'px');
  document.documentElement.style.setProperty('--vv-height',height+'px');
+ const keyboardOpen=!!vv&&window.innerWidth<=760&&(window.innerHeight-vv.height>140);
+ document.documentElement.classList.toggle('field-keyboard-open',keyboardOpen);
 }
 syncVisualViewport();
+document.addEventListener('focusin',e=>{
+ if(window.innerWidth>760)return;
+ if(!e.target?.matches?.('#payModal input,#payModal select,#confirmOrderModal input,#confirmOrderModal select'))return;
+ setTimeout(()=>{syncVisualViewport();e.target.scrollIntoView({block:'center',behavior:'smooth'})},180);
+},{passive:true}); // field-mobile-input-reveal
 if(window.visualViewport){
  visualViewport.addEventListener('resize',syncVisualViewport,{passive:true});
  visualViewport.addEventListener('scroll',syncVisualViewport,{passive:true})
