@@ -1856,6 +1856,45 @@ main{contain:layout style}
  }
 }
 </style>
+
+<style id="field-v79-single-bill-cleanup">
+#payModal .bill-mode,
+#payModal .bill-mode-note,
+#payModal .pay-bill-section{display:none!important}
+
+#payModal .payment-modal-simple{
+  gap:12px!important;
+}
+
+@media(max-width:760px){
+ #confirmOrderModal .confirm-order-summary{
+  position:sticky!important;
+  bottom:76px!important;
+  z-index:8!important;
+  background:#eef5e8!important;
+  border:1px solid #d5e5cf!important;
+  border-radius:16px!important;
+  padding:14px!important;
+ }
+ #confirmOrderModal .confirm-order-actions{
+  position:sticky!important;
+  bottom:0!important;
+  z-index:9!important;
+  background:rgba(246,241,228,.98)!important;
+  padding:10px 0 calc(10px + env(safe-area-inset-bottom))!important;
+ }
+ #payModal .pay-method-section{
+  display:block!important;
+ }
+ #payModal .pay-tabs{
+  grid-template-columns:1fr!important;
+ }
+ #payModal .paytab{
+  min-height:58px!important;
+  font-size:1rem!important;
+ }
+}
+</style>
 </head>
 <body class="auth-locked">
 <div id="authGate" class="auth-gate" role="dialog" aria-modal="true" aria-labelledby="authTitle">
@@ -2273,15 +2312,6 @@ main{contain:layout style}
   <section class="pay-section pay-items-section" aria-label="รายการในบิล">
    <div class="pay-section-title">รายการในบิล</div>
    <div class="pay-order-check" id="payOrderCheck"></div>
-  </section>
-
-  <section class="pay-section pay-bill-section" aria-label="รูปแบบบิล">
-   <div class="pay-section-title">รูปแบบบิล</div>
-   <div class="bill-mode">
-    <button type="button" class="billmode active" data-billmode="combined">รวมบิล</button>
-    <button type="button" class="billmode" data-billmode="split-row">แยกตามรายการ</button>
-   </div>
-   <div class="muted bill-mode-note" id="billModeNote">1 บิล · 1 คิว</div>
   </section>
 
   <section class="pay-section pay-method-section" aria-label="วิธีชำระ">
@@ -3316,7 +3346,6 @@ function renderPromptPayQr(){
  }
 }
 let checkoutBillMode='combined',pendingPaymentReference='',promptPayPollTimer=null,promptPayAutoPaid=false,promptPayAutoAmount=0;
-document.querySelectorAll('.billmode').forEach(b=>b.onclick=()=>{checkoutBillMode=b.dataset.billmode;document.querySelectorAll('.billmode').forEach(x=>x.classList.toggle('active',x===b));document.getElementById('billModeNote').textContent=checkoutBillMode==='combined'?'1 บิล · 1 คิว':`${state.cart.length} บิลตามรายการ · ชำระรวมครั้งเดียว · 1 คิว`});
 function makePaymentReference(){return 'FIELD-'+Date.now().toString(36).toUpperCase()}
 function stopPromptPayMonitor(){if(promptPayPollTimer){clearInterval(promptPayPollTimer);promptPayPollTimer=null}}
 async function checkPromptPayStatus(){
@@ -3378,8 +3407,7 @@ async function openPaymentFromConfirmedOrder(){
  setCheckoutStep('payment');
  setCartOpen(false);
  paymentMethod='cash';checkoutBillMode='combined';pendingPaymentReference=makePaymentReference();promptPayAutoPaid=false;promptPayAutoAmount=0;
- document.querySelectorAll('.billmode').forEach(x=>x.classList.toggle('active',x.dataset.billmode==='combined'));
- document.getElementById('billModeNote').textContent='1 บิล · 1 คิว';
+  document.getElementById('billModeNote').textContent='1 บิล · 1 คิว';
  document.querySelectorAll('.paytab').forEach(x=>x.classList.toggle('active',x.dataset.pay==='cash'));
  const total=cartTotal();
  document.getElementById('payTotal').textContent=money(total);
@@ -3442,7 +3470,7 @@ document.getElementById('confirmPaymentBtn').onclick=async()=>{
     requestKey:'checkout-'+crypto.randomUUID(),
     cart:state.cart.map(x=>({id:x.id,variant:x.variant,qty:Number(x.qty)||1})),
     targetOrderId:targetOrder?.id||null,
-    billMode:checkoutBillMode,
+    billMode:'combined',
     payment:paymentMethod,
     received,
     customerId,
