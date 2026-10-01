@@ -152,7 +152,7 @@ window.addEventListener('load',()=>{
         connect_ms:Math.round(nav.connectEnd-nav.connectStart),
         ttfb_ms:Math.round(nav.responseStart-nav.requestStart),
         dom_interactive_ms:Math.round(nav.domInteractive-nav.startTime),
-        load_ms:Math.round(nav.loadEventEnd-nav.startTime)
+        load_ms:Math.round(performance.now())
       });
     }
   }catch{}
