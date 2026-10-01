@@ -1,12 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "builds": [
-    {"src": "package.json", "use": "@vercel/next"},
-    {"src": "api/index.js", "use": "@vercel/node"}
-  ],
-  "rewrites": [
-    {"source": "/api/:route*", "destination": "/api/index?route=:route*"}
-  ],
+  "buildCommand": "next build",
   "headers": [
     {"source": "/(.*)", "headers": [
       {"key": "X-Content-Type-Options", "value": "nosniff"},
