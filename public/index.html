@@ -1946,6 +1946,12 @@ main{contain:layout style}
 }
 @media(max-width:380px){.ops-kpi-strip{grid-template-columns:1fr 1fr}.health-grid{grid-template-columns:1fr}}
 </style>
+
+<style id="field-v82-split-recovery">
+.split-recovery-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center;padding:10px 0;border-bottom:1px solid var(--line)}
+.split-recovery-row:last-child{border-bottom:0}.split-recovery-row b{display:block}.split-recovery-row small{display:block;margin-top:4px;color:var(--muted);font-size:.72rem;line-height:1.35}
+@media(max-width:520px){.split-recovery-row{grid-template-columns:1fr}.split-recovery-row .btn{width:100%}}
+</style>
 </head>
 <body class="auth-locked">
 <div id="authGate" class="auth-gate" role="dialog" aria-modal="true" aria-labelledby="authTitle">
@@ -2280,6 +2286,12 @@ main{contain:layout style}
   <div id="dbStatusText" class="muted">กำลังตรวจสอบ IndexedDB…</div>
   <div class="db-meta" id="dbMeta"></div>
   <button class="btn ghost" id="syncDbBtn" type="button">ซิงก์ข้อมูลลงฐานข้อมูลตอนนี้</button>
+ </div>
+ <div class="card" id="splitRecoveryCard">
+  <h3>🧾 Split Payment Recovery</h3>
+  <p class="muted">ใช้เมื่อรับเงินบางส่วนแล้วปิดหน้า/เปลี่ยนเครื่อง ระบบจะดึง session ที่ค้างจาก Turso โดยไม่สร้างบิลหรือหักสต๊อกซ้ำ</p>
+  <div id="splitRecoveryList"><div class="empty">กำลังตรวจสอบ…</div></div>
+  <button class="btn ghost sm" id="splitRecoveryRefreshBtn" type="button">↻ ตรวจรายการค้าง</button>
  </div>
  <div class="card system-health-card" id="systemHealthCard"><h3>🩺 System Health</h3>
  <div class="health-grid">
@@ -2864,6 +2876,40 @@ function renderOpsKpis(){
  for(const [id,val] of Object.entries(values)){const el=document.getElementById(id);if(el)el.textContent=val}
 }
 function healthClass(el,stateName){if(!el)return;el.classList.remove('good','warn','bad');el.classList.add(stateName)}
+async function renderSplitRecovery(){
+ const box=document.getElementById('splitRecoveryList');
+ if(!box)return;
+ if(!window.FIELD_ONLINE_POS?.isReady?.()){box.innerHTML='<div class="empty">FIELD Online ยังไม่พร้อม</div>';return}
+ box.innerHTML='<div class="empty">กำลังโหลดรายการค้าง…</div>';
+ try{
+  const result=await window.FIELD_ONLINE_POS.splitList();
+  const sessions=result?.sessions||[];
+  if(!sessions.length){box.innerHTML='<div class="empty">ไม่มี Split Payment ค้าง</div>';return}
+  box.innerHTML=sessions.map(s=>{
+   const paid=(s.payments||[]).reduce((n,p)=>n+Number(p.amount||0),0);
+   const remain=Number(s.remainingAmount||0);
+   const mins=Math.max(0,Math.floor((Date.now()-(Number(s.expiresAt||0)-4*60*60*1000))/60000));
+   return '<div class="split-recovery-row">'+
+    '<div><b>'+esc(s.id.slice(-8))+' · บัตร '+esc(String(s.pager||'?'))+'</b>'+
+    '<small>รับแล้ว '+money(paid)+' · คงเหลือ '+money(remain)+' · '+(s.payments||[]).length+' ครั้ง · '+mins+' นาที</small></div>'+
+    '<button class="btn green sm" type="button" data-resume-split="'+esc(s.id)+'">ดำเนินการต่อ</button>'+
+   '</div>';
+  }).join('');
+  box.querySelectorAll('[data-resume-split]').forEach(btn=>btn.onclick=async()=>{
+   const session=sessions.find(s=>s.id===btn.dataset.resumeSplit);if(!session)return;
+   state.cart=(session.items||[]).map(x=>({id:x.id,name:x.name,variant:x.variant,qty:Number(x.qty)||1,price:Number(x.price)||0}));
+   saveCartLocalOnly();
+   splitSessionId=session.id;localStorage.setItem(SPLIT_SESSION_KEY,splitSessionId);
+   checkoutPayMode='split';hydrateSplitSession(session);
+   showView('order');renderCart();
+   await openPaymentFromConfirmedOrder();
+   fieldToast('โหลด Split Payment ที่ค้างแล้ว',{title:'Recovery'});
+  });
+ }catch(e){
+  if(String(e?.message||'')==='admin_required')box.innerHTML='<div class="empty">เฉพาะ Admin เท่านั้น</div>';
+  else box.innerHTML='<div class="empty">โหลดรายการค้างไม่สำเร็จ</div>';
+ }
+}
 async function renderSystemHealth(){
  const internet=document.getElementById('healthInternet'),online=document.getElementById('healthOnline'),api=document.getElementById('healthApiLatency'),open=document.getElementById('healthOpenQueue'),split=document.getElementById('healthSplit'),low=document.getElementById('healthLowStock'),err=document.getElementById('healthLastError');
  if(!internet)return;
@@ -4322,13 +4368,14 @@ state.lastMasterImport=String(obj.schema_version);state.dataVersion=FIELD_DATA_V
 
 
 // settings/backup
-function renderSettings(){renderAccessSettings();document.getElementById('shopName').value=state.settings.shopName;document.getElementById('promptpayId').value=state.settings.promptpayId;document.getElementById('promptpayProvider').value=state.settings.promptpayProvider||'manual';document.getElementById('promptpayStatusEndpoint').value=state.settings.promptpayStatusEndpoint||'';document.getElementById('pagerCount').value=state.settings.pagerCount;document.getElementById('receiptFooter').value=state.settings.receiptFooter;updateDbUi();renderSystemHealth()}
+function renderSettings(){renderAccessSettings();document.getElementById('shopName').value=state.settings.shopName;document.getElementById('promptpayId').value=state.settings.promptpayId;document.getElementById('promptpayProvider').value=state.settings.promptpayProvider||'manual';document.getElementById('promptpayStatusEndpoint').value=state.settings.promptpayStatusEndpoint||'';document.getElementById('pagerCount').value=state.settings.pagerCount;document.getElementById('receiptFooter').value=state.settings.receiptFooter;updateDbUi();renderSystemHealth();renderSplitRecovery()}
 const testBellBtn=document.getElementById('testBellBtn');if(testBellBtn)testBellBtn.onclick=async()=>{const ok=await playNewOrderBell();if(!ok)alert('เบราว์เซอร์ยังไม่อนุญาตเสียง หรือ Media volume ต่ำ กรุณาเปิดเสียงแล้วกดทดสอบอีกครั้ง')};
 document.getElementById('saveSettingsBtn').onclick=()=>{if(!requireRole())return;const rawPP=document.getElementById('promptpayId').value.trim(),pp=sanitizePromptPayId(rawPP);if(rawPP&& !validPromptPayId(pp)){alert('PromptPay ID ต้องเป็นเบอร์มือถือ 10 หลักขึ้นต้นด้วย 0 หรือเลขบัตรประชาชน/เลขผู้เสียภาษี 13 หลัก');document.getElementById('promptpayId').focus();return}state.settings.shopName=document.getElementById('shopName').value.trim()||'FIELD';state.settings.promptpayId=pp;state.settings.pagerCount=Math.min(50,Math.max(1,Number(document.getElementById('pagerCount').value)||10));state.settings.receiptFooter=document.getElementById('receiptFooter').value.trim();saveState();renderQueue();renderSettings();fieldToast('บันทึกการตั้งค่าแล้ว',{title:'ตั้งค่า'})};
 document.getElementById('exportBtn').onclick=()=>{if(!requireRole())return;const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='FIELD_POS_backup_'+isoDate()+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)};
 document.getElementById('importFile').onchange=e=>{if(!requireRole())return;const f=e.target.files[0];if(!f)return;const rd=new FileReader();rd.onload=()=>{try{const obj=JSON.parse(rd.result);if(String(obj.schema_version||'').startsWith('FIELD_POS_MASTER_IMPORT')){if(confirm('นำเข้า FIELD Master Data โดยไม่ลบยอดขาย/ออเดอร์เดิม?')){importFieldMaster(obj);location.reload()}return}if(!obj.menu||!obj.ingredients)throw new Error('รูปแบบไม่ถูกต้อง');if(confirm('นำเข้า Backup และแทนที่ข้อมูลปัจจุบัน?')){state=normalizeState(obj);state.updatedAt=Date.now();localStorage.setItem(APP_KEY,JSON.stringify(state));dbWrite=dbWrite.then(()=>persistDatabase());dbWrite.finally(()=>location.reload())}}catch(err){console.error(err);alert('ไฟล์ JSON ไม่ถูกต้องหรือไม่รองรับ')}};rd.readAsText(f)};
 document.getElementById('resetAllBtn').onclick=async()=>{if(!requireRole())return;if(confirm('รีเซ็ต FIELD CAFÉ POS v7.4 ทั้งหมด? การกระทำนี้ย้อนกลับไม่ได้หากไม่มี Backup')&&confirm('ยืนยันอีกครั้ง: ลบยอดขาย สต๊อก การตั้งค่า และฐานข้อมูลทั้งหมด?')){localStorage.removeItem(APP_KEY);await deleteFieldDb();location.reload()}};
 
+const splitRecoveryRefreshBtn=document.getElementById('splitRecoveryRefreshBtn');if(splitRecoveryRefreshBtn)splitRecoveryRefreshBtn.onclick=()=>renderSplitRecovery();
 const healthRefreshBtn=document.getElementById('healthRefreshBtn');if(healthRefreshBtn)healthRefreshBtn.onclick=async()=>{healthRefreshBtn.disabled=true;await renderSystemHealth();fieldToast('ตรวจสถานะระบบล่าสุดแล้ว',{title:'System Health'});setTimeout(()=>healthRefreshBtn.disabled=false,450)};
 const syncDbBtn=document.getElementById('syncDbBtn');if(syncDbBtn)syncDbBtn.onclick=async()=>{if(!requireRole())return;syncDbBtn.disabled=true;syncDbBtn.textContent='กำลังซิงก์…';const ok=await persistDatabase();syncDbBtn.textContent=ok?'ซิงก์สำเร็จ ✓':'ซิงก์ไม่สำเร็จ';setTimeout(()=>{syncDbBtn.disabled=false;syncDbBtn.textContent='ซิงก์ข้อมูลลงฐานข้อมูลตอนนี้'},1200)};
 
