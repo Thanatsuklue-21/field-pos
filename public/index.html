@@ -1921,7 +1921,32 @@ main{contain:layout style}
  #payModal .split-item-row{grid-template-columns:minmax(0,1fr) auto!important}
 }
 </style>
-<script defer src="/field-telemetry.js"></script>\n</head>
+<script defer src="/field-telemetry.js"></script>\n
+<style id="field-v81-foundation-upgrade">
+.field-toast-stack{position:fixed;right:14px;top:76px;z-index:1200;display:grid;gap:8px;width:min(360px,calc(100vw - 28px));pointer-events:none}
+.field-toast{pointer-events:auto;background:#fff;border:1px solid var(--line);border-left:4px solid #3f5729;border-radius:14px;padding:11px 12px;box-shadow:0 12px 32px rgba(36,28,18,.16);display:grid;grid-template-columns:auto 1fr auto;gap:9px;align-items:start;animation:fieldToastIn .18s ease-out}
+.field-toast.warn{border-left-color:#b7791f}.field-toast.bad{border-left-color:#a33b32}.field-toast.good{border-left-color:#3f5729}
+.field-toast b{font-size:.84rem}.field-toast small{display:block;margin-top:2px;color:var(--muted);font-size:.72rem;line-height:1.35}.field-toast button{border:0;background:transparent;font-size:1rem;color:var(--muted);cursor:pointer}
+@keyframes fieldToastIn{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}
+
+.production-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:12px}
+.production-stat{background:#fff;border:1px solid var(--line);border-radius:16px;padding:12px;display:grid;grid-template-columns:1fr auto;grid-template-areas:"label value" "small value";gap:2px 8px;align-items:center}
+.production-stat span{grid-area:label;font-size:.72rem;font-weight:800;color:var(--muted)}.production-stat b{grid-area:value;font-size:1.55rem;line-height:1;color:var(--ink)}.production-stat small{grid-area:small;font-size:.66rem;color:var(--muted)}
+.production-stat.waiting{border-left:4px solid #b7791f}.production-stat.making{border-left:4px solid #3f5729}.production-stat.ready{border-left:4px solid #6a8f49}.production-stat.oldest{border-left:4px solid #8a5c38}
+
+.health-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:8px}.health-item{border:1px solid var(--line);border-radius:13px;padding:10px;background:#fff}.health-item span{display:block;font-size:.68rem;color:var(--muted);font-weight:800}.health-item b{display:block;margin-top:4px;font-size:.84rem}.health-item b.good{color:#3f5729}.health-item b.warn{color:#9a6517}.health-item b.bad{color:#a33b32}.health-last-error{margin-top:10px;padding:10px 12px;border-radius:12px;background:#f6f1e4;color:var(--muted);font-size:.75rem;line-height:1.4}.health-actions{margin-top:8px}
+
+.ops-kpi-strip{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px;margin-bottom:12px}.ops-kpi{background:#fff;border:1px solid var(--line);border-radius:14px;padding:10px}.ops-kpi span{display:block;font-size:.68rem;color:var(--muted);font-weight:800}.ops-kpi b{display:block;margin-top:4px;font-size:1.02rem;color:var(--ink)}
+@media(max-width:760px){
+ .field-toast-stack{top:62px;right:10px;width:calc(100vw - 20px)}
+ .production-summary{grid-template-columns:1fr 1fr}
+ .health-grid{grid-template-columns:1fr 1fr}
+ .ops-kpi-strip{grid-template-columns:1fr 1fr 1fr;overflow:visible}
+ .ops-kpi{padding:9px}.ops-kpi b{font-size:.92rem}
+}
+@media(max-width:380px){.ops-kpi-strip{grid-template-columns:1fr 1fr}.health-grid{grid-template-columns:1fr}}
+</style>
+</head>
 <body class="auth-locked">
 <div id="authGate" class="auth-gate" role="dialog" aria-modal="true" aria-labelledby="authTitle">
  <div class="auth-card"><div class="auth-mark">🌿 FIELD</div><h2 id="authTitle">กำลังเตรียมการเข้าใช้งาน</h2><p id="authHelp">ข้อมูล POS ยังอยู่ในเครื่องนี้</p>
@@ -1975,7 +2000,13 @@ main{contain:layout style}
 </section>
 
 <section id="v-queue" class="view">
- <div class="page-title"><div><h2>🔔 คิวเครื่องดื่ม</h2><p>ทำ → เรียก → ส่ง · FIFO</p></div></div>
+ <div class="page-title"><div><h2>🔔 Production Board</h2><p>รอทำ → กำลังทำ → พร้อมส่ง · FIFO</p></div></div>
+ <div class="production-summary" id="productionSummary" aria-label="สรุปสถานะคิว">
+  <div class="production-stat waiting"><span>รอทำ</span><b id="prodWaiting">0</b><small>คิว</small></div>
+  <div class="production-stat making"><span>กำลังทำ</span><b id="prodMaking">0</b><small>คิว</small></div>
+  <div class="production-stat ready"><span>พร้อมส่ง</span><b id="prodReady">0</b><small>คิว</small></div>
+  <div class="production-stat oldest"><span>คิวนานสุด</span><b id="prodOldest">0</b><small>นาที</small></div>
+ </div>
  <div class="queue-flow"><span>☕ ทำ</span><span>📢 เรียก</span><span>📦 ส่งตามคิว</span></div>
  <div class="staging-grid" id="stagingGrid" aria-label="พื้นที่พักแก้วหกคิวแรก"></div>
  <div class="queue-alert" id="queueAlert" role="status" aria-live="polite"></div>
@@ -2071,6 +2102,14 @@ main{contain:layout style}
   <span class="db-pill" id="dbPill">ฐานข้อมูล: กำลังเชื่อมต่อ…</span>
  </div>
 
+ <div class="ops-kpi-strip" id="opsKpiStrip">
+  <div class="ops-kpi"><span>ยอดขายวันนี้</span><b id="opsSalesToday">฿0</b></div>
+  <div class="ops-kpi"><span>บิลวันนี้</span><b id="opsBillsToday">0</b></div>
+  <div class="ops-kpi"><span>แก้ววันนี้</span><b id="opsCupsToday">0</b></div>
+  <div class="ops-kpi"><span>เฉลี่ย/บิล</span><b id="opsAvgBill">฿0</b></div>
+  <div class="ops-kpi"><span>คิวค้าง</span><b id="opsOpenQueue">0</b></div>
+  <div class="ops-kpi"><span>ของใกล้หมด</span><b id="opsLowStock">0</b></div>
+ </div>
  <div class="period-toolbar no-print">
   <div class="period-tabs" id="periodTabs">
    <button class="period-tab active" data-period="day">รายวัน</button>
@@ -2242,16 +2281,18 @@ main{contain:layout style}
   <div class="db-meta" id="dbMeta"></div>
   <button class="btn ghost" id="syncDbBtn" type="button">ซิงก์ข้อมูลลงฐานข้อมูลตอนนี้</button>
  </div>
- <div class="card"><h3>✅ System Health · v6.2</h3>
- <div class="summary-row"><span>Order / Payment</span><b>พร้อม</b></div>
- <div class="summary-row"><span>Queue FIFO</span><b>พร้อม · ไม่มี QC</b></div>
- <div class="summary-row"><span>เสียงกระดิ่ง</span><b id="systemBellStatus">ยังไม่ได้ทดสอบ</b></div>
-  <div class="summary-row"><span>รูปเมนู</span><b id="mediaStatus">กำลังตรวจ</b></div>
- <div class="summary-row"><span>Stock</span><b>ตัดสูตร + Safety stock + รับเข้า/ตัดออก</b></div>
- <div class="summary-row"><span>Report / Expense / Close day</span><b>พร้อม</b></div>
- <div class="summary-row"><span>Menu / Recipe Builder / Custom</span><b>พร้อม</b></div>
- <div class="summary-row"><span>CRM</span><b>แต้ม POS local · LINE OA ยังไม่ sync</b></div>
- <div class="summary-row"><span>หลายอุปกรณ์ realtime</span><b>ยังไม่เปิด</b></div>
+ <div class="card system-health-card" id="systemHealthCard"><h3>🩺 System Health</h3>
+ <div class="health-grid">
+  <div class="health-item"><span>Internet</span><b id="healthInternet">กำลังตรวจ…</b></div>
+  <div class="health-item"><span>FIELD Online</span><b id="healthOnline">กำลังตรวจ…</b></div>
+  <div class="health-item"><span>API ล่าสุด</span><b id="healthApiLatency">—</b></div>
+  <div class="health-item"><span>คิวเปิด</span><b id="healthOpenQueue">0</b></div>
+  <div class="health-item"><span>Split Payment</span><b id="healthSplit">0</b></div>
+  <div class="health-item"><span>สต๊อกต่ำ</span><b id="healthLowStock">0</b></div>
+ </div>
+ <div class="health-last-error" id="healthLastError">ไม่พบ error ล่าสุดในเครื่องนี้</div>
+ <div class="health-actions"><button class="btn ghost sm" id="healthRefreshBtn" type="button">↻ ตรวจใหม่</button></div>
+ <div class="muted" style="margin-top:8px">ใช้สำหรับวินิจฉัยว่าอาการช้าเกิดจาก UI, API, เครือข่าย หรือข้อมูลหลายเครื่อง</div>
 </div>
 </section>
 
@@ -2429,6 +2470,9 @@ main{contain:layout style}
 'use strict';
 const APP_KEY='field_pos_v2_state'; // ใช้ key เดิมเพื่อรักษาข้อมูลลูกค้าเมื่ออัปเกรด
 const FIELD_DATA_VERSION='2026-09-30.74';
+const ORDER_STATUS=Object.freeze({PENDING:'assigned',MAKING:'making',READY:'ready',SERVED:'returned',CANCELLED:'cancelled'});
+const PAYMENT_STATUS=Object.freeze({UNPAID:'unpaid',PARTIAL:'partial',PAID:'paid',REFUNDED:'refunded'});
+const SPLIT_STATUS=Object.freeze({COLLECTING:'collecting',COMPLETED:'completed',CANCELLED:'cancelled',EXPIRED:'expired'});
 document.getElementById('masterDataVersion').textContent=FIELD_DATA_VERSION;
 const FIELD_IMAGE_VERSION='2026-09-28.4';
 const posterPhotos={};
@@ -2782,9 +2826,54 @@ function isoDate(ts=Date.now()){const d=new Date(ts);const off=d.getTimezoneOffs
 function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function nowTime(ts){return new Date(ts).toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'})}
 function currentDateLabel(){return new Date().toLocaleDateString('th-TH',{weekday:'short',day:'numeric',month:'short',year:'numeric'})}
+const FIELD_HEALTH_TIMER=setInterval(()=>{if(document.getElementById('v-settings')?.classList.contains('active'))renderSystemHealth()},3000);
 setInterval(()=>{document.getElementById('clockText').textContent=new Date().toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'});document.getElementById('dateText').textContent=currentDateLabel()},1000);
 document.getElementById('dateText').textContent=currentDateLabel();
 
+// shared UX + operational health
+function fieldToast(message,{type='good',title='',duration=2600}={}){
+ let stack=document.getElementById('fieldToastStack');
+ if(!stack){stack=document.createElement('div');stack.id='fieldToastStack';stack.className='field-toast-stack';stack.setAttribute('aria-live','polite');document.body.appendChild(stack)}
+ const icon=type==='bad'?'✕':type==='warn'?'!':'✓',el=document.createElement('div');el.className='field-toast '+type;
+ el.innerHTML='<b>'+icon+'</b><div><b>'+esc(title||message)+'</b>'+(title?'<small>'+esc(message)+'</small>':'')+'</div><button type="button" aria-label="ปิด">×</button>';
+ el.querySelector('button').onclick=()=>el.remove();stack.appendChild(el);
+ setTimeout(()=>{if(el.isConnected)el.remove()},duration);return el
+}
+function orderUiStatus(o){
+ if(!o)return 'pending';
+ if(o.status===ORDER_STATUS.READY)return 'ready';
+ if(o.status===ORDER_STATUS.MAKING)return 'making';
+ if(o.status===ORDER_STATUS.SERVED)return 'served';
+ if(o.status===ORDER_STATUS.CANCELLED)return 'cancelled';
+ return 'pending'
+}
+function renderProductionSummary(active=activeQueue()){
+ const counts={pending:0,making:0,ready:0};
+ for(const o of active){const s=orderUiStatus(o);if(counts[s]!==undefined)counts[s]++}
+ const oldest=active.length?Math.max(0,Math.floor((Date.now()-Math.min(...active.map(o=>Number(o.time)||Date.now())))/60000)):0;
+ const map={prodWaiting:counts.pending,prodMaking:counts.making,prodReady:counts.ready,prodOldest:oldest};
+ for(const [id,val] of Object.entries(map)){const el=document.getElementById(id);if(el)el.textContent=val}
+}
+function lowStockCount(){
+ return Object.values(state.ingredients||{}).filter(x=>Number(x.low)>0&&Number(x.qty)<=Number(x.low)).length
+}
+function renderOpsKpis(){
+ const today=isoDate(),sales=(state.sales||[]).filter(s=>s.status==='paid'&&s.date===today);
+ const revenue=sales.reduce((n,s)=>n+Number(s.total||0),0),bills=sales.length,cups=sales.reduce((n,s)=>n+(s.items||[]).reduce((m,x)=>m+Number(x.qty||0),0),0);
+ const values={opsSalesToday:money(revenue),opsBillsToday:bills,opsCupsToday:cups,opsAvgBill:money(bills?revenue/bills:0),opsOpenQueue:activeQueue().length,opsLowStock:lowStockCount()};
+ for(const [id,val] of Object.entries(values)){const el=document.getElementById(id);if(el)el.textContent=val}
+}
+function healthClass(el,stateName){if(!el)return;el.classList.remove('good','warn','bad');el.classList.add(stateName)}
+async function renderSystemHealth(){
+ const internet=document.getElementById('healthInternet'),online=document.getElementById('healthOnline'),api=document.getElementById('healthApiLatency'),open=document.getElementById('healthOpenQueue'),split=document.getElementById('healthSplit'),low=document.getElementById('healthLowStock'),err=document.getElementById('healthLastError');
+ if(!internet)return;
+ internet.textContent=navigator.onLine?'ออนไลน์':'ออฟไลน์';healthClass(internet,navigator.onLine?'good':'bad');
+ const ready=!!window.FIELD_ONLINE_POS?.isReady?.();online.textContent=ready?'เชื่อมต่อแล้ว':'ยังไม่พร้อม';healthClass(online,ready?'good':'warn');
+ const h=window.FIELD_RUNTIME_HEALTH||{},ms=Number(h.lastApiMs);
+ api.textContent=Number.isFinite(ms)?ms+' ms':'—';healthClass(api,!Number.isFinite(ms)?'warn':ms<500?'good':ms<1200?'warn':'bad');
+ open.textContent=activeQueue().length;split.textContent=(state.paymentSessions||[]).filter(s=>s.status===SPLIT_STATUS.COLLECTING).length;low.textContent=lowStockCount();
+ if(err){if(h.lastError){const ago=Math.max(0,Math.floor((Date.now()-Number(h.lastErrorAt||Date.now()))/1000));err.textContent='ล่าสุด: '+h.lastError+' · '+ago+' วินาทีที่แล้ว'}else err.textContent='ไม่พบ error ล่าสุดในเครื่องนี้'}
+}
 // navigation
 const nav=document.getElementById('mainNav');
 nav.querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>showView(b.dataset.view)));
@@ -2793,7 +2882,7 @@ const menuStatusFilter=document.getElementById('menuStatusFilter');if(menuStatus
 const menuCategoryFilter=document.getElementById('menuCategoryFilter');if(menuCategoryFilter)menuCategoryFilter.onchange=renderMenuAdmin;
 const addCustomMenuBtn=document.getElementById('addCustomMenuBtn');if(addCustomMenuBtn)addCustomMenuBtn.onclick=addCustomMenu;const applyLatestMasterBtn=document.getElementById('applyLatestMasterBtn');if(applyLatestMasterBtn)applyLatestMasterBtn.onclick=()=>{if(!requireRole())return;if(!confirm('อัปเดตสูตรและต้นทุน FIELD ล่าสุด โดยคงยอดขาย ออเดอร์ ลูกค้า ค่าใช้จ่าย และสต๊อกคงเหลือเดิมไว้?'))return;try{importFieldMaster(deepClone(FIELD_MASTER_LATEST));alert('อัปเดต FIELD Master ล่าสุดสำเร็จ');location.reload()}catch(err){console.error(err);alert('อัปเดต FIELD Master ไม่สำเร็จ: '+err.message)}};const masterImportFile=document.getElementById('masterImportFile');if(masterImportFile)masterImportFile.onchange=e=>{if(!requireRole())return;const f=e.target.files?.[0];if(!f)return;const rd=new FileReader();rd.onload=()=>{try{const obj=JSON.parse(rd.result);if(confirm('อัปเดต FIELD Master Data โดยคงยอดขาย ออเดอร์ ลูกค้า และค่าใช้จ่ายเดิมไว้?')){importFieldMaster(obj);alert('อัปเดต Master Data สำเร็จ');location.reload()}}catch(err){console.error(err);alert('Import FIELD Master ไม่สำเร็จ: '+err.message)}finally{e.target.value=''}};rd.readAsText(f)};
 document.querySelectorAll('[data-menu-panel]').forEach(btn=>btn.addEventListener('click',()=>{document.querySelectorAll('[data-menu-panel]').forEach(x=>x.classList.toggle('active',x===btn));document.querySelectorAll('#v-menu .menu-panel').forEach(p=>p.classList.toggle('active',p.id===btn.dataset.menuPanel));if(btn.dataset.menuPanel==='menuCostPanel')renderMenuCosts()}));
-function showView(name){if(!allowedView(name))return false;setCartOpen(false);nav.querySelectorAll('button').forEach(b=>b.classList.toggle('active',b.dataset.view===name));document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));document.getElementById('v-'+name).classList.add('active');if(name==='queue')renderQueue();if(name==='stock')renderStock();if(name==='report')renderReport();if(name==='crm')renderCrm();if(name==='menu'){renderMenuAdmin();renderMenuCosts();refreshMenuControlCenter();}if(name==='settings')renderSettings();refreshAccessUi();return true}
+function showView(name){if(!allowedView(name))return false;setCartOpen(false);nav.querySelectorAll('button').forEach(b=>b.classList.toggle('active',b.dataset.view===name));document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));document.getElementById('v-'+name).classList.add('active');if(name==='queue')renderQueue();if(name==='stock')renderStock();if(name==='report'){renderOpsKpis();renderReport();}if(name==='crm')renderCrm();if(name==='menu'){renderMenuAdmin();renderMenuCosts();refreshMenuControlCenter();}if(name==='settings')renderSettings();refreshAccessUi();return true}
 
 
 const FIELD_SWIPE_VIEWS=['order','stock','queue','report','crm','menu','settings'];
@@ -3812,7 +3901,7 @@ document.getElementById('pagerHandedBtn').onclick=()=>{const id=document.getElem
 function queueLabel(o){const m=String(o.queueNo||o.billNo||'').match(/(?:^A|^FIELD-\d{8}-)(\d+)$/);return o.queueNo&&/^A\d+$/.test(o.queueNo)?o.queueNo:m?'A'+m[1].padStart(3,'0'):'#'+(o.pagerNo||'?')}
 function activeQueue(){return state.orders.filter(o=>o.status!=='returned').sort((a,b)=>(Number(a.time)||0)-(Number(b.time)||0)||String(a.billNo||'').localeCompare(String(b.billNo||'')))}
 function fifoHead(){return activeQueue()[0]}
-function renderQueue(){const max=Number(state.settings.pagerCount)||10,pool=document.getElementById('pagerPool'),active=activeQueue();pool.innerHTML='';for(let i=1;i<=max;i++){const o=active.find(x=>x.pagerNo===i),d=document.createElement('div');d.className='pager'+(o?(o.status==='ready'?' ready':' busy'):'');d.textContent=i;d.title=o?'บัตร '+i+' · คิว '+queueLabel(o):'บัตร '+i+' ว่าง';pool.appendChild(d)}const stage=document.getElementById('stagingGrid');stage.innerHTML=Array.from({length:6},(_,i)=>{const o=active[i];if(!o)return `<div class="staging-slot empty"><b>—</b><small>ช่อง ${i+1} ว่าง</small></div>`;const done=queueItemProgress(o).reduce((n,x)=>n+x.calledQty,0),qty=o.items.reduce((n,x)=>n+Number(x.qty||0),0);return `<div class="staging-slot ${i===0?'next':''}"><b>${esc(queueLabel(o))}</b><small>${i===0?'คิวถัดไป · ':''}${o.status==='assigned'?'รอทำ':o.status==='ready'?'พร้อมส่ง':'กำลังทำ'} · ${done}/${qty} แก้ว</small></div>`}).join('');const list=document.getElementById('queueList');list.innerHTML='';active.forEach(o=>list.appendChild(queueCard(o)));if(!active.length)list.innerHTML='<div class="empty">ไม่มีคิวค้าง</div>';renderPrepPlan(active);const old=active.filter(o=>Date.now()-Number(o.time||Date.now())>=10*60*1000);document.getElementById('queueAlert').textContent=old.length?'⏱ คิวค้างเกิน 10 นาที '+old.map(o=>queueLabel(o)).join(', ')+' · ตรวจว่าไม่มีแก้วตกหล่น':'';updateQueueBadge()}
+function renderQueue(){const max=Number(state.settings.pagerCount)||10,pool=document.getElementById('pagerPool'),active=activeQueue();pool.innerHTML='';for(let i=1;i<=max;i++){const o=active.find(x=>x.pagerNo===i),d=document.createElement('div');d.className='pager'+(o?(o.status==='ready'?' ready':' busy'):'');d.textContent=i;d.title=o?'บัตร '+i+' · คิว '+queueLabel(o):'บัตร '+i+' ว่าง';pool.appendChild(d)}const stage=document.getElementById('stagingGrid');stage.innerHTML=Array.from({length:6},(_,i)=>{const o=active[i];if(!o)return `<div class="staging-slot empty"><b>—</b><small>ช่อง ${i+1} ว่าง</small></div>`;const done=queueItemProgress(o).reduce((n,x)=>n+x.calledQty,0),qty=o.items.reduce((n,x)=>n+Number(x.qty||0),0);return `<div class="staging-slot ${i===0?'next':''}"><b>${esc(queueLabel(o))}</b><small>${i===0?'คิวถัดไป · ':''}${o.status==='assigned'?'รอทำ':o.status==='ready'?'พร้อมส่ง':'กำลังทำ'} · ${done}/${qty} แก้ว</small></div>`}).join('');const list=document.getElementById('queueList');list.innerHTML='';active.forEach(o=>list.appendChild(queueCard(o)));if(!active.length)list.innerHTML='<div class="empty">ไม่มีคิวค้าง</div>';renderPrepPlan(active);renderProductionSummary(active);const old=active.filter(o=>Date.now()-Number(o.time||Date.now())>=10*60*1000);document.getElementById('queueAlert').textContent=old.length?'⏱ คิวค้างเกิน 10 นาที '+old.map(o=>queueLabel(o)).join(', ')+' · ตรวจว่าไม่มีแก้วตกหล่น':'';updateQueueBadge()}
 function prepClass(x){const m=state.menu.find(v=>v.id===x.id||v.name===x.name),c=m?.category||'';if(c==='TEA')return [10,'ชา','ชงหรือชั่งน้ำชารอไว้ก่อน ประกอบแก้วใกล้ส่ง'];if(c==='COCOA')return [20,'โกโก้','ทำโกโก้เพสต์และฐานนมก่อน'];if(c==='MILK')return [30,'นม','ชั่งและผสมฐานนมก่อน'];if(c==='MATCHA'||c==='HOT MATCHA')return [40,'มัทฉะ','ชั่งฐานไว้ ตีมัทฉะใกล้เวลาประกอบแก้ว'];if(c==='COFFEE')return [50,'กาแฟ','เตรียมแก้วก่อน สกัดช็อตใกล้เวลาส่ง'];if(c==='SODA')return [60,'โซดา','ผสมไซรัปก่อน เติมโซดาและน้ำแข็งท้ายสุด'];return [45,'อื่น ๆ','เตรียมฐานก่อน ประกอบแก้วใกล้ส่ง']}
 function orderPrepTasks(o){return queueItemProgress(o).map((x,i)=>({o,x,i,remaining:Math.max(0,Number(x.qty||0)-Number(x.calledQty||0)),group:prepClass(x)})).filter(t=>t.remaining>0).sort((a,b)=>a.group[0]-b.group[0]||a.x.name.localeCompare(b.x.name,'th')||a.x.variant.localeCompare(b.x.variant,'th'))}
 function firstPrepIndex(o){return orderPrepTasks(o)[0]?.i ?? -1}
@@ -3855,7 +3944,7 @@ async function commitOnlineQueueAction(payload){
    code==='order_not_complete'?'ยังทำเครื่องดื่มไม่ครบ':
    code==='order_not_found'?'คิวนี้ถูกปิดจากอีกเครื่องแล้ว':
    'อัปเดตคิวออนไลน์ไม่สำเร็จ: '+code;
-  renderQueue();updateQueueBadge();alert(msg);
+  renderQueue();updateQueueBadge();fieldToast(msg,{type:'bad',title:'คิวอัปเดตไม่สำเร็จ',duration:3800});
   return true;
  }
 }
@@ -4233,13 +4322,14 @@ state.lastMasterImport=String(obj.schema_version);state.dataVersion=FIELD_DATA_V
 
 
 // settings/backup
-function renderSettings(){renderAccessSettings();document.getElementById('shopName').value=state.settings.shopName;document.getElementById('promptpayId').value=state.settings.promptpayId;document.getElementById('promptpayProvider').value=state.settings.promptpayProvider||'manual';document.getElementById('promptpayStatusEndpoint').value=state.settings.promptpayStatusEndpoint||'';document.getElementById('pagerCount').value=state.settings.pagerCount;document.getElementById('receiptFooter').value=state.settings.receiptFooter;updateDbUi()}
+function renderSettings(){renderAccessSettings();document.getElementById('shopName').value=state.settings.shopName;document.getElementById('promptpayId').value=state.settings.promptpayId;document.getElementById('promptpayProvider').value=state.settings.promptpayProvider||'manual';document.getElementById('promptpayStatusEndpoint').value=state.settings.promptpayStatusEndpoint||'';document.getElementById('pagerCount').value=state.settings.pagerCount;document.getElementById('receiptFooter').value=state.settings.receiptFooter;updateDbUi();renderSystemHealth()}
 const testBellBtn=document.getElementById('testBellBtn');if(testBellBtn)testBellBtn.onclick=async()=>{const ok=await playNewOrderBell();if(!ok)alert('เบราว์เซอร์ยังไม่อนุญาตเสียง หรือ Media volume ต่ำ กรุณาเปิดเสียงแล้วกดทดสอบอีกครั้ง')};
-document.getElementById('saveSettingsBtn').onclick=()=>{if(!requireRole())return;const rawPP=document.getElementById('promptpayId').value.trim(),pp=sanitizePromptPayId(rawPP);if(rawPP&& !validPromptPayId(pp)){alert('PromptPay ID ต้องเป็นเบอร์มือถือ 10 หลักขึ้นต้นด้วย 0 หรือเลขบัตรประชาชน/เลขผู้เสียภาษี 13 หลัก');document.getElementById('promptpayId').focus();return}state.settings.shopName=document.getElementById('shopName').value.trim()||'FIELD';state.settings.promptpayId=pp;state.settings.pagerCount=Math.min(50,Math.max(1,Number(document.getElementById('pagerCount').value)||10));state.settings.receiptFooter=document.getElementById('receiptFooter').value.trim();saveState();renderQueue();renderSettings();alert('บันทึกการตั้งค่าแล้ว')};
+document.getElementById('saveSettingsBtn').onclick=()=>{if(!requireRole())return;const rawPP=document.getElementById('promptpayId').value.trim(),pp=sanitizePromptPayId(rawPP);if(rawPP&& !validPromptPayId(pp)){alert('PromptPay ID ต้องเป็นเบอร์มือถือ 10 หลักขึ้นต้นด้วย 0 หรือเลขบัตรประชาชน/เลขผู้เสียภาษี 13 หลัก');document.getElementById('promptpayId').focus();return}state.settings.shopName=document.getElementById('shopName').value.trim()||'FIELD';state.settings.promptpayId=pp;state.settings.pagerCount=Math.min(50,Math.max(1,Number(document.getElementById('pagerCount').value)||10));state.settings.receiptFooter=document.getElementById('receiptFooter').value.trim();saveState();renderQueue();renderSettings();fieldToast('บันทึกการตั้งค่าแล้ว',{title:'ตั้งค่า'})};
 document.getElementById('exportBtn').onclick=()=>{if(!requireRole())return;const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='FIELD_POS_backup_'+isoDate()+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)};
 document.getElementById('importFile').onchange=e=>{if(!requireRole())return;const f=e.target.files[0];if(!f)return;const rd=new FileReader();rd.onload=()=>{try{const obj=JSON.parse(rd.result);if(String(obj.schema_version||'').startsWith('FIELD_POS_MASTER_IMPORT')){if(confirm('นำเข้า FIELD Master Data โดยไม่ลบยอดขาย/ออเดอร์เดิม?')){importFieldMaster(obj);location.reload()}return}if(!obj.menu||!obj.ingredients)throw new Error('รูปแบบไม่ถูกต้อง');if(confirm('นำเข้า Backup และแทนที่ข้อมูลปัจจุบัน?')){state=normalizeState(obj);state.updatedAt=Date.now();localStorage.setItem(APP_KEY,JSON.stringify(state));dbWrite=dbWrite.then(()=>persistDatabase());dbWrite.finally(()=>location.reload())}}catch(err){console.error(err);alert('ไฟล์ JSON ไม่ถูกต้องหรือไม่รองรับ')}};rd.readAsText(f)};
 document.getElementById('resetAllBtn').onclick=async()=>{if(!requireRole())return;if(confirm('รีเซ็ต FIELD CAFÉ POS v7.4 ทั้งหมด? การกระทำนี้ย้อนกลับไม่ได้หากไม่มี Backup')&&confirm('ยืนยันอีกครั้ง: ลบยอดขาย สต๊อก การตั้งค่า และฐานข้อมูลทั้งหมด?')){localStorage.removeItem(APP_KEY);await deleteFieldDb();location.reload()}};
 
+const healthRefreshBtn=document.getElementById('healthRefreshBtn');if(healthRefreshBtn)healthRefreshBtn.onclick=async()=>{healthRefreshBtn.disabled=true;await renderSystemHealth();fieldToast('ตรวจสถานะระบบล่าสุดแล้ว',{title:'System Health'});setTimeout(()=>healthRefreshBtn.disabled=false,450)};
 const syncDbBtn=document.getElementById('syncDbBtn');if(syncDbBtn)syncDbBtn.onclick=async()=>{if(!requireRole())return;syncDbBtn.disabled=true;syncDbBtn.textContent='กำลังซิงก์…';const ok=await persistDatabase();syncDbBtn.textContent=ok?'ซิงก์สำเร็จ ✓':'ซิงก์ไม่สำเร็จ';setTimeout(()=>{syncDbBtn.disabled=false;syncDbBtn.textContent='ซิงก์ข้อมูลลงฐานข้อมูลตอนนี้'},1200)};
 
 // modals
