@@ -339,3 +339,14 @@ test('refund is blocked after Close Day',async()=>{
   const state=JSON.parse(db.storage.document),sale=state.sales[0];state.closes=[{id:'close-1',date}];db.storage.document=JSON.stringify(state);
   await assert.rejects(()=>refundSale({db,user,now:5410,body:{requestKey:'refund-close-0001',saleId:sale.id}}),/refund_closed_day/);
 });
+
+
+test('voided order releases its pager immediately',async()=>{
+  const seed=initialState();seed.settings.pagerCount=1;const db=fakeDb(seed);
+  const first=await checkoutPos({db,user,now:5500,body:{requestKey:'pager-void-checkout-001',cart,date,payment:'cash',received:100}});
+  const sale=JSON.parse(db.storage.document).sales[0];
+  await voidSale({db,user,now:5510,body:{requestKey:'pager-void-001',saleId:sale.id,reason:'cancel before production'}});
+  const second=await checkoutPos({db,user,now:5520,body:{requestKey:'pager-void-checkout-002',cart,date,payment:'cash',received:100}});
+  assert.equal(first.pager,1);
+  assert.equal(second.pager,1);
+});
