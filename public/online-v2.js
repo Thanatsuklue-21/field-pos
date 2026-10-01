@@ -187,7 +187,7 @@
         <div id="fieldOnlinePasswordStatus" class="muted" style="margin-top:8px"></div>
       </form>`;
     const readiness = el('serverReadiness');
-    if (readiness?.parentElement) readiness.parentElement.insertAdjacentElement('afterend', card);
+    if (readiness) readiness.insertAdjacentElement('afterend', card);
     else settings.appendChild(card);
 
     el('fieldOnlinePasswordAdminForm').onsubmit = async e => {
@@ -385,7 +385,7 @@
       editVersion++;
       syncStatus('บันทึกในเครื่องแล้ว · กำลังซิงก์ Turso…','warn');
       clearTimeout(syncTimer);
-      syncTimer = setTimeout(flush,350);
+      syncTimer = setTimeout(flush,120);
     }
   };
 
@@ -442,19 +442,30 @@
     }
   }
 
-  setInterval(async()=>{
-    if (!onlineReady || syncPending || syncing || !gate.hidden) return;
+  let remotePollTimer=null;
+  async function pollRemote(){
+    clearTimeout(remotePollTimer);
+    const delay=document.hidden?5000:1200;
     try {
-      const remote = await request('state');
-      if (Number(remote.revision) !== Number(revision)) {
-        syncStatus('พบข้อมูลใหม่จากอีกเครื่อง · กำลังโหลด','warn');
-        await adopt(remote);
+      if (onlineReady && !syncPending && !syncing && gate.hidden) {
+        const meta = await request('state/meta');
+        if (Number(meta.revision) !== Number(revision)) {
+          syncStatus('พบข้อมูลใหม่จากอีกเครื่อง · กำลังโหลด','warn');
+          const remote = await request('state');
+          if (Number(remote.revision) !== Number(revision)) await adopt(remote);
+        }
       }
     } catch(e) {
       if (e.status === 401) setLoginForm('เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่');
-      else syncStatus('ออฟไลน์ชั่วคราว · ใช้ข้อมูลในเครื่อง','warn');
+      else if (onlineReady) syncStatus('ออฟไลน์ชั่วคราว · ใช้ข้อมูลในเครื่อง','warn');
+    } finally {
+      remotePollTimer=setTimeout(pollRemote,delay);
     }
-  },15000);
+  }
+  document.addEventListener('visibilitychange',()=>{
+    if(!document.hidden){clearTimeout(remotePollTimer);remotePollTimer=setTimeout(pollRemote,150)}
+  });
 
   boot();
+  remotePollTimer=setTimeout(pollRemote,800);
 })();
