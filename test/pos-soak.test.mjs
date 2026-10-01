@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  checkoutPos,queuePosAction,startSplitPayment,paySplitPayment,getSplitPaymentStatus
+  checkoutPos,queuePosAction,startSplitPayment,paySplitPayment,getSplitPaymentStatus,voidSale
 } from '../lib/pos-api.mjs';
 
 function initialState(){
@@ -233,4 +233,59 @@ test('checkout updates CRM visits spend and loyalty points exactly once',async()
   assert.equal(customer.totalSpend,55);
   assert.equal(customer.points,1);
   assert.equal(customer.lastVisit,700);
+});
+
+
+test('cash sale void before production restores stock exactly once and preserves cost snapshot',async()=>{
+  const db=fakeDb();
+  await checkoutPos({db,user,now:2000,body:{requestKey:'void-sale-checkout-001',cart,date,payment:'cash',received:100}});
+  let state=JSON.parse(db.storage.document),sale=state.sales[0];
+  assert.equal(state.ingredients.matcha.qty,995);
+  assert.equal(db.storage.stockTx.length,3);
+  assert.equal(db.storage.costSnapshots.length,1);
+  const first=await voidSale({db,user,now:2100,body:{requestKey:'void-sale-0001',saleId:sale.id,reason:'mistake'}});
+  const replay=await voidSale({db,user,now:2200,body:{requestKey:'void-sale-0001',saleId:sale.id,reason:'mistake'}});
+  state=JSON.parse(db.storage.document);sale=state.sales[0];
+  assert.equal(first.replayed,false);
+  assert.equal(replay.replayed,true);
+  assert.equal(sale.status,'void');
+  assert.equal(state.orders[0].status,'void');
+  assert.equal(state.ingredients.matcha.qty,1000);
+  assert.equal(state.ingredients.milk.qty,30000);
+  assert.equal(state.ingredients.cup16.qty,500);
+  assert.equal(db.storage.stockTx.length,6);
+  assert.equal(db.storage.costSnapshots.length,1);
+  assert.equal(db.storage.stockTx.filter(args=>args[2]==='VOID_REVERSAL').length,3);
+});
+
+test('cash sale cannot auto-void after production starts',async()=>{
+  const db=fakeDb();
+  const checkout=await checkoutPos({db,user,now:3000,body:{requestKey:'void-start-checkout-001',cart,date,payment:'cash',received:100}});
+  await queuePosAction({db,user,now:3010,body:{requestKey:'void-start-work-001',action:'start',orderId:checkout.orderId,itemIndex:0,unit:1}});
+  const sale=JSON.parse(db.storage.document).sales[0];
+  await assert.rejects(()=>voidSale({db,user,now:3020,body:{requestKey:'void-after-start-001',saleId:sale.id,reason:'too late'}}),/void_after_production_started/);
+  const state=JSON.parse(db.storage.document);
+  assert.equal(state.sales[0].status,'paid');
+  assert.equal(state.ingredients.matcha.qty,995);
+  assert.equal(db.storage.stockTx.length,3);
+});
+
+
+test('closed business day rejects new checkout without stock mutation',async()=>{
+  const seed=initialState();seed.closes=[{id:'close-1',date}];
+  const db=fakeDb(seed);
+  await assert.rejects(()=>checkoutPos({db,user,now:4000,body:{requestKey:'closed-day-checkout-001',cart,date,payment:'cash',received:100}}),/day_closed/);
+  const state=JSON.parse(db.storage.document);
+  assert.equal(state.sales.length,0);
+  assert.equal(state.ingredients.matcha.qty,1000);
+  assert.equal(db.storage.stockTx.length,0);
+});
+
+test('closed business day rejects a new split payment reservation',async()=>{
+  const seed=initialState();seed.closes=[{id:'close-1',date}];
+  const db=fakeDb(seed);
+  await assert.rejects(()=>startSplitPayment({db,user,now:4100,body:{requestKey:'closed-day-split-001',cart,date}}),/day_closed/);
+  const state=JSON.parse(db.storage.document);
+  assert.equal(state.paymentSessions.length,0);
+  assert.equal(state.ingredients.matcha.qty,1000);
 });

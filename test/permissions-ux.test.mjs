@@ -1,0 +1,3 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {readFile} from 'node:fs/promises';const read=p=>readFile(new URL('../'+p,import.meta.url),'utf8');
+test('navigation hides admin-only modules from staff permissions',async()=>{const s=await read('components/app-shell.tsx');assert.match(s,/session\.user\.role==="admin"/);assert.match(s,/session\.user\.permissions/);assert.match(s,/\/backup","backup",DatabaseBackup,"admin"/)});
+test('settings signs out through server session endpoint',async()=>{const s=await read('app/settings/page.tsx');assert.match(s,/\/api\/auth\/logout/);assert.match(s,/field:auth-expired/);assert.match(s,/X-CSRF-Token/)});

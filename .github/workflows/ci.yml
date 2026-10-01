@@ -3,8 +3,6 @@ name: FIELD POS CI
 on:
   push:
     branches:
-      - refactor/v8-core
-      - nextjs-midnight-migration
       - main
   pull_request:
     branches:
@@ -16,11 +14,12 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
-      - name: Use Node.js 20
-        uses: actions/setup-node@v4
+        uses: actions/checkout@v7
+      - name: Use Node.js 24
+        uses: actions/setup-node@v7
         with:
-          node-version: '20'
+          node-version: '24'
+          package-manager-cache: false
       - name: Install dependencies
         run: npm install --no-audit --no-fund
       - name: Run backend tests
