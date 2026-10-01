@@ -1,0 +1,4 @@
+export async function api<T>(path:string,init:RequestInit={}){const res=await fetch(path,{...init,headers:{"Content-Type":"application/json",...(init.headers||{})},credentials:"same-origin",cache:"no-store"});const data=await res.json().catch(()=>({}));if(!res.ok)throw Object.assign(new Error(data.error||"request_failed"),{status:res.status,data});return data as T;}
+export type Session={user:{id:string;username:string;role:"admin"|"staff";permissions:Record<string,boolean>};csrf:string};
+export type MenuItem={id:string;name:string;category?:string;price:number;enabled:boolean;variants:{label:string}[]};
+export type Bootstrap={revision:number;menu:MenuItem[];orders:any[];settings:Record<string,any>};
