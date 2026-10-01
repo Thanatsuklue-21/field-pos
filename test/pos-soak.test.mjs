@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  checkoutPos,queuePosAction,startSplitPayment,paySplitPayment,getSplitPaymentStatus,voidSale
+  checkoutPos,queuePosAction,startSplitPayment,paySplitPayment,getSplitPaymentStatus,voidSale,refundSale
 } from '../lib/pos-api.mjs';
 
 function initialState(){
@@ -288,4 +288,112 @@ test('closed business day rejects a new split payment reservation',async()=>{
   const state=JSON.parse(db.storage.document);
   assert.equal(state.paymentSessions.length,0);
   assert.equal(state.ingredients.matcha.qty,1000);
+});
+
+
+test('full cash refund reverses revenue state and CRM but never restores consumed stock',async()=>{
+  const db=fakeDb();
+  await checkoutPos({db,user,now:5000,body:{requestKey:'refund-cash-checkout-001',cart,date,payment:'cash',received:100,customerId:'cus-1'}});
+  let state=JSON.parse(db.storage.document),sale=state.sales[0],order=state.orders[0];
+  await queuePosAction({db,user,now:5050,body:{requestKey:'refund-cash-start-001',action:'start',orderId:order.id,itemIndex:0,unit:1}});
+  state=JSON.parse(db.storage.document);sale=state.sales[0];
+  assert.equal(state.ingredients.matcha.qty,995);
+  assert.equal(state.customers[0].totalSpend,55);
+  const result=await refundSale({db,user,now:5100,body:{requestKey:'refund-cash-0001',saleId:sale.id,reason:'customer complaint'}});
+  state=JSON.parse(db.storage.document);sale=state.sales[0];
+  assert.equal(result.refundAmount,55);
+  assert.equal(sale.status,'refunded');
+  assert.equal(sale.refundMethod,'cash');
+  assert.equal(state.ingredients.matcha.qty,995);
+  assert.equal(state.ingredients.milk.qty,29890);
+  assert.equal(state.ingredients.cup16.qty,499);
+  assert.equal(state.customers[0].totalSpend,0);
+  assert.equal(state.customers[0].points,0);
+  assert.equal(db.storage.stockTx.length,3);
+});
+
+test('refund replay is idempotent',async()=>{
+  const db=fakeDb();
+  await checkoutPos({db,user,now:5200,body:{requestKey:'refund-replay-checkout-001',cart,date,payment:'cash',received:100}});
+  let state=JSON.parse(db.storage.document),sale=state.sales[0],order=state.orders[0];
+  await queuePosAction({db,user,now:5205,body:{requestKey:'refund-replay-start-001',action:'start',orderId:order.id,itemIndex:0,unit:1}});
+  const body={requestKey:'refund-replay-0001',saleId:sale.id,reason:'duplicate'};
+  const first=await refundSale({db,user,now:5210,body});
+  const replay=await refundSale({db,user,now:5220,body});
+  assert.equal(first.replayed,false);
+  assert.equal(replay.replayed,true);
+  assert.equal(JSON.parse(db.storage.document).sales[0].status,'refunded');
+});
+
+test('PromptPay refund requires explicit external manual confirmation and reference',async()=>{
+  const db=fakeDb();
+  await checkoutPos({db,user,now:5300,body:{requestKey:'refund-pp-checkout-001',cart,date,payment:'promptpay',paymentVerified:'chrg_test_paid',paymentProviderAmount:55,paymentReference:'chrg_test_paid'}});
+  const sale=JSON.parse(db.storage.document).sales[0];
+  await assert.rejects(()=>refundSale({db,user,now:5310,body:{requestKey:'refund-pp-0001',saleId:sale.id}}),/promptpay_manual_refund_required/);
+  const ok=await refundSale({db,user,now:5320,body:{requestKey:'refund-pp-0002',saleId:sale.id,manualConfirmed:true,manualReference:'bank-transfer-123',reason:'manual returned'}});
+  assert.equal(ok.refundMethod,'manual_promptpay');
+  const state=JSON.parse(db.storage.document);
+  assert.equal(state.sales[0].refundReference,'bank-transfer-123');
+  assert.equal(state.sales[0].refundStockRestored,true);
+  assert.equal(state.ingredients.matcha.qty,1000);
+  assert.equal(state.ingredients.milk.qty,30000);
+  assert.equal(state.ingredients.cup16.qty,500);
+  assert.equal(db.storage.stockTx.filter(args=>args[2]==='REFUND_REVERSAL').length,3);
+});
+
+test('refund is blocked after Close Day',async()=>{
+  const db=fakeDb();
+  await checkoutPos({db,user,now:5400,body:{requestKey:'refund-close-checkout-001',cart,date,payment:'cash',received:100}});
+  const state=JSON.parse(db.storage.document),sale=state.sales[0];state.closes=[{id:'close-1',date}];db.storage.document=JSON.stringify(state);
+  await assert.rejects(()=>refundSale({db,user,now:5410,body:{requestKey:'refund-close-0001',saleId:sale.id}}),/refund_closed_day/);
+});
+
+
+test('voided order releases its pager immediately',async()=>{
+  const seed=initialState();seed.settings.pagerCount=1;const db=fakeDb(seed);
+  const first=await checkoutPos({db,user,now:5500,body:{requestKey:'pager-void-checkout-001',cart,date,payment:'cash',received:100}});
+  const sale=JSON.parse(db.storage.document).sales[0];
+  await voidSale({db,user,now:5510,body:{requestKey:'pager-void-001',saleId:sale.id,reason:'cancel before production'}});
+  const second=await checkoutPos({db,user,now:5520,body:{requestKey:'pager-void-checkout-002',cart,date,payment:'cash',received:100}});
+  assert.equal(first.pager,1);
+  assert.equal(second.pager,1);
+});
+
+
+test('cash pre-production cancellation must use void so stock is restored',async()=>{
+  const db=fakeDb();
+  await checkoutPos({db,user,now:5600,body:{requestKey:'refund-preprod-checkout-001',cart,date,payment:'cash',received:100}});
+  const sale=JSON.parse(db.storage.document).sales[0];
+  await assert.rejects(()=>refundSale({db,user,now:5610,body:{requestKey:'refund-preprod-001',saleId:sale.id,reason:'cancel'}}),/use_void_before_production/);
+  const state=JSON.parse(db.storage.document);
+  assert.equal(state.sales[0].status,'paid');
+  assert.equal(state.ingredients.matcha.qty,995);
+});
+
+test('void cannot run on an already refunded sale',async()=>{
+  const db=fakeDb();
+  const checkout=await checkoutPos({db,user,now:5700,body:{requestKey:'void-after-refund-checkout-001',cart,date,payment:'cash',received:100}});
+  await queuePosAction({db,user,now:5705,body:{requestKey:'void-after-refund-start-001',action:'start',orderId:checkout.orderId,itemIndex:0,unit:1}});
+  const sale=JSON.parse(db.storage.document).sales[0];
+  await refundSale({db,user,now:5710,body:{requestKey:'void-after-refund-001',saleId:sale.id,reason:'refund'}});
+  await assert.rejects(()=>voidSale({db,user,now:5720,body:{requestKey:'void-after-refund-002',saleId:sale.id,reason:'wrong action'}}),/sale_not_voidable/);
+});
+
+
+test('new checkout with stale client business date is rejected without stock mutation',async()=>{
+  const db=fakeDb();
+  await assert.rejects(()=>checkoutPos({db,user,now:5800,body:{requestKey:'date-stale-001',cart,date,serverDate:'2026-10-02',payment:'cash',received:100}}),/business_date_changed/);
+  const state=JSON.parse(db.storage.document);
+  assert.equal(state.sales.length,0);
+  assert.equal(state.ingredients.matcha.qty,1000);
+  assert.equal(db.storage.stockTx.length,0);
+});
+
+test('idempotent replay still succeeds after server business date changes',async()=>{
+  const db=fakeDb(),body={requestKey:'date-replay-001',cart,date,serverDate:date,payment:'cash',received:100};
+  const first=await checkoutPos({db,user,now:5900,body});
+  const replay=await checkoutPos({db,user,now:6000,body:{...body,serverDate:'2026-10-02'}});
+  assert.equal(replay.replayed,true);
+  assert.equal(replay.orderId,first.orderId);
+  assert.equal(JSON.parse(db.storage.document).sales.length,1);
 });
