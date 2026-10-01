@@ -418,6 +418,12 @@
       const result=await request('pos/queue',{method:'POST',body:JSON.stringify(payload)});
       await adopt(result);
       return result;
+    },
+    async refresh() {
+      if(!onlineReady) return null;
+      const remote=await request('state');
+      await adopt(remote);
+      return remote;
     }
   };
 
