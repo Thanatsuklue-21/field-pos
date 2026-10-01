@@ -490,9 +490,20 @@
   }
 
   let remotePollTimer=null;
+  let remotePollInFlight=false;
+  function remotePollDelay(){
+    if(document.hidden)return 5000;
+    const hasLiveQueue=(state?.orders||[]).some(o=>o.status!=='returned');
+    const queueVisible=!!document.getElementById('v-queue')?.classList.contains('active');
+    return (hasLiveQueue||queueVisible)?650:1800;
+  }
   async function pollRemote(){
     clearTimeout(remotePollTimer);
-    const delay=document.hidden?5000:1200;
+    if(remotePollInFlight){
+      remotePollTimer=setTimeout(pollRemote,remotePollDelay());
+      return;
+    }
+    remotePollInFlight=true;
     try {
       if (onlineReady && !syncPending && !syncing && gate.hidden) {
         const meta = await request('state/meta');
@@ -506,13 +517,20 @@
       if (e.status === 401) setLoginForm('เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่');
       else if (onlineReady) syncStatus('ออฟไลน์ชั่วคราว · ใช้ข้อมูลในเครื่อง','warn');
     } finally {
-      remotePollTimer=setTimeout(pollRemote,delay);
+      remotePollInFlight=false;
+      remotePollTimer=setTimeout(pollRemote,remotePollDelay());
     }
   }
+  function pollRemoteSoon(delay=60){
+    clearTimeout(remotePollTimer);
+    remotePollTimer=setTimeout(pollRemote,delay);
+  }
   document.addEventListener('visibilitychange',()=>{
-    if(!document.hidden){clearTimeout(remotePollTimer);remotePollTimer=setTimeout(pollRemote,150)}
+    if(!document.hidden)pollRemoteSoon(60);
   });
+  window.addEventListener('focus',()=>pollRemoteSoon(60),{passive:true});
+  window.addEventListener('online',()=>pollRemoteSoon(60),{passive:true});
 
   boot();
-  remotePollTimer=setTimeout(pollRemote,800);
+  remotePollTimer=setTimeout(pollRemote,400);
 })();
