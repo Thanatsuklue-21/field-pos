@@ -462,6 +462,10 @@
       if(!onlineReady) throw new Error('online_not_ready');
       return request('pos/split/status',{method:'POST',body:JSON.stringify({sessionId})});
     },
+    async splitList() {
+      if(!onlineReady) throw new Error('online_not_ready');
+      return request('pos/split/list');
+    },
     async splitCancel(payload) {
       if(!onlineReady) throw new Error('online_not_ready');
       const result=await request('pos/split/cancel',{method:'POST',body:JSON.stringify(payload)});
