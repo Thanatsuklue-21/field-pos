@@ -1,0 +1,6 @@
+@import "tailwindcss";
+:root{--bg:#090909;--panel:#121212;--panel2:#191919;--gold:#d4af37;--text:#f5f1e8;--muted:#9a968d;--line:rgba(255,255,255,.08)}
+*{box-sizing:border-box}html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font-family:Arial,"Noto Sans Thai",sans-serif}body{overflow:hidden}
+button,input,select{font:inherit}.glass{background:rgba(22,22,22,.72);backdrop-filter:blur(18px);border:1px solid var(--line);box-shadow:0 16px 60px rgba(0,0,0,.26)}
+.gold{color:var(--gold)}.soft-scroll{scrollbar-width:none}.soft-scroll::-webkit-scrollbar{display:none}
+.card{border-radius:32px}.pill{border-radius:999px}.focus-ring:focus{outline:2px solid var(--gold);outline-offset:2px}
