@@ -21,7 +21,7 @@ function initialState(){
 }
 
 function fakeDb(seed=initialState()){
-  const storage={revision:0,document:JSON.stringify(seed),audits:[]};
+  const storage={revision:0,document:JSON.stringify(seed),audits:[],stockTx:[],costSnapshots:[]};
 
   function executeOn(target,query){
     const {sql,args=[]}=typeof query==='string'?{sql:query,args:[]}:query;
@@ -37,6 +37,14 @@ function fakeDb(seed=initialState()){
       target.audits.push(args);
       return {rows:[]};
     }
+    if(sql.startsWith('INSERT INTO field_stock_transactions')){
+      target.stockTx.push(args);
+      return {rows:[]};
+    }
+    if(sql.startsWith('INSERT INTO field_cost_snapshots')){
+      target.costSnapshots.push(args);
+      return {rows:[]};
+    }
     throw new Error('Unexpected SQL: '+sql);
   }
 
@@ -47,7 +55,9 @@ function fakeDb(seed=initialState()){
       const draft={
         revision:storage.revision,
         document:storage.document,
-        audits:storage.audits.slice()
+        audits:storage.audits.slice(),
+        stockTx:storage.stockTx.slice(),
+        costSnapshots:storage.costSnapshots.slice()
       };
       return {
         async execute(query){return executeOn(draft,query)},
@@ -55,6 +65,8 @@ function fakeDb(seed=initialState()){
           storage.revision=draft.revision;
           storage.document=draft.document;
           storage.audits=draft.audits;
+          storage.stockTx=draft.stockTx;
+          storage.costSnapshots=draft.costSnapshots;
         },
         async rollback(){}
       };
@@ -111,6 +123,9 @@ test('30-order POS soak keeps bills unique, stock exact and queues returnable',a
   assert.equal(state.ingredients.cup16.qty,500-30);
 
   assert.equal(state.billSeq[date],30);
+  assert.equal(db.storage.stockTx.length,90);
+  assert.equal(db.storage.costSnapshots.length,30);
+  assert.ok(db.storage.stockTx.every(args=>args[2]==='SALE'&&Number(args[3])<0));
 });
 
 test('checkout request replay never duplicates sale, bill or stock deduction',async()=>{
@@ -201,4 +216,6 @@ test('split payment survives intermediate reloads and creates one sale + one que
   assert.equal(state.ingredients.matcha.qty,1000-15);
   assert.equal(state.ingredients.milk.qty,30000-330);
   assert.equal(state.ingredients.cup16.qty,500-3);
+  assert.equal(db.storage.stockTx.length,3);
+  assert.equal(db.storage.costSnapshots.length,1);
 });
