@@ -66,9 +66,31 @@ button.refresh{border:1px solid var(--line);background:#fff;border-radius:9px;pa
 .col{flex:1;min-width:18px;display:flex;flex-direction:column;align-items:center;justify-content:end;height:100%}
 .col .v{width:100%;max-width:36px;min-height:2px;background:var(--green);border-radius:7px 7px 2px 2px}.col small{font-size:.55rem;color:var(--muted);margin-top:5px;white-space:nowrap}
 .note{font-size:.68rem;color:var(--muted);line-height:1.5}
+
+.online-gate{position:fixed;inset:0;z-index:1000;background:#17382c;display:grid;place-items:center;padding:16px}
+.online-gate[hidden]{display:none}
+.online-card{width:min(430px,100%);background:#fffdf7;border-radius:18px;padding:22px;box-shadow:0 20px 60px #0004}
+.online-card h2{margin:0 0 6px;color:var(--green-dark)}
+.online-card p{margin:0 0 14px;color:var(--muted);font-size:.78rem;line-height:1.5}
+.online-card label{display:block;font-size:.72rem;font-weight:800;margin:9px 0}
+.online-card input{display:block;width:100%;margin-top:5px;border:1px solid var(--line);border-radius:10px;padding:11px}
+.online-card button{width:100%;border:0;border-radius:11px;padding:11px;background:var(--green);color:#fff;font-weight:900;margin-top:10px}
+.online-msg{min-height:20px;margin-top:8px;font-size:.72rem;color:var(--red)}
 </style>
 </head>
 <body>
+<div class="online-gate" id="onlineGate" hidden>
+  <div class="online-card">
+    <h2>🌐 FIELD Online</h2>
+    <p>เข้าสู่ระบบเพื่ออ่านข้อมูลร้านจาก Turso โดยตรงจากทุกอุปกรณ์</p>
+    <form id="onlineLoginForm">
+      <label>ชื่อผู้ใช้<input id="onlineUsername" autocomplete="username" value="admin" required></label>
+      <label>รหัสผ่าน<input id="onlinePassword" type="password" autocomplete="current-password" required></label>
+      <button type="submit" id="onlineLoginBtn">เข้าสู่ระบบออนไลน์</button>
+    </form>
+    <div class="online-msg" id="onlineLoginMsg"></div>
+  </div>
+</div>
 <header>
   <a class="back" href="/">← POS</a>
   <div class="brand"><b>FIELD INSIGHTS</b><small>Simple · Fresh · Everyday</small></div>
@@ -138,7 +160,7 @@ button.refresh{border:1px solid var(--line);background:#fff;border-radius:9px;pa
     <div id="dataQuality"></div>
   </section>
 
-  <div class="footer">FIELD Insights v1 · อ่านข้อมูลจากอุปกรณ์นี้เท่านั้น · ไม่เปลี่ยนข้อมูล POS</div>
+  <div class="footer">FIELD Insights v1.1 · Server-first · Turso Online · ไม่เปลี่ยนข้อมูล POS</div>
 </main>
 
 <script>
@@ -181,16 +203,54 @@ async function readIndexedState(){
     }catch(e){resolve(null)}
   })
 }
-async function loadState(){
-  let local=null;
-  try{local=JSON.parse(localStorage.getItem(APP_KEY)||'null')}catch(e){}
-  const indexed=await readIndexedState();
-  state=indexed||local||{};
+async function api(path,options={}){
+  const res=await fetch('/api/'+path,{
+    credentials:'same-origin',
+    cache:'no-store',
+    ...options,
+    headers:{'Content-Type':'application/json',...(options.headers||{})}
+  });
+  const data=await res.json().catch(()=>({error:'invalid_server_response'}));
+  if(!res.ok)throw Object.assign(new Error(data.error||'server_error'),{status:res.status,data});
+  return data;
+}
+function normalizeLoadedState(s){
+  state=s||{};
   state.sales=Array.isArray(state.sales)?state.sales:[];
   state.expenses=Array.isArray(state.expenses)?state.expenses:[];
   state.ingredients=state.ingredients&&typeof state.ingredients==='object'?state.ingredients:{};
   state.menu=Array.isArray(state.menu)?state.menu:[];
-  document.getElementById('dataStatus').textContent=indexed?'IndexedDB พร้อม':'LocalStorage';
+}
+function showOnlineLogin(message=''){
+  const gate=document.getElementById('onlineGate');
+  gate.hidden=false;
+  document.getElementById('onlineLoginMsg').textContent=message;
+  setTimeout(()=>document.getElementById('onlineUsername').focus({preventScroll:true}),0);
+}
+function hideOnlineLogin(){
+  document.getElementById('onlineGate').hidden=true;
+}
+async function loadState(){
+  try{
+    await api('auth/session');
+    const remote=await api('state');
+    normalizeLoadedState(remote.state);
+    document.getElementById('dataStatus').textContent='Turso Online · r'+remote.revision;
+    hideOnlineLogin();
+    return;
+  }catch(e){
+    if(e.status===401){
+      showOnlineLogin('กรุณาเข้าสู่ระบบออนไลน์');
+      throw e;
+    }
+    let local=null;
+    try{local=JSON.parse(localStorage.getItem(APP_KEY)||'null')}catch(_){}
+    const indexed=await readIndexedState();
+    normalizeLoadedState(indexed||local||{});
+    document.getElementById('dataStatus').textContent=indexed
+      ?'Offline fallback · IndexedDB'
+      :'Offline fallback · LocalStorage';
+  }
 }
 
 function recipeUnitCost(item){
@@ -297,11 +357,33 @@ function render(){
   if(!q.length)q.push(['','ข้อมูลหลักพร้อมสำหรับวิเคราะห์ในอุปกรณ์นี้']);
   document.getElementById('dataQuality').innerHTML=q.map(x=>`<div class="insight ${x[0]}"><div class="icon">${x[0]==='bad'?'⚠️':x[0]==='warn'?'🟡':'✅'}</div><div><b>${x[1]}</b><p>${x[0]?'แก้ข้อมูลต้นทางใน POS เพื่อให้ผลวิเคราะห์แม่นขึ้น':'ยอดขาย ต้นทุน และวันที่มีโครงสร้างพร้อมใช้งาน'}</p></div></div>`).join('');
 }
-async function refresh(){await loadState();render()}
+async function refresh(){try{await loadState();render()}catch(e){if(e.status!==401)console.error(e)}}
 document.getElementById('anchorDate').value=today();
 document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>{period=b.dataset.period;document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('active',x===b));render()});
 document.getElementById('anchorDate').onchange=render;
 document.getElementById('refreshBtn').onclick=refresh;
+document.getElementById('onlineLoginForm').onsubmit=async e=>{
+  e.preventDefault();
+  const btn=document.getElementById('onlineLoginBtn');
+  const msg=document.getElementById('onlineLoginMsg');
+  btn.disabled=true;
+  msg.textContent='กำลังเข้าสู่ระบบ…';
+  try{
+    const username=document.getElementById('onlineUsername').value.trim().toLowerCase();
+    const password=document.getElementById('onlinePassword').value;
+    await api('auth/login',{method:'POST',body:JSON.stringify({username,password})});
+    document.getElementById('onlinePassword').value='';
+    msg.textContent='';
+    hideOnlineLogin();
+    await refresh();
+  }catch(err){
+    msg.textContent=err.status===401
+      ?'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง'
+      :'เชื่อมต่อออนไลน์ไม่สำเร็จ: '+err.message;
+  }finally{
+    btn.disabled=false;
+  }
+};
 window.addEventListener('storage',e=>{if(e.key===APP_KEY)refresh()});
 refresh();
 </script>
