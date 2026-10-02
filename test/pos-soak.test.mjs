@@ -482,3 +482,64 @@ test('pager call remains FIFO even when a later order finishes production first'
   const secondCall=await queuePosAction({db,user,now:4070,body:{requestKey:'fifo-call-002b',action:'call',orderId:second.orderId}});
   assert.equal(secondCall.action,'call');
 });
+
+
+test('selected production item auto-clears when its final cup is completed',async()=>{
+  const db=fakeDb();
+  const paid=await checkoutPos({
+    db,user,now:8000,
+    body:{requestKey:'guided-select-checkout-001',cart:[{...cart[0],qty:2}],date,payment:'cash',received:200}
+  });
+  await queuePosAction({db,user,now:8010,body:{requestKey:'guided-select-001',action:'select',orderId:paid.orderId,itemIndex:0,selected:true}});
+  await queuePosAction({db,user,now:8020,body:{requestKey:'guided-done-001',action:'start',orderId:paid.orderId,itemIndex:0,unit:1}});
+  let state=JSON.parse(db.storage.document),order=state.orders.find(o=>o.id===paid.orderId);
+  assert.equal(order.items[0].prepSelected,true);
+  await queuePosAction({db,user,now:8030,body:{requestKey:'guided-done-002',action:'start',orderId:paid.orderId,itemIndex:0,unit:2}});
+  state=JSON.parse(db.storage.document);order=state.orders.find(o=>o.id===paid.orderId);
+  assert.equal(order.items[0].readyQty,2);
+  assert.equal(order.items[0].prepSelected,false);
+});
+
+test('first FIFO order may call a completed menu early while keeping remaining menus in production',async()=>{
+  const seed=initialState();
+  seed.menu.push({
+    id:'pure-matcha',name:'Pure Matcha',category:'MATCHA',enabled:true,price:45,
+    variants:[{label:'ไม่หวาน',recipe:{items:{matcha:4,cup16:1}}}]
+  });
+  const db=fakeDb(seed);
+  const paid=await checkoutPos({
+    db,user,now:8100,
+    body:{requestKey:'partial-call-checkout-001',cart:[
+      {id:'matcha-latte',variant:'100%',qty:1},
+      {id:'pure-matcha',variant:'ไม่หวาน',qty:1}
+    ],date,payment:'cash',received:200}
+  });
+  await queuePosAction({db,user,now:8110,body:{requestKey:'partial-ready-001',action:'start',orderId:paid.orderId,itemIndex:0,unit:1}});
+  const early=await queuePosAction({db,user,now:8120,body:{requestKey:'partial-call-001',action:'call_item',orderId:paid.orderId,itemIndex:0}});
+  assert.equal(early.action,'call_item');
+
+  let state=JSON.parse(db.storage.document),order=state.orders.find(o=>o.id===paid.orderId);
+  assert.equal(order.items[0].calledQty,1);
+  assert.equal(order.items[1].calledQty||0,0);
+  assert.equal(order.status,'making');
+
+  await queuePosAction({db,user,now:8130,body:{requestKey:'partial-ready-002',action:'start',orderId:paid.orderId,itemIndex:1,unit:1}});
+  const finalCall=await queuePosAction({db,user,now:8140,body:{requestKey:'partial-call-final-001',action:'call',orderId:paid.orderId}});
+  assert.equal(finalCall.action,'call');
+  state=JSON.parse(db.storage.document);order=state.orders.find(o=>o.id===paid.orderId);
+  assert.equal(order.items[0].calledQty,1);
+  assert.equal(order.items[1].calledQty,1);
+  assert.equal(order.status,'ready');
+});
+
+test('menu-level early pickup is blocked for a later FIFO order',async()=>{
+  const db=fakeDb();
+  const first=await checkoutPos({db,user,now:8200,body:{requestKey:'partial-fifo-checkout-001',cart,date,payment:'cash',received:100}});
+  const second=await checkoutPos({db,user,now:8210,body:{requestKey:'partial-fifo-checkout-002',cart,date,payment:'cash',received:100}});
+  await queuePosAction({db,user,now:8220,body:{requestKey:'partial-fifo-ready-002',action:'start',orderId:second.orderId,itemIndex:0,unit:1}});
+  await assert.rejects(
+    ()=>queuePosAction({db,user,now:8230,body:{requestKey:'partial-fifo-call-002',action:'call_item',orderId:second.orderId,itemIndex:0}}),
+    e=>e?.status===409&&e?.message==='fifo_violation'
+  );
+  assert.ok(first.orderId);
+});
