@@ -6,7 +6,7 @@ const read=(path)=>readFileSync(new URL('../'+path,import.meta.url),'utf8');
 
 test('global theme defaults to light FIELD surfaces',()=>{
   const css=read('app/globals.css');
-  assert.match(css,/--bg:\s*#f5f5f7/i);
+  assert.match(css,/--bg:\s*#e9edf2/i);
   assert.match(css,/--surface:\s*#ffffff/i);
   assert.match(css,/--text-primary:\s*#1d1d1f/i);
   assert.doesNotMatch(css,/--bg:\s*#090909/i);
@@ -16,8 +16,8 @@ test('app shell no longer uses dark primary surfaces',()=>{
   const shell=read('components/app-shell.tsx');
   assert.doesNotMatch(shell,/bg-\[#090909\]/);
   assert.doesNotMatch(shell,/bg-\[#0e0e0e\]/);
-  assert.match(shell,/bg-\[#f5f5f7\]/i);
-  assert.match(shell,/bg-white/);
+  assert.match(shell,/bg-\[#e9edf2\]/i);
+  assert.match(shell,/bg-\[#f3f5f7\]/i);
 });
 
 test('primary FIELD pages do not regress to legacy dark UI tokens',()=>{

@@ -1,20 +1,20 @@
 @import "tailwindcss";
 
 :root{
-  --bg:#f5f5f7;
+  --bg:#e9edf2;
   --surface:#ffffff;
-  --surface-secondary:#f2f2f7;
-  --surface-elevated:rgba(255,255,255,.88);
+  --surface-secondary:#f1f4f7;
+  --surface-elevated:#ffffff;
   --field-accent:#d4af37;
   --field-accent-strong:#8a6b12;
   --text-primary:#1d1d1f;
   --text-secondary:#6e6e73;
   --text-tertiary:#8e8e93;
-  --separator:rgba(60,60,67,.14);
+  --separator:rgba(51,65,85,.20);
   --success:#34c759;
   --warning:#ff9500;
   --danger:#ff3b30;
-  --shadow:0 14px 42px rgba(15,23,42,.08);
+  --shadow:0 4px 16px rgba(15,23,42,.07);
   --motion-fast:140ms;
   --motion-standard:200ms;
   --motion-sheet:260ms;
@@ -49,10 +49,15 @@ button:disabled{cursor:not-allowed}
 
 .glass{
   background:var(--surface-elevated);
-  -webkit-backdrop-filter:blur(18px) saturate(145%);
-  backdrop-filter:blur(18px) saturate(145%);
   border:1px solid var(--separator);
   box-shadow:var(--shadow);
+}
+.frosted{
+  background:rgba(255,255,255,.90);
+  -webkit-backdrop-filter:blur(14px) saturate(135%);
+  backdrop-filter:blur(14px) saturate(135%);
+  border:1px solid var(--separator);
+  box-shadow:0 8px 24px rgba(15,23,42,.10);
 }
 .gold{color:var(--field-accent-strong)}
 .soft-scroll{scrollbar-width:none}
