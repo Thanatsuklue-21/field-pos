@@ -153,7 +153,7 @@ function QueueView({session}:{session:Session}){
       {!selectedTask&&recommendedTask&&<div className="mt-4 grid gap-4 lg:grid-cols-[1fr_auto] lg:items-center">
         <div>
           <div className="mb-2 flex flex-wrap items-center gap-2">
-            <span className="rounded-full bg-[#d4af37] px-3 py-1 text-xs font-bold text-black">แนะนำทำถัดไป</span>
+            <span className="rounded-full bg-[#d4af37] px-3 py-1 text-xs font-bold text-black">แนะนำเมนูถัดไป</span>
             <span className="rounded-full bg-[#fff3bf] px-3 py-1 text-xs font-bold text-[#765b08]">{recommendedTask.order.queueNo} · บัตร {recommendedTask.order.pagerNo}</span>
           </div>
           <div className="text-xl font-bold">{recommendedTask.item.name}</div>
