@@ -17,7 +17,7 @@ test('app shell no longer uses dark primary surfaces',()=>{
   assert.doesNotMatch(shell,/bg-\[#090909\]/);
   assert.doesNotMatch(shell,/bg-\[#0e0e0e\]/);
   assert.match(shell,/bg-\[#e9edf2\]/i);
-  assert.match(shell,/bg-white/);
+  assert.match(shell,/bg-\[#f3f5f7\]/i);
 });
 
 test('primary FIELD pages do not regress to legacy dark UI tokens',()=>{
