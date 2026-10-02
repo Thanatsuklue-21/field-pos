@@ -66,3 +66,48 @@ test('queue actions consume compact write responses instead of blocking on a sec
   assert.match(queue,/const applyState=/);
   assert.match(queue,/if\(!applyState\(r\)\)load\(\)\.catch/);
 });
+
+
+test('payment success makes the physical pager card visually dominant',async()=>{
+  const pos=await read('app/pos/page.tsx');
+  assert.match(pos,/หยิบบัตรให้ลูกค้า/);
+  assert.match(pos,/text-4xl font-black/);
+  assert.match(pos,/บัตร \{lastSale\.pager/);
+});
+
+test('queue shows pager number on the card, final call button, and Bluetooth reminder',async()=>{
+  const queue=await read('app/queue/page.tsx');
+  assert.match(queue,/บัตรเรียกคิว/);
+  assert.match(queue,/เรียกบัตร \$\{o\.pagerNo/);
+  assert.match(queue,/เครื่องเรียกคิว Bluetooth/);
+  assert.match(queue,/กดเครื่องเรียกแล้ว \/ ปิด/);
+  assert.match(queue,/setCallPrompt/);
+});
+
+test('cold-start schema checks are batched instead of one Turso request per DDL statement',async()=>{
+  const db=await read('lib/db.mjs');
+  assert.match(db,/db\.batch\(SCHEMA\.map/);
+  assert.match(db,/for\(const sql of SCHEMA\)await db\.execute\(sql\)/);
+});
+
+test('checkout accounting and state writes use transaction batching with test-safe fallback',async()=>{
+  const posApi=await read('lib/pos-api.mjs');
+  assert.match(posApi,/async function txBatch/);
+  assert.match(posApi,/typeof tx\.batch==='function'/);
+  const accounting=posApi.slice(posApi.indexOf('async function writeSaleAccounting'),posApi.indexOf('function buildItems'));
+  assert.match(accounting,/statements\.push/);
+  assert.match(accounting,/await txBatch\(tx,statements\)/);
+  const save=posApi.slice(posApi.indexOf('async function saveState'),posApi.indexOf('function activeOrders'));
+  assert.match(save,/await txBatch\(tx,\[/);
+});
+
+test('cash checkout skips the redundant replay read while PromptPay still replays before provider verification',async()=>{
+  const api=await read('lib/api.mjs');
+  const seg=api.slice(api.indexOf("if(path==='/api/pos/checkout'"),api.indexOf("if(path==='/api/pos/queue'"));
+  const prompt=seg.indexOf("if(String(b.payment||'')==='promptpay')");
+  assert.ok(prompt>=0);
+  assert.ok(seg.indexOf('getPosRequestReplay',prompt)>=prompt);
+  assert.equal(seg.slice(0,prompt).includes('getPosRequestReplay'),false);
+  assert.ok(seg.indexOf('getPosRequestReplay')<seg.indexOf('getPromptPayCharge'));
+  assert.match(seg,/FIELD_METRIC pos_checkout_ms=/);
+});
