@@ -5,7 +5,7 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {createClient} from '@libsql/client';
 import {SCHEMA} from '../lib/schema.mjs';
-import {checkoutPos,queuePosAction,startSplitPayment,paySplitPayment} from '../lib/pos-api.mjs';
+import {checkoutPos,queuePosAction,startSplitPayment,paySplitPayment,refundSale} from '../lib/pos-api.mjs';
 import {createApi} from '../lib/api.mjs';
 import {digest} from '../lib/security.mjs';
 import {bangkokDate} from '../lib/time.mjs';
@@ -47,6 +47,33 @@ test('real libSQL: checkout → grouped preparation → early/full call → hand
   await handler({method:'POST',query:{route:'expenses'},headers:{origin:'https://field.test',cookie:'field_session='+token,'x-csrf-token':'csrf'},body:{amount:10,category:'OTHER'}},expenseRes);
   assert.equal(expenseRes.body.error,'day_closed');
   await assert.rejects(sell(db,'closed-checkout'),/day_closed/);
+});
+
+test('real libSQL: production refund clears the order and close day excludes refunded cash sale',async t=>{
+  const db=await setup(t);
+  const paid=await sell(db,'refund-close-checkout');
+  await act(db,paid.orderId,'start',{itemIndex:0,unit:1});
+  let doc=await state(db),sale=doc.sales.find(x=>x.id===paid.saleId);
+  assert.equal(sale.status,'paid');
+  const refunded=await refundSale({db,user,now:Date.now(),body:{requestKey:'refund-close-0001',saleId:sale.id,reason:'customer complaint'}});
+  assert.equal(refunded.refundAmount,110);
+  assert.equal(refunded.stockRestored,false);
+  doc=await state(db);
+  assert.equal(doc.sales[0].status,'refunded');
+  assert.equal(doc.orders[0].status,'void');
+  assert.equal(doc.ingredients.matcha.qty,990);
+
+  const token='refund-close-token';
+  await db.execute({sql:'INSERT INTO field_sessions VALUES(?,?,?,?)',args:[digest(token),user.id,'csrf',Date.now()+60000]});
+  const handler=createApi({db,origin:'https://field.test'});
+  const res={writeHead(status){this.status=status},end(body){this.body=JSON.parse(body)}};
+  await handler({method:'POST',query:{route:'close-day'},headers:{origin:'https://field.test',cookie:'field_session='+token,'x-csrf-token':'csrf'},body:{openingCash:100,countedCash:100}},res);
+  assert.equal(res.status,201);
+  assert.equal(res.body.close.revenue,0);
+  assert.equal(res.body.close.cash,0);
+  assert.equal(res.body.close.expectedCash,100);
+  assert.equal(res.body.close.cashVariance,0);
+  assert.equal(res.body.close.orders,0);
 });
 
 test('real libSQL: durable checkout retry survives 100 newer queue mutations',async t=>{
