@@ -4,3 +4,15 @@ const sale=(time,total,qty=1)=>({status:'paid',time,total,items:[{qty,recipe:{it
 test('operational analytics finds Bangkok peak hour and purchase pressure from recipe usage',()=>{const sales=[sale(Date.parse('2026-10-01T03:10:00Z'),60),sale(Date.parse('2026-10-01T03:40:00Z'),80),sale(Date.parse('2026-09-30T08:00:00Z'),50)];const ingredients={matcha:{name:'Matcha',qty:8,safetyStock:5,unit:'g'},milk:{name:'Milk',qty:5000,safetyStock:500,unit:'g'}};const r=buildOperationalAnalytics({sales,ingredients,now});assert.equal(r.peakHour.hour,10);assert.equal(r.peakHour.orders,2);assert.equal(r.orders14d,3);assert.ok(r.purchaseRecommendations.some(x=>x.id==='matcha'&&x.suggestQty>0));});
 test('refunded and void sales never influence operating analytics',()=>{const base=sale(Date.parse('2026-10-01T03:00:00Z'),100);const r=buildOperationalAnalytics({sales:[base,{...base,status:'refunded',total:999},{...base,status:'void',total:999}],ingredients:{matcha:{qty:100,safetyStock:0}},now});assert.equal(r.revenue14d,100);assert.equal(r.orders14d,1);});
 test('no sales returns stable empty analytics',()=>{const r=buildOperationalAnalytics({sales:[],ingredients:{},now});assert.equal(r.observedDays,0);assert.equal(r.peakHour,null);assert.deepEqual(r.purchaseRecommendations,[]);});
+
+
+test('purchase recommendations round up to real package units when a purchase profile exists',()=>{
+  const sales=[sale(Date.parse('2026-10-01T03:10:00Z'),60,2),sale(Date.parse('2026-09-30T03:10:00Z'),60,2)];
+  const ingredients={matcha:{name:'Matcha',qty:10,safetyStock:5,unit:'g',purchaseProfile:{packageUnit:'ถุง',quantityPerPackage:100}}};
+  const r=buildOperationalAnalytics({sales,ingredients,now,targetDays:7});
+  const p=r.purchaseRecommendations.find(x=>x.id==='matcha');
+  assert.ok(p);
+  assert.equal(p.packageUnit,'ถุง');
+  assert.equal(p.suggestedPackages,1);
+  assert.equal(p.quantityPerPackage,100);
+});

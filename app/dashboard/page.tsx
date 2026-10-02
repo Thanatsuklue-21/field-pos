@@ -52,6 +52,9 @@ type D = {
       safetyStock: number;
       daysCover: number;
       suggestQty: number;
+      suggestedPackages: number | null;
+      packageUnit: string;
+      quantityPerPackage: number | null;
     }[];
   };
   customers: number;
@@ -228,8 +231,15 @@ function View() {
                   <div className="text-right">
                     <small className="text-slate-500">แนะนำสั่ง</small>
                     <div className="gold font-semibold">
-                      {Number(x.suggestQty).toLocaleString()} {x.unit}
+                      {x.suggestedPackages && x.packageUnit
+                        ? `${x.suggestedPackages.toLocaleString()} ${x.packageUnit}`
+                        : `${Number(x.suggestQty).toLocaleString()} ${x.unit}`}
                     </div>
+                    {x.suggestedPackages && x.packageUnit && (
+                      <small className="block text-slate-500">
+                        ≈ {Number(x.suggestQty).toLocaleString()} {x.unit}
+                      </small>
+                    )}
                   </div>
                 </div>
               ))}
