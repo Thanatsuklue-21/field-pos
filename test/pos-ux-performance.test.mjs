@@ -111,3 +111,14 @@ test('cash checkout skips the redundant replay read while PromptPay still replay
   assert.ok(seg.indexOf('getPosRequestReplay')<seg.indexOf('getPromptPayCharge'));
   assert.match(seg,/FIELD_METRIC pos_checkout_ms=/);
 });
+
+
+test('queue production flow uses done -> call pager -> deliver wording',async()=>{
+  const queue=await read('app/queue/page.tsx');
+  assert.doesNotMatch(queue,/ทำถัดไป/);
+  assert.match(queue,/ทำเสร็จ \{ready\+1\}\/\{qty\}/);
+  assert.match(queue,/action:"call"/);
+  assert.match(queue,/เรียกบัตร \$\{o\.pagerNo/);
+  assert.match(queue,/ส่งมอบคิวนี้/);
+  assert.match(queue,/รอคิวก่อนหน้า/);
+});
