@@ -255,7 +255,7 @@ function QueueView({session}:{session:Session}){
           className="min-w-[220px] rounded-2xl bg-[#d4af37] px-5 py-4 text-base font-black text-black shadow-sm disabled:opacity-40"
         >
           {isSelected
-            ?(activeReady+1>=activeQty?"กดเมื่อทำเมนูนี้เสร็จ":"เสร็จแก้ว "+String(activeReady+1)+"/"+String(activeQty))
+            ?(activeQty>1?"เสร็จแก้ว "+String(activeReady+1)+"/"+String(activeQty):"กดเมื่อทำเมนูนี้เสร็จ")
             :"เริ่มทำเมนูนี้"
           }
         </button>}
