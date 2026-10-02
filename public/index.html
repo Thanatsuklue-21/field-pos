@@ -2530,7 +2530,7 @@ main{contain:layout style}
 <script>
 'use strict';
 const APP_KEY='field_pos_v2_state'; // ใช้ key เดิมเพื่อรักษาข้อมูลลูกค้าเมื่ออัปเกรด
-const FIELD_DATA_VERSION='2026-09-30.74';
+const FIELD_DATA_VERSION='2026-10-02.75';
 const ORDER_STATUS=Object.freeze({PENDING:'assigned',MAKING:'making',READY:'ready',SERVED:'returned',CANCELLED:'cancelled'});
 const PAYMENT_STATUS=Object.freeze({UNPAID:'unpaid',PARTIAL:'partial',PAID:'paid',REFUNDED:'refunded'});
 const SPLIT_STATUS=Object.freeze({COLLECTING:'collecting',COMPLETED:'completed',CANCELLED:'cancelled',EXPIRED:'expired'});
@@ -2714,7 +2714,7 @@ const DEFAULT_MENU=[
  {id:'matcha-latte',category:'MATCHA',name:'Matcha Latte',price:55,enabled:true,variants:[v('หวานปกติ',iced({matcha:5,water:40,milk:110,syrup:15}),null,'สูตรที่ชิมผ่าน: ตีกับน้ำร้อน 40g (70°C) → ผสมนม 110g กับไซรัป 15g → ใส่น้ำแข็ง → ราดมัทฉะ'),v('หวานน้อย',iced({matcha:5,water:40,milk:115,syrup:10}),null,'สูตรหวานน้อยจาก Master Menu ก่อนหน้า · รอชิมยืนยัน: ไซรัป 10g นม 115g'),v('ไม่หวาน',iced({matcha:5,water:40,milk:125}),null,'ไม่เติมไซรัป; นมยังมีความหวานตามธรรมชาติ · สูตรจาก Master Menu ก่อนหน้า รอชิมยืนยัน')]},
  {id:'matcha-signature',category:'MATCHA',name:'FIELD Matcha Signature',price:55,enabled:true,variants:[v('100%',iced({matcha:5,water:40,condensed:30,evaporated:30,milk:70}),null,'ตีกับน้ำอุ่น 40g → ผสมนมสดและนมข้น → ใส่น้ำแข็ง → ราดมัทฉะ'),v('50%',iced({matcha:5,water:40,condensed:15,evaporated:30,milk:70}),null,'ตีกับน้ำอุ่น 40g → ผสมนมสดและนมข้น → ใส่น้ำแข็ง → ราดมัทฉะ'),v('0%',iced({matcha:5,water:40,evaporated:15,milk:110}),null,'0% = ไม่ใส่นมข้นหวาน แต่ยังมีความหวานตามธรรมชาติจากนม · ตีกับน้ำอุ่น 40g → ใส่น้ำแข็ง → ราดมัทฉะ')]},
  {id:'coconut-matcha',category:'MATCHA',name:'Coconut Matcha',price:60,enabled:true,variants:[v('สูตรหลัก',iced({matcha:5,water:145,coconutSyrup:20}),null,'APPROVED · ไซรัปมะพร้าว 20g + น้ำเย็น 105g → น้ำแข็ง → มัทฉะ 5g + น้ำอุ่น 40g')]},
- {id:'field-orange',category:'REFRESH',name:'FIELD Orange',price:45,enabled:true,variants:[v('สูตรหลัก',iced({orangeMix:25,water:145}),null,'APPROVED · Sunquick 25g + น้ำเย็น 145g → คนให้เข้ากัน → เทใส่น้ำแข็งเต็มแก้ว 16 oz · ไม่ใส่ไซรัป')]},
+ {id:'field-orange',category:'REFRESH',name:'FIELD Orange',price:45,enabled:true,variants:[v('สูตรหลัก',iced({orangeMix:35,water:135}),null,'APPROVED · Sunquick 35g + น้ำเย็น 135g → คนให้เข้ากัน → เทใส่น้ำแข็งเต็มแก้ว 16 oz · ไม่ใส่ไซรัป')]},
  {id:'strawberry-matcha',category:'MATCHA',name:'Strawberry Matcha',price:60,enabled:false,variants:[v('หวานปกติ',iced({matcha:5,water:40,milk:105,strawberrySyrup:20}),26.1448809524,'R&D 15 vs 20g'),v('หวานน้อย',iced({matcha:5,water:40,milk:115,strawberrySyrup:10}),null)]},
  {id:'honey-matcha',category:'ARCHIVED',name:'Honey Matcha (ตัดออก)',price:0,enabled:false,variants:[v('หวานปกติ',iced({matcha:5,water:40,milk:105,honey:20})),v('หวานน้อย',iced({matcha:5,water:40,milk:115,honey:10})),v('ไม่หวาน',iced({matcha:5,water:40,milk:125,honey:0}))]},
  {id:'cold-whisk',category:'MATCHA',name:'Cold Whisk',price:60,enabled:false,variants:[v('หวานปกติ',iced({matcha:5,milk:150,syrup:15}),21.405,'ตีเย็นสดทุกแก้ว'),v('หวานน้อย',iced({matcha:5,milk:155,syrup:10})),v('ไม่หวาน',iced({matcha:5,milk:165,syrup:0}))]},
