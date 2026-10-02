@@ -1,0 +1,15 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {additionalServingsAvailable,buildPosAvailability,cartAvailability,variantAvailability} from '../lib/domain/availability.mjs';
+
+const stock={matcha:{name:'มัทฉะ',qty:20},milk:{name:'นมสด',qty:150},cup:{name:'แก้ว',qty:10}};
+const recipe={items:{matcha:5,milk:100,cup:1}};
+
+test('sufficient stock returns available and exact max servings',()=>{assert.deepEqual(variantAvailability({recipe,ingredients:stock,lowServings:1}),{available:true,maxServings:1,lowStock:true,recipeItems:recipe.items,missingIngredients:[],reason:null})});
+test('zero stock returns unavailable',()=>{const r=variantAvailability({recipe,ingredients:{...stock,milk:{name:'นมสด',qty:0}}});assert.equal(r.available,false);assert.equal(r.maxServings,0)});
+test('one ingredient shortage returns unavailable with its employee-facing name',()=>{const r=variantAvailability({recipe,ingredients:{...stock,cup:{name:'แก้ว 16 oz',qty:0}}});assert.deepEqual(r.missingIngredients,[{id:'cup',name:'แก้ว 16 oz'}])});
+test('missing recipe is unavailable',()=>{assert.equal(variantAvailability({recipe:{items:{}},ingredients:stock}).reason,'recipe_missing')});
+test('variant availability is independent within one product',()=>{const r=buildPosAvailability({menu:[{id:'latte',variants:[{label:'A',recipe},{label:'B',recipe:{items:{matcha:2,cup:1}}}]}],ingredients:{...stock,milk:{qty:0}}});assert.equal(r.menu[0].variants[0].available,false);assert.equal(r.menu[0].variants[1].available,true);assert.equal(r.menu[0].available,true)});
+test('cart quantity cannot exceed availability',()=>{const {menu,stock:clientStock}=buildPosAvailability({menu:[{id:'latte',variants:[{label:'A',recipe}]}],ingredients:stock});assert.equal(cartAvailability({cart:[{id:'latte',variant:'A',qty:2}],menu,stock:clientStock}).available,false);assert.equal(additionalServingsAvailable({cart:[{id:'latte',variant:'A',qty:1}],menu,stock:clientStock,menuId:'latte',variantLabel:'A'}),0)});
+test('two menus sharing an ingredient aggregate demand correctly',()=>{const payload=buildPosAvailability({menu:[{id:'a',variants:[{label:'S',recipe:{items:{milk:100}}}]},{id:'b',variants:[{label:'S',recipe:{items:{milk:80}}}]}],ingredients:{milk:{name:'นมสด',qty:150}}});const result=cartAvailability({cart:[{id:'a',variant:'S',qty:1},{id:'b',variant:'S',qty:1}],menu:payload.menu,stock:payload.stock});assert.equal(result.available,false);assert.deepEqual(result.shortages,[{id:'milk',name:'นมสด',required:180,available:150}])});
+test('stock deduction and void restore immediately change calculated availability',()=>{const before=variantAvailability({recipe:{items:{matcha:5}},ingredients:{matcha:{qty:5}}});const afterSale=variantAvailability({recipe:{items:{matcha:5}},ingredients:{matcha:{qty:0}}});const afterVoid=variantAvailability({recipe:{items:{matcha:5}},ingredients:{matcha:{qty:5}}});assert.equal(before.available,true);assert.equal(afterSale.available,false);assert.equal(afterVoid.available,true)});
