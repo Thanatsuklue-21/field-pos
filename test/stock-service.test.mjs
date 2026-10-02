@@ -35,7 +35,7 @@ function fakeDb() {
 
   function executeOn(target,{sql,args=[]}){
     if(sql.includes('FROM field_stock_transactions t')){
-      return {rows:target.rows.filter(row=>row.request_key===args[0]).map(row=>{const p=target.purchases.find(x=>x.stock_transaction_id===row.id),h=target.costHistory.find(x=>x.purchase_record_id===p?.id);return {...row,purchase_total_cost:p?.total_cost??null,purchased_at:p?.purchased_at??null,package_qty:p?.package_qty??null,package_unit:p?.package_unit??'',supplier:p?.supplier??'',source_url:p?.source_url??'',image_url:p?.image_url??'',purchase_note:p?.note??'',cost_status:h?.cost_status??null}})};
+      return {rows:target.rows.filter(row=>row.request_key===args[0]).map(row=>{const p=target.purchases.find(x=>x.stock_transaction_id===row.id),h=target.costHistory.find(x=>x.purchase_record_id===p?.id);return {...row,purchase_total_cost:p?.total_cost??null,purchased_at:p?.purchased_at??null,package_qty:p?.package_qty??null,package_unit:p?.package_unit??'',pack_size:p?.pack_size??null,pack_size_unit:p?.pack_size_unit??'',conversion_approximate:p?.conversion_approximate??0,supplier:p?.supplier??'',source_url:p?.source_url??'',image_url:p?.image_url??'',purchase_note:p?.note??'',cost_status:h?.cost_status??null}})};
     }
     if(sql.includes('INSERT INTO field_stock_transactions')){
       target.rows.push({
@@ -45,7 +45,7 @@ function fakeDb() {
       });
       return {rows:[]};
     }
-    if(sql.startsWith('INSERT INTO field_purchase_records')){target.purchases.push({id:args[0],stock_transaction_id:args[1],supplier:args[3],purchased_at:args[4],package_qty:args[5],package_unit:args[6],total_cost:args[9],source_url:args[11],image_url:args[12],note:args[13]});return {rows:[]}}
+    if(sql.startsWith('INSERT INTO field_purchase_records')){target.purchases.push({id:args[0],stock_transaction_id:args[1],supplier:args[3],purchased_at:args[4],package_qty:args[5],package_unit:args[6],total_cost:args[9],source_url:args[11],image_url:args[12],note:args[13],pack_size:args[16],pack_size_unit:args[17],conversion_approximate:args[18]});return {rows:[]}}
     if(sql.startsWith('INSERT INTO field_cost_history')){target.costHistory.push({id:args[0],purchase_record_id:args[2],unit_cost:args[3],cost_status:args[4]});return {rows:[]}}
     if(sql.startsWith('SELECT revision,document FROM field_state')){
       return {rows:[{revision:target.revision,document:target.document}]};
@@ -172,4 +172,20 @@ test('purchase idempotency includes supplier package and cost evidence',async()=
   assert.equal((await recordStockTransaction({db,actorId:'admin-1',input:{...input,supplier:'Supplier B'},now:800})).status,'conflict');
   assert.equal((await recordStockTransaction({db,actorId:'admin-1',input:{...input,purchaseCost:500},now:900})).status,'conflict');
   assert.equal(db.storage.costHistory.length,1);
+});
+
+
+test('packaged purchase persists original package evidence and replays exactly once',async()=>{
+  const db=fakeDb();
+  const input={requestKey:'package-history-0001',ingredientId:'matcha',type:'PURCHASE',unit:'g',purchaseCost:398,purchaseDate:'2026-10-03',supplier:'Makro',packageQty:2,packageUnit:'ขวด',packSize:750,packSizeUnit:'ml'};
+  const first=await recordStockTransaction({db,actorId:'admin-1',input,now:1000});
+  const replay=await recordStockTransaction({db,actorId:'admin-1',input,now:1100});
+  assert.equal(first.status,'created');assert.equal(replay.status,'replayed');
+  assert.equal(db.storage.purchases.length,1);
+  assert.equal(db.storage.purchases[0].package_qty,2);
+  assert.equal(db.storage.purchases[0].package_unit,'ขวด');
+  assert.equal(db.storage.purchases[0].pack_size,750);
+  assert.equal(db.storage.purchases[0].pack_size_unit,'ml');
+  assert.equal(db.storage.purchases[0].conversion_approximate,1);
+  assert.equal(JSON.parse(db.storage.document).ingredients.matcha.qty,2500);
 });
