@@ -189,3 +189,28 @@ test('packaged purchase persists original package evidence and replays exactly o
   assert.equal(db.storage.purchases[0].conversion_approximate,1);
   assert.equal(JSON.parse(db.storage.document).ingredients.matcha.qty,2500);
 });
+
+
+test('purchase cash-out is posted to the selected purchase date',async()=>{
+  const db=fakeDb();
+  await recordStockTransaction({db,actorId:'admin-1',now:Date.parse('2026-10-03T03:00:00Z'),input:{
+    requestKey:'purchase-date-0001',ingredientId:'matcha',type:'PURCHASE',qtyDelta:100,unit:'g',
+    purchaseCost:200,purchaseDate:'2026-10-02',supplier:'Supplier A'
+  }});
+  const state=JSON.parse(db.storage.document);
+  assert.equal(state.expenses.length,1);
+  assert.equal(state.expenses[0].date,'2026-10-02');
+  assert.equal(state.expenses[0].amount,200);
+});
+
+test('purchase cannot post into an already closed purchase date and rolls back stock',async()=>{
+  const db=fakeDb();
+  const state=JSON.parse(db.storage.document);state.closes=[{id:'close-old',date:'2026-10-01'}];db.storage.document=JSON.stringify(state);
+  await assert.rejects(()=>recordStockTransaction({db,actorId:'admin-1',now:Date.parse('2026-10-03T03:00:00Z'),input:{
+    requestKey:'purchase-date-closed',ingredientId:'matcha',type:'PURCHASE',qtyDelta:100,unit:'g',
+    purchaseCost:200,purchaseDate:'2026-10-01',supplier:'Supplier A'
+  }}),/purchase_date_closed/);
+  assert.equal(db.rows.length,0);
+  assert.equal(JSON.parse(db.storage.document).ingredients.matcha.qty,1000);
+  assert.equal(JSON.parse(db.storage.document).expenses?.length||0,0);
+});
