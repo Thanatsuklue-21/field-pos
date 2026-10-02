@@ -53,7 +53,7 @@ test('real libSQL: production refund clears the order and close day excludes ref
   const db=await setup(t);
   const paid=await sell(db,'refund-close-checkout');
   await act(db,paid.orderId,'start',{itemIndex:0,unit:1});
-  let doc=await state(db),sale=doc.sales.find(x=>x.id===paid.saleId);
+  let doc=await state(db),sale=doc.sales.find(x=>x.id===paid.saleIds[0]);
   assert.equal(sale.status,'paid');
   const refunded=await refundSale({db,user,now:Date.now(),body:{requestKey:'refund-close-0001',saleId:sale.id,reason:'customer complaint'}});
   assert.equal(refunded.refundAmount,110);
