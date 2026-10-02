@@ -17,6 +17,9 @@ test('v8 schema contains required additive tables', () => {
   assert.match(sql, /CREATE TABLE IF NOT EXISTS field_cost_history/);
   assert.match(sql, /cost_status IN \('MISSING','PROVISIONAL','CONFIRMED'\)/);
   assert.match(sql, /effective_date TEXT NOT NULL/);
+  assert.match(sql, /pack_size REAL/);
+  assert.match(sql, /pack_size_unit TEXT/);
+  assert.match(sql, /conversion_approximate INTEGER/);
 });
 
 test('v8 stock ledger enforces non-zero quantity', () => {
