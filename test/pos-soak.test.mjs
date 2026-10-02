@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   checkoutPos,queuePosAction,startSplitPayment,paySplitPayment,getSplitPaymentStatus,listSplitPaymentSessions,resolveSplitPayment,voidSale,refundSale
 } from '../lib/pos-api.mjs';
+import {buildPosAvailability} from '../lib/domain/availability.mjs';
 
 function initialState(){
   return {
@@ -272,6 +273,7 @@ test('cash sale void before production restores stock exactly once and preserves
   await checkoutPos({db,user,now:2000,body:{requestKey:'void-sale-checkout-001',cart,date,payment:'cash',received:100}});
   let state=JSON.parse(db.storage.document),sale=state.sales[0];
   assert.equal(state.ingredients.matcha.qty,995);
+  assert.equal(buildPosAvailability({menu:state.menu,ingredients:{...state.ingredients,matcha:{...state.ingredients.matcha,qty:0}}}).menu[0].available,false);
   assert.equal(db.storage.stockTx.length,3);
   assert.equal(db.storage.costSnapshots.length,1);
   const first=await voidSale({db,user,now:2100,body:{requestKey:'void-sale-0001',saleId:sale.id,reason:'mistake'}});
@@ -284,6 +286,7 @@ test('cash sale void before production restores stock exactly once and preserves
   assert.equal(state.ingredients.matcha.qty,1000);
   assert.equal(state.ingredients.milk.qty,30000);
   assert.equal(state.ingredients.cup16.qty,500);
+  assert.equal(buildPosAvailability({menu:state.menu,ingredients:state.ingredients}).menu[0].available,true);
   assert.equal(db.storage.stockTx.length,6);
   assert.equal(db.storage.costSnapshots.length,1);
   assert.equal(db.storage.stockTx.filter(args=>args[2]==='VOID_REVERSAL').length,3);

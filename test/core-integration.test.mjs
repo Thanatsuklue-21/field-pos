@@ -91,6 +91,8 @@ test('real libSQL: reused key with different cart or actor is rejected',async t=
 
 test('real libSQL: simultaneous checkout retries commit one sale and one stock deduction',async t=>{const db=await setup(t);const results=await Promise.all([sell(db,'concurrent-request'),sell(db,'concurrent-request')]);assert.equal(results[0].orderId,results[1].orderId);assert.equal(results.filter(x=>x.replayed).length,1);assert.equal((await state(db)).sales.length,1);assert.equal((await state(db)).ingredients.matcha.qty,990)});
 
+test('real libSQL: stale precheck still rejects stock race on the server',async t=>{const doc=seed();doc.ingredients.matcha.qty=10;doc.ingredients.milk.qty=220;const db=await setup(t,doc);const staleBootstrap=structuredClone(doc);assert.equal(staleBootstrap.ingredients.matcha.qty,10);await sell(db,'race-winner');await assert.rejects(sell(db,'race-stale-client'),/stock_shortage/);assert.equal((await state(db)).sales.length,1);assert.equal((await state(db)).ingredients.matcha.qty,0)});
+
 test('real libSQL: full backup restores ledger and durable retry together',async t=>{
   const db=await setup(t);const sale=await sell(db,'backed-up-request');
   const token='backup-token';await db.execute({sql:'INSERT INTO field_sessions VALUES(?,?,?,?)',args:[digest(token),user.id,'csrf',Date.now()+60000]});

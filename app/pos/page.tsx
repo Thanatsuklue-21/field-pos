@@ -5,6 +5,7 @@ import {useRouter} from "next/navigation";
 import {ArrowRight,CheckCircle2,Minus,Plus,Search,Trash2,WalletCards,X} from "lucide-react";
 import AuthGate from "@/components/auth-gate";
 import {api,type Bootstrap,type MenuItem,type Session} from "@/lib/api-client";
+import {additionalServingsAvailable,cartAvailability} from "@/lib/domain/availability.mjs";
 import {useCartStore} from "@/stores/cart-store";
 
 export default function Pos(){return <AuthGate>{s=><PosView session={s}/>}</AuthGate>}
@@ -64,6 +65,14 @@ function PosView({session}:{session:Session}){
   },[]);
 
   useEffect(()=>{
+    const refresh=()=>load().catch(()=>{});
+    const visible=()=>{if(document.visibilityState==="visible")refresh()};
+    const timer=setInterval(refresh,15000);
+    window.addEventListener("focus",refresh);document.addEventListener("visibilitychange",visible);
+    return()=>{clearInterval(timer);window.removeEventListener("focus",refresh);document.removeEventListener("visibilitychange",visible)};
+  },[]);
+
+  useEffect(()=>{
     if(!lastSale)return;
     const timer=setTimeout(()=>setLastSale(null),8000);
     return()=>clearTimeout(timer);
@@ -119,6 +128,26 @@ function PosView({session}:{session:Session}){
       recovered:opts.recovered
     });
     api<any>("/api/customers").then(x=>setCustomers(x.customers||[])).catch(()=>{});
+    load().catch(()=>{});
+  }
+
+  function availabilityMessage(result:ReturnType<typeof cartAvailability>){
+    if(result.shortages.length)return "วัตถุดิบเพียงพอไม่ครบสำหรับตะกร้านี้ · ขาด: "+result.shortages.map(x=>x.name).join(", ");
+    return "มีเมนูหรือตัวเลือกที่หมดชั่วคราว กรุณาตรวจตะกร้า";
+  }
+
+  function addVariant(product:MenuItem,variant:MenuItem["variants"][number]){
+    const remaining=additionalServingsAvailable({cart:cart.items,menu:data?.menu||[],stock:data?.availabilityStock||{},menuId:product.id,variantLabel:variant.label});
+    if(!variant.available||remaining<1){setNotice("วัตถุดิบเพียงพออีก 0 แก้วเท่านั้น"+(variant.missingIngredients?.length?" · ขาด: "+variant.missingIngredients.map(x=>x.name).join(", "):""));return}
+    cart.addItem({id:product.id,name:product.name,variant:variant.label,price:product.price});setSelected(null);
+  }
+
+  function updateCartQuantity(key:string,nextQty:number){
+    const item=cart.items.find(x=>x.key===key);if(!item)return;
+    if(nextQty<=item.qty){cart.updateQuantity(key,nextQty);return}
+    const remaining=additionalServingsAvailable({cart:cart.items,menu:data?.menu||[],stock:data?.availabilityStock||{},menuId:item.id,variantLabel:item.variant});
+    if(remaining<1){setNotice("วัตถุดิบเพียงพออีก 0 แก้วเท่านั้น");return}
+    cart.updateQuantity(key,nextQty);
   }
 
   async function recoverCashCheckout(){
@@ -244,7 +273,7 @@ function PosView({session}:{session:Session}){
     }catch(e:any){
       if(method==="cash"&&e?.status&&e.status<500)cashPendingClear();
       const message=errorText(e.message);
-      if(["menu_unavailable","variant_unavailable"].includes(e.message)){
+      if(["menu_unavailable","variant_unavailable"].includes(e.message)||e.message==="stock_shortage"||e.message.startsWith("stock_shortage:")){
         setPayOpen(false);
         setNotice(message);
         load().catch(()=>{});
@@ -265,6 +294,8 @@ function PosView({session}:{session:Session}){
       load().catch(()=>{});
       return;
     }
+    const current=cartAvailability({cart:cart.items,menu:data?.menu||[],stock:data?.availabilityStock||{}});
+    if(!current.available){setNotice(availabilityMessage(current));load().catch(()=>{});return}
     setResult("");
     setPayOpen(true);
   }
@@ -283,7 +314,7 @@ function PosView({session}:{session:Session}){
       <div className="soft-scroll mb-4 flex gap-2 overflow-x-auto">{cats.map(x=><button key={x} onClick={()=>setCat(x)} className={"shrink-0 rounded-full border px-4 py-2 text-xs font-semibold "+(cat===x?"border-[#c59b19] bg-[#d4af37] text-black shadow-sm":"border-slate-300 bg-white text-slate-700")}>{x}</button>)}</div>
 
       <div className="soft-scroll min-h-0 flex-1 overflow-auto">
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 2xl:grid-cols-4">{menu.map(x=><button key={x.id} onClick={()=>setSelected(x)} className="glass group min-h-[156px] rounded-[24px] p-4 text-left hover:border-[#c59b19]"><div className="mb-7 grid h-10 w-10 place-items-center rounded-xl bg-[#f4ecd0] text-sm font-bold text-[#765b08]">{x.name.slice(0,1)}</div><div className="text-[10px] uppercase tracking-widest text-slate-500">{x.category||"DRINK"}</div><b className="mt-1 block line-clamp-2">{x.name}</b><div className="mt-3 text-lg font-semibold text-[#765b08]">฿{x.price.toFixed(0)}</div></button>)}</div>
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 2xl:grid-cols-4">{menu.map(x=><button key={x.id} disabled={!x.available} onClick={()=>setSelected(x)} className="glass group min-h-[156px] rounded-[24px] p-4 text-left hover:border-[#c59b19] disabled:border-slate-200 disabled:bg-slate-100 disabled:opacity-65"><div className="flex items-start justify-between gap-2"><div className="mb-7 grid h-10 w-10 place-items-center rounded-xl bg-[#f4ecd0] text-sm font-bold text-[#765b08]">{x.name.slice(0,1)}</div>{!x.available?<span className="rounded-full bg-red-100 px-2 py-1 text-[10px] font-bold text-red-700">หมดชั่วคราว</span>:x.lowStock?<span className="rounded-full bg-amber-100 px-2 py-1 text-[10px] font-bold text-amber-800">เหลือประมาณ {x.maxServings} แก้ว</span>:null}</div><div className="text-[10px] uppercase tracking-widest text-slate-500">{x.category||"DRINK"}</div><b className="mt-1 block line-clamp-2">{x.name}</b><div className="mt-3 text-lg font-semibold text-[#765b08]">฿{x.price.toFixed(0)}</div>{!x.available&&<small className="mt-2 block text-xs text-red-600">{Array.from(new Set(x.variants.flatMap(v=>v.missingIngredients||[]).map(i=>i.name))).slice(0,2).join(", ")||"สูตรยังไม่พร้อม"}</small>}</button>)}</div>
       </div>
     </div>
 
@@ -294,11 +325,11 @@ function PosView({session}:{session:Session}){
 
     <aside className="glass m-3 ml-0 hidden w-[360px] shrink-0 flex-col rounded-[24px] p-5 lg:flex">
       <div className="mb-4 flex items-center justify-between"><div><p className="m-0 text-[10px] tracking-[.25em] text-slate-500">CURRENT ORDER</p><h2 className="m-0 mt-1 text-lg">CART</h2></div><span className="rounded-full border border-slate-200 bg-slate-100 px-3 py-1 text-xs">{cart.items.reduce((s,i)=>s+i.qty,0)} ITEMS</span></div>
-      <div className="soft-scroll min-h-0 flex-1 overflow-auto">{cart.items.length===0?<div className="grid h-full place-items-center text-sm text-slate-400">เลือกเมนูเพื่อเริ่มออเดอร์</div>:cart.items.map(i=><div key={i.key} className="mb-3 rounded-[18px] border border-slate-200 bg-slate-100/70 p-4"><div className="flex gap-3"><div className="flex-1"><b className="text-sm">{i.name}</b><small className="mt-1 block text-slate-500">{i.variant}</small></div><button onClick={()=>cart.removeItem(i.key)} className="text-slate-500 hover:text-red-600"><Trash2 size={16}/></button></div><div className="mt-3 flex items-center justify-between"><div className="flex items-center gap-2"><button onClick={()=>cart.updateQuantity(i.key,i.qty-1)} className="grid h-9 w-9 place-items-center rounded-xl border border-slate-300 bg-white"><Minus size={13}/></button><span className="w-5 text-center">{i.qty}</span><button onClick={()=>cart.updateQuantity(i.key,i.qty+1)} className="grid h-9 w-9 place-items-center rounded-xl border border-slate-300 bg-white"><Plus size={13}/></button></div><b className="text-[#765b08]">฿{(i.price*i.qty).toFixed(0)}</b></div></div>)}</div>
+      <div className="soft-scroll min-h-0 flex-1 overflow-auto">{cart.items.length===0?<div className="grid h-full place-items-center text-sm text-slate-400">เลือกเมนูเพื่อเริ่มออเดอร์</div>:cart.items.map(i=><div key={i.key} className="mb-3 rounded-[18px] border border-slate-200 bg-slate-100/70 p-4"><div className="flex gap-3"><div className="flex-1"><b className="text-sm">{i.name}</b><small className="mt-1 block text-slate-500">{i.variant}</small></div><button onClick={()=>cart.removeItem(i.key)} className="text-slate-500 hover:text-red-600"><Trash2 size={16}/></button></div><div className="mt-3 flex items-center justify-between"><div className="flex items-center gap-2"><button onClick={()=>updateCartQuantity(i.key,i.qty-1)} className="grid h-9 w-9 place-items-center rounded-xl border border-slate-300 bg-white"><Minus size={13}/></button><span className="w-5 text-center">{i.qty}</span><button onClick={()=>updateCartQuantity(i.key,i.qty+1)} className="grid h-9 w-9 place-items-center rounded-xl border border-slate-300 bg-white"><Plus size={13}/></button></div><b className="text-[#765b08]">฿{(i.price*i.qty).toFixed(0)}</b></div></div>)}</div>
       <div className="border-t border-slate-300 pt-4"><div className="mb-2 flex justify-between text-sm text-slate-600"><span>Subtotal</span><span>฿{cart.getSubtotal().toFixed(0)}</span></div><div className="mb-4 flex justify-between text-xl font-semibold"><span>Total</span><span className="text-[#765b08]">฿{cart.getTotal().toFixed(0)}</span></div><button disabled={!cart.items.length} onClick={openPayment} className="flex w-full items-center justify-center gap-2 rounded-2xl bg-[#d4af37] py-3 font-bold text-black disabled:opacity-30"><WalletCards size={18}/>CHECKOUT / PAY</button></div>
     </aside>
 
-    {selected&&<div className="fixed inset-0 z-50 grid place-items-center bg-black/55 p-4" onMouseDown={()=>setSelected(null)}><div className="card w-full max-w-md border border-slate-300 bg-white p-6 shadow-2xl" onMouseDown={e=>e.stopPropagation()}><div className="flex items-start justify-between"><div><p className="gold text-[10px] tracking-[.25em]">{selected.category||"DRINK"}</p><h3 className="mt-1 text-xl">{selected.name}</h3></div><button onClick={()=>setSelected(null)}><X/></button></div><p className="mt-5 text-xs uppercase tracking-widest text-slate-500">Choose variant</p><div className="mt-3 grid gap-2">{selected.variants.map(v=><button key={v.label} onClick={()=>{cart.addItem({id:selected.id,name:selected.name,variant:v.label,price:selected.price});setSelected(null)}} className="rounded-2xl border border-slate-300 bg-slate-50 px-4 py-3 text-left hover:border-[#c59b19]">{v.label||"Standard"} <span className="float-right font-semibold text-[#765b08]">฿{selected.price.toFixed(0)}</span></button>)}</div></div></div>}
+    {selected&&<div className="fixed inset-0 z-50 grid place-items-center bg-black/55 p-4" onMouseDown={()=>setSelected(null)}><div className="card w-full max-w-md border border-slate-300 bg-white p-6 shadow-2xl" onMouseDown={e=>e.stopPropagation()}><div className="flex items-start justify-between"><div><p className="gold text-[10px] tracking-[.25em]">{selected.category||"DRINK"}</p><h3 className="mt-1 text-xl">{selected.name}</h3></div><button onClick={()=>setSelected(null)}><X/></button></div><p className="mt-5 text-xs uppercase tracking-widest text-slate-500">Choose variant</p><div className="mt-3 grid gap-2">{selected.variants.map(v=><button key={v.label} disabled={!v.available} onClick={()=>addVariant(selected,v)} className="rounded-2xl border border-slate-300 bg-slate-50 px-4 py-3 text-left hover:border-[#c59b19] disabled:bg-slate-100 disabled:text-slate-400"><span>{v.label||"Standard"}{!v.available&&<small className="ml-2 text-red-600">หมดชั่วคราว</small>}{v.available&&v.lowStock&&<small className="ml-2 text-amber-700">เหลือประมาณ {v.maxServings} แก้ว</small>}</span><span className="float-right font-semibold text-[#765b08]">฿{selected.price.toFixed(0)}</span>{!v.available&&v.missingIngredients?.length>0&&<small className="mt-1 block text-xs text-red-500">ขาด: {v.missingIngredients.map(i=>i.name).join(", ")}</small>}</button>)}</div></div></div>}
 
     {payOpen&&<div className="fixed inset-0 z-50 grid place-items-center bg-black/55 p-4"><div className="card w-full max-w-md border border-slate-300 bg-white p-6 shadow-2xl"><div className="flex justify-between"><div><p className="gold text-[10px] tracking-[.25em]">PAYMENT</p><h3 className="mt-1 text-2xl font-semibold">ยอดชำระ ฿{cart.getTotal().toFixed(0)}</h3></div><button disabled={busy} onClick={()=>setPayOpen(false)} className="disabled:cursor-not-allowed disabled:opacity-30"><X/></button></div>
       <div className="mt-5 grid grid-cols-2 gap-2 rounded-2xl bg-slate-100 p-1"><button onClick={()=>setMethod("cash")} className={"rounded-xl p-3 "+(method==="cash"?"bg-[#d4af37] font-semibold text-black shadow-sm":"text-slate-700")}>Cash</button><button onClick={()=>setMethod("promptpay")} className={"rounded-xl p-3 "+(method==="promptpay"?"bg-[#d4af37] font-semibold text-black shadow-sm":"text-slate-700")}>PromptPay</button></div>
