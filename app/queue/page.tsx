@@ -1,7 +1,7 @@
 "use client";
 
 import {useEffect,useMemo,useState} from "react";
-import {BellRing,CheckCircle2,ChevronRight,Layers3,PackageCheck,Play,Sparkles,X} from "lucide-react";
+import {BellRing,CheckCircle2,ChevronRight,Layers3,PackageCheck,Play,X} from "lucide-react";
 import AuthGate from "@/components/auth-gate";
 import {api,type Bootstrap,type Session} from "@/lib/api-client";
 
