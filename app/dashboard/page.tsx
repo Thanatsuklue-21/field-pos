@@ -81,7 +81,7 @@ function View() {
       {d?.profitEstimated && (
         <div className="mt-4 rounded-2xl border border-amber-400/25 bg-amber-400/[.08] p-4 text-sm text-amber-800">
           <b>ESTIMATED PROFIT</b>
-          <p className="mt-1 text-xs text-amber-100/70">
+          <p className="mt-1 text-xs text-amber-900/75">
             ตัวเลขกำไรเดือนนี้มีต้นทุนที่ยังไม่ยืนยัน ({d.costQuality.status})
             จึงยังไม่ใช่กำไรจริงขั้นสุดท้าย
           </p>
@@ -111,7 +111,7 @@ function View() {
             {(d?.recommendations || []).map((x, i) => (
               <div
                 key={i}
-                className="rounded-[22px] border border-slate-100 bg-slate-50 p-4"
+                className="rounded-[22px] border border-slate-200 bg-slate-100/70 p-4"
               >
                 <b>{x.title}</b>
                 <p className="mt-1 text-sm text-slate-600">{x.detail}</p>
@@ -128,7 +128,7 @@ function View() {
             {(d?.topItems || []).map((x, i) => (
               <div
                 key={x.name}
-                className="flex justify-between rounded-2xl bg-slate-50 p-3"
+                className="flex justify-between rounded-2xl bg-slate-100/80 p-3"
               >
                 <span>
                   {i + 1}. {x.name}
@@ -173,7 +173,7 @@ function View() {
             <h2 className="text-base">OPERATING PATTERN · 14 DAYS</h2>
           </div>
           <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4">
-            <div className="rounded-2xl bg-slate-50 p-3">
+            <div className="rounded-2xl bg-slate-100/80 p-3">
               <small className="text-slate-500">Peak Hour</small>
               <div className="mt-1 text-lg">
                 {d?.analytics?.peakHour
@@ -181,19 +181,19 @@ function View() {
                   : "—"}
               </div>
             </div>
-            <div className="rounded-2xl bg-slate-50 p-3">
+            <div className="rounded-2xl bg-slate-100/80 p-3">
               <small className="text-slate-500">วันเด่น</small>
               <div className="mt-1 text-lg">
                 {d?.analytics?.bestWeekday?.label || "—"}
               </div>
             </div>
-            <div className="rounded-2xl bg-slate-50 p-3">
+            <div className="rounded-2xl bg-slate-100/80 p-3">
               <small className="text-slate-500">ยอดเฉลี่ย/วัน</small>
               <div className="mt-1 text-lg">
                 ฿{Number(d?.analytics?.avgDailyRevenue || 0).toFixed(0)}
               </div>
             </div>
-            <div className="rounded-2xl bg-slate-50 p-3">
+            <div className="rounded-2xl bg-slate-100/80 p-3">
               <small className="text-slate-500">ออเดอร์เฉลี่ย/วัน</small>
               <div className="mt-1 text-lg">
                 {Number(d?.analytics?.avgDailyOrders || 0).toFixed(1)}
@@ -216,7 +216,7 @@ function View() {
               .map((x) => (
                 <div
                   key={x.id}
-                  className="flex items-center justify-between gap-3 rounded-2xl bg-slate-50 p-3"
+                  className="flex items-center justify-between gap-3 rounded-2xl bg-slate-100/80 p-3"
                 >
                   <div>
                     <b className="text-sm">{x.name}</b>
