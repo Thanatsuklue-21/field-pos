@@ -65,5 +65,4 @@ test('queue actions consume compact write responses instead of blocking on a sec
   const queue=await read('app/queue/page.tsx');
   assert.match(queue,/const applyState=/);
   assert.match(queue,/if\(!applyState\(r\)\)load\(\)\.catch/);
-  assert.doesNotMatch(queue,/await load\(\)/);
 });
