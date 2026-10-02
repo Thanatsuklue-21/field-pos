@@ -200,7 +200,6 @@ function QueueView({session}:{session:Session}){
                   {done&&<CheckCircle2 size={22} className="text-emerald-600"/>}
                 </div>
 
-                {recommended&&!selectedTask&&<button disabled={busy!==""} onClick={()=>selectTask(order.id,index)} className="mt-3 w-full rounded-xl bg-[#1d1d1f] py-2.5 text-sm font-bold text-white disabled:opacity-40">รับทำเมนูนี้</button>}
                 {canCallEarly&&<button disabled={busy!==""} onClick={()=>callReadyItem(order,item,index)} className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-[#d4af37] bg-white py-2.5 text-sm font-semibold text-[#765b08] disabled:opacity-40"><BellRing size={16}/>เรียกบัตร {order.pagerNo} · รับเมนูนี้ก่อน</button>}
               </div>;
             })}
