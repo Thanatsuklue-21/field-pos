@@ -139,3 +139,17 @@ test('non-stock route is ignored by stock handler', async () => {
   });
   assert.equal(res,null);
 });
+
+
+test('stock API returns 409 when purchase date is already closed',async()=>{
+  const db=fakeDb();
+  const state=JSON.parse(db.storage.document);state.closes=[{id:'closed-1',date:'2026-10-01'}];db.storage.document=JSON.stringify(state);
+  const res=await handleStockApi({
+    path:'/api/stock/transactions',method:'POST',
+    user:{id:'admin-1',role:'admin',permissions:{}},db,now:Date.parse('2026-10-03T03:00:00Z'),
+    body:{requestKey:'purchase-closed-api',ingredientId:'matcha',type:'PURCHASE',qtyDelta:100,unit:'g',purchaseCost:200,purchaseDate:'2026-10-01',supplier:'Supplier A'}
+  });
+  assert.equal(res.status,409);
+  assert.equal(res.body.error,'purchase_date_closed');
+  assert.equal(db.rows.length,0);
+});
