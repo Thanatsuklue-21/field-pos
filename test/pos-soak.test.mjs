@@ -359,6 +359,41 @@ test('refund replay is idempotent',async()=>{
   assert.equal(JSON.parse(db.storage.document).sales[0].status,'refunded');
 });
 
+test('all-cash split payment can refund before production and restores reserved stock once',async()=>{
+  const db=fakeDb();
+  const started=await startSplitPayment({db,user,now:6000,body:{requestKey:'split-refund-cash-start',cart:[{...cart[0],qty:2}],date}});
+  await paySplitPayment({db,user,now:6010,body:{requestKey:'split-refund-cash-pay1',sessionId:started.session.id,method:'cash',received:55,allocations:[{index:0,qty:1}]}});
+  const completed=await paySplitPayment({db,user,now:6020,body:{requestKey:'split-refund-cash-pay2',sessionId:started.session.id,method:'cash',received:55,allocations:[{index:0,qty:1}]}});
+  let state=JSON.parse(db.storage.document);
+  assert.equal(state.sales[0].payment,'split');
+  assert.equal(state.ingredients.matcha.qty,990);
+  const refunded=await refundSale({db,user,now:6030,body:{requestKey:'split-refund-cash-full',saleId:completed.saleId,reason:'cancelled'}});
+  assert.equal(refunded.refundMethod,'split_cash');
+  assert.equal(refunded.stockRestored,true);
+  state=JSON.parse(db.storage.document);
+  assert.equal(state.sales[0].status,'refunded');
+  assert.equal(state.orders[0].status,'void');
+  assert.equal(state.ingredients.matcha.qty,1000);
+  assert.equal(state.ingredients.milk.qty,30000);
+  assert.equal(state.ingredients.cup16.qty,500);
+  assert.equal(db.storage.stockTx.filter(args=>args[2]==='REFUND_REVERSAL').length,3);
+});
+
+test('mixed cash and PromptPay split refund requires manual PromptPay confirmation',async()=>{
+  const db=fakeDb();
+  const started=await startSplitPayment({db,user,now:6100,body:{requestKey:'split-refund-mixed-start',cart:[{...cart[0],qty:2}],date}});
+  await paySplitPayment({db,user,now:6110,body:{requestKey:'split-refund-mixed-cash',sessionId:started.session.id,method:'cash',received:55,allocations:[{index:0,qty:1}]}});
+  const completed=await paySplitPayment({db,user,now:6120,body:{requestKey:'split-refund-mixed-pp',sessionId:started.session.id,method:'promptpay',paymentReference:'pp-split-1',paymentVerified:'charge-paid',paymentProviderAmount:55,allocations:[{index:0,qty:1}]}});
+  await assert.rejects(()=>refundSale({db,user,now:6130,body:{requestKey:'split-refund-mixed-no-confirm',saleId:completed.saleId}}),/promptpay_manual_refund_required/);
+  const refunded=await refundSale({db,user,now:6140,body:{requestKey:'split-refund-mixed-confirm',saleId:completed.saleId,manualConfirmed:true,manualReference:'refund-bank-001',reason:'full refund'}});
+  assert.equal(refunded.refundMethod,'split_manual');
+  assert.equal(refunded.stockRestored,true);
+  const state=JSON.parse(db.storage.document);
+  assert.equal(state.sales[0].refundReference,'refund-bank-001');
+  assert.deepEqual(state.sales[0].refundPayments.map(x=>x.method),['cash','promptpay']);
+  assert.equal(state.ingredients.matcha.qty,1000);
+});
+
 test('PromptPay refund requires explicit external manual confirmation and reference',async()=>{
   const db=fakeDb();
   await checkoutPos({db,user,now:5300,body:{requestKey:'refund-pp-checkout-001',cart,date,payment:'promptpay',paymentVerified:'chrg_test_paid',paymentProviderAmount:55,paymentReference:'chrg_test_paid'}});
