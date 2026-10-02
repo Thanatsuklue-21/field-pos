@@ -79,7 +79,7 @@ function View() {
       </p>
       <h1 className="mt-1 text-2xl font-semibold">DASHBOARD</h1>
       {d?.profitEstimated && (
-        <div className="mt-4 rounded-2xl border border-amber-400/25 bg-amber-400/[.08] p-4 text-sm text-amber-200">
+        <div className="mt-4 rounded-2xl border border-amber-400/25 bg-amber-400/[.08] p-4 text-sm text-amber-800">
           <b>ESTIMATED PROFIT</b>
           <p className="mt-1 text-xs text-amber-100/70">
             ตัวเลขกำไรเดือนนี้มีต้นทุนที่ยังไม่ยืนยัน ({d.costQuality.status})
