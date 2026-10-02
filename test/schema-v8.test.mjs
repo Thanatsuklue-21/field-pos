@@ -12,6 +12,11 @@ test('v8 schema contains required additive tables', () => {
   assert.match(sql, /CREATE INDEX IF NOT EXISTS field_stock_transactions_ingredient_created/);
   assert.match(sql, /CREATE INDEX IF NOT EXISTS field_stock_transactions_reference/);
   assert.match(sql, /CREATE INDEX IF NOT EXISTS field_cost_snapshots_sale/);
+  assert.match(sql, /CREATE TABLE IF NOT EXISTS field_purchase_records/);
+  assert.match(sql, /CREATE INDEX IF NOT EXISTS field_purchase_records_ingredient_date/);
+  assert.match(sql, /CREATE TABLE IF NOT EXISTS field_cost_history/);
+  assert.match(sql, /cost_status IN \('MISSING','PROVISIONAL','CONFIRMED'\)/);
+  assert.match(sql, /effective_date TEXT NOT NULL/);
 });
 
 test('v8 stock ledger enforces non-zero quantity', () => {

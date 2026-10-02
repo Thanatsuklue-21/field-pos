@@ -147,6 +147,20 @@ test('checkout request replay never duplicates sale, bill or stock deduction',as
   assert.equal(afterReplay.ingredients.cup16.qty,afterFirst.ingredients.cup16.qty);
 });
 
+test('normal checkout rejects payments array and requires a split session',async()=>{
+  const db=fakeDb();
+  await assert.rejects(()=>checkoutPos({
+    db,user,now:300,
+    body:{
+      requestKey:'checkout-multi-payment-001',cart,date,payment:'cash',received:100,
+      payments:[{method:'cash',received:55,allocations:[{index:0,qty:1}]}]
+    }
+  }),error=>error?.status===409&&error?.message==='multi_payment_requires_split_session');
+  const state=JSON.parse(db.storage.document);
+  assert.equal(state.sales.length,0);
+  assert.equal(state.ingredients.matcha.qty,1000);
+});
+
 test('split payment survives intermediate reloads and creates one sale + one queue only at completion',async()=>{
   const db=fakeDb();
   const splitCart=[{id:'matcha-latte',variant:'100%',qty:3}];
