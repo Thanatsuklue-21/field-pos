@@ -79,7 +79,7 @@ function View() {
       </p>
       <h1 className="mt-1 text-2xl font-semibold">DASHBOARD</h1>
       {d?.profitEstimated && (
-        <div className="mt-4 rounded-2xl border border-amber-400/25 bg-amber-400/[.08] p-4 text-sm text-amber-200">
+        <div className="mt-4 rounded-2xl border border-amber-400/25 bg-amber-400/[.08] p-4 text-sm text-amber-800">
           <b>ESTIMATED PROFIT</b>
           <p className="mt-1 text-xs text-amber-100/70">
             ตัวเลขกำไรเดือนนี้มีต้นทุนที่ยังไม่ยืนยัน ({d.costQuality.status})
@@ -90,7 +90,7 @@ function View() {
       <div className="mt-5 grid grid-cols-2 gap-3 xl:grid-cols-4">
         {cards.map(([l, v, u]) => (
           <div key={String(l)} className="glass card p-5">
-            <small className="text-neutral-500">{l}</small>
+            <small className="text-slate-500">{l}</small>
             <strong className="mt-3 block text-2xl">
               {u === "฿" ? "฿" : ""}
               {Number(v).toLocaleString(undefined, {
@@ -111,10 +111,10 @@ function View() {
             {(d?.recommendations || []).map((x, i) => (
               <div
                 key={i}
-                className="rounded-[22px] border border-white/5 bg-white/[.025] p-4"
+                className="rounded-[22px] border border-slate-100 bg-slate-50 p-4"
               >
                 <b>{x.title}</b>
-                <p className="mt-1 text-sm text-neutral-400">{x.detail}</p>
+                <p className="mt-1 text-sm text-slate-600">{x.detail}</p>
               </div>
             ))}
           </div>
@@ -128,7 +128,7 @@ function View() {
             {(d?.topItems || []).map((x, i) => (
               <div
                 key={x.name}
-                className="flex justify-between rounded-2xl bg-white/[.025] p-3"
+                className="flex justify-between rounded-2xl bg-slate-50 p-3"
               >
                 <span>
                   {i + 1}. {x.name}
@@ -137,27 +137,27 @@ function View() {
               </div>
             ))}
           </div>
-          <div className="mt-5 grid grid-cols-2 gap-3 border-t border-white/5 pt-5 md:grid-cols-4">
+          <div className="mt-5 grid grid-cols-2 gap-3 border-t border-slate-100 pt-5 md:grid-cols-4">
             <div>
-              <small className="text-neutral-500">COGS เดือนนี้</small>
+              <small className="text-slate-500">COGS เดือนนี้</small>
               <div className="mt-1 text-xl">
                 ฿{(d?.cogs || 0).toLocaleString()}
               </div>
             </div>
             <div>
-              <small className="text-neutral-500">Operating Expenses</small>
+              <small className="text-slate-500">Operating Expenses</small>
               <div className="mt-1 text-xl">
                 ฿{(d?.expenses || 0).toLocaleString()}
               </div>
             </div>
             <div>
-              <small className="text-neutral-500">Purchase Spend</small>
+              <small className="text-slate-500">Purchase Spend</small>
               <div className="mt-1 text-xl">
                 ฿{(d?.purchaseSpend || 0).toLocaleString()}
               </div>
             </div>
             <div>
-              <small className="text-neutral-500">ลูกค้า CRM</small>
+              <small className="text-slate-500">ลูกค้า CRM</small>
               <div className="mt-1 flex items-center gap-2 text-xl">
                 <Users size={18} />
                 {d?.customers || 0}
@@ -173,34 +173,34 @@ function View() {
             <h2 className="text-base">OPERATING PATTERN · 14 DAYS</h2>
           </div>
           <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4">
-            <div className="rounded-2xl bg-white/[.025] p-3">
-              <small className="text-neutral-500">Peak Hour</small>
+            <div className="rounded-2xl bg-slate-50 p-3">
+              <small className="text-slate-500">Peak Hour</small>
               <div className="mt-1 text-lg">
                 {d?.analytics?.peakHour
                   ? String(d.analytics.peakHour.hour).padStart(2, "0") + ":00"
                   : "—"}
               </div>
             </div>
-            <div className="rounded-2xl bg-white/[.025] p-3">
-              <small className="text-neutral-500">วันเด่น</small>
+            <div className="rounded-2xl bg-slate-50 p-3">
+              <small className="text-slate-500">วันเด่น</small>
               <div className="mt-1 text-lg">
                 {d?.analytics?.bestWeekday?.label || "—"}
               </div>
             </div>
-            <div className="rounded-2xl bg-white/[.025] p-3">
-              <small className="text-neutral-500">ยอดเฉลี่ย/วัน</small>
+            <div className="rounded-2xl bg-slate-50 p-3">
+              <small className="text-slate-500">ยอดเฉลี่ย/วัน</small>
               <div className="mt-1 text-lg">
                 ฿{Number(d?.analytics?.avgDailyRevenue || 0).toFixed(0)}
               </div>
             </div>
-            <div className="rounded-2xl bg-white/[.025] p-3">
-              <small className="text-neutral-500">ออเดอร์เฉลี่ย/วัน</small>
+            <div className="rounded-2xl bg-slate-50 p-3">
+              <small className="text-slate-500">ออเดอร์เฉลี่ย/วัน</small>
               <div className="mt-1 text-lg">
                 {Number(d?.analytics?.avgDailyOrders || 0).toFixed(1)}
               </div>
             </div>
           </div>
-          <p className="mt-3 text-xs text-neutral-500">
+          <p className="mt-3 text-xs text-slate-500">
             คำนวณจาก {d?.analytics?.observedDays || 0}{" "}
             วันข้อมูลจริงภายในหน้าต่าง 14 วัน
           </p>
@@ -216,17 +216,17 @@ function View() {
               .map((x) => (
                 <div
                   key={x.id}
-                  className="flex items-center justify-between gap-3 rounded-2xl bg-white/[.025] p-3"
+                  className="flex items-center justify-between gap-3 rounded-2xl bg-slate-50 p-3"
                 >
                   <div>
                     <b className="text-sm">{x.name}</b>
-                    <small className="mt-1 block text-neutral-500">
+                    <small className="mt-1 block text-slate-500">
                       คงเหลือ ~{Number(x.daysCover).toFixed(1)} วัน · Stock{" "}
                       {Number(x.qty).toFixed(0)} {x.unit}
                     </small>
                   </div>
                   <div className="text-right">
-                    <small className="text-neutral-500">แนะนำสั่ง</small>
+                    <small className="text-slate-500">แนะนำสั่ง</small>
                     <div className="gold font-semibold">
                       {Number(x.suggestQty).toLocaleString()} {x.unit}
                     </div>
@@ -234,7 +234,7 @@ function View() {
                 </div>
               ))}
             {!(d?.analytics?.purchaseRecommendations || []).length && (
-              <div className="rounded-2xl bg-emerald-400/[.05] p-4 text-sm text-emerald-300">
+              <div className="rounded-2xl bg-emerald-400/[.05] p-4 text-sm text-emerald-700">
                 ยังไม่มีวัตถุดิบที่ต้องเร่งสั่งจากอัตราการใช้ 14 วัน
               </div>
             )}
@@ -243,7 +243,7 @@ function View() {
       </div>
       {(d?.lowStock || []).length > 0 && (
         <div className="mt-4 rounded-[28px] border border-amber-400/20 bg-amber-400/[.06] p-5">
-          <div className="flex items-center gap-2 text-amber-300">
+          <div className="flex items-center gap-2 text-amber-700">
             <AlertTriangle size={18} />
             <b>LOW STOCK</b>
           </div>
@@ -251,7 +251,7 @@ function View() {
             {d!.lowStock.map((x) => (
               <span
                 key={x.name}
-                className="rounded-full bg-black/20 px-3 py-2 text-xs"
+                className="rounded-full bg-slate-100 px-3 py-2 text-xs"
               >
                 {x.name} {x.qty}/{x.safetyStock} {x.unit}
               </span>
