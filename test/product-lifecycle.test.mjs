@@ -20,3 +20,11 @@ test('product management exposes active and archived lists and submits a reason'
   assert.match(ui,/archiveReason/);
   assert.match(ui,/reason:archiveReason/);
 });
+
+test('archived product restore always returns to draft and keeps archive history',async()=>{
+  const api=await read('lib/api.mjs'),ui=await read('app/products/page.tsx');
+  assert.match(api,/product_restore/);
+  assert.match(api,/product\.enabled=false;product\.archived=false/);
+  assert.match(api,/archiveHistory/);
+  assert.match(ui,/RESTORE AS DRAFT/);
+});

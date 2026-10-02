@@ -29,13 +29,13 @@ test('stock write uses server actor and timestamp', () => {
 
 function fakeDb() {
   const storage={
-    rows:[],audits:[],revision:0,
+    rows:[],purchases:[],costHistory:[],audits:[],revision:0,
     document:JSON.stringify({ingredients:{matcha:{name:'Matcha',qty:1000,unit:'g',unitCost:2}}})
   };
 
   function executeOn(target,{sql,args=[]}){
-    if(sql.startsWith('SELECT * FROM field_stock_transactions')){
-      return {rows:target.rows.filter(row=>row.request_key===args[0])};
+    if(sql.includes('FROM field_stock_transactions t')){
+      return {rows:target.rows.filter(row=>row.request_key===args[0]).map(row=>{const p=target.purchases.find(x=>x.stock_transaction_id===row.id),h=target.costHistory.find(x=>x.purchase_record_id===p?.id);return {...row,purchase_total_cost:p?.total_cost??null,purchased_at:p?.purchased_at??null,package_qty:p?.package_qty??null,package_unit:p?.package_unit??'',supplier:p?.supplier??'',source_url:p?.source_url??'',image_url:p?.image_url??'',purchase_note:p?.note??'',cost_status:h?.cost_status??null}})};
     }
     if(sql.includes('INSERT INTO field_stock_transactions')){
       target.rows.push({
@@ -45,6 +45,8 @@ function fakeDb() {
       });
       return {rows:[]};
     }
+    if(sql.startsWith('INSERT INTO field_purchase_records')){target.purchases.push({id:args[0],stock_transaction_id:args[1],supplier:args[3],purchased_at:args[4],package_qty:args[5],package_unit:args[6],total_cost:args[9],source_url:args[11],image_url:args[12],note:args[13]});return {rows:[]}}
+    if(sql.startsWith('INSERT INTO field_cost_history')){target.costHistory.push({id:args[0],purchase_record_id:args[2],unit_cost:args[3],cost_status:args[4]});return {rows:[]}}
     if(sql.startsWith('SELECT revision,document FROM field_state')){
       return {rows:[{revision:target.revision,document:target.document}]};
     }
@@ -62,10 +64,10 @@ function fakeDb() {
     get rows(){return storage.rows},
     get audits(){return storage.audits},
     async transaction(){
-      const draft={rows:storage.rows.map(x=>({...x})),audits:storage.audits.map(x=>[...x]),revision:storage.revision,document:storage.document};
+      const draft={rows:storage.rows.map(x=>({...x})),purchases:storage.purchases.map(x=>({...x})),costHistory:storage.costHistory.map(x=>({...x})),audits:storage.audits.map(x=>[...x]),revision:storage.revision,document:storage.document};
       return {
         async execute(query){return executeOn(draft,typeof query==='string'?{sql:query,args:[]}:query)},
-        async commit(){storage.rows=draft.rows;storage.audits=draft.audits;storage.revision=draft.revision;storage.document=draft.document},
+        async commit(){storage.rows=draft.rows;storage.purchases=draft.purchases;storage.costHistory=draft.costHistory;storage.audits=draft.audits;storage.revision=draft.revision;storage.document=draft.document},
         async rollback(){}
       };
     },
@@ -159,4 +161,15 @@ test('purchase cost updates unit cost and creates one expense only once', async 
   assert.equal(state.ingredients.matcha.unitCost,2);
   assert.equal(state.expenses.length,1);
   assert.equal(state.expenses[0].amount,400);
+  assert.equal(db.storage.costHistory.length,1);
+  assert.equal(db.storage.costHistory[0].cost_status,'CONFIRMED');
+});
+
+test('purchase idempotency includes supplier package and cost evidence',async()=>{
+  const db=fakeDb();
+  const input={requestKey:'purchase-evidence-0001',ingredientId:'matcha',type:'PURCHASE',qtyDelta:250,unit:'g',purchaseCost:519,purchaseDate:'2026-10-02',supplier:'Supplier A',packageQty:250,packageUnit:'bag',costStatus:'CONFIRMED'};
+  assert.equal((await recordStockTransaction({db,actorId:'admin-1',input,now:700})).status,'created');
+  assert.equal((await recordStockTransaction({db,actorId:'admin-1',input:{...input,supplier:'Supplier B'},now:800})).status,'conflict');
+  assert.equal((await recordStockTransaction({db,actorId:'admin-1',input:{...input,purchaseCost:500},now:900})).status,'conflict');
+  assert.equal(db.storage.costHistory.length,1);
 });

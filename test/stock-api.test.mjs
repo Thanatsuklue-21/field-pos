@@ -11,13 +11,13 @@ test('stock write permissions are explicit', () => {
 
 function fakeDb() {
   const storage={
-    rows:[],audits:[],revision:0,
+    rows:[],purchases:[],costHistory:[],audits:[],revision:0,
     document:JSON.stringify({ingredients:{matcha:{name:'Matcha',qty:1000,unit:'g',unitCost:2}}})
   };
   function executeOn(target,query){
     const {sql,args=[]}=typeof query==='string'?{sql:query,args:[]}:query;
-    if(sql.startsWith('SELECT * FROM field_stock_transactions')){
-      return {rows:target.rows.filter(row=>row.request_key===args[0])};
+    if(sql.includes('FROM field_stock_transactions t')){
+      return {rows:target.rows.filter(row=>row.request_key===args[0]).map(row=>{const p=target.purchases.find(x=>x.stock_transaction_id===row.id),h=target.costHistory.find(x=>x.purchase_record_id===p?.id);return {...row,purchase_total_cost:p?.total_cost??null,purchased_at:p?.purchased_at??null,package_qty:p?.package_qty??null,package_unit:p?.package_unit??'',supplier:p?.supplier??'',source_url:p?.source_url??'',image_url:p?.image_url??'',purchase_note:p?.note??'',cost_status:h?.cost_status??null}})};
     }
     if(sql.includes('INSERT INTO field_stock_transactions')){
       target.rows.push({
@@ -26,6 +26,8 @@ function fakeDb() {
         actor_id:args[9],created_at:args[10],
       });return {rows:[]};
     }
+    if(sql.startsWith('INSERT INTO field_purchase_records')){target.purchases.push({id:args[0],stock_transaction_id:args[1],supplier:args[3],purchased_at:args[4],package_qty:args[5],package_unit:args[6],total_cost:args[9],source_url:args[11],image_url:args[12],note:args[13]});return {rows:[]}}
+    if(sql.startsWith('INSERT INTO field_cost_history')){target.costHistory.push({id:args[0],purchase_record_id:args[2],cost_status:args[4]});return {rows:[]}}
     if(sql.startsWith('SELECT revision,document FROM field_state')){
       return {rows:[{revision:target.revision,document:target.document}]};
     }
@@ -42,10 +44,10 @@ function fakeDb() {
     get rows(){return storage.rows},
     get audits(){return storage.audits},
     async transaction(){
-      const draft={rows:storage.rows.map(x=>({...x})),audits:storage.audits.map(x=>[...x]),revision:storage.revision,document:storage.document};
+      const draft={rows:storage.rows.map(x=>({...x})),purchases:storage.purchases.map(x=>({...x})),costHistory:storage.costHistory.map(x=>({...x})),audits:storage.audits.map(x=>[...x]),revision:storage.revision,document:storage.document};
       return {
         async execute(query){return executeOn(draft,query)},
-        async commit(){storage.rows=draft.rows;storage.audits=draft.audits;storage.revision=draft.revision;storage.document=draft.document},
+        async commit(){storage.rows=draft.rows;storage.purchases=draft.purchases;storage.costHistory=draft.costHistory;storage.audits=draft.audits;storage.revision=draft.revision;storage.document=draft.document},
         async rollback(){}
       };
     },
