@@ -75,13 +75,13 @@ test('payment success makes the physical pager card visually dominant',async()=>
   assert.match(pos,/บัตร \{lastSale\.pager/);
 });
 
-test('queue shows pager number on the card, final call button, and Bluetooth reminder',async()=>{
+test('queue keeps the physical Bluetooth pager obvious in the guided flow',async()=>{
   const queue=await read('app/queue/page.tsx');
-  assert.match(queue,/บัตรเรียกคิว/);
-  assert.match(queue,/เรียกบัตร \$\{o\.pagerNo/);
+  assert.match(queue,/บัตร \{current\.pagerNo/);
   assert.match(queue,/เครื่องเรียกคิว Bluetooth/);
   assert.match(queue,/กดเครื่องเรียกแล้ว \/ ปิด/);
   assert.match(queue,/setCallPrompt/);
+  assert.match(queue,/notifyCustomer/);
 });
 
 test('cold-start schema checks are batched instead of one Turso request per DDL statement',async()=>{
@@ -113,12 +113,31 @@ test('cash checkout skips the redundant replay read while PromptPay still replay
 });
 
 
-test('queue production flow uses done -> call pager -> deliver wording',async()=>{
+test('queue production flow is a guided one-action state machine',async()=>{
   const queue=await read('app/queue/page.tsx');
   assert.doesNotMatch(queue,/ทำถัดไป/);
-  assert.match(queue,/ทำเสร็จ \{ready\+1\}\/\{qty\}/);
-  assert.match(queue,/action:"call"/);
-  assert.match(queue,/เรียกบัตร \$\{o\.pagerNo/);
-  assert.match(queue,/ส่งมอบคิวนี้/);
-  assert.match(queue,/รอคิวก่อนหน้า/);
+  assert.match(queue,/เริ่มทำเมนูนี้/);
+  assert.match(queue,/กำลังทำ:/);
+  assert.match(queue,/เสร็จแก้ว /);
+  assert.match(queue,/เมนูถัดไป:/);
+  assert.match(queue,/action:"notify"/);
+  assert.match(queue,/action:"deliver"/);
+  assert.match(queue,/ส่งมอบครบทั้งบิล/);
+  assert.match(queue,/เรียกลูกค้ามารับที่เสร็จแล้ว/);
+});
+
+
+test('guided queue keeps only the current FIFO order actionable while later orders are summaries',async()=>{
+  const queue=await read('app/queue/page.tsx');
+  assert.match(queue,/const current=orders\[0\]\|\|null/);
+  assert.match(queue,/const waiting=orders\.slice\(1\)/);
+  assert.match(queue,/คิวถัดไป/);
+  assert.match(queue,/เตรียมพร้อมได้ แต่ส่งมอบยังเรียง FIFO/);
+});
+
+test('multi-cup menu uses one action position that progresses cup counts',async()=>{
+  const queue=await read('app/queue/page.tsx');
+  assert.match(queue,/activeQty>1\?"เสร็จแก้ว "/);
+  assert.match(queue,/completeUnit\(current,activeIndex\)/);
+  assert.match(queue,/selectItem\(current,activeIndex\)/);
 });
