@@ -482,3 +482,105 @@ test('pager call remains FIFO even when a later order finishes production first'
   const secondCall=await queuePosAction({db,user,now:4070,body:{requestKey:'fifo-call-002b',action:'call',orderId:second.orderId}});
   assert.equal(secondCall.action,'call');
 });
+
+
+test('guided queue can notify customer after a partial ready item without marking it delivered',async()=>{
+  const db=fakeDb();
+  const paid=await checkoutPos({
+    db,user,now:7000,
+    body:{requestKey:'guided-notify-checkout-001',cart:[{...cart[0],qty:2}],date,payment:'cash',received:200}
+  });
+
+  await queuePosAction({
+    db,user,now:7010,
+    body:{requestKey:'guided-select-001',action:'select',orderId:paid.orderId,itemIndex:0,selected:true}
+  });
+  let state=JSON.parse(db.storage.document);
+  let order=state.orders.find(o=>o.id===paid.orderId);
+  assert.equal(order.status,'making');
+  assert.equal(order.items[0].prepSelected,true);
+
+  await queuePosAction({
+    db,user,now:7020,
+    body:{requestKey:'guided-ready-001',action:'start',orderId:paid.orderId,itemIndex:0,unit:1}
+  });
+
+  const notified=await queuePosAction({
+    db,user,now:7030,
+    body:{requestKey:'guided-notify-001',action:'notify',orderId:paid.orderId}
+  });
+  assert.equal(notified.action,'notify');
+
+  state=JSON.parse(db.storage.document);
+  order=state.orders.find(o=>o.id===paid.orderId);
+  assert.equal(order.notifyCount,1);
+  assert.equal(order.notifiedAt,7030);
+  assert.equal(order.lastNotifyReadyQty,1);
+  assert.equal(order.items[0].readyQty,1);
+  assert.equal(order.items[0].calledQty||0,0);
+  assert.notEqual(order.status,'returned');
+
+  const replay=await queuePosAction({
+    db,user,now:7040,
+    body:{requestKey:'guided-notify-001',action:'notify',orderId:paid.orderId}
+  });
+  assert.equal(replay.replayed,true);
+  assert.equal(JSON.parse(db.storage.document).orders.find(o=>o.id===paid.orderId).notifyCount,1);
+});
+
+test('guided deliver requires all drinks ready and completes the FIFO order in one action',async()=>{
+  const seed=initialState();seed.settings.pagerCount=1;
+  const db=fakeDb(seed);
+  const paid=await checkoutPos({
+    db,user,now:7100,
+    body:{requestKey:'guided-deliver-checkout-001',cart:[{...cart[0],qty:2}],date,payment:'cash',received:200}
+  });
+
+  await queuePosAction({
+    db,user,now:7110,
+    body:{requestKey:'guided-deliver-ready-001',action:'start',orderId:paid.orderId,itemIndex:0,unit:1}
+  });
+  await assert.rejects(
+    ()=>queuePosAction({db,user,now:7120,body:{requestKey:'guided-deliver-early-001',action:'deliver',orderId:paid.orderId}}),
+    e=>e?.status===409&&e?.message==='order_not_ready'
+  );
+
+  await queuePosAction({
+    db,user,now:7130,
+    body:{requestKey:'guided-deliver-ready-002',action:'start',orderId:paid.orderId,itemIndex:0,unit:2}
+  });
+  const delivered=await queuePosAction({
+    db,user,now:7140,
+    body:{requestKey:'guided-deliver-001',action:'deliver',orderId:paid.orderId}
+  });
+  assert.equal(delivered.action,'deliver');
+  assert.equal(delivered.orders.some(o=>o.id===paid.orderId),false);
+
+  const state=JSON.parse(db.storage.document);
+  const order=state.orders.find(o=>o.id===paid.orderId);
+  assert.equal(order.status,'returned');
+  assert.equal(order.deliveredAt,7140);
+  assert.equal(order.items[0].calledQty,2);
+
+  const next=await checkoutPos({
+    db,user,now:7150,
+    body:{requestKey:'guided-deliver-checkout-002',cart,date,payment:'cash',received:100}
+  });
+  assert.equal(next.pager,1);
+});
+
+test('guided notify remains FIFO even if a later order has a ready drink',async()=>{
+  const db=fakeDb();
+  const first=await checkoutPos({db,user,now:7200,body:{requestKey:'guided-fifo-checkout-001',cart,date,payment:'cash',received:100}});
+  const second=await checkoutPos({db,user,now:7210,body:{requestKey:'guided-fifo-checkout-002',cart,date,payment:'cash',received:100}});
+
+  await queuePosAction({db,user,now:7220,body:{requestKey:'guided-fifo-ready-002',action:'start',orderId:second.orderId,itemIndex:0,unit:1}});
+  await assert.rejects(
+    ()=>queuePosAction({db,user,now:7230,body:{requestKey:'guided-fifo-notify-002',action:'notify',orderId:second.orderId}}),
+    e=>e?.status===409&&e?.message==='fifo_violation'
+  );
+
+  await queuePosAction({db,user,now:7240,body:{requestKey:'guided-fifo-ready-001',action:'start',orderId:first.orderId,itemIndex:0,unit:1}});
+  const ok=await queuePosAction({db,user,now:7250,body:{requestKey:'guided-fifo-notify-001',action:'notify',orderId:first.orderId}});
+  assert.equal(ok.action,'notify');
+});
