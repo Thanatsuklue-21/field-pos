@@ -146,6 +146,7 @@ function PosView({session}:{session:Session}){
     const body={requestKey:p.requestKey,date:p.date,cart:p.cart,payment:"promptpay",received:p.total,paymentReference:p.paymentReference,paymentVerified:verified,customerId:p.customerId};
     const r=await api<any>("/api/pos/checkout",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify(body)});
     pendingClear();
+    cart.clearCart();
     finishSale(r,{payment:"promptpay",total:p.total,received:p.total,recovered:true});
     return r;
   }
