@@ -18,7 +18,7 @@ async function handle(request,{params}){
   let status=200,responseHeaders={},chunks=[];
   const res={
     writeHead(code,h={}){status=code;responseHeaders={...responseHeaders,...h};},
-    end(chunk=""){if(chunk!==undefined&&chunk!==null)chunks.push(typeof chunk==="string"?chunk:String(chunk));},
+    end(chunk=""){if(chunk!==undefined&&chunk!==null)chunks.push(typeof chunk==="string"||chunk instanceof Uint8Array?chunk:String(chunk));},
     status(code){status=code;return this;},
     json(value){responseHeaders["Content-Type"]="application/json; charset=utf-8";chunks=[JSON.stringify(value)];return this;}
   };
@@ -26,7 +26,8 @@ async function handle(request,{params}){
   const origin=process.env.PUBLIC_ORIGIN;
   if(!origin||!origin.startsWith("https://"))return Response.json({error:"origin_not_configured"},{status:503});
   await createApi({db:getDb(),origin})(req,res);
-  return new Response(chunks.join(""),{status,headers:responseHeaders});
+  const responseBody=chunks.length===1?chunks[0]:chunks.map(x=>typeof x==="string"?x:new TextDecoder().decode(x)).join("");
+  return new Response(responseBody,{status,headers:responseHeaders});
 }
 export const GET=handle;
 export const POST=handle;
