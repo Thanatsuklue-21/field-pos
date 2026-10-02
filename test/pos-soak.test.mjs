@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  checkoutPos,queuePosAction,startSplitPayment,paySplitPayment,getSplitPaymentStatus,voidSale,refundSale
+  checkoutPos,queuePosAction,startSplitPayment,paySplitPayment,getSplitPaymentStatus,listSplitPaymentSessions,resolveSplitPayment,voidSale,refundSale
 } from '../lib/pos-api.mjs';
 
 function initialState(){
@@ -233,6 +233,19 @@ test('split payment survives intermediate reloads and creates one sale + one que
   assert.equal(state.ingredients.cup16.qty,500-3);
   assert.equal(db.storage.stockTx.length,3);
   assert.equal(db.storage.costSnapshots.length,1);
+});
+
+test('expired partial split requires admin resolution without restoring stock or releasing pager',async()=>{
+  const db=fakeDb();
+  const started=await startSplitPayment({db,user,now:1000,body:{requestKey:'split-expiry-start-001',cart:[{...cart[0],qty:2}],date}});
+  await paySplitPayment({db,user,now:1100,body:{requestKey:'split-expiry-pay-001',sessionId:started.session.id,method:'cash',received:55,allocations:[{index:0,qty:1}]}});
+  const before=JSON.parse(db.storage.document).ingredients.matcha.qty;
+  const listed=await listSplitPaymentSessions({db,now:1000+(4*60*60*1000)+1});
+  assert.equal(listed.sessions[0].status,'requires_resolution');
+  assert.equal(JSON.parse(db.storage.document).ingredients.matcha.qty,before);
+  const resumed=await resolveSplitPayment({db,user,now:20_000_000,body:{requestKey:'split-expiry-resolve-001',sessionId:started.session.id}});
+  assert.equal(resumed.session.status,'collecting');
+  assert.ok(resumed.session.expiresAt>20_000_000);
 });
 
 
