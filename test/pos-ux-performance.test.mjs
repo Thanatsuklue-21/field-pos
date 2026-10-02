@@ -75,10 +75,12 @@ test('payment success makes the physical pager card visually dominant',async()=>
   assert.match(pos,/บัตร \{lastSale\.pager/);
 });
 
-test('queue shows pager number on the card, final call button, and Bluetooth reminder',async()=>{
+test('queue shows pager number, guided active work, and Bluetooth reminder',async()=>{
   const queue=await read('app/queue/page.tsx');
   assert.match(queue,/บัตรเรียกคิว/);
-  assert.match(queue,/เรียกบัตร \$\{o\.pagerNo/);
+  assert.match(queue,/รับทำเมนูนี้/);
+  assert.match(queue,/กำลังทำ/);
+  assert.match(queue,/เสร็จแก้ว/);
   assert.match(queue,/เครื่องเรียกคิว Bluetooth/);
   assert.match(queue,/กดเครื่องเรียกแล้ว \/ ปิด/);
   assert.match(queue,/setCallPrompt/);
@@ -113,12 +115,14 @@ test('cash checkout skips the redundant replay read while PromptPay still replay
 });
 
 
-test('queue production flow uses done -> call pager -> deliver wording',async()=>{
+test('queue production flow is one guided task at a time with optional early pickup',async()=>{
   const queue=await read('app/queue/page.tsx');
   assert.doesNotMatch(queue,/ทำถัดไป/);
-  assert.match(queue,/ทำเสร็จ \{ready\+1\}\/\{qty\}/);
-  assert.match(queue,/action:"call"/);
-  assert.match(queue,/เรียกบัตร \$\{o\.pagerNo/);
+  assert.match(queue,/ลำดับงานแนะนำ/);
+  assert.match(queue,/รับทำเมนูนี้/);
+  assert.match(queue,/เสร็จแก้ว/);
+  assert.match(queue,/action:"call_item"/);
+  assert.match(queue,/รับเมนูนี้ก่อน/);
+  assert.match(queue,/รับทั้งหมด/);
   assert.match(queue,/ส่งมอบคิวนี้/);
-  assert.match(queue,/รอคิวก่อนหน้า/);
 });
