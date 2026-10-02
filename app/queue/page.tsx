@@ -105,7 +105,7 @@ function QueueView({session}:{session:Session}){
     setStepNotice("");
     try{
       const r=await queueAction({orderId:order.id,itemIndex,action:"select",selected:true});
-      applyState(r);
+      if(!applyState(r))load().catch(()=>{});
     }catch(e:any){
       setMsg(e.message==="queue_state_changed"?"สถานะคิวเปลี่ยนแล้ว ระบบโหลดข้อมูลล่าสุดให้":e.message);
       await load().catch(()=>{});
@@ -123,6 +123,7 @@ function QueueView({session}:{session:Session}){
     try{
       const r=await queueAction({orderId:order.id,itemIndex,action:"start",unit:nextUnit});
       const updatedOrders=applyState(r)||[];
+      if(!updatedOrders.length)load().catch(()=>{});
       const updated=updatedOrders.find(x=>x.id===order.id);
       const updatedItem=updated?.items?.[itemIndex];
       if(updated&&updatedItem&&(Number(updatedItem.readyQty)||0)>=(Number(updatedItem.qty)||0)){
@@ -174,6 +175,7 @@ function QueueView({session}:{session:Session}){
     try{
       const r=await queueAction({orderId:order.id,action:"deliver"});
       const updated=applyState(r)||[];
+      if(!updated.length)load().catch(()=>{});
       const next=updated[0];
       setStepNotice(next?"ส่งมอบ "+order.queueNo+" แล้ว → คิวถัดไป "+next.queueNo:"ส่งมอบ "+order.queueNo+" แล้ว · ไม่มีคิวค้าง");
     }catch(e:any){
