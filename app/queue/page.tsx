@@ -1,5 +1,7 @@
 "use client";
 
+// FIELD guided single-task production flow: recommend → acknowledge → complete → call → handoff.
+
 import {useEffect,useMemo,useState} from "react";
 import {BellRing,CheckCircle2,ChevronRight,Layers3,Sparkles,X} from "lucide-react";
 import AuthGate from "@/components/auth-gate";
