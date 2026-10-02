@@ -1,9 +1,10 @@
 import {randomUUID} from 'node:crypto';
-import {getDb} from '../lib/db.mjs';
+import {getDb,ensureSchemaMigrations} from '../lib/db.mjs';
 import {SCHEMA} from '../lib/schema.mjs';
 import {hashPassword,validPassword,validUsername} from '../lib/security.mjs';
 const db=getDb();
 for(const sql of SCHEMA)await db.execute(sql);
+await ensureSchemaMigrations(db);
 const username=String(process.argv[2]||'admin').toLowerCase();
 if(!validUsername(username))throw new Error('Username must be 3–32 ASCII letters, digits, . _ or -');
 const count=await db.execute("SELECT COUNT(*) AS n FROM field_users WHERE role='admin'");
