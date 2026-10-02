@@ -61,10 +61,11 @@ test('ordinary cards avoid expensive backdrop blur while navigation can stay fro
   assert.match(css,/backdrop-filter:blur\(14px\)/);
 });
 
-test('queue actions consume compact write responses instead of blocking on a second bootstrap fetch',async()=>{
+test('queue actions consume compact write responses and only fall back to bootstrap when a response is incomplete',async()=>{
   const queue=await read('app/queue/page.tsx');
   assert.match(queue,/const applyState=/);
-  assert.match(queue,/if\(!applyState\(r\)\)load\(\)\.catch/);
+  assert.match(queue,/const updatedOrders=applyState\(r\)\|\|\[\]/);
+  assert.match(queue,/load\(\)\.catch\(\(\)=>\{\}\)/);
 });
 
 
