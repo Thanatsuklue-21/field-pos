@@ -2,7 +2,7 @@
 
 // FIELD guided single-task production flow: recommend → acknowledge → complete → call → handoff.
 
-import {useEffect,useMemo,useState} from "react";
+import {useEffect,useMemo,useRef,useState} from "react";
 import {BellRing,CheckCircle2,ChevronRight,Layers3,Sparkles,X} from "lucide-react";
 import AuthGate from "@/components/auth-gate";
 import {api,type Bootstrap,type Session} from "@/lib/api-client";
@@ -39,15 +39,33 @@ function QueueView({session}:{session:Session}){
   const [busy,setBusy]=useState("");
   const [msg,setMsg]=useState("");
   const [notice,setNotice]=useState("");
+  const busyRef=useRef(false);
+  busyRef.current=busy!=="";
   const [callPrompt,setCallPrompt]=useState<{queueNo:string;pagerNo:number;scope:string}|null>(null);
 
-  const load=()=>api<Bootstrap>("/api/pos/bootstrap").then(setData);
-  useEffect(()=>{load().catch(()=>{})},[]);
+  const load=()=>api<Bootstrap>("/api/pos/bootstrap").then(next=>setData(prev=>!prev||next.revision>=prev.revision?next:prev));
+  useEffect(()=>{
+    let disposed=false,inFlight=false;
+    const refresh=async()=>{
+      if(disposed||inFlight||busyRef.current||document.visibilityState==="hidden")return;
+      inFlight=true;
+      try{
+        const next=await api<Bootstrap>("/api/pos/bootstrap");
+        if(!disposed)setData(prev=>!prev||next.revision>=prev.revision?next:prev);
+      }catch(e:any){if(!disposed)setMsg(e.message==="network_unavailable"?"ขาดการเชื่อมต่อ · ตรวจคิวล่าสุดก่อนทำต่อ":e.message)}
+      finally{inFlight=false}
+    };
+    refresh();
+    const timer=window.setInterval(refresh,5000);
+    window.addEventListener("focus",refresh);
+    document.addEventListener("visibilitychange",refresh);
+    return()=>{disposed=true;window.clearInterval(timer);window.removeEventListener("focus",refresh);document.removeEventListener("visibilitychange",refresh)};
+  },[]);
 
   const applyState=(r:any)=>{
     const orders=Array.isArray(r?.orders)?r.orders:null;
     if(!orders)return false;
-    setData(prev=>prev?{...prev,revision:Number(r.revision)||prev.revision,orders}:prev);
+    setData(prev=>prev&&Number(r.revision)>=prev.revision?{...prev,revision:Number(r.revision),orders}:prev);
     return true;
   };
 
@@ -81,10 +99,10 @@ function QueueView({session}:{session:Session}){
   }
 
   async function completeNext(order:QOrder,item:QItem,itemIndex:number){
-    const next=n(item.readyQty)+1;
+    const expectedReadyQty=n(item.readyQty);
     setBusy("done:"+order.id+":"+itemIndex);setMsg("");
     try{
-      const r=await api<any>("/api/pos/queue",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({requestKey:crypto.randomUUID(),orderId:order.id,itemIndex,action:"start",unit:next})});
+      const r=await api<any>("/api/pos/queue",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({requestKey:crypto.randomUUID(),orderId:order.id,itemIndex,action:"complete_item",expectedReadyQty})});
       if(!applyState(r))load().catch(()=>{});
       const updated=(r?.orders||[]).find((x:any)=>x.id===order.id);
       const updatedItem=updated?.items?.[itemIndex];
@@ -148,7 +166,7 @@ function QueueView({session}:{session:Session}){
           <div className="mt-1 text-sm text-slate-600">{selectedTask.item.variant} · {selectedTask.item.qty} แก้ว · เสร็จ {n(selectedTask.item.readyQty)}/{n(selectedTask.item.qty)}</div>
         </div>
         <button disabled={busy!==""} onClick={()=>completeNext(selectedTask.order,selectedTask.item,selectedTask.index)} className="rounded-2xl bg-[#d4af37] px-6 py-4 text-base font-black text-black disabled:opacity-40">
-          เสร็จแก้ว {n(selectedTask.item.readyQty)+1}/{n(selectedTask.item.qty)}
+          ทำเสร็จ {n(selectedTask.item.qty)-n(selectedTask.item.readyQty)} แก้ว
         </button>
       </div>}
 

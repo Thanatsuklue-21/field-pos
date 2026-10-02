@@ -1,21 +1,37 @@
-# FIELD CAFÉ POS — Vercel + Turso deployment package
+# FIELD Café POS
 
-This package serves the current standalone POS HTML at `/` and runs the Admin account and import API on Vercel Functions, backed by Turso (libSQL). The POS screen itself still stores sales, queue, stock and customers on its device. Publishing this package **does not turn checkout into a shared online POS**. Account management in the HTML is also device-local; the API Admin is provisioned separately. Do not rely on the API database as an automatic backup of live sales.
+Single-shop POS for a small team, using Next.js/React, Vercel Functions and Turso/libSQL. The current application is the `app/` frontend: `/pos`, `/queue`, `/orders`, `/stock`, `/costs`, `/recipes`, `/expenses`, `/customers`, `/close`, `/reports`, `/backup`, `/users`, `/audit` and `/settings`.
 
-## Before deployment
+## Core operating flow
 
-1. Create/link a verified Vercel project and a Turso database through the Vercel Marketplace. Associate the resource with that project. The integration exposes `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN` as server environment variables. Never add these secrets to the HTML or Git.
-2. Configure `PUBLIC_ORIGIN` to the exact HTTPS origin of the deployment, such as `https://field-pos.example.com`, in Vercel project settings. Preview domains need a matching setting too, or writes are rejected.
-3. From the `vercel-turso` directory, install dependencies (`npm install`), run `npm test`, and use Vercel's project link/deploy workflow. The root directory of the Vercel project must be **this** directory.
-4. Run `npm run bootstrap -- admin` from a secure terminal with the Turso environment variables to initialize schema and create the first API Admin. It prompts for a password. On a noninteractive runner, provide `FIELD_ADMIN_PASSWORD` as an ephemeral secret for that one command and remove it immediately.
-5. Check `GET /api/health` and the protected API after deployment. Keep a backup of the device's JSON export and test database restore.
+1. Owner confirms menu prices, variants, recipes, purchase costs and ingredient balances. Review SYSTEM READINESS in Settings before opening.
+2. Checkout validates the current server menu and stock, calculates the bill on the server and commits the sale, stock ledger, cost snapshot, loyalty points and queue in one write transaction.
+3. Cash checkout checks received money and calculates change. PromptPay requires the configured provider to verify payment; displaying a QR alone does not mark a bill paid. Split payments reserve ingredients until completion or resolution.
+4. Queue recommends work for the oldest customer. Accept a menu, then complete all its remaining identical cups with one button. Ready menus may be called early, or all drinks called together. Calls and final handoff enforce FIFO on the server. The Bluetooth pager still requires pressing its number on the physical device.
+5. Print or reprint receipts from the order details in `/orders` using the browser print dialog.
+6. Close day requires counted cash, no unfinished orders and no unresolved payments. Sales, refunds, expenses and purchase expenses for a closed day are blocked.
 
-## Controlled historical data migration
+Checkout and queue operations have durable request keys stored in `field_pos_requests`. A request key cannot be reused with changed input or a different actor. The state document retains its last 100 request responses for compatibility; the durable table protects newer transactions after that cache expires. Requests predating this migration are protected only while their legacy keys remain available.
 
-Export JSON from the offline POS Admin settings. Obtain an API session with `POST /api/auth/login` and use its `csrf` response in `X-CSRF-Token` for subsequent writes (same HTTPS origin). Submit the JSON as `state` to `POST /api/import/preview`. Compare `counts` with the device. Check `GET /api/state` for its `revision`, then call `POST /api/import/commit` with `{ "state": <export>, "expectedRevision": 0 }`. Replacing an already imported state requires the current revision and `"replace": true`. Every import preserves the prior version in `field_state_versions`. Server accounts are never imported from the browser. The JSON includes customer and sales information; handle it as private data.
+## Setup and validation
 
-## What remains for a production online POS
+- Node.js 20 or newer; use `npm ci`, `npm test`, `npm run build`, then `npm run dev` or `npm start`.
+- Set `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN`, and `PUBLIC_ORIGIN` to the exact application origin. Keep credentials server-side. Schema installation is additive and runs before API handling.
+- Provision the first API admin with `npm run bootstrap -- admin`; the bootstrap prompts securely for a password. Do not initialize another admin when using an existing configured database.
+- Configure the PromptPay provider in the deployment environment if QR payments are needed. Check its readiness in Settings.
+- Session cookies are HttpOnly/Secure/SameSite=Strict; writes validate origin, CSRF and server action permissions.
+- `npm test` includes real file-backed libSQL tests of checkout, stock deduction, grouped preparation, FIFO, close day, split payments, concurrent retries and durable idempotency.
 
-The backend needs server-authoritative sales, payments, queue, stock, expenses, close day and loyalty operations with atomic transactions and idempotency keys. Then the HTML needs to use server login and those APIs, reconcile the existing offline data once, and handle offline conflict/retry. Until that work and a browser/device test pass, use the current HTML on one device and its JSON backups. Publicly hosting the current HTML alone provides no shared transactions.
+## Data and recovery
 
-The former `server/` package in this workspace targeted PostgreSQL. This is a separate Turso package; never run the PostgreSQL migration against Turso.
+The server is authoritative for transactions made in the current Next.js app. IndexedDB caches bootstrap data for viewing when connectivity is lost; checkout is blocked offline. Keep an unresolved checkout's original request key and reconcile its result instead of creating a new bill.
+
+Use the full backup page for state plus stock, purchase, recipe, cost and durable request ledgers. Version 2 backups include request keys; version 1 backups remain readable. Export reads all tables in a consistent transaction. Restore requires an owner confirmation and matching revision. Test recovery on a separate database before using it for an emergency.
+
+`public/index.html`, `index.html` and `public/online*.js` are legacy clients, not the primary application. Do not use their local state as the source of truth for current shared sales or assume that legacy JSON exports contain the full accounting ledgers.
+
+## Deployment and practical limits
+
+Push a tested change to the connected GitHub repository and verify that Vercel Production is READY for the exact commit. Smoke-test `/api/health`, page routes and unauthenticated API denial. A successful page response alone does not verify logged-in checkout or the live payment provider.
+
+The application keeps its shared business document in `field_state`, with transaction locking and separate accounting ledgers. This is suited to the current small shop, but historical sales growth should be measured before expanding to many users. Cash reconciliation assumes expenses are paid outside the sales drawer; cash-in/out tracking must be added if expenses are paid from it. LINE integration, automatic bank reconciliation, printer/pager hardware control and Android device acceptance are separate checks and must not be inferred from passing backend tests.

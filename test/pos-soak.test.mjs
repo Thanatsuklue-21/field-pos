@@ -22,10 +22,12 @@ function initialState(){
 }
 
 function fakeDb(seed=initialState()){
-  const storage={revision:0,document:JSON.stringify(seed),audits:[],stockTx:[],costSnapshots:[]};
+  const storage={revision:0,document:JSON.stringify(seed),audits:[],stockTx:[],costSnapshots:[],requests:[]};
 
   function executeOn(target,query){
     const {sql,args=[]}=typeof query==='string'?{sql:query,args:[]}:query;
+    if(sql.startsWith('SELECT response,request_hash FROM field_pos_requests'))return {rows:target.requests.filter(r=>r.key===args[0]).map(r=>({response:r.response,request_hash:r.hash}))};
+    if(sql.startsWith('INSERT INTO field_pos_requests')){target.requests.push({key:args[0],response:args[1],hash:args[3]});return {rows:[]}}
     if(sql.startsWith('SELECT revision,document FROM field_state')){
       return {rows:[{revision:target.revision,document:target.document}]};
     }
@@ -58,6 +60,7 @@ function fakeDb(seed=initialState()){
         document:storage.document,
         audits:storage.audits.slice(),
         stockTx:storage.stockTx.slice(),
+        requests:storage.requests.slice(),
         costSnapshots:storage.costSnapshots.slice()
       };
       return {
@@ -67,7 +70,7 @@ function fakeDb(seed=initialState()){
           storage.document=draft.document;
           storage.audits=draft.audits;
           storage.stockTx=draft.stockTx;
-          storage.costSnapshots=draft.costSnapshots;
+          storage.costSnapshots=draft.costSnapshots;storage.requests=draft.requests;
         },
         async rollback(){}
       };

@@ -10,8 +10,7 @@ import {useCartStore} from "@/stores/cart-store";
 export default function Pos(){return <AuthGate>{s=><PosView session={s}/>}</AuthGate>}
 
 function localDate(){
-  const d=new Date();
-  return [d.getFullYear(),String(d.getMonth()+1).padStart(2,"0"),String(d.getDate()).padStart(2,"0")].join("-");
+  return new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Bangkok",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date());
 }
 
 const PENDING_KEY="field-pos-pending-promptpay-v1";
@@ -172,8 +171,11 @@ function PosView({session}:{session:Session}){
   function errorText(code:string){
     return code==="cash_insufficient"?"จำนวนเงินรับไม่พอ":
       code==="menu_unavailable"?"มีเมนูในตะกร้าที่ปิดขาย ราคาเป็น 0 หรือยังไม่พร้อมขาย กรุณาตรวจตะกร้าใหม่":
+      code==="request_key_conflict"?"รายการเดิมถูกเปลี่ยน กรุณาตรวจประวัติออเดอร์ก่อนชำระอีกครั้ง":
+      code==="recipe_unavailable"?"สูตรเมนูยังไม่ครบหรือมีปริมาณผิด กรุณาตรวจสูตรก่อนขาย":
+      code==="day_closed"?"วันนี้ปิดยอดแล้ว ไม่สามารถรับรายการขายเพิ่มได้":
       code==="variant_unavailable"?"ตัวเลือกของเมนูในตะกร้าเปลี่ยนแล้ว กรุณาเลือกเมนูใหม่":
-      code==="stock_shortage"?"วัตถุดิบไม่เพียงพอสำหรับออเดอร์นี้":
+      (code==="stock_shortage"||code.startsWith("stock_shortage:"))?"วัตถุดิบไม่เพียงพอสำหรับออเดอร์นี้":
       code==="promptpay_timeout"?"หมดเวลารอ PromptPay ระบบจะเก็บรายการไว้และตรวจสอบอีกครั้งเมื่อกลับมา":
       code==="promptpay_failed"?"PromptPay ไม่สำเร็จ กรุณาลองใหม่":
       code==="pending_promptpay_exists"?"มี PromptPay รายการเดิมที่ยังไม่สิ้นสุด กรุณาชำระหรือรอผลรายการเดิม":

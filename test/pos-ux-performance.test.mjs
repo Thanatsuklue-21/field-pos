@@ -80,7 +80,7 @@ test('queue shows pager number, guided active work, and Bluetooth reminder',asyn
   assert.match(queue,/บัตรเรียกคิว/);
   assert.match(queue,/รับทำเมนูนี้/);
   assert.match(queue,/กำลังทำ/);
-  assert.match(queue,/เสร็จแก้ว/);
+  assert.match(queue,/ทำเสร็จ/);
   assert.match(queue,/เครื่องเรียกคิว Bluetooth/);
   assert.match(queue,/กดเครื่องเรียกแล้ว \/ ปิด/);
   assert.match(queue,/setCallPrompt/);
@@ -120,7 +120,7 @@ test('queue production flow is one guided task at a time with optional early pic
   assert.doesNotMatch(queue,/ทำถัดไป/);
   assert.match(queue,/ลำดับงานแนะนำ/);
   assert.match(queue,/รับทำเมนูนี้/);
-  assert.match(queue,/เสร็จแก้ว/);
+  assert.match(queue,/ทำเสร็จ/);
   assert.match(queue,/action:"call_item"/);
   assert.match(queue,/รับเมนูนี้ก่อน/);
   assert.match(queue,/รับทั้งหมด/);
