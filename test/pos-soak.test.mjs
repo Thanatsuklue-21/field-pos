@@ -114,6 +114,7 @@ test('30-order POS soak keeps bills unique, stock exact and queues returnable',a
 
   const state=JSON.parse(db.storage.document);
   assert.equal(state.sales.length,30);
+  assert.ok(state.sales.every(s=>s.costStatus==='CONFIRMED'));
   assert.equal(new Set(state.sales.map(s=>s.id)).size,30);
   assert.equal(new Set(state.sales.map(s=>s.billNo)).size,30);
   assert.equal(state.orders.length,30);
