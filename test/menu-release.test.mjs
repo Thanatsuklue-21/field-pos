@@ -6,12 +6,12 @@ import {previewSnapshot} from '../lib/migration.mjs';
 const html=await readFile(new URL('../public/index.html',import.meta.url),'utf8');
 
 test('approved menu release keeps FIELD approved recipes active',()=>{
-  assert.match(html,/FIELD_DATA_VERSION='2026-09-30\.74'/);
+  assert.match(html,/FIELD_DATA_VERSION='2026-10-02\.75'/);
   assert.match(html,/id:'pure-matcha'.*enabled:true.*iced\(\{matcha:4,water:170\}\)/);
   assert.match(html,/id:'matcha-latte'.*enabled:true.*iced\(\{matcha:5,water:40,milk:110,syrup:15\}\)/);
   assert.match(html,/id:'matcha-signature'.*name:'FIELD Matcha Signature'.*v\('100%'.*condensed:30,evaporated:30,milk:70.*v\('50%'.*condensed:15,evaporated:30,milk:70.*v\('0%'.*evaporated:15,milk:110/);
   assert.match(html,/id:'coconut-matcha'.*price:60,enabled:true.*coconutSyrup:20/);
-  assert.match(html,/id:'field-orange'.*price:45,enabled:true.*orangeMix:25,water:145/);
+  assert.match(html,/id:'field-orange'.*price:45,enabled:true.*orangeMix:35,water:135/);
   assert.match(html,/id:'strawberry-matcha'.*enabled:false/);
   assert.match(html,/id:'honey-matcha'.*price:0,enabled:false/);
   const activeCoconut=html.match(/\{id:'coconut-matcha'.*?\},\n/)?.[0]||'';
@@ -33,11 +33,11 @@ test('current authoritative unit costs and ice policy are locked',()=>{
   assert.match(html,/Direct COGS = วัตถุดิบตามสูตรจริง \+ บรรจุภัณฑ์ \+ น้ำแข็ง/);
 });
 
-test('approved Orange actual COGS math uses 25g concentrate and 145g water',()=>{
+test('approved Orange actual COGS math uses 35g concentrate and 135g water',()=>{
   const unit={orange:.225,water:.0075};
   const fixed=1.8+.5+.2+.5+.525;
-  const orange=25*unit.orange+145*unit.water+fixed;
-  assert.equal(Number(orange.toFixed(4)),10.2375);
+  const orange=35*unit.orange+135*unit.water+fixed;
+  assert.equal(Number(orange.toFixed(4)),12.4125);
 });
 
 test('Turso snapshot migration preserves historical sales, orders and cost rows',()=>{
