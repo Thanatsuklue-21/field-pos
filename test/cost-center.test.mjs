@@ -24,3 +24,5 @@ test('supplier comparison uses normalized cost and keeps purchase evidence',()=>
   assert.equal(rows[0].best,true);
   assert.equal(rows[0].imageUrl,'https://example.com/a.jpg');
 });
+
+test('missing ingredient cost marks menu profit as estimated',()=>{const [row]=buildMenuCostRows({menu:[{id:'m',name:'M',price:50,variants:[{label:'S',recipe:{items:{known:1,unknown:2}}}]}],ingredients:{known:{unitCost:5,costStatus:'CONFIRMED'},unknown:{unitCost:0,costStatus:'MISSING'}}});assert.equal(row.actualCogs,5);assert.equal(row.isEstimated,true);assert.equal(row.costStatus,'MISSING');assert.deepEqual(row.missingCost,['unknown'])});

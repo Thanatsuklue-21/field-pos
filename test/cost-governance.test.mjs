@@ -1,0 +1,2 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {readFile} from 'node:fs/promises';const read=p=>readFile(new URL('../'+p,import.meta.url),'utf8');
+test('stock settings cannot overwrite unit cost outside purchase history',async()=>{const api=await read('lib/api.mjs'),ui=await read('app/stock/page.tsx');assert.match(api,/cost_update_requires_purchase_record/);const fn=ui.slice(ui.indexOf('async function saveIngredient'),ui.indexOf('async function saveCount'));assert.doesNotMatch(fn,/unitCost/);assert.match(ui,/ต้องบันทึกจาก รับเข้า/)});
