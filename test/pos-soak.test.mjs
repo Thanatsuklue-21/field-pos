@@ -425,3 +425,60 @@ test('idempotent replay still succeeds after server business date changes',async
   assert.equal(replay.orderId,first.orderId);
   assert.equal(JSON.parse(db.storage.document).sales.length,1);
 });
+
+
+test('order-level pager call requires all drinks ready and completes the whole order once',async()=>{
+  const db=fakeDb();
+  const paid=await checkoutPos({
+    db,user,now:3000,
+    body:{requestKey:'queue-call-checkout-001',cart:[{...cart[0],qty:2}],date,payment:'cash',received:200}
+  });
+  let state=JSON.parse(db.storage.document);
+  const order=state.orders.find(o=>o.id===paid.orderId);
+  assert.ok(order);
+
+  await assert.rejects(
+    ()=>queuePosAction({db,user,now:3010,body:{requestKey:'queue-call-too-early-001',action:'call',orderId:order.id}}),
+    e=>e?.status===409&&e?.message==='order_not_ready'
+  );
+
+  await queuePosAction({db,user,now:3020,body:{requestKey:'queue-made-001',action:'start',orderId:order.id,itemIndex:0,unit:1}});
+  await queuePosAction({db,user,now:3030,body:{requestKey:'queue-made-002',action:'start',orderId:order.id,itemIndex:0,unit:2}});
+
+  const called=await queuePosAction({
+    db,user,now:3040,
+    body:{requestKey:'queue-call-001',action:'call',orderId:order.id}
+  });
+  assert.equal(called.action,'call');
+
+  state=JSON.parse(db.storage.document);
+  const ready=state.orders.find(o=>o.id===order.id);
+  assert.equal(ready.status,'ready');
+  assert.equal(ready.items[0].readyQty,2);
+  assert.equal(ready.items[0].calledQty,2);
+  assert.equal(ready.calledAt,3040);
+
+  const replay=await queuePosAction({
+    db,user,now:3050,
+    body:{requestKey:'queue-call-001',action:'call',orderId:order.id}
+  });
+  assert.equal(replay.replayed,true);
+});
+
+test('pager call remains FIFO even when a later order finishes production first',async()=>{
+  const db=fakeDb();
+  const first=await checkoutPos({db,user,now:4000,body:{requestKey:'fifo-call-checkout-001',cart,date,payment:'cash',received:100}});
+  const second=await checkoutPos({db,user,now:4010,body:{requestKey:'fifo-call-checkout-002',cart,date,payment:'cash',received:100}});
+
+  await queuePosAction({db,user,now:4020,body:{requestKey:'fifo-ready-002',action:'start',orderId:second.orderId,itemIndex:0,unit:1}});
+  await assert.rejects(
+    ()=>queuePosAction({db,user,now:4030,body:{requestKey:'fifo-call-002',action:'call',orderId:second.orderId}}),
+    e=>e?.status===409&&e?.message==='fifo_violation'
+  );
+
+  await queuePosAction({db,user,now:4040,body:{requestKey:'fifo-ready-001',action:'start',orderId:first.orderId,itemIndex:0,unit:1}});
+  await queuePosAction({db,user,now:4050,body:{requestKey:'fifo-call-001',action:'call',orderId:first.orderId}});
+  await queuePosAction({db,user,now:4060,body:{requestKey:'fifo-return-001',action:'return',orderId:first.orderId}});
+  const secondCall=await queuePosAction({db,user,now:4070,body:{requestKey:'fifo-call-002b',action:'call',orderId:second.orderId}});
+  assert.equal(secondCall.action,'call');
+});
