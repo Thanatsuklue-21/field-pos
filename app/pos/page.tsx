@@ -93,8 +93,9 @@ function PosView({session}:{session:Session}){
   const cashDelta=Number.isFinite(cashReceived)?cashReceived-total:NaN;
 
   function applyServerState(r:any){
-    if(!r?.state)return;
-    setData(prev=>prev?{...prev,revision:Number(r.revision)||prev.revision,orders:compactOrders(r.state)}:prev);
+    const orders=Array.isArray(r?.orders)?r.orders:(r?.state?compactOrders(r.state):null);
+    if(!orders)return;
+    setData(prev=>prev?{...prev,revision:Number(r.revision)||prev.revision,orders}:prev);
   }
 
   function finishSale(r:any,opts:{payment:"cash"|"promptpay";total:number;received:number;recovered?:boolean}){
