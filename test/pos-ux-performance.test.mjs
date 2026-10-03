@@ -177,3 +177,20 @@ test('mobile operational pages use compact density while preserving touch action
   assert.match(stock,/p-3 sm:p-5 md:p-7/);
   assert.match(orders,/p-3 sm:p-5 md:p-7/);
 });
+
+
+test('payment modal reviews cart items prices quantities and sweetness before confirmation',async()=>{
+  const pos=await read('app/pos/page.tsx');
+  assert.match(pos,/รายการที่สั่ง/);
+  assert.match(pos,/ทวนเมนู ราคา และระดับหวานก่อนรับเงิน/);
+  assert.match(pos,/orderOptionLabel/);
+  assert.match(pos,/หวานปกติ \(100%\)/);
+  assert.match(pos,/หวานน้อย \(50%\)/);
+  assert.match(pos,/ไม่หวาน \(0%\)/);
+  assert.match(pos,/\{i\.qty\} × ฿\{i\.price\.toFixed\(0\)\}/);
+  assert.match(pos,/cart\.removeItem\(i\.key\)/);
+  assert.match(pos,/updateCartQuantity\(i\.key,i\.qty-1\)/);
+  assert.match(pos,/updateCartQuantity\(i\.key,i\.qty\+1\)/);
+  assert.match(pos,/รวม \{cart\.items\.reduce\(\(s,i\)=>s\+i\.qty,0\)\} แก้ว/);
+  assert.match(pos,/max-h-\[94vh\]/);
+});
