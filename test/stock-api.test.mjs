@@ -153,3 +153,10 @@ test('stock API returns 409 when purchase date is already closed',async()=>{
   assert.equal(res.body.error,'purchase_date_closed');
   assert.equal(db.rows.length,0);
 });
+
+
+test('stock API returns 409 for future purchase date',async()=>{
+  const db=fakeDb();
+  const res=await handleStockApi({path:'/api/stock/transactions',method:'POST',user:{id:'admin-1',role:'admin',permissions:{}},db,now:Date.parse('2026-10-03T03:00:00Z'),body:{requestKey:'purchase-future-api',ingredientId:'matcha',type:'PURCHASE',qtyDelta:100,unit:'g',purchaseCost:200,purchaseDate:'2026-10-04'}});
+  assert.equal(res.status,409);assert.equal(res.body.error,'future_purchase_date');assert.equal(db.rows.length,0);
+});
