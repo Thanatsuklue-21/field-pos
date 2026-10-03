@@ -126,3 +126,35 @@ test('queue production flow is one guided task at a time with optional early pic
   assert.match(queue,/รับทั้งหมด/);
   assert.match(queue,/ส่งมอบคิวนี้/);
 });
+
+test('queue reads a compact snapshot and renders priced order details',async()=>{
+  const queue=await read('app/queue/page.tsx'),api=await read('lib/api.mjs'),posApi=await read('lib/pos-api.mjs');
+  assert.match(queue,/api<QueueSnapshot>\("\/api\/pos\/queue"\)/);
+  assert.doesNotMatch(queue,/api<Bootstrap>\("\/api\/pos\/bootstrap"\)/);
+  assert.match(api,/path==='\/api\/pos\/queue'&&method==='GET'/);
+  assert.match(api,/getQueueSnapshot/);
+  assert.match(posApi,/price:n\(x\.price\)/);
+  assert.match(queue,/ยอดรวม ฿/);
+  assert.match(queue,/ดูรายการ \/ แก้ไขออเดอร์/);
+});
+
+test('queue actions use optimistic feedback and delivery has a visible fixed toast',async()=>{
+  const queue=await read('app/queue/page.tsx');
+  assert.match(queue,/const optimistic=/);
+  assert.match(queue,/pulse\("กำลังส่งมอบ/);
+  assert.match(queue,/ส่งมอบ .*เรียบร้อยแล้ว/);
+  assert.match(queue,/fixed bottom-\[92px\]/);
+  assert.match(queue,/กำลังบันทึก\.\.\./);
+});
+
+test('cash order can be safely voided and loaded back into POS before production',async()=>{
+  const orders=await read('app/orders/page.tsx'),pos=await read('app/pos/page.tsx'),api=await read('lib/api.mjs');
+  assert.match(api,/productionStarted/);
+  assert.match(api,/id:x\.id,name:x\.name/);
+  assert.match(orders,/แก้ไข \/ ลด \/ เปลี่ยนเมนู/);
+  assert.match(orders,/cart\.replaceItems/);
+  assert.match(orders,/field-pos-edit-cash-v1/);
+  assert.match(orders,/heldCash:s\.total/);
+  assert.match(pos,/field-pos-edit-cash-v1/);
+  assert.match(pos,/ยอดเงินสดจากบิลเดิม/);
+});
