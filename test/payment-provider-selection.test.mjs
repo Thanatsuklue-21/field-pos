@@ -8,7 +8,9 @@ test('PromptPay API routes use provider adapter and preserve raw webhook body',a
   assert.match(route,/rawBody=raw/);
   assert.match(route,/body,rawBody/);
 });
-test('POS uses checkout request key as Beam idempotent payment reference',async()=>{
+test('POS reserves stock before creating Beam QR and uses reservation id as idempotent reference',async()=>{
   const pos=await read('app/pos/page.tsx');
-  assert.match(pos,/reference:requestKey/);
+  assert.match(pos,/\/api\/pos\/split\/start/);
+  assert.match(pos,/reference:next\.sessionId/);
+  assert.ok(pos.indexOf('/api/pos/split/start')<pos.indexOf('/api/payments/promptpay/create'));
 });
