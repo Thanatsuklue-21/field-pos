@@ -7,7 +7,7 @@ test('stock admin supports self-service master create edit archive restore reset
   const api=await read('lib/api.mjs'),ui=await read('app/stock/page.tsx');
   assert.match(api,/path==='\/api\/stock\/ingredients'&&method==='POST'/);
   assert.match(api,/stockIngredientActionMatch/);
-  assert.match(api,/stock_ingredient_reset/);
+  assert.match(api,/stock_ingredient_'\+action/);assert.match(api,/before_ingredient_test_reset/);
   assert.match(api,/purchaseEditMatch/);
   assert.match(api,/stock_purchase_update/);
   assert.match(ui,/เพิ่ม Stock/);
