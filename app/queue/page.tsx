@@ -3,12 +3,14 @@
 // FIELD guided single-task production flow: recommend → acknowledge → complete → call → handoff.
 
 import {useEffect,useMemo,useRef,useState} from "react";
-import {BellRing,CheckCircle2,ChevronRight,Layers3,Sparkles,X} from "lucide-react";
+import {useRouter} from "next/navigation";
+import {BellRing,CheckCircle2,ChevronRight,Layers3,ReceiptText,Sparkles,X} from "lucide-react";
 import AuthGate from "@/components/auth-gate";
-import {api,type Bootstrap,type Session} from "@/lib/api-client";
+import {api,type Session} from "@/lib/api-client";
 
-type QItem={id:string;name:string;variant:string;qty:number;readyQty?:number;calledQty?:number;prepSelected?:boolean};
-type QOrder={id:string;queueNo:string;pagerNo:number;status:string;time:number;items:QItem[]};
+type QItem={id:string;name:string;variant:string;qty:number;price:number;readyQty?:number;calledQty?:number;prepSelected?:boolean};
+type QOrder={id:string;queueNo:string;pagerNo:number;status:string;time:number;total:number;billNo?:string|null;saleId?:string|null;saleIds?:string[];items:QItem[]};
+type QueueSnapshot={revision:number;orders:QOrder[]};
 
 const n=(v:any)=>Number(v)||0;
 const itemDone=(item:QItem)=>n(item.readyQty)>=n(item.qty);
@@ -35,22 +37,28 @@ function nextTask(orders:QOrder[]){
 export default function Queue(){return <AuthGate>{session=><QueueView session={session}/>}</AuthGate>}
 
 function QueueView({session}:{session:Session}){
-  const [data,setData]=useState<Bootstrap|null>(null);
+  const router=useRouter();
+  const [data,setData]=useState<QueueSnapshot|null>(null);
   const [busy,setBusy]=useState("");
   const [msg,setMsg]=useState("");
   const [notice,setNotice]=useState("");
+  const [toast,setToast]=useState("");
   const busyRef=useRef(false);
   busyRef.current=busy!=="";
   const [callPrompt,setCallPrompt]=useState<{queueNo:string;pagerNo:number;scope:string}|null>(null);
 
-  const load=()=>api<Bootstrap>("/api/pos/bootstrap").then(next=>setData(prev=>!prev||next.revision>=prev.revision?next:prev));
+  useEffect(()=>{if(!toast)return;const timer=window.setTimeout(()=>setToast(""),2600);return()=>window.clearTimeout(timer)},[toast]);
+  const pulse=(message:string)=>{setToast(message);try{navigator.vibrate?.(35)}catch{}};
+  const optimistic=(mutate:(orders:QOrder[])=>QOrder[])=>setData(prev=>prev?{...prev,orders:mutate(prev.orders)}:prev);
+
+  const load=()=>api<QueueSnapshot>("/api/pos/queue").then(next=>setData(prev=>!prev||next.revision>=prev.revision?next:prev));
   useEffect(()=>{
     let disposed=false,inFlight=false;
     const refresh=async()=>{
       if(disposed||inFlight||busyRef.current||document.visibilityState==="hidden")return;
       inFlight=true;
       try{
-        const next=await api<Bootstrap>("/api/pos/bootstrap");
+        const next=await api<QueueSnapshot>("/api/pos/queue");
         if(!disposed)setData(prev=>!prev||next.revision>=prev.revision?next:prev);
       }catch(e:any){if(!disposed)setMsg(e.message==="network_unavailable"?"ขาดการเชื่อมต่อ · ตรวจคิวล่าสุดก่อนทำต่อ":e.message)}
       finally{inFlight=false}
@@ -90,17 +98,21 @@ function QueueView({session}:{session:Session}){
   }
 
   async function selectTask(orderId:string,itemIndex:number){
-    setBusy("select:"+orderId+":"+itemIndex);setMsg("");
+    const snapshot=data;const key="select:"+orderId+":"+itemIndex;setBusy(key);setMsg("");
+    optimistic(list=>list.map(order=>({...order,items:(order.items||[]).map((item,index)=>({...item,prepSelected:order.id===orderId&&index===itemIndex}))})));
+    pulse("รับงานแล้ว · กำลังบันทึก");
     try{
       const r=await api<any>("/api/pos/queue",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({requestKey:crypto.randomUUID(),orderId,itemIndex,action:"select",selected:true})});
       if(!applyState(r))load().catch(()=>{});
       setNotice("รับงานแล้ว · ระบบจะแสดงเมนูนี้เป็น “กำลังทำ” จนกว่าจะทำครบ");
-    }catch(e:any){setMsg(errorText(e.message));await load().catch(()=>{})}finally{setBusy("")}
+    }catch(e:any){if(snapshot)setData(snapshot);setMsg(errorText(e.message));await load().catch(()=>{})}finally{setBusy("")}
   }
 
   async function completeNext(order:QOrder,item:QItem,itemIndex:number){
-    const expectedReadyQty=n(item.readyQty);
-    setBusy("done:"+order.id+":"+itemIndex);setMsg("");
+    const expectedReadyQty=n(item.readyQty),snapshot=data,key="done:"+order.id+":"+itemIndex;
+    setBusy(key);setMsg("");
+    optimistic(list=>list.map(o=>o.id!==order.id?o:{...o,status:"making",items:o.items.map((x,index)=>index===itemIndex?{...x,readyQty:x.qty,prepSelected:false}:x)}));
+    pulse("บันทึกว่าทำ "+item.name+" ครบแล้ว");
     try{
       const r=await api<any>("/api/pos/queue",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({requestKey:crypto.randomUUID(),orderId:order.id,itemIndex,action:"complete_item",expectedReadyQty})});
       if(!applyState(r))load().catch(()=>{});
@@ -110,34 +122,41 @@ function QueueView({session}:{session:Session}){
         const nextRecommended=nextTask((r.orders||[]) as QOrder[]);
         setNotice(nextRecommended?`ทำ ${item.name} ครบแล้ว · ถัดไป ${nextRecommended.item.name}`:`ทำ ${item.name} ครบแล้ว · ตรวจปุ่มเรียกบัตรด้านล่าง`);
       }
-    }catch(e:any){setMsg(errorText(e.message));await load().catch(()=>{})}finally{setBusy("")}
+    }catch(e:any){if(snapshot)setData(snapshot);setMsg(errorText(e.message));await load().catch(()=>{})}finally{setBusy("")}
   }
 
   async function callReadyItem(order:QOrder,item:QItem,itemIndex:number){
-    setBusy("callitem:"+order.id+":"+itemIndex);setMsg("");
+    const snapshot=data,key="callitem:"+order.id+":"+itemIndex;setBusy(key);setMsg("");
+    optimistic(list=>list.map(o=>o.id!==order.id?o:{...o,items:o.items.map((x,index)=>index===itemIndex?{...x,calledQty:x.readyQty}:x)}));
+    pulse("บันทึกการเรียกบัตร "+order.pagerNo);
     try{
       const r=await api<any>("/api/pos/queue",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({requestKey:crypto.randomUUID(),orderId:order.id,itemIndex,action:"call_item"})});
       if(!applyState(r))load().catch(()=>{});
       setCallPrompt({queueNo:order.queueNo,pagerNo:order.pagerNo,scope:`รับ ${item.name} ก่อน`});
-    }catch(e:any){setMsg(errorText(e.message));await load().catch(()=>{})}finally{setBusy("")}
+    }catch(e:any){if(snapshot)setData(snapshot);setMsg(errorText(e.message));await load().catch(()=>{})}finally{setBusy("")}
   }
 
   async function callOrder(order:QOrder){
-    setBusy("call:"+order.id);setMsg("");
+    const snapshot=data,key="call:"+order.id;setBusy(key);setMsg("");
+    optimistic(list=>list.map(o=>o.id!==order.id?o:{...o,status:"ready",items:o.items.map(x=>({...x,calledQty:x.qty,prepSelected:false}))}));
+    pulse("บันทึกการเรียกบัตร "+order.pagerNo);
     try{
       const r=await api<any>("/api/pos/queue",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({requestKey:crypto.randomUUID(),orderId:order.id,action:"call"})});
       if(!applyState(r))load().catch(()=>{});
       setCallPrompt({queueNo:order.queueNo,pagerNo:order.pagerNo,scope:"รับออเดอร์ทั้งหมด"});
-    }catch(e:any){setMsg(errorText(e.message));await load().catch(()=>{})}finally{setBusy("")}
+    }catch(e:any){if(snapshot)setData(snapshot);setMsg(errorText(e.message));await load().catch(()=>{})}finally{setBusy("")}
   }
 
   async function deliver(orderId:string){
-    setBusy("return:"+orderId);setMsg("");
+    const snapshot=data,order=orders.find(x=>x.id===orderId),key="return:"+orderId;setBusy(key);setMsg("");
+    optimistic(list=>list.filter(o=>o.id!==orderId));
+    pulse("กำลังส่งมอบ "+(order?.queueNo||"คิว")+"…");
     try{
       const r=await api<any>("/api/pos/queue",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({requestKey:crypto.randomUUID(),orderId,action:"return"})});
       if(!applyState(r))load().catch(()=>{});
       setNotice("ส่งมอบคิวแล้ว · ระบบเลื่อนไปคิวถัดไป");
-    }catch(e:any){setMsg(errorText(e.message));await load().catch(()=>{})}finally{setBusy("")}
+      pulse("✓ ส่งมอบ "+(order?.queueNo||"คิว")+" เรียบร้อยแล้ว");
+    }catch(e:any){if(snapshot)setData(snapshot);setMsg(errorText(e.message));pulse("ส่งมอบไม่สำเร็จ · ระบบคืนคิวกลับแล้ว");await load().catch(()=>{})}finally{setBusy("")}
   }
 
   const first=orders[0];
@@ -179,8 +198,8 @@ function QueueView({session}:{session:Session}){
           <div className="text-xl font-bold">{recommendedTask.item.name}</div>
           <div className="mt-1 text-sm text-slate-600">{recommendedTask.item.variant} · เหลือ {n(recommendedTask.item.qty)-n(recommendedTask.item.readyQty)} จาก {n(recommendedTask.item.qty)} แก้ว</div>
         </div>
-        <button disabled={busy!==""} onClick={()=>selectTask(recommendedTask.order.id,recommendedTask.index)} className="rounded-2xl bg-[#1d1d1f] px-6 py-4 text-base font-bold text-white disabled:opacity-40">
-          รับทำเมนูนี้
+        <button disabled={busy!==""} onClick={()=>selectTask(recommendedTask.order.id,recommendedTask.index)} className="rounded-2xl bg-[#d4af37] px-6 py-4 text-base font-black text-black disabled:cursor-wait disabled:bg-[#f4e7a6] disabled:text-[#765b08]">
+          {busy==="select:"+recommendedTask.order.id+":"+recommendedTask.index?"กำลังบันทึก...":"รับทำเมนูนี้"}
         </button>
       </div>}
 
@@ -203,6 +222,10 @@ function QueueView({session}:{session:Session}){
             <div><small className="text-slate-500">QUEUE</small><div className="mt-1 text-3xl font-black text-[#765b08]">{order.queueNo}</div></div>
             <div className="rounded-2xl border-2 border-[#d4af37] bg-[#fff8dc] px-4 py-2 text-center"><small className="block text-[10px] font-bold tracking-widest text-[#765b08]">บัตรเรียกคิว</small><div className="mt-1 text-3xl font-black leading-none text-[#6f5510]">บัตร {order.pagerNo||"—"}</div></div>
           </div>
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-2xl bg-[#fffaf0] px-4 py-3 text-sm">
+            <span className="text-slate-600">{order.billNo||"รายการขาย"} · {(order.items||[]).reduce((sum,item)=>sum+n(item.qty),0)} แก้ว</span>
+            <b className="text-[#765b08]">ยอดรวม ฿{n(order.total).toFixed(0)}</b>
+          </div>
 
           <div className="mt-5 space-y-2">
             {(order.items||[]).map((item,index)=>{
@@ -214,7 +237,7 @@ function QueueView({session}:{session:Session}){
               return <div key={index} className={"rounded-[20px] border p-4 "+(current?"border-emerald-400 bg-emerald-50/50":recommended?"border-[#d4af37] bg-[#fffaf0]":"border-slate-300 bg-slate-50")}>
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
-                    <div className="flex flex-wrap items-center gap-2"><b>{item.name}</b><span className="text-sm text-slate-500">{item.variant} ×{item.qty}</span>{current&&<span className="rounded-full bg-emerald-100 px-2 py-1 text-[10px] font-bold text-emerald-700">กำลังทำ</span>}{recommended&&<span className="rounded-full bg-[#d4af37] px-2 py-1 text-[10px] font-bold text-black">ถัดไป</span>}</div>
+                    <div className="flex flex-wrap items-center gap-2"><b>{item.name}</b><span className="text-sm text-slate-500">{item.variant} ×{item.qty}</span><span className="text-sm font-semibold text-[#765b08]">฿{(n(item.price)*n(item.qty)).toFixed(0)}</span>{current&&<span className="rounded-full bg-emerald-100 px-2 py-1 text-[10px] font-bold text-emerald-700">กำลังทำ</span>}{recommended&&<span className="rounded-full bg-[#d4af37] px-2 py-1 text-[10px] font-bold text-black">ถัดไป</span>}</div>
                     <div className="mt-2 text-sm"><span className={done?"font-semibold text-emerald-700":"text-slate-600"}>ทำเสร็จ {n(item.readyQty)}/{n(item.qty)}</span>{called&&<span className="ml-2 text-emerald-700">· แจ้งรับแล้ว</span>}</div>
                   </div>
                   {done&&<CheckCircle2 size={22} className="text-emerald-600"/>}
@@ -225,15 +248,19 @@ function QueueView({session}:{session:Session}){
             })}
           </div>
 
-          <div className="mt-4 grid gap-2 border-t border-slate-200 pt-4">
+          <button onClick={()=>router.push("/orders?queue="+encodeURIComponent(order.queueNo))} className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl border border-slate-300 bg-white py-3 text-sm font-semibold text-slate-700"><ReceiptText size={17}/>ดูรายการ / แก้ไขออเดอร์</button>
+
+          <div className="mt-3 grid gap-2 border-t border-slate-200 pt-4">
             {allReady&&!allCalled&&<button disabled={busy!==""||orderIndex!==0} onClick={()=>callOrder(order)} className="flex w-full items-center justify-center gap-2 rounded-2xl bg-[#d4af37] py-3 text-sm font-bold text-black disabled:bg-slate-200 disabled:text-slate-400"><BellRing size={17}/>{orderIndex===0?`เรียกบัตร ${order.pagerNo} · รับทั้งหมด`:"รอคิวก่อนหน้า"}</button>}
             {!allReady&&<div className="rounded-2xl bg-slate-100 px-4 py-3 text-center text-sm text-slate-600">เหลือทำอีก {(order.items||[]).reduce((sum,item)=>sum+Math.max(0,n(item.qty)-n(item.readyQty)),0)} แก้ว</div>}
             {allCalled&&<div className="flex items-center justify-center gap-2 rounded-2xl border border-emerald-300 bg-emerald-50 py-3 text-sm font-semibold text-emerald-700"><BellRing size={17}/>แจ้งลูกค้ารับครบแล้ว</div>}
-            <button disabled={busy!==""||!allCalled||orderIndex!==0} onClick={()=>deliver(order.id)} className="flex w-full items-center justify-center gap-2 rounded-2xl border border-emerald-400/40 bg-white py-3 text-sm font-semibold text-emerald-700 disabled:border-slate-200 disabled:text-slate-300">ส่งมอบคิวนี้ <ChevronRight size={16}/></button>
+            <button disabled={busy!==""||!allCalled||orderIndex!==0} onClick={()=>deliver(order.id)} className="flex w-full items-center justify-center gap-2 rounded-2xl border border-emerald-400/40 bg-white py-3 text-sm font-semibold text-emerald-700 disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-500">{busy==="return:"+order.id?"กำลังส่งมอบ...":!allCalled?"ทำและเรียกลูกค้าให้ครบก่อน":orderIndex!==0?"รอส่งมอบคิวก่อนหน้า":"ส่งมอบคิวนี้"} <ChevronRight size={16}/></button>
           </div>
         </div>;
       })}
     </div>
+
+    {toast&&<div className="fixed bottom-[92px] left-4 right-4 z-[95] mx-auto max-w-xl rounded-2xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-center text-sm font-semibold text-emerald-800 shadow-xl">{toast}</div>}
 
     {callPrompt&&<div className="fixed inset-0 z-[80] grid place-items-center bg-black/55 p-4">
       <div className="w-full max-w-lg rounded-[28px] border-2 border-[#d4af37] bg-white p-6 text-center shadow-2xl">
