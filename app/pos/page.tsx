@@ -87,13 +87,19 @@ function PosView({session}:{session:Session}){
     let changed=false;
     const next=cart.items.flatMap(item=>{
       const current=byId.get(item.id);
-      const validVariant=current?.variants?.some(v=>v.label===item.variant);
-      if(!current||!validVariant){removed.push(item.name);changed=true;return []}
+      const currentVariant=current?.variants?.find(v=>v.label===item.variant);
+      if(!current||!currentVariant){removed.push(item.name);changed=true;return []}
+      if(!currentVariant.available){
+        const missing=(currentVariant.missingIngredients||[]).map(x=>x.name).join(", ");
+        removed.push(item.name+(missing?" (ขาด "+missing+")":""));
+        changed=true;
+        return [];
+      }
       if(item.name!==current.name||item.price!==current.price){changed=true;return [{...item,name:current.name,price:current.price}]}
       return [item];
     });
     if(changed)cart.replaceItems(next);
-    if(removed.length)setNotice("นำ "+removed.join(", ")+" ออกจากตะกร้า เพราะเมนูปิดขาย ราคาเป็น 0 หรือเวอร์ชันเมนูเปลี่ยนแล้ว");
+    if(removed.length)setNotice("นำ "+removed.join(", ")+" ออกจากตะกร้าอัตโนมัติ เพราะสต็อกหรือสูตรไม่พร้อม กรุณาตรวจยอดก่อนชำระ");
   },[data?.revision]);
 
   const cats=useMemo(()=>["ทั้งหมด",...Array.from(new Set((data?.menu||[]).filter(sellable).map(x=>x.category||"อื่นๆ")))], [data]);
@@ -387,9 +393,14 @@ function PosView({session}:{session:Session}){
   function openPayment(){
     if(!cart.items.length)return;
     const byId=new Map((data?.menu||[]).filter(sellable).map(x=>[x.id,x]));
-    const invalid=cart.items.find(i=>!byId.get(i.id)?.variants?.some(v=>v.label===i.variant));
-    if(invalid){
-      setNotice("เมนู "+invalid.name+" ไม่พร้อมขายแล้ว ระบบกำลังอัปเดตตะกร้า");
+    const blocked=cart.items.filter(item=>{
+      const variant=byId.get(item.id)?.variants?.find(v=>v.label===item.variant);
+      return !variant||!variant.available;
+    });
+    if(blocked.length){
+      const blockedKeys=new Set(blocked.map(item=>item.key));
+      cart.replaceItems(cart.items.filter(item=>!blockedKeys.has(item.key)));
+      setNotice("นำ "+blocked.map(item=>item.name).join(", ")+" ออกจากตะกร้า เพราะเมนูหมดชั่วคราวหรือสูตรไม่พร้อม · กรุณาตรวจยอดแล้วกด CHECKOUT อีกครั้ง");
       load().catch(()=>{});
       return;
     }
