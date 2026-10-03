@@ -4,8 +4,8 @@ import {assessSalesCostQuality,buildMenuCostRows} from '../lib/domain/cost-cente
 
 const ingredients={
   matcha:{unitCost:2.076,costStatus:'CONFIRMED'},water:{unitCost:.0075,costStatus:'CONFIRMED'},milk:{unitCost:.0525,costStatus:'CONFIRMED'},
-  syrup:{unitCost:.04625,costStatus:'CONFIRMED'},condensed:{unitCost:.0645,costStatus:'CONFIRMED'},evaporated:{unitCost:.099,costStatus:'CONFIRMED'},
-  coconutSyrup:{unitCost:.2653333333,costStatus:'CONFIRMED'},orangeMix:{unitCost:.225,costStatus:'CONFIRMED'},
+  syrup:{unitCost:.04625,costStatus:'CONFIRMED',costKind:'syrup',wasteMargin:.05},condensed:{unitCost:.0645,costStatus:'CONFIRMED'},evaporated:{unitCost:.099,costStatus:'CONFIRMED'},
+  coconutSyrup:{unitCost:.2653333333,costStatus:'CONFIRMED',costKind:'syrup',wasteMargin:.05},orangeMix:{unitCost:.225,costStatus:'CONFIRMED',costKind:'concentrate',wasteMargin:.05},
   cup16:{unitCost:1.8,costStatus:'CONFIRMED'},lid:{unitCost:.5,costStatus:'CONFIRMED'},straw:{unitCost:.2,costStatus:'CONFIRMED'},sticker:{unitCost:.5,costStatus:'CONFIRMED'},ice:{unitCost:.525,costStatus:'CONFIRMED'}
 };
 const fixed={cup16:1,lid:1,straw:1,sticker:1,ice:1};
@@ -19,7 +19,7 @@ const menu=[
     {label:'0%',recipe:recipe({matcha:5,water:40,evaporated:15,milk:110})}
   ]},
   {id:'coconut-matcha',name:'FIELD Coconut Matcha 16 oz',price:60,enabled:true,variants:[{label:'Standard',recipe:recipe({matcha:5,water:145,coconutSyrup:20})}]},
-  {id:'field-orange',name:'FIELD Orange 16 oz',price:45,enabled:true,variants:[{label:'Standard',recipe:recipe({orangeMix:35,water:135})}]}
+  {id:'field-orange',name:'FIELD Orange 16 oz',price:45,enabled:true,variants:[{label:'Standard',recipe:recipe({orangeMix:25,water:145})}]}
 ];
 
 test('every APPROVED recipe has regression-locked COGS, margin and contribution',()=>{
@@ -29,12 +29,12 @@ test('every APPROVED recipe has regression-locked COGS, margin and contribution'
   }]));
   assert.deepEqual(actual,{
     'pure-matcha:Standard':{cogs:13.104,grossProfit:31.896,grossMargin:70.88,contribution:29.396,status:'CONFIRMED'},
-    'matcha-latte:Standard':{cogs:20.67375,grossProfit:34.32625,grossMargin:62.411,contribution:31.82625,status:'CONFIRMED'},
+    'matcha-latte:Standard':{cogs:20.708438,grossProfit:34.291563,grossMargin:62.348,contribution:31.791563,status:'CONFIRMED'},
     'matcha-signature:100%':{cogs:22.785,grossProfit:32.215,grossMargin:58.573,contribution:29.715,status:'CONFIRMED'},
     'matcha-signature:50%':{cogs:21.8175,grossProfit:33.1825,grossMargin:60.332,contribution:30.6825,status:'CONFIRMED'},
     'matcha-signature:0%':{cogs:21.465,grossProfit:33.535,grossMargin:60.973,contribution:31.035,status:'CONFIRMED'},
-    'coconut-matcha:Standard':{cogs:20.299167,grossProfit:39.700833,grossMargin:66.168,contribution:37.200833,status:'CONFIRMED'},
-    'field-orange:Standard':{cogs:12.4125,grossProfit:32.5875,grossMargin:72.417,contribution:30.0875,status:'CONFIRMED'}
+    'coconut-matcha:Standard':{cogs:20.5645,grossProfit:39.4355,grossMargin:65.726,contribution:36.9355,status:'CONFIRMED'},
+    'field-orange:Standard':{cogs:10.51875,grossProfit:34.48125,grossMargin:76.625,contribution:31.98125,status:'CONFIRMED'}
   });
 });
 
