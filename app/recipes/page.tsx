@@ -9,7 +9,8 @@ type Ingredient={id:string;name:string;unit:string;qty:number;unitCost:number};
 type Variant={label:string;recipeVersion:number|null;recipe:{items:Record<string,number>}};
 type Menu={id:string;name:string;enabled:boolean;variants:Variant[]};
 type Comment={id:string;menuId:string;variant:string;recipeVersion:number|null;authorType:"customer"|"owner"|"custom";authorName:string;text:string;createdAt:number;updatedAt:number;history?:{text:string;authorName:string;authorType:string;updatedAt:number}[]};
-type Data={ingredients:Ingredient[];menus:Menu[];versions:any[];comments:Comment[]};
+type Drift={updateId:string;menuId:string;menuName:string;variant:string;from:Record<string,number>;to:Record<string,number>};
+type Data={ingredients:Ingredient[];menus:Menu[];versions:any[];comments:Comment[];approvedDrift:Drift[]};
 
 export default function Recipes(){return <AuthGate>{s=><View session={s}/>}</AuthGate>}
 
@@ -32,6 +33,16 @@ function View({session}:{session:Session}){
     setMsg("Published v"+r.version);await load();
   }
 
+  async function reconcileApproved(d:Drift){
+    if(!window.confirm("ปรับ "+d.menuName+" · "+d.variant+" ให้ตรง FIELD Approved Master? ระบบจะสร้าง Recipe Version ใหม่และเก็บ Audit เดิมไว้"))return;
+    setBusy(true);setMsg("");
+    try{
+      const r=await api<any>("/api/admin/recipes/reconcile",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({updateId:d.updateId})});
+      setMsg("ปรับสูตรอนุมัติแล้ว · Published v"+r.version);await load();
+    }catch(e:any){setMsg(e.message||"ปรับสูตรไม่สำเร็จ")}finally{setBusy(false)}
+  }
+
+
   async function saveComment(){
     if(!commentText.trim()||!authorName.trim())return;setBusy(true);setMsg("");
     try{
@@ -47,6 +58,7 @@ function View({session}:{session:Session}){
 
   return <section className="soft-scroll h-full overflow-auto p-5 md:p-7">
     <p className="gold m-0 text-[10px] font-bold tracking-[.3em]">R&amp;D CONTROL</p><h1 className="mt-1 text-2xl font-semibold">RECIPE VERSIONING</h1>
+    {(data?.approvedDrift||[]).length>0&&<div className="mt-5 space-y-2">{data!.approvedDrift.map(d=><div key={d.updateId+":"+d.variant} className="rounded-[24px] border border-amber-300 bg-amber-50 p-4"><div className="flex flex-wrap items-center justify-between gap-3"><div><b className="text-amber-900">สูตรยังไม่ตรง FIELD Approved Master</b><p className="mt-1 text-sm text-amber-800">{d.menuName} · {d.variant} · เดิม {Object.entries(d.from).map(([k,v])=>k+" "+v+"g").join(" + ")} → อนุมัติ {Object.entries(d.to).map(([k,v])=>k+" "+v+"g").join(" + ")}</p></div><button disabled={busy} onClick={()=>reconcileApproved(d)} className="rounded-full bg-[#d4af37] px-5 py-2.5 text-sm font-bold text-black disabled:opacity-40">{busy?"กำลังบันทึก...":"ใช้สูตรอนุมัติ"}</button></div></div>)}</div>}
     <div className="mt-5 grid gap-4 xl:grid-cols-[1fr_2fr]">
       <div className="glass card p-5"><label className="text-xs text-slate-500">Menu</label><select value={menuId} onChange={e=>setMenuId(e.target.value)} className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3">{data?.menus.map(x=><option key={x.id} value={x.id}>{x.name}</option>)}</select><label className="mt-4 block text-xs text-slate-500">Variant</label><select value={variant} onChange={e=>setVariant(e.target.value)} className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3">{menu?.variants.map(x=><option key={x.label}>{x.label}</option>)}</select><p className="mt-4 text-xs text-slate-500">Current version: {currentVariant?.recipeVersion||"Legacy / unversioned"}</p><button onClick={publish} className="mt-5 w-full rounded-full bg-[#d4af37] py-3 font-bold text-black">PUBLISH NEW VERSION</button>{msg&&<p className="mt-3 text-center text-sm text-emerald-700">{msg}</p>}</div>
       <div className="glass card p-5"><h2 className="text-sm tracking-widest">INGREDIENTS</h2><div className="mt-4 grid gap-2 md:grid-cols-2">{data?.ingredients.map(i=><label key={i.id} className="rounded-[20px] border border-slate-100 bg-slate-50 p-3"><span className="text-sm">{i.name}</span><small className="ml-2 text-slate-500">{i.unit}</small><input inputMode="decimal" value={items[i.id]||""} onChange={e=>setItems({...items,[i.id]:e.target.value})} placeholder="0" className="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 outline-none"/></label>)}</div></div>
