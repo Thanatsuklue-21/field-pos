@@ -6,7 +6,7 @@ import {api,type Session} from "@/lib/api-client";
 
 type Purchase={
   id:string;stockTransactionId:string;supplier:string;purchaseDate:string;packageQty:number|null;packageUnit:string;packSize:number|null;packSizeUnit:string;
-  quantityReceived:number;usageUnit:string;totalCost:number;unitCost:number;sourceUrl:string;imageUrl:string;note:string;createdAt:number;conversionApproximate:boolean;
+  quantityReceived:number;usageUnit:string;totalCost:number;unitCost:number;sourceUrl:string;imageUrl:string;note:string;createdAt:number;conversionApproximate:boolean;paymentMethod?:string;
   cancelled:boolean;cancelledAt:number|null;cancelReason:string;
 };
 type PurchaseProfile={packageUnit:string;packSize:number;packSizeUnit:string;quantityPerPackage:number;usageUnit:string;conversionApproximate?:boolean;supplier?:string;sourceUrl?:string;imageUrl?:string;purchaseCost?:number|null;purchaseDate?:string;note?:string;paymentMethod?:string;updatedAt?:number};
