@@ -46,3 +46,35 @@ test('settings exposes mobile admin center shortcuts',async()=>{
   for(const path of ['/products','/recipes','/stock','/costs','/backup','/audit'])assert.match(ui,new RegExp(path.replace('/','\\/')));
   assert.match(ui,/ADMIN CENTER/);
 });
+
+
+test('purchase correction updates received quantity and current stock by audited delta',async()=>{
+  const api=await read('lib/api.mjs'),ui=await read('app/stock/page.tsx');
+  assert.match(api,/calculateReceivedQuantity/);
+  assert.match(api,/const delta=quantityReceived-Number\(p\.quantity_received\)/);
+  assert.match(api,/UPDATE field_stock_transactions SET qty_delta=/);
+  assert.match(api,/purchase_correction_stock_negative/);
+  assert.match(api,/oldQuantity:Number\(p\.quantity_received\),newQuantity:quantityReceived,delta/);
+  assert.match(ui,/packageQty:p\.packageQty/);
+  assert.match(ui,/ถ้าแก้จำนวนแพ็ก\/ขนาด ระบบจะคำนวณส่วนต่าง/);
+});
+
+test('trial sales reset is explicit, snapshot-backed and does not change stock quantity',async()=>{
+  const api=await read('lib/api.mjs'),settings=await read('app/settings/page.tsx');
+  const start=api.indexOf("if(path==='/api/admin/test-data/sales-reset'&&method==='POST')");
+  const end=api.indexOf("if(path==='/api/admin/backup/export'",start);
+  assert.ok(start>0&&end>start);
+  const seg=api.slice(start,end);
+  assert.match(seg,/RESET TEST SALES/);
+  assert.match(seg,/active_payment_sessions_exist/);
+  assert.match(seg,/active_orders_confirmation_required/);
+  assert.match(seg,/before_test_sales_reset/);
+  assert.match(seg,/doc\.sales=\[\];doc\.orders=\[\]/);
+  assert.match(seg,/DELETE FROM field_cost_snapshots/);
+  assert.match(seg,/DELETE FROM field_pos_requests/);
+  assert.match(seg,/stockChanged:false/);
+  assert.doesNotMatch(seg,/ingredient\.qty\s*=/);
+  assert.match(settings,/TEST DATA RESET/);
+  assert.match(settings,/ล้างประวัติการขายทดลอง/);
+  assert.match(settings,/Stock ปัจจุบันไม่ถูกเปลี่ยน|ไม่เปลี่ยน Stock คงเหลือปัจจุบัน/);
+});
