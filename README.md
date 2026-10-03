@@ -6,7 +6,7 @@ Single-shop POS for a small team, using Next.js/React, Vercel Functions and Turs
 
 1. Owner confirms menu prices, variants, recipes, purchase costs and ingredient balances. Review SYSTEM READINESS in Settings before opening.
 2. Checkout validates the current server menu and stock, calculates the bill on the server and commits the sale, stock ledger, cost snapshot, loyalty points and queue in one write transaction.
-3. Cash checkout checks received money and calculates change. PromptPay requires the configured provider to verify payment; displaying a QR alone does not mark a bill paid. Split payments reserve ingredients until completion or resolution.
+3. Cash checkout checks received money and calculates change. PromptPay is payment-first: the POS creates a provider QR, polls the server while the customer pays, and only creates the sale/order after the provider reports success and the server re-verifies the charge. Displaying a QR alone never marks a bill paid. Split payments reserve ingredients until completion or resolution.
 4. Queue recommends work for the oldest customer. Accept a menu, then complete all its remaining identical cups with one button. Ready menus may be called early, or all drinks called together. Calls and final handoff enforce FIFO on the server. The Bluetooth pager still requires pressing its number on the physical device.
 5. Print or reprint receipts from the order details in `/orders` using the browser print dialog.
 6. Close day requires counted cash, no unfinished orders and no unresolved payments. Sales, refunds, expenses and purchase expenses for a closed day are blocked.
@@ -18,7 +18,7 @@ Checkout and queue operations have durable request keys stored in `field_pos_req
 - Node.js 20 or newer; use `npm ci`, `npm test`, `npm run build`, then `npm run dev` or `npm start`.
 - Set `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN`, and `PUBLIC_ORIGIN` to the exact application origin. Keep credentials server-side. Schema installation is additive and runs before API handling.
 - Provision the first API admin with `npm run bootstrap -- admin`; the bootstrap prompts securely for a password. Do not initialize another admin when using an existing configured database.
-- Configure the PromptPay provider in the deployment environment if QR payments are needed. Check its readiness in Settings.
+- Configure Beam PromptPay with `PROMPTPAY_PROVIDER=beam`, `BEAM_ENV=playground`, `BEAM_MERCHANT_ID`, `BEAM_API_KEY` and `BEAM_WEBHOOK_HMAC_KEY`. Keep all credentials server-side and test in Playground before Production. Legacy Omise/Opn remains available as a migration fallback when `PROMPTPAY_PROVIDER=opn`.
 - Session cookies are HttpOnly/Secure/SameSite=Strict; writes validate origin, CSRF and server action permissions.
 - `npm test` includes real file-backed libSQL tests of checkout, stock deduction, grouped preparation, FIFO, close day, split payments, concurrent retries and durable idempotency.
 
