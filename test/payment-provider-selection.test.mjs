@@ -5,7 +5,8 @@ test('PromptPay API routes use provider adapter and preserve raw webhook body',a
   assert.match(api,/payment-promptpay\.mjs/);
   assert.match(api,/rawBody:req\.rawBody/);
   assert.match(api,/headers:req\.headers/);
-  assert.match(route,/rawBody:raw/);
+  assert.match(route,/rawBody=raw/);
+  assert.match(route,/body,rawBody/);
 });
 test('POS uses checkout request key as Beam idempotent payment reference',async()=>{
   const pos=await read('app/pos/page.tsx');
