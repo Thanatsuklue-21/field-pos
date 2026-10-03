@@ -21,10 +21,11 @@ test('existing databases add missing purchase package history columns once',asyn
     }
   };
   assert.equal(await ensureSchemaMigrations(db),true);
-  assert.equal(applied.length,3);
+  assert.equal(applied.length,4);
   assert.ok(columns.has('pack_size'));
   assert.ok(columns.has('pack_size_unit'));
   assert.ok(columns.has('conversion_approximate'));
+  assert.ok(columns.has('payment_method'));
   applied.length=0;
   assert.equal(await ensureSchemaMigrations(db),false);
   assert.equal(applied.length,0);
