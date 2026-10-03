@@ -9,3 +9,5 @@ test('POS gives an actionable stock setup path when every sellable product is un
 test('POS and product management render menu photos and offer a real file upload control',async()=>{const pos=await read('app/pos/page.tsx'),products=await read('app/products/page.tsx');assert.match(pos,/x\.image/);assert.match(products,/type="file"/);assert.match(products,/accept="image\/jpeg,image\/png,image\/webp"/);assert.match(products,/compressMenuImage/);assert.match(products,/\/image/)});
 
 test('POS removes stale unavailable persisted cart items before checkout',async()=>{const pos=await read('app/pos/page.tsx');assert.match(pos,/!currentVariant\.available/);assert.match(pos,/ออกจากตะกร้าอัตโนมัติ/);assert.match(pos,/blockedKeys=new Set/);assert.match(pos,/กด CHECKOUT อีกครั้ง/)});
+
+test('login does not publicly prefill the admin username',async()=>{const gate=await read('components/auth-gate.tsx');assert.match(gate,/setUsername\]=useState\(""/);assert.doesNotMatch(gate,/useState\("admin"\)/)});
