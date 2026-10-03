@@ -584,3 +584,37 @@ test('menu-level early pickup is blocked for a later FIFO order',async()=>{
   );
   assert.ok(first.orderId);
 });
+
+
+test('full PromptPay reservation deducts stock before QR payment and auto-releases after grace expiry',async()=>{
+  const seed=initialState();
+  seed.ingredients.matcha.qty=5;
+  seed.ingredients.milk.qty=110;
+  seed.ingredients.cup16.qty=1;
+  const db=fakeDb(seed);
+  const now=2_000_000;
+  const first=await startSplitPayment({
+    db,user,now,
+    body:{requestKey:'promptpay-reserve-001',cart,date,mode:'promptpay_full'}
+  });
+  assert.equal(first.session.status,'collecting');
+  assert.equal(first.session.total,55);
+  let state=JSON.parse(db.storage.document);
+  assert.equal(state.paymentSessions[0].mode,'promptpay_full');
+  assert.equal(state.paymentSessions[0].expiresAt,now+20*60*1000);
+  assert.equal(state.ingredients.matcha.qty,0);
+  assert.equal(state.ingredients.milk.qty,0);
+  assert.equal(state.ingredients.cup16.qty,0);
+
+  await assert.rejects(
+    ()=>startSplitPayment({db,user,now:now+1,body:{requestKey:'promptpay-reserve-002',cart,date,mode:'promptpay_full'}}),
+    /stock_shortage/
+  );
+
+  await listSplitPaymentSessions({db,now:now+20*60*1000+1});
+  state=JSON.parse(db.storage.document);
+  assert.equal(state.ingredients.matcha.qty,5);
+  assert.equal(state.ingredients.milk.qty,110);
+  assert.equal(state.ingredients.cup16.qty,1);
+  assert.equal(state.paymentSessions[0].status,'expired');
+});

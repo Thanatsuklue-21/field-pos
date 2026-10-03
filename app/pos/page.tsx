@@ -15,7 +15,7 @@ function localDate(){
 }
 
 const PENDING_KEY="field-pos-pending-promptpay-v1";
-type PendingPrompt={requestKey:string;date:string;cart:{id:string;variant:string;qty:number}[];paymentReference:string;total:number;customerId:string|null;createdAt:number};
+type PendingPrompt={requestKey:string;payRequestKey?:string;sessionId?:string;date:string;cart:{id:string;variant:string;qty:number}[];paymentReference:string;total:number;customerId:string|null;createdAt:number};
 const pendingRead=():PendingPrompt|null=>{try{return JSON.parse(localStorage.getItem(PENDING_KEY)||"null")}catch{return null}};
 const pendingWrite=(p:PendingPrompt)=>localStorage.setItem(PENDING_KEY,JSON.stringify(p));
 const pendingClear=()=>localStorage.removeItem(PENDING_KEY);
@@ -52,6 +52,7 @@ function PosView({session}:{session:Session}){
   const [notice,setNotice]=useState("");
   const [lastSale,setLastSale]=useState<LastSale|null>(null);
   const [prompt,setPrompt]=useState<any|null>(null);
+  const [promptConfig,setPromptConfig]=useState<any|null>(null);
   const [customers,setCustomers]=useState<any[]>([]);
   const [customerId,setCustomerId]=useState("");
   const cart=useCartStore();
@@ -61,6 +62,7 @@ function PosView({session}:{session:Session}){
   useEffect(()=>{
     load().catch(()=>{});
     api<any>("/api/customers").then(x=>setCustomers(x.customers||[])).catch(()=>{});
+    api<any>("/api/payments/promptpay/config").then(setPromptConfig).catch(()=>setPromptConfig({ready:false,configured:false}));
     recoverCashCheckout().then(()=>recoverPending()).catch(()=>{});
   },[]);
 
@@ -173,6 +175,35 @@ function PosView({session}:{session:Session}){
   }
 
   async function finalizePending(p:PendingPrompt,verified:string){
+    if(p.sessionId){
+      const status=await api<any>("/api/pos/split/status",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({sessionId:p.sessionId})});
+      if(status?.session?.status==="completed"){
+        pendingClear();
+        cart.clearCart();
+        finishSale({queueNo:status.session.queueNo,pager:status.session.pager,total:status.session.total},{payment:"promptpay",total:p.total,received:p.total,recovered:true});
+        return status;
+      }
+      const allocations=p.cart.map((x,index)=>({index,qty:x.qty}));
+      const body={requestKey:p.payRequestKey||crypto.randomUUID(),sessionId:p.sessionId,method:"promptpay",allocations,paymentReference:p.paymentReference,paymentVerified:verified,label:"PromptPay"};
+      try{
+        const r=await api<any>("/api/pos/split/pay",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify(body)});
+        pendingClear();
+        cart.clearCart();
+        finishSale(r,{payment:"promptpay",total:p.total,received:p.total,recovered:true});
+        return r;
+      }catch(e:any){
+        if(e.message==="split_session_unavailable"){
+          const retry=await api<any>("/api/pos/split/status",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({sessionId:p.sessionId})});
+          if(retry?.session?.status==="completed"){
+            pendingClear();
+            cart.clearCart();
+            finishSale({queueNo:retry.session.queueNo,pager:retry.session.pager,total:retry.session.total},{payment:"promptpay",total:p.total,received:p.total,recovered:true});
+            return retry;
+          }
+        }
+        throw e;
+      }
+    }
     const body={requestKey:p.requestKey,date:p.date,cart:p.cart,payment:"promptpay",received:p.total,paymentReference:p.paymentReference,paymentVerified:verified,customerId:p.customerId};
     const r=await api<any>("/api/pos/checkout",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify(body)});
     pendingClear();
@@ -181,21 +212,64 @@ function PosView({session}:{session:Session}){
     return r;
   }
 
+  async function cancelPendingReservation(p:PendingPrompt){
+    if(!p.sessionId)return;
+    try{
+      await api<any>("/api/pos/split/cancel",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({requestKey:crypto.randomUUID(),sessionId:p.sessionId})});
+    }catch(e:any){
+      if(!["split_session_unavailable","split_session_not_found"].includes(e.message))throw e;
+    }
+  }
+
+  async function ensurePendingPrompt(p:PendingPrompt){
+    let next={...p};
+    if(!next.sessionId){
+      const reserved=await api<any>("/api/pos/split/start",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({requestKey:next.requestKey,date:next.date,cart:next.cart,customerId:next.customerId,mode:"promptpay_full"})});
+      const serverTotal=Number(reserved?.session?.total);
+      if(!reserved?.session?.id||!Number.isFinite(serverTotal)||serverTotal<=0)throw new Error("promptpay_reservation_failed");
+      next={...next,sessionId:reserved.session.id,total:serverTotal};
+      pendingWrite(next);
+    }
+    let st:any=null;
+    if(!next.paymentReference){
+      st=await api<any>("/api/payments/promptpay/create",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({amount:next.total,reference:next.sessionId})});
+      if(!st?.chargeId)throw new Error("promptpay_qr_unavailable");
+      next={...next,paymentReference:st.chargeId};
+      pendingWrite(next);
+    }
+    return {pending:next,status:st};
+  }
+
   async function recoverPending(){
-    const p=pendingRead();
+    let p=pendingRead();
     if(!p)return;
     try{
+      if(!p.sessionId||!p.paymentReference){
+        const resumed=await ensurePendingPrompt(p);
+        p=resumed.pending;
+        if(resumed.status)setPrompt(resumed.status);
+      }
+      if(p.sessionId){
+        const sessionStatus=await api<any>("/api/pos/split/status",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({sessionId:p.sessionId})});
+        if(sessionStatus?.session?.status==="completed"){
+          pendingClear();
+          cart.clearCart();
+          finishSale({queueNo:sessionStatus.session.queueNo,pager:sessionStatus.session.pager,total:sessionStatus.session.total},{payment:"promptpay",total:p.total,received:p.total,recovered:true});
+          return;
+        }
+        if(["expired","cancelled"].includes(String(sessionStatus?.session?.status||"").toLowerCase())){pendingClear();return}
+      }
       const st=await api<any>("/api/payments/promptpay/status",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({chargeId:p.paymentReference})});
       if(st.paid){await finalizePending(p,st.chargeId||p.paymentReference);return}
-      if(["failed","expired","reversed"].includes(String(st.status||"").toLowerCase())){pendingClear();return}
+      if(["failed","expired","reversed"].includes(String(st.status||"").toLowerCase())){await cancelPendingReservation(p);pendingClear();return}
       setMethod("promptpay");
       setPrompt(st);
       setPayOpen(true);
-      setResult("พบ PromptPay ที่ยังรอชำระ ระบบจะใช้ QR เดิมและตรวจสอบรายการเดิมเพื่อป้องกันรายการซ้ำ");
+      setResult("พบ PromptPay ที่ยังรอชำระ ระบบใช้ QR เดิม ตรวจสอบรายการเดิม และยังคงจอง Stock ไว้เพื่อป้องกันรับเงินเกินจำนวนที่ขายได้");
     }catch{
       setMethod("promptpay");
       setPayOpen(true);
-      setResult("ยังตรวจสอบ PromptPay รายการเดิมไม่ได้ ระบบเก็บรายการไว้และจะไม่สร้าง QR ใหม่");
+      setResult("ยังตรวจสอบ PromptPay รายการเดิมไม่ได้ ระบบเก็บรายการและ Stock reservation ไว้เพื่อป้องกันบิล/การรับเงินซ้ำ");
     }
   }
 
@@ -207,7 +281,10 @@ function PosView({session}:{session:Session}){
       code==="day_closed"?"วันนี้ปิดยอดแล้ว ไม่สามารถรับรายการขายเพิ่มได้":
       code==="variant_unavailable"?"ตัวเลือกของเมนูในตะกร้าเปลี่ยนแล้ว กรุณาเลือกเมนูใหม่":
       (code==="stock_shortage"||code.startsWith("stock_shortage:"))?"วัตถุดิบไม่เพียงพอสำหรับออเดอร์นี้":
-      code==="promptpay_timeout"?"หมดเวลารอ PromptPay ระบบจะเก็บรายการไว้และตรวจสอบอีกครั้งเมื่อกลับมา":
+      code==="promptpay_timeout"?"หมดเวลารอ PromptPay ระบบยังเก็บรายการจองไว้ชั่วคราวและจะตรวจสอบอีกครั้ง":
+      code==="promptpay_not_ready"?"PromptPay ยังไม่พร้อมใช้งาน กรุณารอ Beam อนุมัติและตั้งค่า API/Webhook ให้ครบ":
+      code==="promptpay_provider_not_configured"?"ยังไม่ได้ตั้งค่า Beam Merchant ID / API Key":
+      code==="promptpay_webhook_not_configured"?"ยังไม่ได้ตั้งค่า Beam Webhook HMAC Key":
       code==="promptpay_failed"?"PromptPay ไม่สำเร็จ กรุณาลองใหม่":
       code==="pending_promptpay_exists"?"มี PromptPay รายการเดิมที่ยังไม่สิ้นสุด กรุณาชำระหรือรอผลรายการเดิม":
       code==="pending_cash_checkout_exists"?"มีออเดอร์เงินสดเดิมที่ยังไม่ทราบผล กรุณารอระบบตรวจรายการเดิมก่อนรับบิลใหม่":
@@ -222,35 +299,55 @@ function PosView({session}:{session:Session}){
     setBusy(true);
     setResult("");
     try{
-      const checkoutTotal=cart.getTotal();
+      let checkoutTotal=cart.getTotal();
       const cartPayload=cart.items.map(i=>({id:i.id,variant:i.variant,qty:i.qty}));
       let paymentVerified:any=true,paymentReference:any=null,requestKey=crypto.randomUUID();
       if(method==="cash"&&Number(received)<checkoutTotal)throw Object.assign(new Error("cash_insufficient"),{status:409});
 
       if(method==="promptpay"){
+        if(promptConfig?.ready!==true)throw Object.assign(new Error("promptpay_not_ready"),{status:503});
         let st:any=null;
+        let activePending:PendingPrompt|null=null;
         const existing=pendingRead();
         if(existing){
-          const current=await api<any>("/api/payments/promptpay/status",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({chargeId:existing.paymentReference})});
-          if(current.paid){await finalizePending(existing,current.chargeId||existing.paymentReference);return}
-          if(["failed","expired","reversed"].includes(String(current.status||"").toLowerCase()))pendingClear();
-          else if(!samePending(existing,checkoutTotal,cartPayload,customerId))throw Object.assign(new Error("pending_promptpay_exists"),{status:409});
-          else{st=current;paymentReference=existing.paymentReference;requestKey=existing.requestKey}
+          let resumed=existing,current:any=null;
+          if(!resumed.sessionId||!resumed.paymentReference){
+            const setup=await ensurePendingPrompt(resumed);
+            resumed=setup.pending;
+            current=setup.status;
+          }
+          if(!current)current=await api<any>("/api/payments/promptpay/status",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({chargeId:resumed.paymentReference})});
+          if(current.paid){await finalizePending(resumed,current.chargeId||resumed.paymentReference);return}
+          if(["failed","expired","reversed"].includes(String(current.status||"").toLowerCase())){await cancelPendingReservation(resumed);pendingClear()}
+          else if(!samePending(resumed,checkoutTotal,cartPayload,customerId))throw Object.assign(new Error("pending_promptpay_exists"),{status:409});
+          else{st=current;paymentReference=resumed.paymentReference;requestKey=resumed.requestKey;activePending=resumed;checkoutTotal=resumed.total}
         }
         if(!st){
-          st=await api<any>("/api/payments/promptpay/create",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({amount:checkoutTotal,reference:requestKey})});
-          paymentReference=st.chargeId;
-          pendingWrite({requestKey,date:localDate(),cart:cartPayload,paymentReference,total:checkoutTotal,customerId:customerId||null,createdAt:Date.now()});
+          const reservationKey=crypto.randomUUID();
+          const payRequestKey=crypto.randomUUID();
+          activePending={requestKey:reservationKey,payRequestKey,date:localDate(),cart:cartPayload,paymentReference:"",total:checkoutTotal,customerId:customerId||null,createdAt:Date.now()};
+          pendingWrite(activePending);
+          const setup=await ensurePendingPrompt(activePending);
+          activePending=setup.pending;
+          st=setup.status||await api<any>("/api/payments/promptpay/status",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({chargeId:activePending.paymentReference})});
+          checkoutTotal=activePending.total;
+          paymentReference=activePending.paymentReference;
         }
         setPrompt(st);
         const deadline=Date.now()+15*60*1000;
         while(!st.paid&&Date.now()<deadline){
-          if(["failed","expired","reversed"].includes(String(st.status||"").toLowerCase())){pendingClear();throw Object.assign(new Error("promptpay_failed"),{status:409})}
+          if(["failed","expired","reversed"].includes(String(st.status||"").toLowerCase())){
+            if(activePending)await cancelPendingReservation(activePending);
+            pendingClear();
+            throw Object.assign(new Error("promptpay_failed"),{status:409});
+          }
           await new Promise(resolve=>setTimeout(resolve,2500));
           st=await api<any>("/api/payments/promptpay/status",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({chargeId:paymentReference})});
           setPrompt(st);
         }
         if(!st.paid)throw new Error("promptpay_timeout");
+        const p=activePending||pendingRead();
+        if(p?.sessionId){await finalizePending(p,st.chargeId||paymentReference);return}
         paymentVerified=st.chargeId||paymentReference;
       }
 
@@ -335,7 +432,8 @@ function PosView({session}:{session:Session}){
     {selected&&<div className="fixed inset-0 z-50 grid place-items-center bg-black/55 p-4" onMouseDown={()=>setSelected(null)}><div className="card w-full max-w-md border border-slate-300 bg-white p-6 shadow-2xl" onMouseDown={e=>e.stopPropagation()}><div className="flex items-start justify-between"><div><p className="gold text-[10px] tracking-[.25em]">{selected.category||"DRINK"}</p><h3 className="mt-1 text-xl">{selected.name}</h3></div><button onClick={()=>setSelected(null)}><X/></button></div><p className="mt-5 text-xs uppercase tracking-widest text-slate-500">Choose variant</p><div className="mt-3 grid gap-2">{selected.variants.map(v=><button key={v.label} disabled={!v.available} onClick={()=>addVariant(selected,v)} className="rounded-2xl border border-slate-300 bg-slate-50 px-4 py-3 text-left hover:border-[#c59b19] disabled:bg-slate-100 disabled:text-slate-400"><span>{v.label||"Standard"}{!v.available&&<small className="ml-2 text-red-600">หมดชั่วคราว</small>}{v.available&&v.lowStock&&<small className="ml-2 text-amber-700">เหลือประมาณ {v.maxServings} แก้ว</small>}</span><span className="float-right font-semibold text-[#765b08]">฿{selected.price.toFixed(0)}</span>{!v.available&&v.missingIngredients?.length>0&&<small className="mt-1 block text-xs text-red-500">ขาด: {v.missingIngredients.map(i=>i.name).join(", ")}</small>}</button>)}</div></div></div>}
 
     {payOpen&&<div className="fixed inset-0 z-50 grid place-items-center bg-black/55 p-4"><div className="card w-full max-w-md border border-slate-300 bg-white p-6 shadow-2xl"><div className="flex justify-between"><div><p className="gold text-[10px] tracking-[.25em]">PAYMENT</p><h3 className="mt-1 text-2xl font-semibold">ยอดชำระ ฿{cart.getTotal().toFixed(0)}</h3></div><button disabled={busy} onClick={()=>setPayOpen(false)} className="disabled:cursor-not-allowed disabled:opacity-30"><X/></button></div>
-      <div className="mt-5 grid grid-cols-2 gap-2 rounded-2xl bg-slate-100 p-1"><button onClick={()=>setMethod("cash")} className={"rounded-xl p-3 "+(method==="cash"?"bg-[#d4af37] font-semibold text-black shadow-sm":"text-slate-700")}>Cash</button><button onClick={()=>setMethod("promptpay")} className={"rounded-xl p-3 "+(method==="promptpay"?"bg-[#d4af37] font-semibold text-black shadow-sm":"text-slate-700")}>PromptPay</button></div>
+      <div className="mt-5 grid grid-cols-2 gap-2 rounded-2xl bg-slate-100 p-1"><button onClick={()=>setMethod("cash")} className={"rounded-xl p-3 "+(method==="cash"?"bg-[#d4af37] font-semibold text-black shadow-sm":"text-slate-700")}>Cash</button><button disabled={promptConfig?.ready!==true} onClick={()=>setMethod("promptpay")} title={promptConfig?.ready===true?"PromptPay พร้อมใช้งาน":"รอ Beam อนุมัติ / ตั้งค่า API และ Webhook"} className={"rounded-xl p-3 disabled:cursor-not-allowed disabled:opacity-45 "+(method==="promptpay"?"bg-[#d4af37] font-semibold text-black shadow-sm":"text-slate-700")}>PromptPay{promptConfig?.selectedProvider==="beam"&&promptConfig?.mode==="test"?" · TEST":""}</button></div>
+      {promptConfig?.ready!==true&&<div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">PromptPay ยังไม่เปิดรับเงินจริง · ระบบกำลังรอ Beam Merchant/API/Webhook ให้พร้อม</div>}
       {customers.length>0&&<select value={customerId} onChange={e=>setCustomerId(e.target.value)} className="mt-4 w-full rounded-2xl border border-slate-300 bg-white px-4 py-3"><option value="">ลูกค้าทั่วไป / ไม่สะสมแต้ม</option>{customers.map(x=><option key={x.id} value={x.id}>{x.name} · {x.points||0} pts</option>)}</select>}
       {method==="cash"&&<><input autoFocus inputMode="decimal" value={received} onChange={e=>setReceived(e.target.value)} placeholder="จำนวนเงินที่รับ" className="mt-4 w-full rounded-2xl border border-slate-300 bg-slate-100 px-4 py-3 text-lg outline-none focus:border-[#c59b19]"/>{received.trim()!==""&&Number.isFinite(cashDelta)&&<div className={"mt-3 flex items-center justify-between rounded-2xl border px-4 py-3 "+(cashDelta>=0?"border-emerald-300 bg-emerald-50 text-emerald-900":"border-red-300 bg-red-50 text-red-800")}><span>{cashDelta>=0?"เงินทอน":"ขาดอีก"}</span><b className="text-xl">฿{Math.abs(cashDelta).toFixed(0)}</b></div>}</>}
       {method==="promptpay"&&prompt?.qrUrl&&<div className="mt-4 rounded-[20px] border border-slate-300 bg-white p-4 text-center"><img src={prompt.qrUrl} alt="PromptPay QR" className="mx-auto max-h-56 w-auto"/><p className="mt-2 text-xs font-semibold text-black">{prompt.paid?"ชำระเงินแล้ว":"สแกน QR แล้วระบบจะตรวจสอบอัตโนมัติ"}</p></div>}
