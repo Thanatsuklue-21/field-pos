@@ -221,10 +221,34 @@ function PosView({session}:{session:Session}){
     }
   }
 
+  async function ensurePendingPrompt(p:PendingPrompt){
+    let next={...p};
+    if(!next.sessionId){
+      const reserved=await api<any>("/api/pos/split/start",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({requestKey:next.requestKey,date:next.date,cart:next.cart,customerId:next.customerId,mode:"promptpay_full"})});
+      const serverTotal=Number(reserved?.session?.total);
+      if(!reserved?.session?.id||!Number.isFinite(serverTotal)||serverTotal<=0)throw new Error("promptpay_reservation_failed");
+      next={...next,sessionId:reserved.session.id,total:serverTotal};
+      pendingWrite(next);
+    }
+    let st:any=null;
+    if(!next.paymentReference){
+      st=await api<any>("/api/payments/promptpay/create",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({amount:next.total,reference:next.sessionId})});
+      if(!st?.chargeId)throw new Error("promptpay_qr_unavailable");
+      next={...next,paymentReference:st.chargeId};
+      pendingWrite(next);
+    }
+    return {pending:next,status:st};
+  }
+
   async function recoverPending(){
-    const p=pendingRead();
+    let p=pendingRead();
     if(!p)return;
     try{
+      if(!p.sessionId||!p.paymentReference){
+        const resumed=await ensurePendingPrompt(p);
+        p=resumed.pending;
+        if(resumed.status)setPrompt(resumed.status);
+      }
       if(p.sessionId){
         const sessionStatus=await api<any>("/api/pos/split/status",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({sessionId:p.sessionId})});
         if(sessionStatus?.session?.status==="completed"){
@@ -286,28 +310,28 @@ function PosView({session}:{session:Session}){
         let activePending:PendingPrompt|null=null;
         const existing=pendingRead();
         if(existing){
-          const current=await api<any>("/api/payments/promptpay/status",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({chargeId:existing.paymentReference})});
-          if(current.paid){await finalizePending(existing,current.chargeId||existing.paymentReference);return}
-          if(["failed","expired","reversed"].includes(String(current.status||"").toLowerCase())){await cancelPendingReservation(existing);pendingClear()}
-          else if(!samePending(existing,checkoutTotal,cartPayload,customerId))throw Object.assign(new Error("pending_promptpay_exists"),{status:409});
-          else{st=current;paymentReference=existing.paymentReference;requestKey=existing.requestKey;activePending=existing}
+          let resumed=existing,current:any=null;
+          if(!resumed.sessionId||!resumed.paymentReference){
+            const setup=await ensurePendingPrompt(resumed);
+            resumed=setup.pending;
+            current=setup.status;
+          }
+          if(!current)current=await api<any>("/api/payments/promptpay/status",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({chargeId:resumed.paymentReference})});
+          if(current.paid){await finalizePending(resumed,current.chargeId||resumed.paymentReference);return}
+          if(["failed","expired","reversed"].includes(String(current.status||"").toLowerCase())){await cancelPendingReservation(resumed);pendingClear()}
+          else if(!samePending(resumed,checkoutTotal,cartPayload,customerId))throw Object.assign(new Error("pending_promptpay_exists"),{status:409});
+          else{st=current;paymentReference=resumed.paymentReference;requestKey=resumed.requestKey;activePending=resumed;checkoutTotal=resumed.total}
         }
         if(!st){
           const reservationKey=crypto.randomUUID();
           const payRequestKey=crypto.randomUUID();
-          const reserved=await api<any>("/api/pos/split/start",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({requestKey:reservationKey,date:localDate(),cart:cartPayload,customerId:customerId||null,mode:"promptpay_full"})});
-          const serverTotal=Number(reserved?.session?.total);
-          if(!reserved?.session?.id||!Number.isFinite(serverTotal)||serverTotal<=0)throw new Error("promptpay_reservation_failed");
-          checkoutTotal=serverTotal;
-          try{
-            st=await api<any>("/api/payments/promptpay/create",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({amount:checkoutTotal,reference:reserved.session.id})});
-          }catch(e){
-            await api<any>("/api/pos/split/cancel",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({requestKey:crypto.randomUUID(),sessionId:reserved.session.id})}).catch(()=>{});
-            throw e;
-          }
-          paymentReference=st.chargeId;
-          activePending={requestKey:reservationKey,payRequestKey,sessionId:reserved.session.id,date:localDate(),cart:cartPayload,paymentReference,total:checkoutTotal,customerId:customerId||null,createdAt:Date.now()};
+          activePending={requestKey:reservationKey,payRequestKey,date:localDate(),cart:cartPayload,paymentReference:"",total:checkoutTotal,customerId:customerId||null,createdAt:Date.now()};
           pendingWrite(activePending);
+          const setup=await ensurePendingPrompt(activePending);
+          activePending=setup.pending;
+          st=setup.status||await api<any>("/api/payments/promptpay/status",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({chargeId:activePending.paymentReference})});
+          checkoutTotal=activePending.total;
+          paymentReference=activePending.paymentReference;
         }
         setPrompt(st);
         const deadline=Date.now()+15*60*1000;
