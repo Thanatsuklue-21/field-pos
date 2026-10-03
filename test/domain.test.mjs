@@ -20,6 +20,7 @@ import {
   standardCostPerGram,
   recipeStandardCost,
   makeCostSnapshot,
+  operationalUnitCost,
 } from '../lib/domain/costing.mjs';
 
 test('legacy queue states normalize safely', () => {
@@ -109,4 +110,11 @@ test('cost snapshot freezes ingredient cost at sale time', () => {
   assert.equal(snapshot.standardCost, 15.5);
   assert.equal(snapshot.ingredientCosts.matcha.unitCost, 2);
   assert.equal(snapshot.costingMethod, 'simplified');
+});
+
+
+test('operational unit cost keeps raw purchase cost factual and adds waste only to syrup/concentrate',()=>{
+  assert.equal(operationalUnitCost({unitCost:1,costKind:'milk',wasteMargin:.10}),1);
+  assert.equal(operationalUnitCost({unitCost:2,costKind:'syrup',wasteMargin:.05}),2.1);
+  assert.equal(operationalUnitCost({unitCost:4,costKind:'concentrate',wasteMargin:.10}),4.4);
 });

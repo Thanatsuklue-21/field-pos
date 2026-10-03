@@ -80,3 +80,8 @@ button:disabled{cursor:not-allowed}
   }
   button:active:not(:disabled),a:active{transform:none}
 }
+
+
+@media (max-width:767px){
+  .card{border-radius:18px}
+}

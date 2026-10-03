@@ -168,9 +168,9 @@ test('purchase cost updates unit cost and creates one expense only once', async 
 test('purchase idempotency includes supplier package and cost evidence',async()=>{
   const db=fakeDb();
   const input={requestKey:'purchase-evidence-0001',ingredientId:'matcha',type:'PURCHASE',qtyDelta:250,unit:'g',purchaseCost:519,purchaseDate:'2026-10-02',supplier:'Supplier A',packageQty:250,packageUnit:'bag',costStatus:'CONFIRMED'};
-  assert.equal((await recordStockTransaction({db,actorId:'admin-1',input,now:700})).status,'created');
-  assert.equal((await recordStockTransaction({db,actorId:'admin-1',input:{...input,supplier:'Supplier B'},now:800})).status,'conflict');
-  assert.equal((await recordStockTransaction({db,actorId:'admin-1',input:{...input,purchaseCost:500},now:900})).status,'conflict');
+  assert.equal((await recordStockTransaction({db,actorId:'admin-1',input,now:Date.parse('2026-10-03T03:00:00Z')})).status,'created');
+  assert.equal((await recordStockTransaction({db,actorId:'admin-1',input:{...input,supplier:'Supplier B'},now:Date.parse('2026-10-03T03:01:00Z')})).status,'conflict');
+  assert.equal((await recordStockTransaction({db,actorId:'admin-1',input:{...input,purchaseCost:500},now:Date.parse('2026-10-03T03:02:00Z')})).status,'conflict');
   assert.equal(db.storage.costHistory.length,1);
 });
 
@@ -178,8 +178,8 @@ test('purchase idempotency includes supplier package and cost evidence',async()=
 test('packaged purchase persists original package evidence and replays exactly once',async()=>{
   const db=fakeDb();
   const input={requestKey:'package-history-0001',ingredientId:'matcha',type:'PURCHASE',unit:'g',purchaseCost:398,purchaseDate:'2026-10-03',supplier:'Makro',packageQty:2,packageUnit:'ขวด',packSize:750,packSizeUnit:'ml'};
-  const first=await recordStockTransaction({db,actorId:'admin-1',input,now:1000});
-  const replay=await recordStockTransaction({db,actorId:'admin-1',input,now:1100});
+  const first=await recordStockTransaction({db,actorId:'admin-1',input,now:Date.parse('2026-10-03T03:00:00Z')});
+  const replay=await recordStockTransaction({db,actorId:'admin-1',input,now:Date.parse('2026-10-03T03:01:00Z')});
   assert.equal(first.status,'created');assert.equal(replay.status,'replayed');
   assert.equal(db.storage.purchases.length,1);
   assert.equal(db.storage.purchases[0].package_qty,2);
@@ -213,4 +213,13 @@ test('purchase cannot post into an already closed purchase date and rolls back s
   assert.equal(db.rows.length,0);
   assert.equal(JSON.parse(db.storage.document).ingredients.matcha.qty,1000);
   assert.equal(JSON.parse(db.storage.document).expenses?.length||0,0);
+});
+
+
+test('purchase rejects future business dates and impossible calendar dates',async()=>{
+  const db=fakeDb(),now=Date.parse('2026-10-03T03:00:00Z');
+  await assert.rejects(()=>recordStockTransaction({db,actorId:'admin-1',now,input:{requestKey:'purchase-future-0001',ingredientId:'matcha',type:'PURCHASE',qtyDelta:100,unit:'g',purchaseCost:200,purchaseDate:'2026-10-04'}}),/future_purchase_date/);
+  await assert.rejects(()=>recordStockTransaction({db,actorId:'admin-1',now,input:{requestKey:'purchase-invalid-date',ingredientId:'matcha',type:'PURCHASE',qtyDelta:100,unit:'g',purchaseCost:200,purchaseDate:'2026-02-30'}}),/invalid_purchase_date/);
+  assert.equal(db.rows.length,0);
+  assert.equal(JSON.parse(db.storage.document).ingredients.matcha.qty,1000);
 });

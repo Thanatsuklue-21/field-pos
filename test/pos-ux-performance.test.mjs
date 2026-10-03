@@ -133,7 +133,7 @@ test('queue reads a compact snapshot and renders priced order details',async()=>
   assert.doesNotMatch(queue,/api<Bootstrap>\("\/api\/pos\/bootstrap"\)/);
   assert.match(api,/path==='\/api\/pos\/queue'&&method==='GET'/);
   assert.match(api,/getQueueSnapshot/);
-  assert.match(posApi,/price:n\(x\.price\)/);
+  assert.match(posApi,/price:saleTimeItemPrice\(doc,o,x\)/);
   assert.match(queue,/ยอดรวม ฿/);
   assert.match(queue,/ดูรายการ \/ แก้ไขออเดอร์/);
 });
@@ -143,7 +143,7 @@ test('queue actions use optimistic feedback and delivery has a visible fixed toa
   assert.match(queue,/const optimistic=/);
   assert.match(queue,/pulse\("กำลังส่งมอบ/);
   assert.match(queue,/ส่งมอบ .*เรียบร้อยแล้ว/);
-  assert.match(queue,/fixed bottom-\[92px\]/);
+  assert.match(queue,/fixed bottom-\[76px\]/);
   assert.match(queue,/กำลังบันทึก\.\.\./);
 });
 
@@ -157,4 +157,23 @@ test('cash order can be safely voided and loaded back into POS before production
   assert.match(orders,/heldCash:s\.total/);
   assert.match(pos,/field-pos-edit-cash-v1/);
   assert.match(pos,/ยอดเงินสดจากบิลเดิม/);
+});
+
+
+test('order items preserve sale-time price across normal add-on and split flows',async()=>{
+  const api=await read('lib/pos-api.mjs'),queue=await read('app/queue/page.tsx');
+  assert.match(api,/price:x\.price,readyQty:0,calledQty:0,addedAt:now/);
+  assert.ok((api.match(/qty:x\.qty,price:x\.price,readyQty:0,calledQty:0/g)||[]).length>=2);
+  assert.match(api,/function saleTimeItemPrice/);
+  assert.match(queue,/ราคาไม่พบ/);
+});
+
+test('mobile operational pages use compact density while preserving touch actions',async()=>{
+  const shell=await read('components/app-shell.tsx'),pos=await read('app/pos/page.tsx'),queue=await read('app/queue/page.tsx'),stock=await read('app/stock/page.tsx'),orders=await read('app/orders/page.tsx');
+  assert.match(shell,/min-w-\[54px\]/);
+  assert.match(pos,/min-h-\[154px\]/);
+  assert.match(pos,/bottom-\[70px\]/);
+  assert.match(queue,/p-3 sm:p-5 md:p-7/);
+  assert.match(stock,/p-3 sm:p-5 md:p-7/);
+  assert.match(orders,/p-3 sm:p-5 md:p-7/);
 });
