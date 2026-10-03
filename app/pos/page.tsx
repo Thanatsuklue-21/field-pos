@@ -265,7 +265,7 @@ function PosView({session}:{session:Session}){
       setMethod("promptpay");
       setPrompt(st);
       setPayOpen(true);
-      setResult("พบ PromptPay ที่ยังรอชำระ ระบบใช้ QR เดิมและยังคงจอง Stock ไว้เพื่อป้องกันรับเงินเกินจำนวนที่ขายได้");
+      setResult("พบ PromptPay ที่ยังรอชำระ ระบบใช้ QR เดิม ตรวจสอบรายการเดิม และยังคงจอง Stock ไว้เพื่อป้องกันรับเงินเกินจำนวนที่ขายได้");
     }catch{
       setMethod("promptpay");
       setPayOpen(true);
