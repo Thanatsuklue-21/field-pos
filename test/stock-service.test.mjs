@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {normalizeStockWrite, recordStockTransaction} from '../lib/stock-service.mjs';
+import {normalizePurchaseUrl, normalizeStockWrite, recordStockTransaction} from '../lib/stock-service.mjs';
 
 test('stock write validates transaction direction', () => {
   const base={requestKey:'req-00001',ingredientId:'matcha',unit:'g'};
@@ -222,4 +222,11 @@ test('purchase rejects future business dates and impossible calendar dates',asyn
   await assert.rejects(()=>recordStockTransaction({db,actorId:'admin-1',now,input:{requestKey:'purchase-invalid-date',ingredientId:'matcha',type:'PURCHASE',qtyDelta:100,unit:'g',purchaseCost:200,purchaseDate:'2026-02-30'}}),/invalid_purchase_date/);
   assert.equal(db.rows.length,0);
   assert.equal(JSON.parse(db.storage.document).ingredients.matcha.qty,1000);
+});
+
+
+test('purchase URL accepts bare domains and normalizes them to https',()=>{
+  assert.equal(normalizePurchaseUrl('shopee.co.th/item/123'),'https://shopee.co.th/item/123');
+  assert.equal(normalizePurchaseUrl('https://example.com/a'),'https://example.com/a');
+  assert.throws(()=>normalizePurchaseUrl('javascript:alert(1)'),/invalid_purchase_url/);
 });
