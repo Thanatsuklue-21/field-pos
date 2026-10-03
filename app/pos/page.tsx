@@ -67,6 +67,20 @@ function PosView({session}:{session:Session}){
   },[]);
 
   useEffect(()=>{
+    try{
+      const raw=sessionStorage.getItem("field-pos-edit-cash-v1");
+      if(!raw)return;
+      sessionStorage.removeItem("field-pos-edit-cash-v1");
+      const edit=JSON.parse(raw),heldCash=Number(edit?.heldCash);
+      if(Number.isFinite(heldCash)&&heldCash>0){
+        setMethod("cash");
+        setReceived(String(heldCash));
+        setNotice("กำลังแก้ไข "+String(edit?.fromQueue||edit?.fromBill||"บิลเดิม")+" · ยอดเงินสดจากบิลเดิม ฿"+heldCash.toFixed(0)+" ถูกกรอกไว้แล้ว เพิ่ม/ลด/เปลี่ยนเมนูแล้วกด CHECKOUT ใหม่");
+      }
+    }catch{}
+  },[]);
+
+  useEffect(()=>{
     const refresh=()=>load().catch(()=>{});
     const visible=()=>{if(document.visibilityState==="visible")refresh()};
     const timer=setInterval(refresh,15000);
