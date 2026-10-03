@@ -11,7 +11,7 @@ async function resetTestSales(){
   try{
     const r=await api<any>("/api/admin/test-data/sales-reset",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({confirm:resetPhrase,confirmOpenOrders:resetOpenOrders})});
     clearCart();try{localStorage.removeItem("field-pos-pending-promptpay-v1")}catch{}
-    setResetPhrase("");setResetOpenOrders(false);setResetMsg("ล้างข้อมูลการขายทดลองแล้ว "+r.sales+" บิล · Stock ปัจจุบันไม่ถูกเปลี่ยน");
+    setResetPhrase("");setResetOpenOrders(false);setResetMsg("ล้างข้อมูลการขายทดลองแล้ว "+r.sales+" บิล · Stock คงเหลือปัจจุบันไม่ถูกเปลี่ยน");
     await Promise.all([loadTestData(),loadReadiness()]);
   }catch(e:any){
     const map:Record<string,string>={active_payment_sessions_exist:"ยังมี PromptPay/Split payment ค้างอยู่ ต้องจัดการให้จบก่อน",active_orders_confirmation_required:"ยังมีคิวที่เปิดอยู่ กรุณาติ๊กยืนยันว่าจะล้างคิวทดลองด้วย",test_sales_reset_confirmation_required:"กรุณาพิมพ์ RESET TEST SALES ให้ตรง"};
