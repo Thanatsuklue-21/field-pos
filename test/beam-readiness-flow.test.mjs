@@ -5,11 +5,14 @@ const read=p=>readFile(new URL('../'+p,import.meta.url),'utf8');
 
 test('POS PromptPay reserves stock before creating provider QR',async()=>{
   const pos=await read('app/pos/page.tsx');
+  const setup=pos.slice(pos.indexOf('async function ensurePendingPrompt'),pos.indexOf('async function recoverPending'));
   const checkout=pos.slice(pos.indexOf('async function checkout()'),pos.indexOf('function openPayment()'));
-  assert.match(checkout,/\/api\/pos\/split\/start/);
-  assert.match(checkout,/mode:"promptpay_full"/);
+  assert.match(setup,/\/api\/pos\/split\/start/);
+  assert.match(setup,/mode:"promptpay_full"/);
+  assert.match(setup,/\/api\/payments\/promptpay\/create/);
+  assert.ok(setup.indexOf('/api/pos/split/start')<setup.indexOf('/api/payments/promptpay/create'));
+  assert.match(checkout,/pendingWrite\(activePending\)/);
   assert.match(checkout,/ensurePendingPrompt/);
-  assert.ok(checkout.indexOf('/api/pos/split/start')<checkout.indexOf('/api/payments/promptpay/create'));
   assert.match(pos,/PromptPay ยังไม่เปิดรับเงินจริง/);
   assert.match(pos,/promptConfig\?\.ready!==true/);
 });
