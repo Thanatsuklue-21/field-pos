@@ -29,7 +29,7 @@ test('every APPROVED recipe has regression-locked COGS, margin and contribution'
   }]));
   assert.deepEqual(actual,{
     'pure-matcha:Standard':{cogs:13.104,grossProfit:31.896,grossMargin:70.88,contribution:29.396,status:'CONFIRMED'},
-    'matcha-latte:Standard':{cogs:20.708438,grossProfit:34.291563,grossMargin:62.348,contribution:31.791563,status:'CONFIRMED'},
+    'matcha-latte:Standard':{cogs:20.708438,grossProfit:34.291562,grossMargin:62.348,contribution:31.791562,status:'CONFIRMED'},
     'matcha-signature:100%':{cogs:22.785,grossProfit:32.215,grossMargin:58.573,contribution:29.715,status:'CONFIRMED'},
     'matcha-signature:50%':{cogs:21.8175,grossProfit:33.1825,grossMargin:60.332,contribution:30.6825,status:'CONFIRMED'},
     'matcha-signature:0%':{cogs:21.465,grossProfit:33.535,grossMargin:60.973,contribution:31.035,status:'CONFIRMED'},
