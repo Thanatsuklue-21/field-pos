@@ -238,7 +238,7 @@ function PosView({session}:{session:Session}){
           else{st=current;paymentReference=existing.paymentReference;requestKey=existing.requestKey}
         }
         if(!st){
-          st=await api<any>("/api/payments/promptpay/create",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({amount:checkoutTotal,reference:"FIELD-"+Date.now()})});
+          st=await api<any>("/api/payments/promptpay/create",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({amount:checkoutTotal,reference:requestKey})});
           paymentReference=st.chargeId;
           pendingWrite({requestKey,date:localDate(),cart:cartPayload,paymentReference,total:checkoutTotal,customerId:customerId||null,createdAt:Date.now()});
         }

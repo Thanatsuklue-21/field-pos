@@ -7,14 +7,15 @@ export const dynamic="force-dynamic";
 async function handle(request,{params}){
   const {route=[]}=await params;
   const headers=Object.fromEntries(request.headers.entries());
-  let body={};
+  let body={},rawBody="";
   if(!["GET","HEAD"].includes(request.method)){
     const raw=await request.text();
+    rawBody=raw;
     if(raw){
       try{body=JSON.parse(raw)}catch{return Response.json({error:"invalid_json"},{status:400})}
     }
   }
-  const req={method:request.method,headers,query:{route},body};
+  const req={method:request.method,headers,query:{route},body,rawBody};
   let status=200,responseHeaders={},chunks=[];
   const res={
     writeHead(code,h={}){status=code;responseHeaders={...responseHeaders,...h};},
