@@ -34,7 +34,20 @@ test('Beam config exposes readiness without secrets',()=>{
   assert.equal(cfg.configured,true);
   assert.equal(cfg.mode,'test');
   assert.equal(cfg.webhookConfigured,true);
+  assert.equal(cfg.ready,true);
+  assert.deepEqual(cfg.missing,[]);
   assert.equal(JSON.stringify(cfg).includes('secret-api-key'),false);
+});
+
+
+test('Beam readiness reports missing server configuration without exposing values',()=>{
+  delete process.env.BEAM_MERCHANT_ID;
+  delete process.env.BEAM_API_KEY;
+  delete process.env.BEAM_WEBHOOK_HMAC_KEY;
+  const cfg=beamPromptPayConfig();
+  assert.equal(cfg.configured,false);
+  assert.equal(cfg.ready,false);
+  assert.deepEqual(cfg.missing,['BEAM_MERCHANT_ID','BEAM_API_KEY','BEAM_WEBHOOK_HMAC_KEY']);
 });
 
 test('create Beam PromptPay charge sends satang, idempotency key and returns data URL',async()=>{
