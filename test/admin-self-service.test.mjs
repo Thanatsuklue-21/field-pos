@@ -76,5 +76,5 @@ test('trial sales reset is explicit, snapshot-backed and does not change stock q
   assert.doesNotMatch(seg,/ingredient\.qty\s*=/);
   assert.match(settings,/TEST DATA RESET/);
   assert.match(settings,/ล้างประวัติการขายทดลอง/);
-  assert.match(settings,/Stock คงเหลือปัจจุบันไม่ถูกเปลี่ยน/);
+  assert.match(settings,/Stock ปัจจุบันไม่ถูกเปลี่ยน|ไม่เปลี่ยน Stock คงเหลือปัจจุบัน/);
 });
