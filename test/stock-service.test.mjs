@@ -214,3 +214,12 @@ test('purchase cannot post into an already closed purchase date and rolls back s
   assert.equal(JSON.parse(db.storage.document).ingredients.matcha.qty,1000);
   assert.equal(JSON.parse(db.storage.document).expenses?.length||0,0);
 });
+
+
+test('purchase rejects future business dates and impossible calendar dates',async()=>{
+  const db=fakeDb(),now=Date.parse('2026-10-03T03:00:00Z');
+  await assert.rejects(()=>recordStockTransaction({db,actorId:'admin-1',now,input:{requestKey:'purchase-future-0001',ingredientId:'matcha',type:'PURCHASE',qtyDelta:100,unit:'g',purchaseCost:200,purchaseDate:'2026-10-04'}}),/future_purchase_date/);
+  await assert.rejects(()=>recordStockTransaction({db,actorId:'admin-1',now,input:{requestKey:'purchase-invalid-date',ingredientId:'matcha',type:'PURCHASE',qtyDelta:100,unit:'g',purchaseCost:200,purchaseDate:'2026-02-30'}}),/invalid_purchase_date/);
+  assert.equal(db.rows.length,0);
+  assert.equal(JSON.parse(db.storage.document).ingredients.matcha.qty,1000);
+});
