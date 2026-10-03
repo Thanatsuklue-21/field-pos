@@ -194,3 +194,13 @@ test('payment modal reviews cart items prices quantities and sweetness before co
   assert.match(pos,/รวม \{cart\.items\.reduce\(\(s,i\)=>s\+i\.qty,0\)\} แก้ว/);
   assert.match(pos,/max-h-\[94vh\]/);
 });
+
+
+test('payment actions stay above mobile navigation and support exact cash shortcut',async()=>{
+  const pos=await read('app/pos/page.tsx');
+  assert.match(pos,/z-\[80\]/);
+  assert.match(pos,/sticky bottom-0 z-20/);
+  assert.match(pos,/รับมาพอดี/);
+  assert.match(pos,/setReceived\(String\(cart\.getTotal\(\)\)\)/);
+  assert.match(pos,/pb-\[max\(\.25rem,env\(safe-area-inset-bottom\)\)\]/);
+});
