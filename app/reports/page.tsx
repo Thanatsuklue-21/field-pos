@@ -1,21 +1,44 @@
 "use client";
 import {useEffect,useState} from "react";
+import {Download} from "lucide-react";
 import AuthGate from "@/components/auth-gate";
 import {api} from "@/lib/api-client";
 import {ResponsiveContainer,BarChart,Bar,XAxis,YAxis,Tooltip} from "recharts";
 
-type Summary={today:string;todayRevenue:number;totalRevenue:number;grossProfit:number;grossMargin:number;profitEstimated:boolean;costQuality:{status:string};cups:number;daily:{date:string;revenue:number}[]};
+type Summary={today:string;todayRevenue:number;totalRevenue:number;grossProfit:number;grossMargin:number;profitEstimated:boolean;costQuality:{status:string};cups:number;daily:{date:string;revenue:number}[];inventoryValue:number;inventoryItems:number;inventoryValueEstimated:boolean};
+type ExportData={exportedAt:number;sales:Record<string,unknown>[];expenses:Record<string,unknown>[];stock:Record<string,unknown>[];inventorySummary:{value:number;items:number;isEstimated:boolean}};
 
 export default function Reports(){return <AuthGate>{()=><ReportsView/>}</AuthGate>}
 
+function escapeCsv(v:unknown){const s=String(v??"");return /[",\n]/.test(s)?'"'+s.replaceAll('"','""')+'"':s}
+function toCsv(rows:Record<string,unknown>[]){
+  if(!rows.length)return "";
+  const headers=[...new Set(rows.flatMap(r=>Object.keys(r)))];
+  return [headers.join(","),...rows.map(r=>headers.map(h=>escapeCsv(r[h])).join(","))].join("\n");
+}
+function downloadCsv(name:string,rows:Record<string,unknown>[]){
+  const csv="\ufeff"+toCsv(rows),url=URL.createObjectURL(new Blob([csv],{type:"text/csv;charset=utf-8"})),a=document.createElement("a");
+  a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
+
 function ReportsView(){
-  const [d,setD]=useState<Summary|null>(null);
+  const [d,setD]=useState<Summary|null>(null),[busy,setBusy]=useState(false),[msg,setMsg]=useState("");
   useEffect(()=>{api<Summary>("/api/reports/summary").then(setD).catch(()=>{})},[]);
-  const k=[["ยอดขายวันนี้",d?.todayRevenue||0,"฿"],["ยอดขายรวม",d?.totalRevenue||0,"฿"],["กำไรขั้นต้น",d?.grossProfit||0,"฿"],["Gross Margin",d?.grossMargin||0,"%"]];
-  return <section className="soft-scroll h-full overflow-auto p-5 md:p-7">
-    <p className="gold m-0 text-[10px] font-bold tracking-[.3em]">PERFORMANCE</p><h1 className="mt-1 text-2xl font-semibold">REPORTS</h1>
-    {d?.profitEstimated&&<div className="mt-4 rounded-2xl border border-amber-400/25 bg-amber-400/[.08] p-4 text-sm text-amber-800"><b>ESTIMATED PROFIT</b><p className="mt-1 text-xs text-amber-100/70">กำไรและ Margin มีรายการต้นทุนที่ยังไม่ยืนยัน ({d.costQuality.status}) โปรดใช้ประกอบการตัดสินใจชั่วคราว</p></div>}
-    <div className="mt-5 grid grid-cols-2 gap-3 xl:grid-cols-4">{k.map(([label,value,unit])=><div key={String(label)} className="glass card p-5"><small className="text-xs text-slate-500">{label}</small><strong className="mt-3 block text-2xl">{unit==="฿"?"฿":""}{Number(value).toLocaleString(undefined,{maximumFractionDigits:unit==="%"?1:0})}{unit==="%"?"%":""}</strong></div>)}</div>
-    <div className="mt-4 grid gap-4 xl:grid-cols-[2fr_1fr]"><div className="glass card p-5"><div className="mb-5"><p className="m-0 text-[10px] tracking-[.25em] text-slate-500">LAST 7 SALES DAYS</p><h2 className="mt-1 text-base">DAILY REVENUE</h2></div><div className="h-[310px]"><ResponsiveContainer width="100%" height="100%"><BarChart data={d?.daily||[]}><XAxis dataKey="date" tick={{fill:"#8b8b8b",fontSize:11}} axisLine={false} tickLine={false}/><YAxis tick={{fill:"#8b8b8b",fontSize:11}} axisLine={false} tickLine={false}/><Tooltip contentStyle={{background:"#ffffff",color:"#1d1d1f",border:"1px solid rgba(60,60,67,.14)",borderRadius:16,boxShadow:"0 12px 32px rgba(15,23,42,.10)"}}/><Bar dataKey="revenue" fill="#d4af37" radius={[10,10,0,0]}/></BarChart></ResponsiveContainer></div></div><div className="glass card p-6"><p className="text-[10px] tracking-[.25em] text-slate-500">OPERATIONS</p><div className="mt-8"><small className="text-slate-500">Cups sold</small><div className="mt-2 text-4xl font-semibold gold">{d?.cups||0}</div></div><div className="mt-8 border-t border-slate-100 pt-6"><small className="text-slate-500">Data source</small><p className="mt-2 text-sm">Turso · FIELD server state</p></div></div></div>
+  const k=[["ยอดขายวันนี้",d?.todayRevenue||0,"฿"],["ยอดขายรวม",d?.totalRevenue||0,"฿"],["กำไรขั้นต้น",d?.grossProfit||0,"฿"],["Gross Margin",d?.grossMargin||0,"%"],["มูลค่า Stock คงเหลือ",d?.inventoryValue||0,"฿"]];
+  async function exportKind(kind:"sales"|"expenses"|"stock"){
+    setBusy(true);setMsg("");
+    try{
+      const x=await api<ExportData>("/api/reports/accounting-export");
+      downloadCsv("FIELD_"+kind+"_"+new Date().toISOString().slice(0,10)+".csv",x[kind]||[]);
+      setMsg("Export "+kind+" สำเร็จ");
+    }catch(e:any){setMsg(e.message||"export_failed")}finally{setBusy(false)}
+  }
+  return <section className="soft-scroll h-full overflow-auto p-3 sm:p-5 md:p-7">
+    <div className="flex flex-wrap items-end justify-between gap-3"><div><p className="gold m-0 text-[10px] font-bold tracking-[.3em]">PERFORMANCE</p><h1 className="mt-1 text-xl font-semibold sm:text-2xl">REPORTS</h1><p className="mt-1 text-xs text-slate-500">ยอดขาย · กำไร · มูลค่าสต็อก · Export สำหรับบัญชี</p></div><div className="flex flex-wrap gap-2">{(["sales","expenses","stock"] as const).map(x=><button key={x} disabled={busy} onClick={()=>exportKind(x)} className="flex min-h-10 items-center gap-1.5 rounded-full border border-slate-300 bg-white px-3 text-xs font-semibold disabled:opacity-40"><Download size={14}/>{x==="sales"?"Sales CSV":x==="expenses"?"Expenses CSV":"Stock CSV"}</button>)}</div></div>
+    {msg&&<p className="mt-3 rounded-xl bg-white px-3 py-2 text-sm">{msg}</p>}
+    {d?.profitEstimated&&<div className="mt-4 rounded-2xl border border-amber-400/25 bg-amber-50 p-4 text-sm text-amber-800"><b>ESTIMATED PROFIT</b><p className="mt-1 text-xs">กำไรและ Margin มีรายการต้นทุนที่ยังไม่ยืนยัน ({d.costQuality.status})</p></div>}
+    {d?.inventoryValueEstimated&&<div className="mt-3 rounded-2xl border border-amber-300 bg-amber-50 p-3 text-xs text-amber-800">มูลค่า Stock ยังเป็นค่าประมาณ เพราะมีวัตถุดิบบางรายการที่ต้นทุนยังไม่ยืนยัน</div>}
+    <div className="mt-5 grid grid-cols-2 gap-3 xl:grid-cols-5">{k.map(([label,value,unit])=><div key={String(label)} className="glass card p-4 sm:p-5"><small className="text-xs text-slate-500">{label}</small><strong className="mt-3 block text-xl sm:text-2xl">{unit==="฿"?"฿":""}{Number(value).toLocaleString(undefined,{maximumFractionDigits:unit==="%"?1:2})}{unit==="%"?"%":""}</strong>{label==="มูลค่า Stock คงเหลือ"&&<small className="mt-1 block text-slate-500">{d?.inventoryItems||0} รายการที่มีของคงเหลือ</small>}</div>)}</div>
+    <div className="mt-4 grid gap-4 xl:grid-cols-[2fr_1fr]"><div className="glass card p-5"><div className="mb-5"><p className="m-0 text-[10px] tracking-[.25em] text-slate-500">LAST 7 SALES DAYS</p><h2 className="mt-1 text-base">DAILY REVENUE</h2></div><div className="h-[310px]"><ResponsiveContainer width="100%" height="100%"><BarChart data={d?.daily||[]}><XAxis dataKey="date" tick={{fill:"#8b8b8b",fontSize:11}} axisLine={false} tickLine={false}/><YAxis tick={{fill:"#8b8b8b",fontSize:11}} axisLine={false} tickLine={false}/><Tooltip contentStyle={{background:"#ffffff",color:"#1d1d1f",border:"1px solid rgba(60,60,67,.14)",borderRadius:16,boxShadow:"0 12px 32px rgba(15,23,42,.10)"}}/><Bar dataKey="revenue" fill="#d4af37" radius={[10,10,0,0]}/></BarChart></ResponsiveContainer></div></div><div className="glass card p-6"><p className="text-[10px] tracking-[.25em] text-slate-500">OPERATIONS</p><div className="mt-8"><small className="text-slate-500">Cups sold</small><div className="mt-2 text-4xl font-semibold gold">{d?.cups||0}</div></div><div className="mt-8 border-t border-slate-100 pt-6"><small className="text-slate-500">Accounting export</small><p className="mt-2 text-sm text-slate-600">CSV เป็น Non‑VAT: Sales, Expenses และ Stock valuation พร้อมส่งต่อคนทำบัญชีได้</p></div></div></div>
   </section>
 }
