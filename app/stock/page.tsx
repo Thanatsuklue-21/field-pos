@@ -7,6 +7,7 @@ import {api,type Session} from "@/lib/api-client";
 type Purchase={
   id:string;stockTransactionId:string;supplier:string;purchaseDate:string;packageQty:number|null;packageUnit:string;packSize:number|null;packSizeUnit:string;
   quantityReceived:number;usageUnit:string;totalCost:number;unitCost:number;sourceUrl:string;imageUrl:string;note:string;createdAt:number;conversionApproximate:boolean;
+  cancelled:boolean;cancelledAt:number|null;cancelReason:string;
 };
 type PurchaseProfile={packageUnit:string;packSize:number;packSizeUnit:string;quantityPerPackage:number;usageUnit:string;conversionApproximate?:boolean;supplier?:string;sourceUrl?:string;imageUrl?:string;purchaseCost?:number|null;purchaseDate?:string;note?:string;updatedAt?:number};
 type Ingredient={id:string;name:string;qty:number;unit:string;safetyStock:number;unitCost:number;costStatus:string;costKind:string;wasteMargin:number;lowStock:boolean;archived:boolean;archivedAt?:number|null;historyResetAt?:number;purchaseProfile?:PurchaseProfile|null;recentPurchases:Purchase[]};
@@ -33,7 +34,7 @@ function previewReceived(packageQty:string,packSize:string,fromUnit:string,toUni
   const qty=packs*each;return {qty,label:qty.toLocaleString()+" "+toUnit,approximate};
 }
 function compactMoney(v:number){return Number(v||0).toLocaleString("th-TH",{minimumFractionDigits:0,maximumFractionDigits:2})}
-function latestPurchase(x:Ingredient){return x.recentPurchases?.[0]||null}
+function latestPurchase(x:Ingredient){return x.recentPurchases?.find(p=>!p.cancelled)||null}
 
 function StockView({session}:{session:Session}){
   const admin=session.user.role==="admin";
@@ -134,6 +135,29 @@ function StockView({session}:{session:Session}){
     }catch(e:any){setMsg(e.message==="purchase_before_reset_read_only"?"รายการนี้อยู่ก่อนจุดล้างข้อมูลทดลอง จึงเก็บไว้อ่านอย่างเดียว":e.message==="invalid_purchase_url"?"ลิงก์ไม่ถูกต้อง":e.message)}finally{setBusy(false)}
   }
 
+  async function cancelPurchase(x:Ingredient,p:Purchase){
+    if(p.cancelled)return;
+    const reason=window.prompt("เหตุผลที่ยกเลิกรับเข้า "+x.name+"\nเช่น กรอกวัตถุดิบผิด / รับเข้าซ้ำ","");
+    if(!reason?.trim())return;
+    if(!window.confirm("ยกเลิกรายการรับเข้า?\n\n"+x.name+"\n"+p.quantityReceived.toLocaleString()+" "+p.usageUnit+" · ฿"+compactMoney(p.totalCost)+"\n\nระบบจะหัก Stock และ Purchase Spend ของรายการนี้ พร้อมคืนราคาซื้อก่อนหน้า"))return;
+    setBusy(true);setMsg("");
+    try{
+      await api("/api/stock/purchases/"+encodeURIComponent(p.id)+"/cancel",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({confirm:"CANCEL PURCHASE",reason:reason.trim()})});
+      if(purchaseEdit?.purchase.id===p.id)setPurchaseEdit(null);
+      setMsg("ยกเลิกรับเข้า "+x.name+" แล้ว · Stock และ Purchase Spend ถูกย้อนกลับ");await load();
+    }catch(e:any){
+      const map:Record<string,string>={
+        purchase_cancel_stock_negative:"ยกเลิกไม่ได้ เพราะ Stock คงเหลือน้อยกว่าจำนวนรับเข้าเดิม รายการนี้อาจถูกใช้ไปแล้ว กรุณาตรวจนับ Stock ก่อน",
+        purchase_already_cancelled:"รายการรับเข้านี้ถูกยกเลิกไปแล้ว",
+        purchase_before_reset_read_only:"รายการนี้อยู่ก่อนจุดล้างข้อมูลทดลอง จึงยกเลิกย้อนหลังไม่ได้",
+        purchase_date_closed:"วันที่ซื้อรายการนี้ถูก Close Day แล้ว จึงไม่ให้แก้ย้อนหลัง",
+        purchase_cancel_confirmation_required:"การยืนยันยกเลิกรายการไม่ถูกต้อง",
+        purchase_cancel_reason_required:"กรุณาระบุเหตุผลที่ยกเลิก"
+      };
+      setMsg(map[e.message]||e.message);
+    }finally{setBusy(false)}
+  }
+
   return <section className="soft-scroll h-full overflow-auto p-3 sm:p-5 md:p-7">
     <header className="flex flex-wrap items-end justify-between gap-3">
       <div><p className="gold m-0 text-[9px] font-bold tracking-[.26em] sm:text-[10px]">INVENTORY</p><h1 className="mt-1 text-xl font-semibold sm:text-2xl">STOCK MANAGEMENT</h1><p className="mt-1 text-xs text-slate-500">นับเป็นกล่อง/แพ็กได้ · สูตรหักใช้ตามหน่วยจริงแยกกัน</p></div>
@@ -154,14 +178,14 @@ function StockView({session}:{session:Session}){
       </article>)}
     </div>
 
-    {admin&&purchaseHistory.length>0&&<div className="glass card mt-4 overflow-hidden p-2"><div className="p-3"><p className="text-[10px] tracking-[.25em] text-slate-500">PURCHASE HISTORY</p><h2 className="mt-1 text-base">ข้อมูลซื้อที่นำกลับมาใช้ซ้ำได้</h2></div><div className="soft-scroll max-h-[300px] overflow-auto"><table className="w-full min-w-[620px] text-sm"><thead className="sticky top-0 bg-slate-100 text-left text-[10px] text-slate-500"><tr><th className="p-3">รายการ</th><th>วันที่</th><th>ร้าน/แหล่ง</th><th>ราคา</th><th>แพ็ก</th><th></th></tr></thead><tbody>{purchaseHistory.map(({ingredient,p})=><tr key={p.id} className="border-t border-slate-100"><td className="p-3">{ingredient.name}</td><td>{p.purchaseDate}</td><td>{p.supplier||"—"}</td><td>฿{compactMoney(p.totalCost)}</td><td>{p.packageQty||"—"} {p.packageUnit}</td><td><button onClick={()=>setPurchaseEdit({ingredient,purchase:{...p}})} className="rounded-full border px-3 py-1.5 text-xs">แก้</button></td></tr>)}</tbody></table></div></div>}
+    {admin&&purchaseHistory.length>0&&<div className="glass card mt-4 overflow-hidden p-2"><div className="p-3"><p className="text-[10px] tracking-[.25em] text-slate-500">PURCHASE HISTORY</p><h2 className="mt-1 text-base">ข้อมูลซื้อ / รับเข้า</h2><p className="mt-1 text-xs text-slate-500">ถ้ากรอกวัตถุดิบผิด ให้ใช้ “ยกเลิกรับเข้า” แทนการลบ Stock Master</p></div><div className="soft-scroll max-h-[340px] overflow-auto"><table className="w-full min-w-[780px] text-sm"><thead className="sticky top-0 bg-slate-100 text-left text-[10px] text-slate-500"><tr><th className="p-3">รายการ</th><th>วันที่</th><th>ร้าน/แหล่ง</th><th>จำนวนรับ</th><th>ราคา</th><th>แพ็ก</th><th>สถานะ / จัดการ</th></tr></thead><tbody>{purchaseHistory.map(({ingredient,p})=><tr key={p.id} className={"border-t border-slate-100 "+(p.cancelled?"bg-slate-50 text-slate-400":"")}><td className="p-3"><b className={p.cancelled?"line-through":""}>{ingredient.name}</b>{p.cancelled&&p.cancelReason&&<small className="mt-1 block max-w-[220px]">เหตุผล: {p.cancelReason}</small>}</td><td>{p.purchaseDate}</td><td>{p.supplier||"—"}</td><td>{p.quantityReceived.toLocaleString()} {p.usageUnit}</td><td>฿{compactMoney(p.totalCost)}</td><td>{p.packageQty||"—"} {p.packageUnit}</td><td>{p.cancelled?<span className="rounded-full bg-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600">ยกเลิกแล้ว</span>:<div className="flex gap-2"><button disabled={busy} onClick={()=>setPurchaseEdit({ingredient,purchase:{...p}})} className="rounded-full border px-3 py-1.5 text-xs disabled:opacity-40">แก้</button><button disabled={busy} onClick={()=>cancelPurchase(ingredient,p)} className="rounded-full border border-red-200 px-3 py-1.5 text-xs font-semibold text-red-600 disabled:opacity-40">ยกเลิกรับเข้า</button></div>}</td></tr>)}</tbody></table></div></div>}
 
     <div className="glass card mt-4 overflow-hidden p-2"><div className="p-3"><p className="text-[10px] tracking-[.25em] text-slate-500">RECENT LEDGER</p><h2 className="mt-1 text-base">การเคลื่อนไหว Stock</h2></div><div className="soft-scroll max-h-[260px] overflow-auto"><table className="w-full min-w-[560px] text-sm"><thead className="sticky top-0 bg-slate-100 text-left text-[10px] text-slate-500"><tr><th className="p-3">รายการ</th><th>ประเภท</th><th>จำนวน</th><th>เวลา</th></tr></thead><tbody>{(data?.transactions||[]).map(t=><tr key={t.id} className="border-t border-slate-100"><td className="p-3">{data?.ingredients.find(i=>i.id===t.ingredientId)?.name||t.ingredientId}</td><td>{t.type}</td><td className={t.qtyDelta>=0?"text-emerald-700":"text-red-600"}>{t.qtyDelta>0?"+":""}{t.qtyDelta.toLocaleString()} {t.unit}</td><td className="text-slate-500">{new Date(t.createdAt).toLocaleString("th-TH")}</td></tr>)}</tbody></table></div></div>
 
     {txOpen&&<div className="fixed inset-0 z-50 grid place-items-center overflow-auto bg-black/70 p-3"><div className="glass card my-4 w-full max-w-lg p-4 sm:p-6"><div className="flex justify-between"><div><p className="gold text-[10px] tracking-[.25em]">{type}</p><h3 className="mt-1 text-lg">{txOpen.name}</h3></div><button onClick={()=>setTxOpen(null)}><X/></button></div>
       <div className="mt-4 grid gap-3">{type==="WASTE"?<><label className="text-xs text-slate-500">จำนวนของเสีย ({txOpen.unit})</label><input inputMode="decimal" value={wasteQty} onChange={e=>setWasteQty(e.target.value)} className="rounded-2xl border bg-slate-50 px-4 py-3"/><input value={note} onChange={e=>setNote(e.target.value)} placeholder="เหตุผล / หมายเหตุ" className="rounded-2xl border bg-slate-50 px-4 py-3"/></>:<>
         <label className="text-xs font-semibold text-slate-700">1. ราคาซื้อรวม (บาท)</label><input inputMode="decimal" value={purchaseCost} onChange={e=>setPurchaseCost(e.target.value)} placeholder="เช่น 199" className="rounded-2xl border bg-slate-50 px-4 py-3 text-lg font-semibold"/>
-        <div className="grid grid-cols-2 gap-2"><div><label className="mb-1 block text-xs text-slate-500">วันที่ซื้อ</label><input type="date" max={today()} value={purchaseDate} onChange={e=>setPurchaseDate(e.target.value)} className="w-full rounded-2xl border bg-slate-50 px-3 py-3"/></div><div><label className="mb-1 block text-xs text-slate-500">ข้อมูลเดิม</label><select value={presetId} onChange={e=>{const p=txOpen.recentPurchases.find(p=>p.id===e.target.value);setFromPurchase(txOpen,p)}} className="w-full rounded-2xl border bg-white px-3 py-3"><option value="">ไม่ใช้</option>{txOpen.recentPurchases.map(p=><option key={p.id} value={p.id}>{p.purchaseDate} · ฿{compactMoney(p.totalCost)}</option>)}</select></div></div>
+        <div className="grid grid-cols-2 gap-2"><div><label className="mb-1 block text-xs text-slate-500">วันที่ซื้อ</label><input type="date" max={today()} value={purchaseDate} onChange={e=>setPurchaseDate(e.target.value)} className="w-full rounded-2xl border bg-slate-50 px-3 py-3"/></div><div><label className="mb-1 block text-xs text-slate-500">ข้อมูลเดิม</label><select value={presetId} onChange={e=>{const p=txOpen.recentPurchases.find(p=>p.id===e.target.value&&!p.cancelled);setFromPurchase(txOpen,p)}} className="w-full rounded-2xl border bg-white px-3 py-3"><option value="">ไม่ใช้</option>{txOpen.recentPurchases.filter(p=>!p.cancelled).map(p=><option key={p.id} value={p.id}>{p.purchaseDate} · ฿{compactMoney(p.totalCost)}</option>)}</select></div></div>
         <label className="text-xs text-slate-500">ร้าน / แหล่งซื้อ</label><input value={supplier} onChange={e=>setSupplier(e.target.value)} placeholder="เช่น Makro, Shopee, ร้านประจำ" className="rounded-2xl border bg-slate-50 px-4 py-3"/>
         <label className="text-xs text-slate-500">ลิงก์สินค้า/แหล่งซื้อ</label><input value={sourceUrl} onChange={e=>setSourceUrl(e.target.value)} placeholder="ใส่ https://... หรือ shopee.co.th/..." className="rounded-2xl border bg-slate-50 px-4 py-3"/>
         <label className="text-xs font-semibold text-slate-700">2. จำนวนที่ซื้อ</label><div className="grid grid-cols-2 gap-2"><input inputMode="decimal" value={packageQty} onChange={e=>setPackageQty(e.target.value)} placeholder="จำนวนแพ็ก" className="rounded-2xl border bg-slate-50 px-4 py-3"/><select value={packageUnit} onChange={e=>setPackageUnit(e.target.value)} className="rounded-2xl border bg-white px-3 py-3">{packageUnits.map(u=><option key={u}>{u}</option>)}</select></div>
