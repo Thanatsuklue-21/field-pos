@@ -194,3 +194,14 @@ test('payment modal reviews cart items prices quantities and sweetness before co
   assert.match(pos,/รวม \{cart\.items\.reduce\(\(s,i\)=>s\+i\.qty,0\)\} แก้ว/);
   assert.match(pos,/max-h-\[94vh\]/);
 });
+
+
+test('payment modal stays above mobile navigation with sticky confirm and exact-cash shortcut',async()=>{
+  const pos=await read('app/pos/page.tsx');
+  assert.match(pos,/z-\[90\]/);
+  assert.match(pos,/max-h-\[calc\(100dvh-1rem\)\]/);
+  assert.match(pos,/sticky bottom-0 z-10/);
+  assert.match(pos,/รับพอดี ฿\{cart\.getTotal\(\)\.toFixed\(0\)\}/);
+  assert.match(pos,/setReceived\(String\(cart\.getTotal\(\)\)\)/);
+  assert.match(pos,/รับเงินพอดียอด · กดยืนยันชำระได้เลย/);
+});
