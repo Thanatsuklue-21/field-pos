@@ -130,14 +130,38 @@ test('queue production flow is one guided task at a time with optional early pic
 
 test('queue reads a compact snapshot and renders priced order details',async()=>{
   const queue=await read('app/queue/page.tsx'),api=await read('lib/api.mjs'),posApi=await read('lib/pos-api.mjs');
-  assert.match(queue,/api<QueueSnapshot>\("\/api\/pos\/queue"\)/);
+  assert.match(queue,/api<QueueSnapshot\|RevisionUnchanged>\("\/api\/pos\/queue"/);
   assert.doesNotMatch(queue,/api<Bootstrap>\("\/api\/pos\/bootstrap"\)/);
   assert.match(api,/path==='\/api\/pos\/queue'&&method==='GET'/);
   assert.match(api,/getQueueSnapshot/);
   assert.match(posApi,/price:x\.price/);
-  assert.match(posApi,/normalizeQueueItems\(doc,o\)/);
+  assert.match(posApi,/normalizeQueueItems\(doc,o,lookup\)/);
   assert.match(queue,/ยอดรวม ฿/);
   assert.match(queue,/ดูรายการ \/ แก้ไขออเดอร์/);
+});
+
+test('POS and Queue polls short-circuit unchanged state by revision',async()=>{
+  const pos=await read('app/pos/page.tsx'),queue=await read('app/queue/page.tsx'),api=await read('lib/api.mjs'),posApi=await read('lib/pos-api.mjs'),client=await read('lib/api-client.ts');
+  assert.match(pos,/X-Field-Revision/);
+  assert.match(queue,/X-Field-Revision/);
+  assert.match(api,/x-field-revision/);
+  assert.match(api,/CASE WHEN revision=\? THEN NULL ELSE document END AS document/);
+  assert.match(posApi,/CASE WHEN revision=\? THEN NULL ELSE document END AS document/);
+  assert.match(posApi,/unchanged:true/);
+  assert.match(api,/unchanged:true/);
+  assert.match(client,/data\?\.unchanged!==true/);
+  const bootstrap=api.slice(api.indexOf("if(path==='/api/pos/bootstrap'"),api.indexOf("const menuImageReadMatch",api.indexOf("if(path==='/api/pos/bootstrap'")));
+  assert.doesNotMatch(bootstrap,/const orders=/);
+  assert.doesNotMatch(bootstrap,/availabilityStock:availability\.stock,orders/);
+});
+
+test('queue view reuses lookup maps instead of rescanning menus sales and prep bases per item',async()=>{
+  const api=await read('lib/pos-api.mjs');
+  assert.match(api,/function buildQueueLookup/);
+  assert.match(api,/menuById:new Map/);
+  assert.match(api,/saleById:new Map/);
+  assert.match(api,/prepBaseById:new Map/);
+  assert.match(api,/const lookup=buildQueueLookup\(doc\)/);
 });
 
 test('queue actions use optimistic feedback and delivery has a visible fixed toast',async()=>{
@@ -263,7 +287,7 @@ test('queue groups duplicate lines and exposes prep base plan without changing F
   assert.match(queue,/ห้ามเทรวม/);
   assert.match(api,/for\(const o of activeOrders\(doc\)\)/);
   assert.match(api,/target\.items=normalizeQueueItems/);
-  assert.match(api,/order\.items=normalizeQueueItems\(doc,order\)/);
+  assert.match(api,/order\.items=normalizeQueueItems\(doc,order,buildQueueLookup\(doc\)\)/);
   assert.match(queue,/แผนเตรียมเบสของคิวนี้/);
   assert.match(queue,/เตรียมของเบสพร้อมกันได้ แล้วค่อยแยกประกอบตามสูตร/);
   assert.match(queue,/เตรียมฐาน:/);
