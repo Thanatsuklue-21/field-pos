@@ -149,6 +149,8 @@ function StockView({session}:{session:Session}){
     }catch(e:any){
       const map:Record<string,string>={
         purchase_cancel_stock_negative:"ยกเลิกไม่ได้ เพราะ Stock คงเหลือน้อยกว่าจำนวนรับเข้าเดิม รายการนี้อาจถูกใช้ไปแล้ว กรุณาตรวจนับ Stock ก่อน",
+        purchase_cancel_has_later_movement:"ยกเลิกย้อนหลังอัตโนมัติไม่ได้ เพราะวัตถุดิบนี้มีการขาย/ของเสีย/ตรวจนับหรือปรับ Stock หลังรับเข้าแล้ว เพื่อไม่ให้ Stock เพี้ยน กรุณาใช้การตรวจนับ Stock จริงหรือปรับยอดแทน",
+        purchase_stock_transaction_missing:"ไม่พบ Stock Ledger ต้นทางของรายการรับเข้านี้ จึงไม่ยกเลิกอัตโนมัติเพื่อป้องกันข้อมูลเพี้ยน",
         purchase_already_cancelled:"รายการรับเข้านี้ถูกยกเลิกไปแล้ว",
         purchase_before_reset_read_only:"รายการนี้อยู่ก่อนจุดล้างข้อมูลทดลอง จึงยกเลิกย้อนหลังไม่ได้",
         purchase_date_closed:"วันที่ซื้อรายการนี้ถูก Close Day แล้ว จึงไม่ให้แก้ย้อนหลัง",
