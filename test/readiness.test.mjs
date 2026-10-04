@@ -4,3 +4,6 @@ test('settings surfaces readiness without exposing secrets',async()=>{const ui=a
 
 
 test('readiness cash flag is gated by actual stock availability',async()=>{const api=await read('lib/api.mjs');const start=api.indexOf("if(path==='/api/admin/readiness'"),end=api.indexOf("if(path==='/api/admin/business-settings'",start),seg=api.slice(start,end);assert.match(seg,/buildPosAvailability/);assert.match(seg,/availableVariants>0/);assert.match(seg,/no_available_menu/)});
+
+
+test('terminal orders do not create false readiness warnings',async()=>{const api=await read('lib/api.mjs');const start=api.indexOf("if(path==='/api/admin/readiness'"),end=api.indexOf("if(path==='/api/admin/business-settings'",start),seg=api.slice(start,end);assert.match(seg,/\['returned','void','refunded','cancelled'\]/)});

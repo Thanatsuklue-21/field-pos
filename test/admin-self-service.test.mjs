@@ -86,6 +86,7 @@ test('trial sales reset preserves stock and is protected by confirmation payment
   assert.match(seg,/active_orders_confirmation_required/);
   assert.match(seg,/before_test_sales_reset/);
   assert.match(seg,/doc\.sales=\[\];doc\.orders=\[\]/);
+  assert.match(seg,/customerEffectsReversed===true/);
   assert.doesNotMatch(seg,/ingredient\.qty\s*=/);
   assert.match(seg,/stockChanged:false/);
   assert.match(settings,/ล้างประวัติการขายทดลอง/);
