@@ -15,7 +15,7 @@ function localDate(){
 }
 
 const PENDING_KEY="field-pos-pending-promptpay-v1";
-type PendingPrompt={requestKey:string;payRequestKey?:string;sessionId?:string;date:string;cart:{id:string;variant:string;qty:number}[];paymentReference:string;total:number;customerId:string|null;createdAt:number};
+type PendingPrompt={requestKey:string;payRequestKey?:string;sessionId?:string;date:string;cart:{id:string;variant:string;qty:number}[];paymentReference:string;total:number;customerId:string|null;createdAt:number;checkoutMode?:"full"|"split_bill"};
 const pendingRead=():PendingPrompt|null=>{try{return JSON.parse(localStorage.getItem(PENDING_KEY)||"null")}catch{return null}};
 const pendingWrite=(p:PendingPrompt)=>localStorage.setItem(PENDING_KEY,JSON.stringify(p));
 const pendingClear=()=>localStorage.removeItem(PENDING_KEY);
@@ -64,6 +64,8 @@ function PosView({session}:{session:Session}){
   const [promptConfig,setPromptConfig]=useState<any|null>(null);
   const [customers,setCustomers]=useState<any[]>([]);
   const [customerId,setCustomerId]=useState("");
+  const [splitBill,setSplitBill]=useState(false);
+  const [splitSelection,setSplitSelection]=useState<Record<string,number>>({});
   const cart=useCartStore();
 
   const load=()=>api<Bootstrap>("/api/pos/bootstrap").then(setData);
@@ -130,8 +132,12 @@ function PosView({session}:{session:Session}){
   const allUnavailable=menu.length>0&&menu.every(x=>!x.available);
   const unavailableNames=Array.from(new Set(menu.flatMap(x=>x.variants.flatMap(v=>v.missingIngredients||[]).map(i=>i.name)))).slice(0,4);
   const total=cart.getTotal();
+  const payableItems=splitBill?cart.items.map(i=>({...i,qty:Math.min(i.qty,Math.max(0,Number(splitSelection[i.key])||0))})).filter(i=>i.qty>0):cart.items;
+  const payableQty=payableItems.reduce((s,i)=>s+i.qty,0);
+  const payableTotal=payableItems.reduce((s,i)=>s+i.price*i.qty,0);
+  const remainingAfterBill=Math.max(0,cart.items.reduce((s,i)=>s+i.qty,0)-payableQty);
   const cashReceived=received.trim()===""?NaN:Number(received);
-  const cashDelta=Number.isFinite(cashReceived)?cashReceived-total:NaN;
+  const cashDelta=Number.isFinite(cashReceived)?cashReceived-payableTotal:NaN;
 
   function applyServerState(r:any){
     const orders=Array.isArray(r?.orders)?r.orders:(r?.state?compactOrders(r.state):null);
@@ -139,7 +145,18 @@ function PosView({session}:{session:Session}){
     setData(prev=>prev?{...prev,revision:Number(r.revision)||prev.revision,orders}:prev);
   }
 
-  function finishSale(r:any,opts:{payment:"cash"|"promptpay";total:number;received:number;recovered?:boolean}){
+  function subtractPaidCart(payload:{id:string;variant:string;qty:number}[]){
+    const remaining=cart.items.flatMap(item=>{
+      const paid=payload.find(x=>x.id===item.id&&x.variant===item.variant);
+      if(!paid)return [item];
+      const qty=item.qty-Math.min(item.qty,Number(paid.qty)||0);
+      return qty>0?[{...item,qty}]:[];
+    });
+    cart.replaceItems(remaining);
+    return remaining;
+  }
+
+  function finishSale(r:any,opts:{payment:"cash"|"promptpay";total:number;received:number;recovered?:boolean;splitBill?:boolean;paidCart?:{id:string;variant:string;qty:number}[]}){
     applyServerState(r);
     const serverTotal=Number(r?.total??opts.total);
     const serverReceived=Number(r?.received??opts.received);
@@ -147,9 +164,15 @@ function PosView({session}:{session:Session}){
     setPayOpen(false);
     setResult("");
     setPrompt(null);
-    cart.clearCart();
+    const remaining=opts.splitBill&&opts.paidCart?subtractPaidCart(opts.paidCart):(cart.clearCart(),[]);
     setReceived("");
     setCustomerId("");
+    setSplitSelection({});
+    setSplitBill(false);
+    if(opts.splitBill&&remaining.length){
+      const qty=remaining.reduce((s,i)=>s+i.qty,0);
+      setNotice("ชำระบิลแยกสำเร็จ · เหลือ "+qty+" แก้วในตะกร้า กด CHECKOUT เพื่อรับเงินคนถัดไป");
+    }
     setLastSale({
       queueNo:String(r?.queueNo||"—"),
       pager:Number(r?.pager)||0,
@@ -193,7 +216,7 @@ function PosView({session}:{session:Session}){
     try{
       const r=await api<any>("/api/pos/checkout",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify(p.body)});
       cashPendingClear();
-      finishSale(r,{payment:"cash",total:Number(p.body?.total)||0,received:Number(p.body?.received)||0,recovered:true});
+      finishSale(r,{payment:"cash",total:Number(p.body?.total)||0,received:Number(p.body?.received)||0,recovered:true,splitBill:p.body?.checkoutMode==="split_bill",paidCart:Array.isArray(p.body?.cart)?p.body.cart:undefined});
     }catch(e:any){
       if(e.message==="business_date_changed")setNotice("รายการเงินสดค้างข้ามวัน · กรุณาตรวจ Orders ก่อน หากไม่พบบิลให้บันทึกปรับปรุงด้วย Admin");
       else if(!["network_unavailable","offline_write_blocked"].includes(e.message)){
@@ -209,7 +232,7 @@ function PosView({session}:{session:Session}){
       if(status?.session?.status==="completed"){
         pendingClear();
         cart.clearCart();
-        finishSale({queueNo:status.session.queueNo,pager:status.session.pager,total:status.session.total},{payment:"promptpay",total:p.total,received:p.total,recovered:true});
+        finishSale({queueNo:status.session.queueNo,pager:status.session.pager,total:status.session.total},{payment:"promptpay",total:p.total,received:p.total,recovered:true,splitBill:p.checkoutMode==="split_bill",paidCart:p.cart});
         return status;
       }
       const allocations=p.cart.map((x,index)=>({index,qty:x.qty}));
@@ -218,7 +241,7 @@ function PosView({session}:{session:Session}){
         const r=await api<any>("/api/pos/split/pay",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify(body)});
         pendingClear();
         cart.clearCart();
-        finishSale(r,{payment:"promptpay",total:p.total,received:p.total,recovered:true});
+        finishSale(r,{payment:"promptpay",total:p.total,received:p.total,recovered:true,splitBill:p.checkoutMode==="split_bill",paidCart:p.cart});
         return r;
       }catch(e:any){
         if(e.message==="split_session_unavailable"){
@@ -226,18 +249,18 @@ function PosView({session}:{session:Session}){
           if(retry?.session?.status==="completed"){
             pendingClear();
             cart.clearCart();
-            finishSale({queueNo:retry.session.queueNo,pager:retry.session.pager,total:retry.session.total},{payment:"promptpay",total:p.total,received:p.total,recovered:true});
+            finishSale({queueNo:retry.session.queueNo,pager:retry.session.pager,total:retry.session.total},{payment:"promptpay",total:p.total,received:p.total,recovered:true,splitBill:p.checkoutMode==="split_bill",paidCart:p.cart});
             return retry;
           }
         }
         throw e;
       }
     }
-    const body={requestKey:p.requestKey,date:p.date,cart:p.cart,payment:"promptpay",received:p.total,paymentReference:p.paymentReference,paymentVerified:verified,customerId:p.customerId};
+    const body={requestKey:p.requestKey,date:p.date,cart:p.cart,payment:"promptpay",received:p.total,paymentReference:p.paymentReference,paymentVerified:verified,customerId:p.customerId,checkoutMode:p.checkoutMode||"full"};
     const r=await api<any>("/api/pos/checkout",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify(body)});
     pendingClear();
     cart.clearCart();
-    finishSale(r,{payment:"promptpay",total:p.total,received:p.total,recovered:true});
+    finishSale(r,{payment:"promptpay",total:p.total,received:p.total,recovered:true,splitBill:p.checkoutMode==="split_bill",paidCart:p.cart});
     return r;
   }
 
@@ -283,7 +306,7 @@ function PosView({session}:{session:Session}){
         if(sessionStatus?.session?.status==="completed"){
           pendingClear();
           cart.clearCart();
-          finishSale({queueNo:sessionStatus.session.queueNo,pager:sessionStatus.session.pager,total:sessionStatus.session.total},{payment:"promptpay",total:p.total,received:p.total,recovered:true});
+          finishSale({queueNo:sessionStatus.session.queueNo,pager:sessionStatus.session.pager,total:sessionStatus.session.total},{payment:"promptpay",total:p.total,received:p.total,recovered:true,splitBill:p.checkoutMode==="split_bill",paidCart:p.cart});
           return;
         }
         if(["expired","cancelled"].includes(String(sessionStatus?.session?.status||"").toLowerCase())){pendingClear();return}
@@ -324,12 +347,13 @@ function PosView({session}:{session:Session}){
   }
 
   async function checkout(){
-    if(!cart.items.length||busy)return;
+    if(!cart.items.length||busy||!payableItems.length)return;
     setBusy(true);
     setResult("");
     try{
-      let checkoutTotal=cart.getTotal();
-      const cartPayload=cart.items.map(i=>({id:i.id,variant:i.variant,qty:i.qty}));
+      let checkoutTotal=payableTotal;
+      const cartPayload=payableItems.map(i=>({id:i.id,variant:i.variant,qty:i.qty}));
+      const checkoutMode=splitBill?"split_bill":"full";
       let paymentVerified:any=true,paymentReference:any=null,requestKey=crypto.randomUUID();
       if(method==="cash"&&Number(received)<checkoutTotal)throw Object.assign(new Error("cash_insufficient"),{status:409});
 
@@ -354,7 +378,7 @@ function PosView({session}:{session:Session}){
         if(!st){
           const reservationKey=crypto.randomUUID();
           const payRequestKey=crypto.randomUUID();
-          activePending={requestKey:reservationKey,payRequestKey,date:localDate(),cart:cartPayload,paymentReference:"",total:checkoutTotal,customerId:customerId||null,createdAt:Date.now()};
+          activePending={requestKey:reservationKey,payRequestKey,date:localDate(),cart:cartPayload,paymentReference:"",total:checkoutTotal,customerId:customerId||null,createdAt:Date.now(),checkoutMode};
           pendingWrite(activePending);
           const setup=await ensurePendingPrompt(activePending);
           activePending=setup.pending;
@@ -383,7 +407,7 @@ function PosView({session}:{session:Session}){
       let body:any={
         requestKey,date:localDate(),cart:cartPayload,payment:method,
         received:method==="cash"?Number(received):checkoutTotal,
-        paymentReference,paymentVerified,customerId:customerId||null,total:checkoutTotal
+        paymentReference,paymentVerified,customerId:customerId||null,total:checkoutTotal,checkoutMode
       };
       if(method==="cash"){
         const existing=cashPendingRead();
@@ -397,7 +421,7 @@ function PosView({session}:{session:Session}){
       const r=await api<any>("/api/pos/checkout",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify(body)});
       if(method==="promptpay")pendingClear();
       if(method==="cash")cashPendingClear();
-      finishSale(r,{payment:method,total:checkoutTotal,received:method==="cash"?Number(received):checkoutTotal});
+      finishSale(r,{payment:method,total:checkoutTotal,received:method==="cash"?Number(received):checkoutTotal,splitBill:checkoutMode==="split_bill",paidCart:cartPayload});
     }catch(e:any){
       if(method==="cash"&&e?.status&&e.status<500)cashPendingClear();
       const message=errorText(e.message);
@@ -430,6 +454,8 @@ function PosView({session}:{session:Session}){
     const current=cartAvailability({cart:cart.items,menu:data?.menu||[],stock:data?.availabilityStock||{}});
     if(!current.available){setNotice(availabilityMessage(current));load().catch(()=>{});return}
     setResult("");
+    setSplitBill(false);
+    setSplitSelection({});
     setPayOpen(true);
   }
 
@@ -447,8 +473,8 @@ function PosView({session}:{session:Session}){
 
       <div className="soft-scroll mb-3 flex gap-1.5 overflow-x-auto sm:mb-4 sm:gap-2">{cats.map(x=><button key={x} onClick={()=>setCat(x)} className={"shrink-0 rounded-full border px-3 py-1.5 text-[11px] font-semibold sm:px-4 sm:py-2 sm:text-xs "+(cat===x?"border-[#c59b19] bg-[#d4af37] text-black shadow-sm":"border-slate-300 bg-white text-slate-700")}>{x}</button>)}</div>
 
-      <div className="soft-scroll min-h-0 flex-1 overflow-auto">
-        <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-3 2xl:grid-cols-4">{menu.map(x=><button key={x.id} disabled={!x.available} onClick={()=>setSelected(x)} className="glass group min-h-[154px] overflow-hidden rounded-[20px] text-left sm:min-h-[190px] sm:rounded-[24px] hover:border-[#c59b19] disabled:border-slate-200 disabled:bg-slate-100 disabled:opacity-65"><div className="relative h-20 bg-[#f4ecd0] sm:h-24">{x.image?<img src={x.image} alt={x.name} className="h-full w-full object-cover"/>:<div className="grid h-full place-items-center text-2xl font-bold text-[#765b08]">{x.name.slice(0,1)}</div>}<div className="absolute right-2 top-2">{!x.available?<span className="rounded-full bg-red-100 px-2 py-1 text-[10px] font-bold text-red-700">หมดชั่วคราว</span>:x.lowStock?<span className="rounded-full bg-amber-100 px-2 py-1 text-[10px] font-bold text-amber-800">เหลือประมาณ {x.maxServings} แก้ว</span>:null}</div></div><div className="p-3 sm:p-4"><div className="text-[9px] uppercase tracking-widest text-slate-500 sm:text-[10px]">{x.category||"DRINK"}</div><b className="mt-1 block line-clamp-2 text-sm sm:text-base">{x.name}</b><div className="mt-2 text-base font-semibold text-[#765b08] sm:mt-3 sm:text-lg">฿{x.price.toFixed(0)}</div>{!x.available&&<small className="mt-2 block text-xs text-red-600">{Array.from(new Set(x.variants.flatMap(v=>v.missingIngredients||[]).map(i=>i.name))).slice(0,2).join(", ")||"สูตรยังไม่พร้อม"}</small>}</div></button>)}</div>
+      <div className="soft-scroll min-h-0 flex-1 overflow-auto pb-28 lg:pb-0">
+        <div className="grid grid-cols-2 items-stretch gap-2 sm:gap-3 lg:grid-cols-3 2xl:grid-cols-4">{menu.map(x=><button key={x.id} disabled={!x.available} onClick={()=>setSelected(x)} className="glass group flex min-h-[154px] flex-col overflow-hidden rounded-[20px] text-left sm:min-h-[190px] sm:rounded-[24px] hover:border-[#c59b19] disabled:border-slate-200 disabled:bg-slate-100 disabled:opacity-65"><div className="relative h-20 shrink-0 bg-[#f4ecd0] sm:h-24">{x.image?<img src={x.image} alt={x.name} className="h-full w-full object-cover"/>:<div className="grid h-full place-items-center text-2xl font-bold text-[#765b08]">{x.name.slice(0,1)}</div>}<div className="absolute right-2 top-2">{!x.available?<span className="rounded-full bg-red-100 px-2 py-1 text-[10px] font-bold text-red-700">หมดชั่วคราว</span>:x.lowStock?<span className="rounded-full bg-amber-100 px-2 py-1 text-[10px] font-bold text-amber-800">เหลือประมาณ {x.maxServings} แก้ว</span>:null}</div></div><div className="flex flex-1 flex-col p-3 sm:p-4"><div className="text-[9px] uppercase tracking-widest text-slate-500 sm:text-[10px]">{x.category||"DRINK"}</div><b className="mt-1 block line-clamp-2 text-sm sm:text-base">{x.name}</b><div className="mt-auto pt-2 text-base font-semibold text-[#765b08] sm:pt-3 sm:text-lg">฿{x.price.toFixed(0)}</div>{!x.available&&<small className="mt-2 block text-xs text-red-600">{Array.from(new Set(x.variants.flatMap(v=>v.missingIngredients||[]).map(i=>i.name))).slice(0,2).join(", ")||"สูตรยังไม่พร้อม"}</small>}</div></button>)}</div>
       </div>
     </div>
 
@@ -465,27 +491,30 @@ function PosView({session}:{session:Session}){
 
     {selected&&<div className="fixed inset-0 z-50 grid place-items-center bg-black/55 p-3 sm:p-4" onMouseDown={()=>setSelected(null)}><div className="card w-full max-w-md border border-slate-300 bg-white p-4 shadow-2xl sm:p-6" onMouseDown={e=>e.stopPropagation()}><div className="flex items-start justify-between"><div><p className="gold text-[10px] tracking-[.25em]">{selected.category||"DRINK"}</p><h3 className="mt-1 text-lg sm:text-xl">{selected.name}</h3></div><button onClick={()=>setSelected(null)}><X/></button></div><p className="mt-5 text-xs uppercase tracking-widest text-slate-500">Choose variant</p><div className="mt-3 grid gap-2">{selected.variants.map(v=><button key={v.label} disabled={!v.available} onClick={()=>addVariant(selected,v)} className="min-h-11 rounded-2xl border border-slate-300 bg-slate-50 px-3 py-2.5 text-left hover:border-[#c59b19] sm:px-4 sm:py-3 disabled:bg-slate-100 disabled:text-slate-400"><span>{v.label||"Standard"}{!v.available&&<small className="ml-2 text-red-600">หมดชั่วคราว</small>}{v.available&&v.lowStock&&<small className="ml-2 text-amber-700">เหลือประมาณ {v.maxServings} แก้ว</small>}</span><span className="float-right font-semibold text-[#765b08]">฿{selected.price.toFixed(0)}</span>{!v.available&&v.missingIngredients?.length>0&&<small className="mt-1 block text-xs text-red-500">ขาด: {v.missingIngredients.map(i=>i.name).join(", ")}</small>}</button>)}</div></div></div>}
 
-    {payOpen&&<div className="fixed inset-0 z-[90] grid place-items-center bg-black/55 p-2 sm:p-4"><div className="soft-scroll card max-h-[calc(100dvh-1rem)] w-full max-w-md overflow-auto border border-slate-300 bg-white p-4 shadow-2xl sm:max-h-[94vh] sm:p-6"><div className="flex justify-between"><div><p className="gold text-[10px] tracking-[.25em]">PAYMENT</p><h3 className="mt-1 text-2xl font-semibold">ยอดชำระ ฿{cart.getTotal().toFixed(0)}</h3><p className="mt-1 text-xs text-slate-500">{cart.items.reduce((s,i)=>s+i.qty,0)} แก้ว · {cart.items.length} เมนู</p></div><button disabled={busy} onClick={()=>setPayOpen(false)} className="disabled:cursor-not-allowed disabled:opacity-30"><X/></button></div>
+    {payOpen&&<div className="fixed inset-0 z-[90] grid place-items-center bg-black/55 p-2 sm:p-4"><div className="soft-scroll card max-h-[calc(100dvh-1rem)] w-full max-w-md overflow-auto border border-slate-300 bg-white p-4 shadow-2xl sm:max-h-[94vh] sm:p-6"><div className="flex justify-between gap-3"><div><p className="gold text-[10px] tracking-[.25em]">PAYMENT</p><h3 className="mt-1 text-2xl font-semibold">ยอดชำระ ฿{payableTotal.toFixed(0)}</h3><p className="mt-1 text-xs text-slate-500">{splitBill?"บิลนี้ "+payableQty+" แก้ว · เหลือ "+remainingAfterBill+" แก้ว":payableQty+" แก้ว · "+cart.items.length+" เมนู"}</p></div><button disabled={busy} onClick={()=>setPayOpen(false)} className="disabled:cursor-not-allowed disabled:opacity-30"><X/></button></div>
 
-      <div className="mt-4 rounded-[20px] border border-slate-200 bg-slate-50 p-3">
-        <div className="flex items-center justify-between gap-3"><div><b className="text-sm">รายการที่สั่ง</b><p className="mt-0.5 text-[11px] text-slate-500">ทวนเมนู ราคา และระดับหวานก่อนรับเงิน</p></div><b className="shrink-0 text-lg text-[#765b08]">฿{cart.getTotal().toFixed(0)}</b></div>
+      <button type="button" disabled={busy||cart.items.reduce((s,i)=>s+i.qty,0)<2} onClick={()=>{setSplitBill(v=>!v);setSplitSelection({});setReceived("");setResult("")}} className={"mt-4 min-h-11 w-full rounded-2xl border px-4 text-sm font-semibold "+(splitBill?"border-[#d4af37] bg-[#fff8dc] text-[#765b08]":"border-slate-300 bg-white text-slate-700")+" disabled:opacity-40"}>{splitBill?"ยกเลิกแยกบิล":"แยกบิล / จ่ายแยกตามคน"}</button>
+      {splitBill&&<div className="mt-2 rounded-2xl border border-[#d4af37]/40 bg-[#fffaf0] px-3 py-2 text-xs text-slate-700">เลือกจำนวนแก้วของ <b>คนที่กำลังจ่าย</b> · หลังชำระ รายการที่เหลือยังอยู่ในตะกร้าเพื่อรับเงินคนถัดไป</div>}
+
+      <div className="mt-3 rounded-[20px] border border-slate-200 bg-slate-50 p-3">
+        <div className="flex items-center justify-between gap-3"><div><b className="text-sm">{splitBill?"เลือกสำหรับบิลนี้":"รายการที่สั่ง"}</b><p className="mt-0.5 text-[11px] text-slate-500">{splitBill?"เลือกได้แม้เมนูเดียวกันมีหลายแก้ว":"ทวนเมนู ราคา และระดับหวานก่อนรับเงิน"}</p></div><b className="shrink-0 text-lg text-[#765b08]">฿{payableTotal.toFixed(0)}</b></div>
         <div className="soft-scroll mt-3 max-h-[230px] space-y-2 overflow-auto pr-1">
-          {cart.items.map(i=><div key={i.key} className="rounded-2xl border border-slate-200 bg-white p-3">
-            <div className="flex items-start justify-between gap-3"><div className="min-w-0 flex-1"><b className="block text-sm">{i.name}</b><span className="mt-1 inline-block rounded-full bg-[#f4ecd0] px-2 py-1 text-[10px] font-semibold text-[#765b08]">{orderOptionLabel(i.variant)}</span></div><button disabled={busy} onClick={()=>cart.removeItem(i.key)} className="grid h-9 w-9 shrink-0 place-items-center rounded-xl text-slate-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-30" aria-label={"ลบ "+i.name}><Trash2 size={15}/></button></div>
-            <div className="mt-3 flex items-center justify-between gap-3"><div className="flex items-center gap-2"><button disabled={busy} onClick={()=>updateCartQuantity(i.key,i.qty-1)} className="grid h-9 w-9 place-items-center rounded-xl border border-slate-300 bg-white disabled:opacity-30"><Minus size={13}/></button><span className="min-w-6 text-center text-sm font-semibold">{i.qty}</span><button disabled={busy} onClick={()=>updateCartQuantity(i.key,i.qty+1)} className="grid h-9 w-9 place-items-center rounded-xl border border-slate-300 bg-white disabled:opacity-30"><Plus size={13}/></button></div><div className="text-right"><small className="block text-[10px] text-slate-500">{i.qty} × ฿{i.price.toFixed(0)}</small><b className="text-sm text-[#765b08]">฿{(i.qty*i.price).toFixed(0)}</b></div></div>
-          </div>)}
+          {cart.items.map(i=>{const selectedQty=splitBill?Math.min(i.qty,Math.max(0,Number(splitSelection[i.key])||0)):i.qty;return <div key={i.key} className={"rounded-2xl border bg-white p-3 "+(splitBill&&selectedQty>0?"border-[#d4af37]":"border-slate-200")}>
+            <div className="flex items-start justify-between gap-3"><div className="min-w-0 flex-1"><b className="block text-sm">{i.name}</b><span className="mt-1 inline-block rounded-full bg-[#f4ecd0] px-2 py-1 text-[10px] font-semibold text-[#765b08]">{orderOptionLabel(i.variant)}</span></div>{!splitBill&&<button disabled={busy} onClick={()=>cart.removeItem(i.key)} className="grid h-9 w-9 shrink-0 place-items-center rounded-xl text-slate-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-30" aria-label={"ลบ "+i.name}><Trash2 size={15}/></button>}</div>
+            <div className="mt-3 flex items-center justify-between gap-3">{splitBill?<div className="flex items-center gap-2"><button disabled={busy||selectedQty<=0} onClick={()=>setSplitSelection(s=>({...s,[i.key]:Math.max(0,selectedQty-1)}))} className="grid h-9 w-9 place-items-center rounded-xl border border-slate-300 bg-white disabled:opacity-30"><Minus size={13}/></button><span className="min-w-[68px] text-center text-xs font-semibold">บิลนี้ {selectedQty}/{i.qty}</span><button disabled={busy||selectedQty>=i.qty} onClick={()=>setSplitSelection(s=>({...s,[i.key]:Math.min(i.qty,selectedQty+1)}))} className="grid h-9 w-9 place-items-center rounded-xl border border-slate-300 bg-white disabled:opacity-30"><Plus size={13}/></button></div>:<div className="flex items-center gap-2"><button disabled={busy} onClick={()=>updateCartQuantity(i.key,i.qty-1)} className="grid h-9 w-9 place-items-center rounded-xl border border-slate-300 bg-white disabled:opacity-30"><Minus size={13}/></button><span className="min-w-6 text-center text-sm font-semibold">{i.qty}</span><button disabled={busy} onClick={()=>updateCartQuantity(i.key,i.qty+1)} className="grid h-9 w-9 place-items-center rounded-xl border border-slate-300 bg-white disabled:opacity-30"><Plus size={13}/></button></div>}<div className="text-right"><small className="block text-[10px] text-slate-500">{selectedQty} × ฿{i.price.toFixed(0)}</small><b className="text-sm text-[#765b08]">฿{(selectedQty*i.price).toFixed(0)}</b></div></div>
+          </div>})}
         </div>
-        <div className="mt-3 flex items-center justify-between border-t border-slate-200 pt-3"><span className="text-sm font-semibold">รวม {cart.items.reduce((s,i)=>s+i.qty,0)} แก้ว</span><b className="text-xl text-[#765b08]">฿{cart.getTotal().toFixed(0)}</b></div>
+        <div className="mt-3 flex items-center justify-between border-t border-slate-200 pt-3"><span className="text-sm font-semibold">{splitBill?"บิลนี้":"รวม"} {payableQty} แก้ว</span><b className="text-xl text-[#765b08]">฿{payableTotal.toFixed(0)}</b></div>
       </div>
 
       <div className="mt-4 grid grid-cols-2 gap-2 rounded-2xl bg-slate-100 p-1"><button onClick={()=>setMethod("cash")} className={"rounded-xl p-3 "+(method==="cash"?"bg-[#d4af37] font-semibold text-black shadow-sm":"text-slate-700")}>Cash</button><button disabled={promptConfig?.ready!==true} onClick={()=>setMethod("promptpay")} title={promptConfig?.ready===true?"PromptPay พร้อมใช้งาน":"รอ Beam อนุมัติ / ตั้งค่า API และ Webhook"} className={"rounded-xl p-3 disabled:cursor-not-allowed disabled:opacity-45 "+(method==="promptpay"?"bg-[#d4af37] font-semibold text-black shadow-sm":"text-slate-700")}>PromptPay{promptConfig?.selectedProvider==="beam"&&promptConfig?.mode==="test"?" · TEST":""}</button></div>
       {promptConfig?.ready!==true&&<div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">PromptPay ยังไม่เปิดรับเงินจริง · ระบบกำลังรอ Beam Merchant/API/Webhook ให้พร้อม</div>}
       {customers.length>0&&<select value={customerId} onChange={e=>setCustomerId(e.target.value)} className="mt-4 w-full rounded-2xl border border-slate-300 bg-white px-4 py-3"><option value="">ลูกค้าทั่วไป / ไม่สะสมแต้ม</option>{customers.map(x=><option key={x.id} value={x.id}>{x.name} · {x.points||0} pts</option>)}</select>}
-      {method==="cash"&&<><div className="mt-4 grid grid-cols-[1fr_auto] gap-2"><input autoFocus inputMode="decimal" value={received} onChange={e=>setReceived(e.target.value)} placeholder="จำนวนเงินที่รับ" className="min-w-0 rounded-2xl border border-slate-300 bg-slate-100 px-4 py-3 text-lg outline-none focus:border-[#c59b19]"/><button type="button" disabled={busy||!cart.items.length} onClick={()=>setReceived(String(cart.getTotal()))} className="min-h-12 rounded-2xl border border-[#d4af37] bg-[#fff8dc] px-3 text-sm font-bold text-[#765b08] disabled:opacity-40">รับพอดี ฿{cart.getTotal().toFixed(0)}</button></div>{received.trim()!==""&&Number.isFinite(cashDelta)&&<div className={"mt-3 flex items-center justify-between rounded-2xl border px-4 py-3 "+(cashDelta>=0?"border-emerald-300 bg-emerald-50 text-emerald-900":"border-red-300 bg-red-50 text-red-800")}><span>{cashDelta>=0?"เงินทอน":"ขาดอีก"}</span><b className="text-xl">฿{Math.abs(cashDelta).toFixed(0)}</b></div>}</>}
+      {method==="cash"&&<><div className="mt-4 grid grid-cols-[1fr_auto] gap-2"><input autoFocus inputMode="decimal" value={received} onChange={e=>setReceived(e.target.value)} placeholder="จำนวนเงินที่รับ" className="min-w-0 rounded-2xl border border-slate-300 bg-slate-100 px-4 py-3 text-lg outline-none focus:border-[#c59b19]"/><button type="button" disabled={busy||!payableItems.length} onClick={()=>setReceived(String(payableTotal))} className="min-h-12 rounded-2xl border border-[#d4af37] bg-[#fff8dc] px-3 text-sm font-bold text-[#765b08] disabled:opacity-40">รับพอดี ฿{payableTotal.toFixed(0)}</button></div>{received.trim()!==""&&Number.isFinite(cashDelta)&&<div className={"mt-3 flex items-center justify-between rounded-2xl border px-4 py-3 "+(cashDelta>=0?"border-emerald-300 bg-emerald-50 text-emerald-900":"border-red-300 bg-red-50 text-red-800")}><span>{cashDelta>=0?"เงินทอน":"ขาดอีก"}</span><b className="text-xl">฿{Math.abs(cashDelta).toFixed(0)}</b></div>}</>}
       {method==="promptpay"&&prompt?.qrUrl&&<div className="mt-4 rounded-[20px] border border-slate-300 bg-white p-4 text-center"><img src={prompt.qrUrl} alt="PromptPay QR" className="mx-auto max-h-56 w-auto"/><p className="mt-2 text-xs font-semibold text-black">{prompt.paid?"ชำระเงินแล้ว":"สแกน QR แล้วระบบจะตรวจสอบอัตโนมัติ"}</p></div>}
       <div className="sticky bottom-0 z-10 -mx-4 mt-4 border-t border-slate-200 bg-white/95 px-4 pb-[max(.5rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur sm:-mx-6 sm:px-6">
-        <button disabled={busy||!cart.items.length||(method==="cash"&&(!Number.isFinite(cashReceived)||cashReceived<cart.getTotal()))} onClick={checkout} className="w-full rounded-2xl bg-[#d4af37] py-3.5 font-bold text-black shadow-sm disabled:opacity-40">{busy?(method==="promptpay"&&prompt?"WAITING FOR PAYMENT...":"กำลังบันทึกบิล..."):(method==="promptpay"?"CREATE QR / PAY":"CONFIRM PAYMENT")}</button>
-        {method==="cash"&&Number.isFinite(cashReceived)&&cashReceived===cart.getTotal()&&<p className="mt-2 text-center text-xs font-semibold text-emerald-700">รับเงินพอดียอด · กดยืนยันชำระได้เลย</p>}
+        <button disabled={busy||!payableItems.length||(method==="cash"&&(!Number.isFinite(cashReceived)||cashReceived<payableTotal))} onClick={checkout} className="w-full rounded-2xl bg-[#d4af37] py-3.5 font-bold text-black shadow-sm disabled:opacity-40">{busy?(method==="promptpay"&&prompt?"WAITING FOR PAYMENT...":"กำลังบันทึกบิล..."):(method==="promptpay"?"CREATE QR / PAY":"CONFIRM PAYMENT")}</button>
+        {method==="cash"&&Number.isFinite(cashReceived)&&cashReceived===payableTotal&&<p className="mt-2 text-center text-xs font-semibold text-emerald-700">รับเงินพอดียอด · กดยืนยันชำระได้เลย</p>}
         {result&&<p className="mt-2 rounded-xl bg-slate-100 px-3 py-2 text-center text-sm text-slate-700">{result}</p>}
       </div>
     </div></div>}

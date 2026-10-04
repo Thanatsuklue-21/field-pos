@@ -96,11 +96,12 @@ test('checkout accounting and state writes use transaction batching with test-sa
   const posApi=await read('lib/pos-api.mjs');
   assert.match(posApi,/async function txBatch/);
   assert.match(posApi,/typeof tx\.batch==='function'/);
-  const accounting=posApi.slice(posApi.indexOf('async function writeSaleAccounting'),posApi.indexOf('function buildItems'));
+  const accounting=posApi.slice(posApi.indexOf('function saleAccountingStatements'),posApi.indexOf('function buildItems'));
   assert.match(accounting,/statements\.push/);
-  assert.match(accounting,/await txBatch\(tx,statements\)/);
-  const save=posApi.slice(posApi.indexOf('async function saveState'),posApi.indexOf('function activeOrders'));
-  assert.match(save,/await txBatch\(tx,\[/);
+  assert.match(posApi,/async function writeSaleAccounting\(tx,ctx\)\{return txBatch\(tx,saleAccountingStatements\(ctx\)\)\}/);
+  const save=posApi.slice(posApi.indexOf('function stateSaveStatements'),posApi.indexOf('function activeOrders'));
+  assert.match(save,/prepared\.statements/);
+  assert.match(save,/await txBatch\(tx,prepared\.statements\)/);
 });
 
 test('cash checkout skips the redundant replay read while PromptPay still replays before provider verification',async()=>{
@@ -187,11 +188,11 @@ test('payment modal reviews cart items prices quantities and sweetness before co
   assert.match(pos,/หวานปกติ \(100%\)/);
   assert.match(pos,/หวานน้อย \(50%\)/);
   assert.match(pos,/ไม่หวาน \(0%\)/);
-  assert.match(pos,/\{i\.qty\} × ฿\{i\.price\.toFixed\(0\)\}/);
+  assert.match(pos,/\{selectedQty\} × ฿\{i\.price\.toFixed\(0\)\}/);
   assert.match(pos,/cart\.removeItem\(i\.key\)/);
   assert.match(pos,/updateCartQuantity\(i\.key,i\.qty-1\)/);
   assert.match(pos,/updateCartQuantity\(i\.key,i\.qty\+1\)/);
-  assert.match(pos,/รวม \{cart\.items\.reduce\(\(s,i\)=>s\+i\.qty,0\)\} แก้ว/);
+  assert.match(pos,/\{splitBill\?"บิลนี้":"รวม"\} \{payableQty\} แก้ว/);
   assert.match(pos,/max-h-\[94vh\]/);
 });
 
@@ -201,7 +202,38 @@ test('payment modal stays above mobile navigation with sticky confirm and exact-
   assert.match(pos,/z-\[90\]/);
   assert.match(pos,/max-h-\[calc\(100dvh-1rem\)\]/);
   assert.match(pos,/sticky bottom-0 z-10/);
-  assert.match(pos,/รับพอดี ฿\{cart\.getTotal\(\)\.toFixed\(0\)\}/);
-  assert.match(pos,/setReceived\(String\(cart\.getTotal\(\)\)\)/);
+  assert.match(pos,/รับพอดี ฿\{payableTotal\.toFixed\(0\)\}/);
+  assert.match(pos,/setReceived\(String\(payableTotal\)\)/);
   assert.match(pos,/รับเงินพอดียอด · กดยืนยันชำระได้เลย/);
+});
+
+
+test('separate-person bills keep unpaid drinks in cart and pay only selected quantities',async()=>{
+  const pos=await read('app/pos/page.tsx');
+  assert.match(pos,/แยกบิล \/ จ่ายแยกตามคน/);
+  assert.match(pos,/splitSelection/);
+  assert.match(pos,/payableItems/);
+  assert.match(pos,/checkoutMode=splitBill\?"split_bill":"full"/);
+  assert.match(pos,/subtractPaidCart/);
+  assert.match(pos,/เหลือ .* แก้วในตะกร้า/);
+});
+
+test('mobile menu cards keep long names and prices aligned above checkout bar',async()=>{
+  const pos=await read('app/pos/page.tsx');
+  assert.match(pos,/overflow-auto pb-28 lg:pb-0/);
+  assert.match(pos,/flex min-h-\[154px\] flex-col/);
+  assert.match(pos,/flex flex-1 flex-col p-3/);
+  assert.match(pos,/mt-auto pt-2 text-base font-semibold/);
+});
+
+test('cash checkout batches state and idempotency reads plus accounting state and audit writes',async()=>{
+  const api=await read('lib/pos-api.mjs');
+  const checkout=api.slice(api.indexOf('export async function checkoutPos'),api.indexOf('export async function voidSale'));
+  assert.match(api,/function rememberStatement/);
+  assert.match(api,/function stateSaveStatements/);
+  assert.match(api,/function saleAccountingStatements/);
+  assert.match(checkout,/const reads=await txBatch\(tx,/);
+  assert.match(checkout,/writes\.push\(rememberStatement/);
+  assert.match(checkout,/writes\.push\(\.\.\.stateWrite\.statements\)/);
+  assert.match(checkout,/await txBatch\(tx,writes\)/);
 });
