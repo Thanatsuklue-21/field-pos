@@ -237,3 +237,15 @@ test('cash checkout batches state and idempotency reads plus accounting state an
   assert.match(checkout,/writes\.push\(\.\.\.stateWrite\.statements\)/);
   assert.match(checkout,/await txBatch\(tx,writes\)/);
 });
+
+
+test('split-person flow retains one group queue between payments',async()=>{
+  const pos=await read('app/pos/page.tsx'),api=await read('lib/pos-api.mjs');
+  assert.match(pos,/field-pos-split-group-v1/);
+  assert.match(pos,/targetOrderId:splitGroup\?\.orderId\|\|undefined/);
+  assert.match(pos,/ลูกค้ากลุ่มนี้ใช้คิว/);
+  assert.match(pos,/การจ่ายคนถัดไปจะใช้คิวและบัตรเรียกเดิมอัตโนมัติ/);
+  assert.match(api,/paymentGroupId=target\?\.paymentGroupId\|\|'pg-'/);
+  assert.match(api,/targetOrderId:target\?\.id\|\|null/);
+  assert.match(api,/target\.saleIds=\[\.\.\.\(target\.saleIds/);
+});
