@@ -132,3 +132,43 @@ test('real libSQL: full backup restores ledger and durable retry together',async
   assert.equal(restored.status,200);assert.equal((await sell(db,'backed-up-request')).replayed,true);
   assert.equal((await state(db)).sales.length,1);assert.equal((await db.execute('SELECT * FROM field_stock_transactions')).rows.length,2);
 });
+
+
+test('real libSQL: separate-person bills share one queue and pager while keeping separate sales',async t=>{
+  const db=await setup(t);
+  const one=[{id:'latte',variant:'100%',qty:1}];
+  const first=await sell(db,'group-person-1',{cart:one,received:55});
+  const second=await sell(db,'group-person-2',{cart:one,received:55,targetOrderId:first.orderId});
+  assert.equal(second.orderId,first.orderId);
+  assert.equal(second.queueNo,first.queueNo);
+  assert.equal(second.pager,first.pager);
+  assert.notEqual(second.billNo,first.billNo);
+  const doc=await state(db);
+  assert.equal(doc.orders.length,1);
+  assert.equal(doc.sales.length,2);
+  assert.equal(doc.orders[0].saleIds.length,2);
+  assert.equal(doc.orders[0].items.reduce((s,x)=>s+Number(x.qty||0),0),2);
+  assert.equal(doc.sales[0].paymentGroupId,doc.sales[1].paymentGroupId);
+});
+
+test('real libSQL: payment reservation for next person can target the same queue order',async t=>{
+  const db=await setup(t);
+  const one=[{id:'latte',variant:'100%',qty:1}];
+  const first=await sell(db,'reserved-group-person-1',{cart:one,received:55});
+  const split=await startSplitPayment({db,user,body:{
+    requestKey:'reserved-group-start',date:bangkokDate(),cart:one,mode:'promptpay_full',targetOrderId:first.orderId
+  }});
+  assert.equal(split.session.pager,first.pager);
+  assert.equal(split.session.targetOrderId,first.orderId);
+  const paid=await paySplitPayment({db,user,body:{
+    requestKey:'reserved-group-pay',sessionId:split.session.id,allocations:[{index:0,qty:1}],method:'cash',received:55
+  }});
+  assert.equal(paid.completed,true);
+  assert.equal(paid.orderId,first.orderId);
+  assert.equal(paid.queueNo,first.queueNo);
+  assert.equal(paid.pager,first.pager);
+  const doc=await state(db);
+  assert.equal(doc.orders.length,1);
+  assert.equal(doc.sales.length,2);
+  assert.equal(doc.orders[0].saleIds.length,2);
+});
