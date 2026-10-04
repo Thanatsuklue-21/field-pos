@@ -292,6 +292,24 @@ test('cash sale void before production restores stock exactly once and preserves
   assert.equal(db.storage.stockTx.filter(args=>args[2]==='VOID_REVERSAL').length,3);
 });
 
+test('void reverses CRM once and restores previous last visit',async()=>{
+  const db=fakeDb();
+  const first=await checkoutPos({db,user,now:1000,body:{requestKey:'crm-void-first-001',cart,date,payment:'cash',received:100,customerId:'cus-1'}});
+  await queuePosAction({db,user,now:1010,body:{requestKey:'crm-first-start',action:'start',orderId:first.orderId,itemIndex:0,unit:1}});
+  await queuePosAction({db,user,now:1020,body:{requestKey:'crm-first-call',action:'call',orderId:first.orderId}});
+  await queuePosAction({db,user,now:1030,body:{requestKey:'crm-first-return',action:'return',orderId:first.orderId}});
+  const second=await checkoutPos({db,user,now:2000,body:{requestKey:'crm-void-second-001',cart,date,payment:'cash',received:100,customerId:'cus-1'}});
+  let state=JSON.parse(db.storage.document),sale=state.sales.find(x=>x.id===second.saleIds[0]),customer=state.customers[0];
+  assert.equal(customer.visits,2);assert.equal(customer.totalSpend,110);assert.equal(customer.points,2);assert.equal(customer.lastVisit,2000);
+  const body={requestKey:'crm-void-action-001',saleId:sale.id,reason:'wrong order'};
+  const firstVoid=await voidSale({db,user,now:2100,body});
+  const replay=await voidSale({db,user,now:2200,body});
+  state=JSON.parse(db.storage.document);sale=state.sales.find(x=>x.id===second.saleIds[0]);customer=state.customers[0];
+  assert.equal(firstVoid.replayed,false);assert.equal(replay.replayed,true);
+  assert.equal(customer.visits,1);assert.equal(customer.totalSpend,55);assert.equal(customer.points,1);assert.equal(customer.lastVisit,1000);
+  assert.equal(sale.customerEffectsReversed,true);
+});
+
 test('cash sale cannot auto-void after production starts',async()=>{
   const db=fakeDb();
   const checkout=await checkoutPos({db,user,now:3000,body:{requestKey:'void-start-checkout-001',cart,date,payment:'cash',received:100}});
@@ -343,6 +361,9 @@ test('full cash refund reverses revenue state and CRM but never restores consume
   assert.equal(state.ingredients.cup16.qty,499);
   assert.equal(state.customers[0].totalSpend,0);
   assert.equal(state.customers[0].points,0);
+  assert.equal(state.customers[0].visits,0);
+  assert.equal(state.customers[0].lastVisit,0);
+  assert.equal(sale.customerEffectsReversed,true);
   assert.equal(db.storage.stockTx.length,3);
 });
 
