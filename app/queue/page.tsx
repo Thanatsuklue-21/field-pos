@@ -8,8 +8,10 @@ import {BellRing,CheckCircle2,ChevronRight,Layers3,ReceiptText,Sparkles,X} from 
 import AuthGate from "@/components/auth-gate";
 import {api,type Session} from "@/lib/api-client";
 
-type QItem={id:string;name:string;variant:string;qty:number;price:number|null;readyQty?:number;calledQty?:number;prepSelected?:boolean};
-type QOrder={id:string;queueNo:string;pagerNo:number;status:string;time:number;total:number;billNo?:string|null;saleId?:string|null;saleIds?:string[];items:QItem[]};
+type PrepUsage={id:string;name:string;qty:number;unit:string};
+type PrepGroup={id:string;label:string;qty:number;items:{id:string;name:string;variant:string;qty:number}[];baseUsage:PrepUsage[]};
+type QItem={id:string;name:string;variant:string;qty:number;price:number|null;readyQty?:number;calledQty?:number;prepSelected?:boolean;prepGroup?:{id:string;label:string};saleIds?:string[]};
+type QOrder={id:string;queueNo:string;pagerNo:number;status:string;time:number;total:number;billNo?:string|null;saleId?:string|null;saleIds?:string[];items:QItem[];prepGroups?:PrepGroup[]};
 type QueueSnapshot={revision:number;orders:QOrder[]};
 
 const n=(v:any)=>Number(v)||0;
@@ -181,7 +183,7 @@ function QueueView({session}:{session:Session}){
             <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-700">กำลังทำ</span>
             <span className="rounded-full bg-[#fff3bf] px-3 py-1 text-xs font-bold text-[#765b08]">{selectedTask.order.queueNo} · บัตร {selectedTask.order.pagerNo}</span>
           </div>
-          <div className="text-lg font-bold sm:text-xl">{selectedTask.item.name}</div>
+          <div className="flex flex-wrap items-center gap-2"><div className="text-lg font-bold sm:text-xl">{selectedTask.item.name}</div>{selectedTask.item.prepGroup&&<span className="rounded-full border border-[#d4af37]/60 bg-[#fff8dc] px-2 py-1 text-[10px] font-bold text-[#765b08]">{selectedTask.item.prepGroup.label}</span>}</div>
           <div className="mt-1 text-sm text-slate-600">{selectedTask.item.variant} · {selectedTask.item.qty} แก้ว · เสร็จ {n(selectedTask.item.readyQty)}/{n(selectedTask.item.qty)}</div>
         </div>
         <button disabled={busy!==""} onClick={()=>completeNext(selectedTask.order,selectedTask.item,selectedTask.index)} className="min-h-11 rounded-2xl bg-[#d4af37] px-4 py-3 text-sm font-black text-black disabled:opacity-40 sm:px-6 sm:py-4 sm:text-base">
@@ -195,7 +197,7 @@ function QueueView({session}:{session:Session}){
             <span className="rounded-full bg-[#d4af37] px-3 py-1 text-xs font-bold text-black">แนะนำเมนูถัดไป</span>
             <span className="rounded-full bg-[#fff3bf] px-3 py-1 text-xs font-bold text-[#765b08]">{recommendedTask.order.queueNo} · บัตร {recommendedTask.order.pagerNo}</span>
           </div>
-          <div className="text-lg font-bold sm:text-xl">{recommendedTask.item.name}</div>
+          <div className="flex flex-wrap items-center gap-2"><div className="text-lg font-bold sm:text-xl">{recommendedTask.item.name}</div>{recommendedTask.item.prepGroup&&<span className="rounded-full border border-[#d4af37]/60 bg-[#fff8dc] px-2 py-1 text-[10px] font-bold text-[#765b08]">{recommendedTask.item.prepGroup.label}</span>}</div>
           <div className="mt-1 text-sm text-slate-600">{recommendedTask.item.variant} · เหลือ {n(recommendedTask.item.qty)-n(recommendedTask.item.readyQty)} จาก {n(recommendedTask.item.qty)} แก้ว</div>
         </div>
         <button disabled={busy!==""} onClick={()=>selectTask(recommendedTask.order.id,recommendedTask.index)} className="rounded-2xl bg-[#d4af37] px-6 py-4 text-base font-black text-black disabled:cursor-wait disabled:bg-[#f4e7a6] disabled:text-[#765b08]">
@@ -227,6 +229,16 @@ function QueueView({session}:{session:Session}){
             <b className="text-[#765b08]">ยอดรวม ฿{n(order.total).toFixed(0)}</b>
           </div>
 
+          {(order.prepGroups||[]).length>0&&<div className="mt-4 rounded-[20px] border border-[#d4af37]/40 bg-[#fffaf0] p-3">
+            <div className="flex items-center gap-2"><Layers3 size={16} className="text-[#765b08]"/><b className="text-sm">แผนเตรียมเบสของคิวนี้</b></div>
+            <p className="mt-1 text-[11px] text-slate-500">เตรียมของเบสพร้อมกันได้ แล้วค่อยแยกประกอบตามสูตรของแต่ละเมนู</p>
+            <div className="mt-3 space-y-2">{(order.prepGroups||[]).map(group=><div key={group.id} className="rounded-2xl border border-[#eadb9b] bg-white p-3">
+              <div className="flex flex-wrap items-center justify-between gap-2"><b className="text-sm text-[#765b08]">{group.label}</b><span className="rounded-full bg-[#f4ecd0] px-2 py-1 text-[10px] font-bold text-[#765b08]">{group.qty} แก้ว</span></div>
+              <div className="mt-1 text-xs text-slate-600">{group.items.map(x=>x.name+" ×"+x.qty).join(" · ")}</div>
+              {group.baseUsage?.length>0&&<div className="mt-2 text-[11px] text-slate-500">เตรียมฐาน: {group.baseUsage.map(x=>x.name+" "+Number(x.qty.toFixed(2)).toLocaleString()+" "+x.unit).join(" · ")}</div>}
+            </div>)}</div>
+          </div>}
+
           <div className="mt-5 space-y-2">
             {(order.items||[]).map((item,index)=>{
               const done=itemDone(item);
@@ -237,7 +249,7 @@ function QueueView({session}:{session:Session}){
               return <div key={index} className={"rounded-[18px] border p-3 sm:rounded-[20px] sm:p-4 "+(current?"border-emerald-400 bg-emerald-50/50":recommended?"border-[#d4af37] bg-[#fffaf0]":"border-slate-300 bg-slate-50")}>
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
-                    <div className="flex flex-wrap items-center gap-2"><b>{item.name}</b><span className="text-sm text-slate-500">{item.variant} ×{item.qty}</span>{item.price==null?<span className="text-xs font-semibold text-amber-700">ราคาไม่พบ</span>:<span className="text-sm font-semibold text-[#765b08]">฿{(item.price*n(item.qty)).toFixed(0)}</span>}{current&&<span className="rounded-full bg-emerald-100 px-2 py-1 text-[10px] font-bold text-emerald-700">กำลังทำ</span>}{recommended&&<span className="rounded-full bg-[#d4af37] px-2 py-1 text-[10px] font-bold text-black">ถัดไป</span>}</div>
+                    <div className="flex flex-wrap items-center gap-2"><b>{item.name}</b><span className="text-sm text-slate-500">{item.variant} ×{item.qty}</span>{item.prepGroup&&<span className="rounded-full bg-[#f4ecd0] px-2 py-1 text-[10px] font-bold text-[#765b08]">{item.prepGroup.label}</span>}{item.price==null?<span className="text-xs font-semibold text-amber-700">ราคาไม่พบ</span>:<span className="text-sm font-semibold text-[#765b08]">฿{(item.price*n(item.qty)).toFixed(0)}</span>}{current&&<span className="rounded-full bg-emerald-100 px-2 py-1 text-[10px] font-bold text-emerald-700">กำลังทำ</span>}{recommended&&<span className="rounded-full bg-[#d4af37] px-2 py-1 text-[10px] font-bold text-black">ถัดไป</span>}</div>
                     <div className="mt-2 text-sm"><span className={done?"font-semibold text-emerald-700":"text-slate-600"}>ทำเสร็จ {n(item.readyQty)}/{n(item.qty)}</span>{called&&<span className="ml-2 text-emerald-700">· แจ้งรับแล้ว</span>}</div>
                   </div>
                   {done&&<CheckCircle2 size={22} className="text-emerald-600"/>}
