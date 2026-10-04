@@ -364,6 +364,12 @@ test('full cash refund reverses revenue state and CRM but never restores consume
   assert.equal(state.customers[0].visits,0);
   assert.equal(state.customers[0].lastVisit,0);
   assert.equal(sale.customerEffectsReversed,true);
+  assert.equal(state.expenses.length,1);
+  assert.equal(state.expenses[0].category,'WASTE');
+  assert.equal(state.expenses[0].sourceType,'STOCK_REFUND_LOSS');
+  assert.equal(state.expenses[0].paymentMethod,'noncash');
+  assert.equal(state.expenses[0].amount,18.6);
+  assert.equal(sale.refundLossExpenseId,state.expenses[0].id);
   assert.equal(db.storage.stockTx.length,3);
 });
 
@@ -397,6 +403,7 @@ test('all-cash split payment can refund before production and restores reserved 
   assert.equal(state.ingredients.matcha.qty,1000);
   assert.equal(state.ingredients.milk.qty,30000);
   assert.equal(state.ingredients.cup16.qty,500);
+  assert.equal(state.expenses?.filter(e=>e.sourceType==='STOCK_REFUND_LOSS').length||0,0);
   assert.equal(db.storage.stockTx.filter(args=>args[2]==='REFUND_REVERSAL').length,3);
 });
 
