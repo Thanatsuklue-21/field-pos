@@ -4,14 +4,16 @@ import {readFile} from 'node:fs/promises';
 
 const read=p=>readFile(new URL('../'+p,import.meta.url),'utf8');
 
-test('queue UI recommends work from the oldest active order and exposes later same-menu batch hints only',async()=>{
+test('queue UI keeps oldest-order guidance while batching shared prep bases across the first FIFO window',async()=>{
   const ui=await read('app/queue/page.tsx');
   assert.match(ui,/sort\(\(a,b\)=>n\(a\.time\)-n\(b\.time\)\)/);
   assert.match(ui,/const first=orders\[0\]/);
-  assert.match(ui,/orders\.slice\(1\)\.flatMap/);
-  assert.match(ui,/item\.id===task\.item\.id/);
-  assert.match(ui,/เมนูเดียวกันในคิวถัดไป/);
-  assert.match(ui,/เรียกลูกค้ายังคงตาม FIFO/);
+  assert.match(ui,/const window=orders\.slice\(0,3\)/);
+  assert.match(ui,/task\?\.item\.prepGroup\?\.id/);
+  assert.match(ui,/ทำเบสต่อเนื่อง/);
+  assert.match(ui,/เตรียมฐานรวม:/);
+  assert.match(ui,/แนะนำเฉพาะ 3 คิวแรก/);
+  assert.match(ui,/เรียกหรือส่งมอบยังคง FIFO/);
 });
 
 test('queue selection marker is explicit and persists through bootstrap',async()=>{
