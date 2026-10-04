@@ -9,8 +9,9 @@ import AuthGate from "@/components/auth-gate";
 import {api,type Session} from "@/lib/api-client";
 
 type PrepUsage={id:string;name:string;qty:number;unit:string};
-type PrepGroup={id:string;label:string;qty:number;items:{id:string;name:string;variant:string;qty:number}[];baseUsage:PrepUsage[]};
-type QItem={id:string;name:string;variant:string;qty:number;price:number|null;readyQty?:number;calledQty?:number;prepSelected?:boolean;prepGroup?:{id:string;label:string};saleIds?:string[]};
+type BatchMode="NONE"|"SEQUENTIAL"|"COMBINED";
+type PrepGroup={id:string;compatibilityKey:string;label:string;batchMode:BatchMode;qty:number;items:{id:string;name:string;variant:string;qty:number}[];baseUsage:PrepUsage[]};
+type QItem={id:string;name:string;variant:string;qty:number;price:number|null;readyQty?:number;calledQty?:number;prepSelected?:boolean;prepGroup?:{id:string;compatibilityKey:string;label:string;batchMode:BatchMode};saleIds?:string[]};
 type QOrder={id:string;queueNo:string;pagerNo:number;status:string;time:number;total:number;billNo?:string|null;saleId?:string|null;saleIds?:string[];items:QItem[];prepGroups?:PrepGroup[]};
 type QueueSnapshot={revision:number;orders:QOrder[]};
 
@@ -85,11 +86,11 @@ function QueueView({session}:{session:Session}){
   const recommendedTask=task&&!task.selected?task:null;
 
   const baseBatch=useMemo(()=>{
-    const baseId=task?.item.prepGroup?.id;
-    if(!baseId)return null;
+    const prep=task?.item.prepGroup,baseKey=prep?.compatibilityKey;
+    if(!baseKey||prep?.batchMode==="NONE")return null;
     const window=orders.slice(0,3);
     const matches=window.map(order=>{
-      const group=(order.prepGroups||[]).find(g=>g.id===baseId);
+      const group=(order.prepGroups||[]).find(g=>g.compatibilityKey===baseKey&&g.batchMode!=="NONE");
       return group?{order,group}:null;
     }).filter(Boolean) as {order:QOrder;group:PrepGroup}[];
     if(matches.length<2)return null;
@@ -100,7 +101,7 @@ function QueueView({session}:{session:Session}){
       else usage.set(u.id,{...u,qty:n(u.qty)});
     }
     return {
-      id:baseId,label:matches[0].group.label,
+      id:matches[0].group.id,compatibilityKey:baseKey,label:matches[0].group.label,batchMode:matches[0].group.batchMode,
       qty:matches.reduce((sum,row)=>sum+n(row.group.qty),0),
       queues:matches.map(row=>({queueNo:row.order.queueNo,pagerNo:row.order.pagerNo,qty:n(row.group.qty)})),
       baseUsage:[...usage.values()]
@@ -229,10 +230,10 @@ function QueueView({session}:{session:Session}){
       {!task&&(!first||firstCalled)&&<div className="mt-4 text-sm text-emerald-700">ไม่มีเมนูค้างทำ</div>}
 
       {baseBatch&&<div className="mt-4 rounded-[18px] border border-[#d4af37]/40 bg-[#fffaf0] p-3">
-        <div className="flex flex-wrap items-center justify-between gap-2"><span className="flex items-center gap-2 text-sm font-bold text-[#765b08]"><Layers3 size={16}/>ทำเบสต่อเนื่อง · {baseBatch.label}</span><span className="rounded-full bg-[#f4ecd0] px-2.5 py-1 text-[10px] font-bold text-[#765b08]">{baseBatch.qty} แก้ว · {baseBatch.queues.length} คิว</span></div>
+        <div className="flex flex-wrap items-center justify-between gap-2"><span className="flex items-center gap-2 text-sm font-bold text-[#765b08]"><Layers3 size={16}/>{baseBatch.batchMode==="COMBINED"?"ทำเบสรวมได้":"ทำเบสต่อเนื่อง"} · {baseBatch.label}</span><span className="rounded-full bg-[#f4ecd0] px-2.5 py-1 text-[10px] font-bold text-[#765b08]">{baseBatch.qty} แก้ว · {baseBatch.queues.length} คิว</span></div>
         <div className="mt-2 flex flex-wrap gap-2">{baseBatch.queues.map(x=><span key={x.queueNo} className="rounded-full border border-[#eadb9b] bg-white px-3 py-1 text-xs">{x.queueNo} · บัตร {x.pagerNo} · {x.qty} แก้ว</span>)}</div>
         {baseBatch.baseUsage.length>0&&<div className="mt-2 text-xs text-slate-600">เตรียมฐานรวม: {baseBatch.baseUsage.map(x=>x.name+" "+Number(x.qty.toFixed(2)).toLocaleString()+" "+x.unit).join(" · ")}</div>}
-        <p className="mt-2 text-[11px] text-slate-500">แนะนำเฉพาะ 3 คิวแรก · เตรียมต่อเนื่องได้ แต่แยกแก้ว/สูตรตามคิว และเรียกหรือส่งมอบยังคง FIFO</p>
+        <p className="mt-2 text-[11px] text-slate-500">{baseBatch.batchMode==="COMBINED"?"พิจารณาเฉพาะ 3 คิวแรก · R&D อนุญาตให้รวมฐานสูตรนี้ได้ · ชั่งยอดรวมแล้วแบ่งตามจำนวนแก้ว/คิว · เรียกและส่งมอบยังคง FIFO":"พิจารณาเฉพาะ 3 คิวแรก · สูตรฐานตรงกัน จึงทำต่อเนื่องได้ · ห้ามเทรวมเป็น batch เดียว · แยกชั่ง/ประกอบแต่ละแก้วและเรียกหรือส่งมอบตาม FIFO"}</p>
       </div>}
     </div>
 

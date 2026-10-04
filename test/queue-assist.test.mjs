@@ -9,11 +9,13 @@ test('queue UI keeps oldest-order guidance while batching shared prep bases acro
   assert.match(ui,/sort\(\(a,b\)=>n\(a\.time\)-n\(b\.time\)\)/);
   assert.match(ui,/const first=orders\[0\]/);
   assert.match(ui,/const window=orders\.slice\(0,3\)/);
-  assert.match(ui,/task\?\.item\.prepGroup\?\.id/);
+  assert.match(ui,/prep\?\.compatibilityKey/);
+  assert.match(ui,/prep\?\.batchMode==="NONE"/);
   assert.match(ui,/ทำเบสต่อเนื่อง/);
   assert.match(ui,/เตรียมฐานรวม:/);
-  assert.match(ui,/แนะนำเฉพาะ 3 คิวแรก/);
-  assert.match(ui,/เรียกหรือส่งมอบยังคง FIFO/);
+  assert.match(ui,/พิจารณาเฉพาะ 3 คิวแรก/);
+  assert.match(ui,/ห้ามเทรวม/);
+  assert.match(ui,/FIFO/);
 });
 
 test('queue selection marker is explicit and persists through bootstrap',async()=>{

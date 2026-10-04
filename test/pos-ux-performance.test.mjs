@@ -256,7 +256,12 @@ test('queue groups duplicate lines and exposes prep base plan without changing F
   const queue=await read('app/queue/page.tsx'),api=await read('lib/pos-api.mjs');
   assert.match(api,/function normalizeQueueItems/);
   assert.match(api,/function prepGroupsView/);
+  assert.match(api,/function prepCompatibilityKey/);
   assert.match(api,/MATCHA BASE/);
+  assert.match(api,/compatibilityKey/);
+  assert.match(queue,/compatibilityKey/);
+  assert.match(queue,/ห้ามเทรวม/);
+  assert.match(api,/for\(const o of activeOrders\(doc\)\)/);
   assert.match(api,/target\.items=normalizeQueueItems/);
   assert.match(api,/order\.items=normalizeQueueItems\(doc,order\)/);
   assert.match(queue,/แผนเตรียมเบสของคิวนี้/);
