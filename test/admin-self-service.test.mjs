@@ -91,3 +91,26 @@ test('trial sales reset preserves stock and is protected by confirmation payment
   assert.match(settings,/ล้างประวัติการขายทดลอง/);
   assert.match(settings,/Stock คงเหลือปัจจุบันไม่ถูกเปลี่ยน/);
 });
+
+
+test('stock master permanent delete is guarded and can detach current recipes with version history',async()=>{
+  const api=await read('lib/api.mjs'),ui=await read('app/stock/page.tsx');
+  assert.match(api,/stockIngredientPurgeMatch/);
+  assert.match(api,/DELETE INGREDIENT/);
+  assert.match(api,/ingredient_purge_requires_zero_stock/);
+  assert.match(api,/ingredient_purge_active_purchase/);
+  assert.match(api,/ingredient_purge_would_empty_recipe/);
+  assert.match(api,/changeReason:'ingredient_purge'/);
+  assert.match(api,/before_ingredient_purge/);
+  assert.match(api,/stock_ingredient_purge/);
+  assert.match(api,/delete doc\.ingredients\[id\]/);
+  assert.match(ui,/ลบถาวร \(ข้อมูลทดลอง\)/);
+  assert.match(ui,/เอาวัตถุดิบนี้ออกจากสูตรทั้งหมดแล้วลบ Stock Master/);
+  assert.match(ui,/ยกเลิกรับเข้า/);
+});
+
+test('all stock overlays stay above mobile bottom navigation',async()=>{
+  const ui=await read('app/stock/page.tsx');
+  assert.doesNotMatch(ui,/fixed inset-0 z-50/);
+  assert.ok((ui.match(/fixed inset-0 z-\[80\]/g)||[]).length>=4);
+});
