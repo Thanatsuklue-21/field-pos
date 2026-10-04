@@ -99,8 +99,9 @@ test('checkout accounting and state writes use transaction batching with test-sa
   const accounting=posApi.slice(posApi.indexOf('function saleAccountingStatements'),posApi.indexOf('function buildItems'));
   assert.match(accounting,/statements\.push/);
   assert.match(posApi,/async function writeSaleAccounting\(tx,ctx\)\{return txBatch\(tx,saleAccountingStatements\(ctx\)\)\}/);
-  const save=posApi.slice(posApi.indexOf('async function saveState'),posApi.indexOf('function activeOrders'));
-  assert.match(save,/await txBatch\(tx,\[/);
+  const save=posApi.slice(posApi.indexOf('function stateSaveStatements'),posApi.indexOf('function activeOrders'));
+  assert.match(save,/prepared\.statements/);
+  assert.match(save,/await txBatch\(tx,prepared\.statements\)/);
 });
 
 test('cash checkout skips the redundant replay read while PromptPay still replays before provider verification',async()=>{
@@ -191,7 +192,7 @@ test('payment modal reviews cart items prices quantities and sweetness before co
   assert.match(pos,/cart\.removeItem\(i\.key\)/);
   assert.match(pos,/updateCartQuantity\(i\.key,i\.qty-1\)/);
   assert.match(pos,/updateCartQuantity\(i\.key,i\.qty\+1\)/);
-  assert.match(pos,/รวม \{cart\.items\.reduce\(\(s,i\)=>s\+i\.qty,0\)\} แก้ว/);
+  assert.match(pos,/\{splitBill\?"บิลนี้":"รวม"\} \{payableQty\} แก้ว/);
   assert.match(pos,/max-h-\[94vh\]/);
 });
 
