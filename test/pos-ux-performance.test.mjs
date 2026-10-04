@@ -96,9 +96,9 @@ test('checkout accounting and state writes use transaction batching with test-sa
   const posApi=await read('lib/pos-api.mjs');
   assert.match(posApi,/async function txBatch/);
   assert.match(posApi,/typeof tx\.batch==='function'/);
-  const accounting=posApi.slice(posApi.indexOf('async function writeSaleAccounting'),posApi.indexOf('function buildItems'));
+  const accounting=posApi.slice(posApi.indexOf('function saleAccountingStatements'),posApi.indexOf('function buildItems'));
   assert.match(accounting,/statements\.push/);
-  assert.match(accounting,/await txBatch\(tx,statements\)/);
+  assert.match(posApi,/async function writeSaleAccounting\(tx,ctx\)\{return txBatch\(tx,saleAccountingStatements\(ctx\)\)\}/);
   const save=posApi.slice(posApi.indexOf('async function saveState'),posApi.indexOf('function activeOrders'));
   assert.match(save,/await txBatch\(tx,\[/);
 });
@@ -187,7 +187,7 @@ test('payment modal reviews cart items prices quantities and sweetness before co
   assert.match(pos,/หวานปกติ \(100%\)/);
   assert.match(pos,/หวานน้อย \(50%\)/);
   assert.match(pos,/ไม่หวาน \(0%\)/);
-  assert.match(pos,/\{i\.qty\} × ฿\{i\.price\.toFixed\(0\)\}/);
+  assert.match(pos,/\{selectedQty\} × ฿\{i\.price\.toFixed\(0\)\}/);
   assert.match(pos,/cart\.removeItem\(i\.key\)/);
   assert.match(pos,/updateCartQuantity\(i\.key,i\.qty-1\)/);
   assert.match(pos,/updateCartQuantity\(i\.key,i\.qty\+1\)/);
@@ -201,8 +201,8 @@ test('payment modal stays above mobile navigation with sticky confirm and exact-
   assert.match(pos,/z-\[90\]/);
   assert.match(pos,/max-h-\[calc\(100dvh-1rem\)\]/);
   assert.match(pos,/sticky bottom-0 z-10/);
-  assert.match(pos,/รับพอดี ฿\{cart\.getTotal\(\)\.toFixed\(0\)\}/);
-  assert.match(pos,/setReceived\(String\(cart\.getTotal\(\)\)\)/);
+  assert.match(pos,/รับพอดี ฿\{payableTotal\.toFixed\(0\)\}/);
+  assert.match(pos,/setReceived\(String\(payableTotal\)\)/);
   assert.match(pos,/รับเงินพอดียอด · กดยืนยันชำระได้เลย/);
 });
 
