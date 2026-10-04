@@ -4,18 +4,16 @@ import {readFile} from 'node:fs/promises';
 
 const read=p=>readFile(new URL('../'+p,import.meta.url),'utf8');
 
-test('queue UI keeps oldest-order guidance while batching shared prep bases across the first FIFO window',async()=>{
+test('queue UI keeps base preparation inside the oldest FIFO queue only',async()=>{
   const ui=await read('app/queue/page.tsx');
   assert.match(ui,/sort\(\(a,b\)=>n\(a\.time\)-n\(b\.time\)\)/);
   assert.match(ui,/const first=orders\[0\]/);
-  assert.match(ui,/const window=orders\.slice\(0,3\)/);
-  assert.match(ui,/prep\?\.compatibilityKey/);
-  assert.match(ui,/prep\?\.batchMode==="NONE"/);
-  assert.match(ui,/ทำเบสต่อเนื่อง/);
-  assert.match(ui,/เตรียมฐานรวม:/);
-  assert.match(ui,/พิจารณาเฉพาะ 3 คิวแรก/);
-  assert.match(ui,/ห้ามเทรวม/);
-  assert.match(ui,/FIFO/);
+  assert.match(ui,/ทำเบสตามคิว/);
+  assert.match(ui,/ไม่มีการรวมเบสหรือทำต่อเนื่องข้ามคิว/);
+  assert.match(ui,/เตรียมเบสได้เฉพาะภายในคิวนี้/);
+  assert.doesNotMatch(ui,/orders\.slice\(0,3\)/);
+  assert.doesNotMatch(ui,/เตรียมฐานรวม:/);
+  assert.doesNotMatch(ui,/พิจารณาเฉพาะ 3 คิวแรก/);
 });
 
 test('queue selection marker is explicit and persists through queue snapshot',async()=>{
