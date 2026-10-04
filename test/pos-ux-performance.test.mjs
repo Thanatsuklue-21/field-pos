@@ -134,7 +134,8 @@ test('queue reads a compact snapshot and renders priced order details',async()=>
   assert.doesNotMatch(queue,/api<Bootstrap>\("\/api\/pos\/bootstrap"\)/);
   assert.match(api,/path==='\/api\/pos\/queue'&&method==='GET'/);
   assert.match(api,/getQueueSnapshot/);
-  assert.match(posApi,/price:saleTimeItemPrice\(doc,o,x\)/);
+  assert.match(posApi,/price:x\.price/);
+  assert.match(posApi,/normalizeQueueItems\(doc,o\)/);
   assert.match(queue,/ยอดรวม ฿/);
   assert.match(queue,/ดูรายการ \/ แก้ไขออเดอร์/);
 });
@@ -248,4 +249,18 @@ test('split-person flow retains one group queue between payments',async()=>{
   assert.match(api,/paymentGroupId=target\?\.paymentGroupId\|\|'pg-'/);
   assert.match(api,/targetOrderId:target\?\.id\|\|null/);
   assert.match(api,/target\.saleIds=\[\.\.\.\(target\.saleIds/);
+});
+
+
+test('queue groups duplicate lines and exposes prep base plan without changing FIFO handoff',async()=>{
+  const queue=await read('app/queue/page.tsx'),api=await read('lib/pos-api.mjs');
+  assert.match(api,/function normalizeQueueItems/);
+  assert.match(api,/function prepGroupsView/);
+  assert.match(api,/MATCHA BASE/);
+  assert.match(api,/target\.items=normalizeQueueItems/);
+  assert.match(api,/order\.items=normalizeQueueItems\(doc,order\)/);
+  assert.match(queue,/แผนเตรียมเบสของคิวนี้/);
+  assert.match(queue,/เตรียมของเบสพร้อมกันได้ แล้วค่อยแยกประกอบตามสูตร/);
+  assert.match(queue,/เตรียมฐาน:/);
+  assert.match(api,/fifo_violation/);
 });
