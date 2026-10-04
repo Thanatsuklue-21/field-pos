@@ -284,12 +284,13 @@ test('queue groups duplicate lines and exposes prep base plan without changing F
   assert.match(api,/MATCHA BASE/);
   assert.match(api,/compatibilityKey/);
   assert.match(queue,/compatibilityKey/);
-  assert.match(queue,/ห้ามเทรวม/);
+  assert.match(queue,/ทำเบสตามคิว/);
+  assert.match(queue,/ไม่ข้ามไปเตรียมคิวถัดไป/);
   assert.match(api,/for\(const o of activeOrders\(doc\)\)/);
   assert.match(api,/target\.items=normalizeQueueItems/);
   assert.match(api,/order\.items=normalizeQueueItems\(doc,order,buildQueueLookup\(doc\)\)/);
   assert.match(queue,/แผนเตรียมเบสของคิวนี้/);
-  assert.match(queue,/เตรียมของเบสพร้อมกันได้ แล้วค่อยแยกประกอบตามสูตร/);
+  assert.match(queue,/เตรียมเบสได้เฉพาะภายในคิวนี้ แล้วแยกประกอบตามสูตร/);
   assert.match(queue,/เตรียมฐาน:/);
   assert.match(api,/fifo_violation/);
 });
