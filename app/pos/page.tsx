@@ -15,20 +15,25 @@ function localDate(){
 }
 
 const PENDING_KEY="field-pos-pending-promptpay-v1";
-type PendingPrompt={requestKey:string;payRequestKey?:string;sessionId?:string;date:string;cart:{id:string;variant:string;qty:number}[];paymentReference:string;total:number;customerId:string|null;createdAt:number;checkoutMode?:"full"|"split_bill"};
+type PendingPrompt={requestKey:string;payRequestKey?:string;sessionId?:string;date:string;cart:{id:string;variant:string;qty:number}[];paymentReference:string;total:number;customerId:string|null;createdAt:number;checkoutMode?:"full"|"split_bill";targetOrderId?:string|null};
 const pendingRead=():PendingPrompt|null=>{try{return JSON.parse(localStorage.getItem(PENDING_KEY)||"null")}catch{return null}};
 const pendingWrite=(p:PendingPrompt)=>localStorage.setItem(PENDING_KEY,JSON.stringify(p));
 const pendingClear=()=>localStorage.removeItem(PENDING_KEY);
-const samePending=(p:PendingPrompt,total:number,cart:{id:string;variant:string;qty:number}[],customerId:string)=>p.total===total&&p.customerId===(customerId||null)&&JSON.stringify(p.cart)===JSON.stringify(cart);
+const samePending=(p:PendingPrompt,total:number,cart:{id:string;variant:string;qty:number}[],customerId:string,targetOrderId?:string|null)=>p.total===total&&p.customerId===(customerId||null)&&String(p.targetOrderId||"")===String(targetOrderId||"")&&JSON.stringify(p.cart)===JSON.stringify(cart);
 
 const CASH_PENDING_KEY="field-pos-pending-cash-v1";
 type PendingCash={body:any;createdAt:number};
 const cashPendingRead=():PendingCash|null=>{try{return JSON.parse(localStorage.getItem(CASH_PENDING_KEY)||"null")}catch{return null}};
 const cashPendingWrite=(p:PendingCash)=>localStorage.setItem(CASH_PENDING_KEY,JSON.stringify(p));
 const cashPendingClear=()=>localStorage.removeItem(CASH_PENDING_KEY);
-const sameCashPending=(p:PendingCash,total:number,cart:{id:string;variant:string;qty:number}[],customerId:string,received:number)=>Number(p.body?.received)===received&&Number(p.body?.total??total)===total&&(p.body?.customerId||null)===(customerId||null)&&JSON.stringify(p.body?.cart||[])===JSON.stringify(cart);
+const sameCashPending=(p:PendingCash,total:number,cart:{id:string;variant:string;qty:number}[],customerId:string,received:number,targetOrderId?:string|null)=>Number(p.body?.received)===received&&Number(p.body?.total??total)===total&&(p.body?.customerId||null)===(customerId||null)&&String(p.body?.targetOrderId||"")===String(targetOrderId||"")&&JSON.stringify(p.body?.cart||[])===JSON.stringify(cart);
 
 type LastSale={queueNo:string;pager:number;billNo?:string;total:number;received:number;change:number;payment:"cash"|"promptpay";recovered?:boolean};
+type SplitGroup={orderId:string;queueNo:string;pager:number;createdAt:number};
+const SPLIT_GROUP_KEY="field-pos-split-group-v1";
+const splitGroupRead=():SplitGroup|null=>{try{return JSON.parse(sessionStorage.getItem(SPLIT_GROUP_KEY)||"null")}catch{return null}};
+const splitGroupWrite=(g:SplitGroup)=>sessionStorage.setItem(SPLIT_GROUP_KEY,JSON.stringify(g));
+const splitGroupClear=()=>sessionStorage.removeItem(SPLIT_GROUP_KEY);
 
 const sellable=(x:MenuItem)=>!!x.enabled&&Number(x.price)>0&&Array.isArray(x.variants)&&x.variants.length>0;
 const compactOrders=(state:any)=>(Array.isArray(state?.orders)?state.orders:[])
@@ -66,16 +71,22 @@ function PosView({session}:{session:Session}){
   const [customerId,setCustomerId]=useState("");
   const [splitBill,setSplitBill]=useState(false);
   const [splitSelection,setSplitSelection]=useState<Record<string,number>>({});
+  const [splitGroup,setSplitGroup]=useState<SplitGroup|null>(null);
   const cart=useCartStore();
 
   const load=()=>api<Bootstrap>("/api/pos/bootstrap").then(setData);
 
   useEffect(()=>{
+    const savedGroup=splitGroupRead();if(savedGroup?.orderId)setSplitGroup(savedGroup);
     load().catch(()=>{});
     api<any>("/api/customers").then(x=>setCustomers(x.customers||[])).catch(()=>{});
     api<any>("/api/payments/promptpay/config").then(setPromptConfig).catch(()=>setPromptConfig({ready:false,configured:false}));
     recoverCashCheckout().then(()=>recoverPending()).catch(()=>{});
   },[]);
+
+  useEffect(()=>{
+    if(splitGroup&&cart.items.length===0){splitGroupClear();setSplitGroup(null)}
+  },[cart.items.length,splitGroup?.orderId]);
 
   useEffect(()=>{
     try{
@@ -169,9 +180,18 @@ function PosView({session}:{session:Session}){
     setCustomerId("");
     setSplitSelection({});
     setSplitBill(false);
-    if(opts.splitBill&&remaining.length){
+    if(remaining.length&&(opts.splitBill||splitGroup)){
+      const orderId=String(r?.orderId||splitGroup?.orderId||"");
+      const queueNo=String(r?.queueNo||splitGroup?.queueNo||"—");
+      const pager=Number(r?.pager??splitGroup?.pager??0);
+      if(orderId){
+        const group={orderId,queueNo,pager,createdAt:splitGroup?.createdAt||Date.now()};
+        splitGroupWrite(group);setSplitGroup(group);
+      }
       const qty=remaining.reduce((s,i)=>s+i.qty,0);
-      setNotice("ชำระบิลแยกสำเร็จ · เหลือ "+qty+" แก้วในตะกร้า กด CHECKOUT เพื่อรับเงินคนถัดไป");
+      setNotice("ชำระแยกสำเร็จ · ลูกค้ากลุ่มนี้ใช้คิว "+queueNo+" เดียวกัน · เหลือ "+qty+" แก้ว รอรับเงินคนถัดไป");
+    }else if(!remaining.length){
+      splitGroupClear();setSplitGroup(null);
     }
     setLastSale({
       queueNo:String(r?.queueNo||"—"),
@@ -231,8 +251,8 @@ function PosView({session}:{session:Session}){
       const status=await api<any>("/api/pos/split/status",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({sessionId:p.sessionId})});
       if(status?.session?.status==="completed"){
         pendingClear();
-        cart.clearCart();
-        finishSale({queueNo:status.session.queueNo,pager:status.session.pager,total:status.session.total},{payment:"promptpay",total:p.total,received:p.total,recovered:true,splitBill:p.checkoutMode==="split_bill",paidCart:p.cart});
+        if(p.checkoutMode!=="split_bill")cart.clearCart();
+        finishSale({orderId:status.session.orderId,queueNo:status.session.queueNo,pager:status.session.pager,total:status.session.total},{payment:"promptpay",total:p.total,received:p.total,recovered:true,splitBill:p.checkoutMode==="split_bill",paidCart:p.cart});
         return status;
       }
       const allocations=p.cart.map((x,index)=>({index,qty:x.qty}));
@@ -248,15 +268,15 @@ function PosView({session}:{session:Session}){
           const retry=await api<any>("/api/pos/split/status",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({sessionId:p.sessionId})});
           if(retry?.session?.status==="completed"){
             pendingClear();
-            cart.clearCart();
-            finishSale({queueNo:retry.session.queueNo,pager:retry.session.pager,total:retry.session.total},{payment:"promptpay",total:p.total,received:p.total,recovered:true,splitBill:p.checkoutMode==="split_bill",paidCart:p.cart});
+            if(p.checkoutMode!=="split_bill")cart.clearCart();
+            finishSale({orderId:retry.session.orderId,queueNo:retry.session.queueNo,pager:retry.session.pager,total:retry.session.total},{payment:"promptpay",total:p.total,received:p.total,recovered:true,splitBill:p.checkoutMode==="split_bill",paidCart:p.cart});
             return retry;
           }
         }
         throw e;
       }
     }
-    const body={requestKey:p.requestKey,date:p.date,cart:p.cart,payment:"promptpay",received:p.total,paymentReference:p.paymentReference,paymentVerified:verified,customerId:p.customerId,checkoutMode:p.checkoutMode||"full"};
+    const body={requestKey:p.requestKey,date:p.date,cart:p.cart,payment:"promptpay",received:p.total,paymentReference:p.paymentReference,paymentVerified:verified,customerId:p.customerId,checkoutMode:p.checkoutMode||"full",targetOrderId:p.targetOrderId||undefined};
     const r=await api<any>("/api/pos/checkout",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify(body)});
     pendingClear();
     cart.clearCart();
@@ -276,7 +296,7 @@ function PosView({session}:{session:Session}){
   async function ensurePendingPrompt(p:PendingPrompt){
     let next={...p};
     if(!next.sessionId){
-      const reserved=await api<any>("/api/pos/split/start",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({requestKey:next.requestKey,date:next.date,cart:next.cart,customerId:next.customerId,mode:"promptpay_full"})});
+      const reserved=await api<any>("/api/pos/split/start",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({requestKey:next.requestKey,date:next.date,cart:next.cart,customerId:next.customerId,mode:"promptpay_full",targetOrderId:next.targetOrderId||undefined})});
       const serverTotal=Number(reserved?.session?.total);
       if(!reserved?.session?.id||!Number.isFinite(serverTotal)||serverTotal<=0)throw new Error("promptpay_reservation_failed");
       next={...next,sessionId:reserved.session.id,total:serverTotal};
@@ -305,8 +325,8 @@ function PosView({session}:{session:Session}){
         const sessionStatus=await api<any>("/api/pos/split/status",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({sessionId:p.sessionId})});
         if(sessionStatus?.session?.status==="completed"){
           pendingClear();
-          cart.clearCart();
-          finishSale({queueNo:sessionStatus.session.queueNo,pager:sessionStatus.session.pager,total:sessionStatus.session.total},{payment:"promptpay",total:p.total,received:p.total,recovered:true,splitBill:p.checkoutMode==="split_bill",paidCart:p.cart});
+          if(p.checkoutMode!=="split_bill")cart.clearCart();
+          finishSale({orderId:sessionStatus.session.orderId,queueNo:sessionStatus.session.queueNo,pager:sessionStatus.session.pager,total:sessionStatus.session.total},{payment:"promptpay",total:p.total,received:p.total,recovered:true,splitBill:p.checkoutMode==="split_bill",paidCart:p.cart});
           return;
         }
         if(["expired","cancelled"].includes(String(sessionStatus?.session?.status||"").toLowerCase())){pendingClear();return}
@@ -372,13 +392,13 @@ function PosView({session}:{session:Session}){
           if(!current)current=await api<any>("/api/payments/promptpay/status",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({chargeId:resumed.paymentReference})});
           if(current.paid){await finalizePending(resumed,current.chargeId||resumed.paymentReference);return}
           if(["failed","expired","reversed"].includes(String(current.status||"").toLowerCase())){await cancelPendingReservation(resumed);pendingClear()}
-          else if(!samePending(resumed,checkoutTotal,cartPayload,customerId))throw Object.assign(new Error("pending_promptpay_exists"),{status:409});
+          else if(!samePending(resumed,checkoutTotal,cartPayload,customerId,splitGroup?.orderId||null))throw Object.assign(new Error("pending_promptpay_exists"),{status:409});
           else{st=current;paymentReference=resumed.paymentReference;requestKey=resumed.requestKey;activePending=resumed;checkoutTotal=resumed.total}
         }
         if(!st){
           const reservationKey=crypto.randomUUID();
           const payRequestKey=crypto.randomUUID();
-          activePending={requestKey:reservationKey,payRequestKey,date:localDate(),cart:cartPayload,paymentReference:"",total:checkoutTotal,customerId:customerId||null,createdAt:Date.now(),checkoutMode};
+          activePending={requestKey:reservationKey,payRequestKey,date:localDate(),cart:cartPayload,paymentReference:"",total:checkoutTotal,customerId:customerId||null,createdAt:Date.now(),checkoutMode,targetOrderId:splitGroup?.orderId||null};
           pendingWrite(activePending);
           const setup=await ensurePendingPrompt(activePending);
           activePending=setup.pending;
@@ -407,12 +427,13 @@ function PosView({session}:{session:Session}){
       let body:any={
         requestKey,date:localDate(),cart:cartPayload,payment:method,
         received:method==="cash"?Number(received):checkoutTotal,
-        paymentReference,paymentVerified,customerId:customerId||null,total:checkoutTotal,checkoutMode
+        paymentReference,paymentVerified,customerId:customerId||null,total:checkoutTotal,checkoutMode,
+        targetOrderId:splitGroup?.orderId||undefined
       };
       if(method==="cash"){
         const existing=cashPendingRead();
         if(existing){
-          if(!sameCashPending(existing,checkoutTotal,cartPayload,customerId,Number(received)))throw Object.assign(new Error("pending_cash_checkout_exists"),{status:409});
+          if(!sameCashPending(existing,checkoutTotal,cartPayload,customerId,Number(received),splitGroup?.orderId||null))throw Object.assign(new Error("pending_cash_checkout_exists"),{status:409});
           body=existing.body;
           requestKey=body.requestKey;
         }else cashPendingWrite({body,createdAt:Date.now()});
@@ -495,6 +516,7 @@ function PosView({session}:{session:Session}){
 
       <button type="button" disabled={busy||cart.items.reduce((s,i)=>s+i.qty,0)<2} onClick={()=>{setSplitBill(v=>!v);setSplitSelection({});setReceived("");setResult("")}} className={"mt-4 min-h-11 w-full rounded-2xl border px-4 text-sm font-semibold "+(splitBill?"border-[#d4af37] bg-[#fff8dc] text-[#765b08]":"border-slate-300 bg-white text-slate-700")+" disabled:opacity-40"}>{splitBill?"ยกเลิกแยกบิล":"แยกบิล / จ่ายแยกตามคน"}</button>
       {splitBill&&<div className="mt-2 rounded-2xl border border-[#d4af37]/40 bg-[#fffaf0] px-3 py-2 text-xs text-slate-700">เลือกจำนวนแก้วของ <b>คนที่กำลังจ่าย</b> · หลังชำระ รายการที่เหลือยังอยู่ในตะกร้าเพื่อรับเงินคนถัดไป</div>}
+      {splitGroup&&<div className="mt-2 rounded-2xl border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs text-emerald-800"><b>กลุ่มเดียวกัน · คิว ${splitGroup.queueNo}</b> · การจ่ายคนถัดไปจะใช้คิวและบัตรเรียกเดิมอัตโนมัติ</div>}
 
       <div className="mt-3 rounded-[20px] border border-slate-200 bg-slate-50 p-3">
         <div className="flex items-center justify-between gap-3"><div><b className="text-sm">{splitBill?"เลือกสำหรับบิลนี้":"รายการที่สั่ง"}</b><p className="mt-0.5 text-[11px] text-slate-500">{splitBill?"เลือกได้แม้เมนูเดียวกันมีหลายแก้ว":"ทวนเมนู ราคา และระดับหวานก่อนรับเงิน"}</p></div><b className="shrink-0 text-lg text-[#765b08]">฿{payableTotal.toFixed(0)}</b></div>
