@@ -205,3 +205,34 @@ test('payment modal stays above mobile navigation with sticky confirm and exact-
   assert.match(pos,/setReceived\(String\(cart\.getTotal\(\)\)\)/);
   assert.match(pos,/รับเงินพอดียอด · กดยืนยันชำระได้เลย/);
 });
+
+
+test('separate-person bills keep unpaid drinks in cart and pay only selected quantities',async()=>{
+  const pos=await read('app/pos/page.tsx');
+  assert.match(pos,/แยกบิล \/ จ่ายแยกตามคน/);
+  assert.match(pos,/splitSelection/);
+  assert.match(pos,/payableItems/);
+  assert.match(pos,/checkoutMode=splitBill\?"split_bill":"full"/);
+  assert.match(pos,/subtractPaidCart/);
+  assert.match(pos,/เหลือ .* แก้วในตะกร้า/);
+});
+
+test('mobile menu cards keep long names and prices aligned above checkout bar',async()=>{
+  const pos=await read('app/pos/page.tsx');
+  assert.match(pos,/overflow-auto pb-28 lg:pb-0/);
+  assert.match(pos,/flex min-h-\[154px\] flex-col/);
+  assert.match(pos,/flex flex-1 flex-col p-3/);
+  assert.match(pos,/mt-auto pt-2 text-base font-semibold/);
+});
+
+test('cash checkout batches state and idempotency reads plus accounting state and audit writes',async()=>{
+  const api=await read('lib/pos-api.mjs');
+  const checkout=api.slice(api.indexOf('export async function checkoutPos'),api.indexOf('export async function voidSale'));
+  assert.match(api,/function rememberStatement/);
+  assert.match(api,/function stateSaveStatements/);
+  assert.match(api,/function saleAccountingStatements/);
+  assert.match(checkout,/const reads=await txBatch\(tx,/);
+  assert.match(checkout,/writes\.push\(rememberStatement/);
+  assert.match(checkout,/writes\.push\(\.\.\.stateWrite\.statements\)/);
+  assert.match(checkout,/await txBatch\(tx,writes\)/);
+});
