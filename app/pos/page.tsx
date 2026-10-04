@@ -189,7 +189,7 @@ function PosView({session}:{session:Session}){
         splitGroupWrite(group);setSplitGroup(group);
       }
       const qty=remaining.reduce((s,i)=>s+i.qty,0);
-      setNotice("ชำระแยกสำเร็จ · ลูกค้ากลุ่มนี้ใช้คิว "+queueNo+" เดียวกัน · เหลือ "+qty+" แก้ว รอรับเงินคนถัดไป");
+      setNotice("ชำระแยกสำเร็จ · ลูกค้ากลุ่มนี้ใช้คิว "+queueNo+" เดียวกัน · เหลือ "+qty+" แก้วในตะกร้า รอรับเงินคนถัดไป");
     }else if(!remaining.length){
       splitGroupClear();setSplitGroup(null);
     }
