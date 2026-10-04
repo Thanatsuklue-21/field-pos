@@ -14,10 +14,12 @@ type Ingredient={id:string;name:string;qty:number;unit:string;safetyStock:number
 type Tx={id:string;ingredientId:string;type:string;qtyDelta:number;unit:string;reason:string;createdAt:number};
 type Overview={revision:number;ingredients:Ingredient[];transactions:Tx[]};
 type CountInput={packs:string;loose:string;base:string};
+type MasterDraft=Partial<Ingredient>&{originalUnit?:string;loadedAt?:number};
 
 const today=()=>new Date().toLocaleDateString("en-CA",{timeZone:"Asia/Bangkok"});
 const packageUnits=["ขวด","ถุง","ถัง","แกลลอน","กล่อง","แพ็ก","ลัง","ชิ้น"];
 const usageUnits=[["g","กรัม (g)"],["ml","มิลลิลิตร (ml)"],["piece","ชิ้น"],["serve","เสิร์ฟ"]];
+const usageUnitLabel=(unit?:string)=>usageUnits.find(([value])=>value===unit)?.[1]||String(unit||"—");
 
 export default function Stock(){return <AuthGate>{s=><StockView session={s}/>}</AuthGate>}
 
@@ -42,7 +44,7 @@ function StockView({session}:{session:Session}){
   const [txOpen,setTxOpen]=useState<Ingredient|null>(null),[type,setType]=useState<"PURCHASE"|"WASTE">("PURCHASE"),[wasteQty,setWasteQty]=useState("");
   const [purchaseCost,setPurchaseCost]=useState(""),[purchaseDate,setPurchaseDate]=useState(today()),[supplier,setSupplier]=useState(""),[sourceUrl,setSourceUrl]=useState(""),[imageUrl,setImageUrl]=useState(""),[note,setNote]=useState(""),[purchasePaymentMethod,setPurchasePaymentMethod]=useState("bank");
   const [packageQty,setPackageQty]=useState("1"),[packageUnit,setPackageUnit]=useState("ขวด"),[packSize,setPackSize]=useState(""),[packSizeUnit,setPackSizeUnit]=useState("g"),[presetId,setPresetId]=useState("");
-  const [master,setMaster]=useState<Partial<Ingredient>|null>(null),[purchaseEdit,setPurchaseEdit]=useState<{ingredient:Ingredient;purchase:Purchase}|null>(null);
+  const [master,setMaster]=useState<MasterDraft|null>(null),[masterMsg,setMasterMsg]=useState(""),[purchaseEdit,setPurchaseEdit]=useState<{ingredient:Ingredient;purchase:Purchase}|null>(null);
   const [countOpen,setCountOpen]=useState(false),[counts,setCounts]=useState<Record<string,CountInput>>({});
 
   const load=()=>api<Overview>("/api/stock/overview").then(setData);
@@ -69,6 +71,24 @@ function StockView({session}:{session:Session}){
   function openPurchase(x:Ingredient){setMsg("");setType("PURCHASE");setTxOpen(x);setFromPurchase(x,latestPurchase(x))}
   function openWaste(x:Ingredient){setMsg("");setType("WASTE");setTxOpen(x);setWasteQty("");setNote("")}
 
+  async function openMaster(x?:Ingredient){
+    setMasterMsg("");
+    if(!x){
+      setMaster({name:"",unit:"piece",originalUnit:"piece",safetyStock:0,costKind:"other",wasteMargin:0,loadedAt:Date.now()});
+      return;
+    }
+    setBusy(true);
+    try{
+      const latest=await api<Overview>("/api/stock/overview");
+      setData(latest);
+      const fresh=latest.ingredients.find(item=>item.id===x.id)||x;
+      setMaster({...fresh,originalUnit:fresh.unit,loadedAt:Date.now()});
+    }catch{
+      setMaster({...x,originalUnit:x.unit,loadedAt:Date.now()});
+      setMasterMsg("โหลดข้อมูลล่าสุดจากฐานข้อมูลไม่สำเร็จ · กำลังแสดงข้อมูลที่มีอยู่ในหน้าจอ");
+    }finally{setBusy(false)}
+  }
+
   async function saveTx(){
     if(!txOpen)return;setBusy(true);setMsg("");
     try{
@@ -88,15 +108,22 @@ function StockView({session}:{session:Session}){
   }
 
   async function saveMaster(){
-    if(!master)return;setBusy(true);setMsg("");
+    if(!master)return;setBusy(true);setMsg("");setMasterMsg("");
     try{
-      const payload={name:master.name,unit:master.unit,safetyStock:Number(master.safetyStock)||0,costKind:master.costKind||"other",wasteMargin:Number(master.wasteMargin)||0};
+      const payload:any={name:String(master.name||"").trim(),safetyStock:Number(master.safetyStock)||0,costKind:master.costKind||"other",wasteMargin:Number(master.wasteMargin)||0};
+      if(!master.id||master.unit!==master.originalUnit)payload.unit=master.unit||"piece";
       if(master.id)await api("/api/stock/ingredients/"+encodeURIComponent(master.id),{method:"PATCH",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify(payload)});
       else await api("/api/stock/ingredients",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify(payload)});
-      setMaster(null);setMsg("บันทึก Stock Master แล้ว");await load();
+      const latest=await api<Overview>("/api/stock/overview");setData(latest);
+      const saved=master.id?latest.ingredients.find(item=>item.id===master.id):null;
+      setMaster(null);setMsg(saved?"บันทึก Master แล้ว · "+saved.name:"บันทึก Stock Master แล้ว");
     }catch(e:any){
-      const map:Record<string,string>={unit_change_requires_zero_stock:"ต้องนับ/ปรับยอดให้เป็น 0 ก่อนเปลี่ยนหน่วย",unit_change_recipe_in_use:"รายการนี้ถูกใช้ในสูตรอยู่ จึงเปลี่ยนหน่วยไม่ได้"};
-      setMsg(map[e.message]||e.message)
+      const map:Record<string,string>={
+        unit_change_requires_zero_stock:"เปลี่ยนหน่วยตัดสูตรไม่ได้ เพราะยังมี Stock คงเหลืออยู่ · แต่การเปลี่ยนชื่อทำได้โดยไม่ต้องเปลี่ยนหน่วย",
+        unit_change_recipe_in_use:"เปลี่ยนหน่วยตัดสูตรไม่ได้ เพราะรายการนี้ถูกใช้ในสูตรอยู่ · แก้ชื่อได้ตามปกติ",
+        invalid_ingredient_name:"ชื่อรายการไม่ถูกต้อง กรุณากรอกอย่างน้อย 2 ตัวอักษร"
+      };
+      setMasterMsg(map[e.message]||e.message)
     }finally{setBusy(false)}
   }
   async function ingredientAction(x:Ingredient,action:"archive"|"restore"|"reset"){
@@ -193,7 +220,7 @@ function StockView({session}:{session:Session}){
   return <section className="soft-scroll h-full overflow-auto p-3 sm:p-5 md:p-7">
     <header className="flex flex-wrap items-end justify-between gap-3">
       <div><p className="gold m-0 text-[9px] font-bold tracking-[.26em] sm:text-[10px]">INVENTORY</p><h1 className="mt-1 text-xl font-semibold sm:text-2xl">STOCK MANAGEMENT</h1><p className="mt-1 text-xs text-slate-500">นับเป็นกล่อง/แพ็กได้ · สูตรหักใช้ตามหน่วยจริงแยกกัน</p></div>
-      <div className="flex flex-wrap gap-2">{admin&&<button onClick={()=>setMaster({name:"",unit:"piece",safetyStock:0,costKind:"other",wasteMargin:0})} className="flex min-h-11 items-center gap-2 rounded-full bg-[#d4af37] px-4 text-xs font-bold text-black"><Plus size={15}/>เพิ่ม Stock</button>}<button onClick={openCount} className="min-h-11 rounded-full border border-slate-300 bg-white px-4 text-xs font-bold">นับสต๊อกจริง</button></div>
+      <div className="flex flex-wrap gap-2">{admin&&<button onClick={()=>openMaster()} className="flex min-h-11 items-center gap-2 rounded-full bg-[#d4af37] px-4 text-xs font-bold text-black"><Plus size={15}/>เพิ่ม Stock</button>}<button onClick={openCount} className="min-h-11 rounded-full border border-slate-300 bg-white px-4 text-xs font-bold">นับสต๊อกจริง</button></div>
     </header>
 
     {msg&&<div className="mt-3 flex items-start justify-between rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm"><span>{msg}</span><button onClick={()=>setMsg("")}><X size={16}/></button></div>}
@@ -206,7 +233,7 @@ function StockView({session}:{session:Session}){
         <div className="flex items-start justify-between gap-3"><div><small className="text-[9px] uppercase tracking-widest text-slate-400">{x.id}</small><h2 className="mt-1 font-semibold">{x.name}</h2></div>{x.archived?<span className="rounded-full bg-slate-100 px-2 py-1 text-[10px]">ARCHIVED</span>:x.lowStock?<span className="rounded-full bg-amber-100 px-2 py-1 text-[10px] text-amber-700">LOW</span>:null}</div>
         <div className="mt-3 flex items-end justify-between gap-3"><div><small className="text-slate-500">คงเหลือที่สูตรใช้ได้</small><div className="mt-1 text-2xl font-semibold text-[#765b08]">{x.qty.toLocaleString()} <span className="text-xs text-slate-500">{x.unit}</span></div>{x.purchaseProfile&&<small className="mt-1 block text-slate-500">1 {x.purchaseProfile.packageUnit} = {Number(x.purchaseProfile.quantityPerPackage||0).toLocaleString()} {x.unit}</small>}</div><div className="text-right text-xs text-slate-500">ต้นทุนล่าสุด<br/><b className="text-slate-700">฿{x.unitCost.toFixed(4)}/{x.unit}</b></div></div>
         {!x.archived&&<><p className="mt-3 text-[11px] text-slate-500">ต้นทุนซื้อจริงต้องบันทึกจาก “รับเข้า” เพื่อเก็บราคา วันที่ และแหล่งซื้อย้อนหลัง</p><div className="mt-4 grid grid-cols-2 gap-2"><button onClick={()=>openPurchase(x)} className="flex min-h-11 items-center justify-center gap-2 rounded-2xl border border-emerald-300 text-xs font-semibold text-emerald-700"><ArrowUpCircle size={15}/>รับเข้า</button><button onClick={()=>openWaste(x)} className="flex min-h-11 items-center justify-center gap-2 rounded-2xl border border-red-200 text-xs font-semibold text-red-600"><ArrowDownCircle size={15}/>ของเสีย</button></div></>}
-        {admin&&<div className="mt-2 grid grid-cols-2 gap-2">{x.archived?<><button onClick={()=>ingredientAction(x,"restore")} className="min-h-11 rounded-2xl border border-amber-300 text-xs font-semibold text-amber-700"><RotateCcw size={14} className="mr-1 inline"/>กู้คืน</button><button onClick={()=>purgeIngredient(x)} className="min-h-11 rounded-2xl border border-red-200 text-xs font-semibold text-red-600"><Trash2 size={14} className="mr-1 inline"/>ลบถาวร</button></>:<><button onClick={()=>setMaster({...x})} className="min-h-11 rounded-2xl border border-slate-200 text-xs text-slate-700"><Edit3 size={14} className="mr-1 inline"/>แก้ Master</button>{latestPurchase(x)?<button onClick={()=>setPurchaseEdit({ingredient:x,purchase:{...latestPurchase(x)!}})} className="min-h-11 rounded-2xl border border-slate-200 text-xs text-slate-700">แก้ข้อมูลซื้อล่าสุด</button>:<button onClick={()=>ingredientAction(x,"reset")} className="min-h-11 rounded-2xl border border-red-200 text-xs text-red-600">ล้างข้อมูลทดลอง</button>}</>}</div>}
+        {admin&&<div className="mt-2 grid grid-cols-2 gap-2">{x.archived?<><button onClick={()=>ingredientAction(x,"restore")} className="min-h-11 rounded-2xl border border-amber-300 text-xs font-semibold text-amber-700"><RotateCcw size={14} className="mr-1 inline"/>กู้คืน</button><button onClick={()=>purgeIngredient(x)} className="min-h-11 rounded-2xl border border-red-200 text-xs font-semibold text-red-600"><Trash2 size={14} className="mr-1 inline"/>ลบถาวร</button></>:<><button onClick={()=>openMaster(x)} className="min-h-11 rounded-2xl border border-slate-200 text-xs text-slate-700"><Edit3 size={14} className="mr-1 inline"/>แก้ Master</button>{latestPurchase(x)?<button onClick={()=>setPurchaseEdit({ingredient:x,purchase:{...latestPurchase(x)!}})} className="min-h-11 rounded-2xl border border-slate-200 text-xs text-slate-700">แก้ข้อมูลซื้อล่าสุด</button>:<button onClick={()=>ingredientAction(x,"reset")} className="min-h-11 rounded-2xl border border-red-200 text-xs text-red-600">ล้างข้อมูลทดลอง</button>}</>}</div>}
       </article>)}
     </div>
 
@@ -227,7 +254,28 @@ function StockView({session}:{session:Session}){
       </>}
       <button disabled={busy||(type==="PURCHASE"&&(!(Number(purchaseCost)>=0)||!(Number(packageQty)>0)||!(Number(packSize)>0)))||(type==="WASTE"&&!(Number(wasteQty)>0))} onClick={saveTx} className="min-h-12 rounded-full bg-[#d4af37] font-bold text-black disabled:opacity-40">{busy?"กำลังบันทึก...":"ยืนยันและบันทึก"}</button></div></div></div>}
 
-    {master&&<div className="fixed inset-0 z-[80] grid place-items-center overflow-auto bg-black/70 p-3"><div className="glass card w-full max-w-md p-5"><div className="flex justify-between"><div><p className="gold text-[10px] tracking-[.25em]">STOCK MASTER</p><h3 className="mt-1 text-lg">{master.id?"แก้ไขรายการ":"เพิ่มรายการใหม่"}</h3></div><button onClick={()=>setMaster(null)}><X/></button></div><div className="mt-4 grid gap-3"><input value={master.name||""} onChange={e=>setMaster({...master,name:e.target.value})} placeholder="ชื่อวัตถุดิบ/บรรจุภัณฑ์" className="rounded-2xl border bg-slate-50 px-4 py-3"/><div className="grid grid-cols-2 gap-2"><select value={master.unit||"piece"} onChange={e=>setMaster({...master,unit:e.target.value})} className="rounded-2xl border bg-white px-3 py-3">{usageUnits.map(([v,l])=><option key={v} value={v}>{l}</option>)}</select><input type="number" min="0" value={Number(master.safetyStock)||0} onChange={e=>setMaster({...master,safetyStock:Number(e.target.value)})} placeholder="Safety Stock" className="rounded-2xl border bg-slate-50 px-3 py-3"/></div><select value={master.costKind||"other"} onChange={e=>setMaster({...master,costKind:e.target.value,wasteMargin:["syrup","concentrate"].includes(e.target.value)?(master.wasteMargin||.05):0})} className="rounded-2xl border bg-white px-3 py-3"><option value="other">ทั่วไป/บรรจุภัณฑ์</option><option value="powder">ผง</option><option value="milk">นม</option><option value="water">น้ำ</option><option value="syrup">ไซรัป</option><option value="concentrate">น้ำเข้มข้น</option></select>{["syrup","concentrate"].includes(master.costKind||"")&&<input type="number" min="0" max="50" value={Math.round(Number(master.wasteMargin||0)*100)} onChange={e=>setMaster({...master,wasteMargin:Number(e.target.value)/100})} placeholder="% เผื่อสูญเสีย" className="rounded-2xl border bg-slate-50 px-4 py-3"/>}<button disabled={busy||String(master.name||"").trim().length<2} onClick={saveMaster} className="min-h-12 rounded-full bg-[#d4af37] font-bold text-black">บันทึก Master</button>{master.id&&<div className="rounded-2xl bg-slate-50 p-3 text-xs text-slate-600"><b>เก็บรายการ</b> = ซ่อนและกู้คืนได้ · <b>ลบถาวร</b> = เอาออกจาก Stock Master โดยต้องมียอด 0 และไม่มีรายการรับเข้าที่ยังใช้งาน</div>}{master.id&&!master.archived&&<><button onClick={()=>ingredientAction(master as Ingredient,"reset")} className="min-h-11 rounded-full border border-red-200 text-sm text-red-600">ล้างยอด/ราคาทดลอง</button><button onClick={()=>ingredientAction(master as Ingredient,"archive")} className="min-h-11 rounded-full border border-slate-300 text-sm text-slate-600"><Archive size={14} className="mr-1 inline"/>เก็บรายการ</button></>}{master.id&&<button onClick={()=>purgeIngredient(master as Ingredient)} className="min-h-11 rounded-full border border-red-300 text-sm font-semibold text-red-700"><Trash2 size={14} className="mr-1 inline"/>ลบถาวร (ข้อมูลทดลอง)</button>}</div></div></div>}
+    {master&&<div className="fixed inset-0 z-[80] grid place-items-center overflow-auto bg-black/70 p-3"><div className="glass card soft-scroll max-h-[92vh] w-full max-w-md overflow-auto p-5"><div className="flex justify-between"><div><p className="gold text-[10px] tracking-[.25em]">STOCK MASTER</p><h3 className="mt-1 text-lg">{master.id?"แก้ไขรายการ":"เพิ่มรายการใหม่"}</h3>{master.id&&<p className="mt-1 text-[11px] text-slate-500">ID: {master.id} · โหลดข้อมูลล่าสุดจากฐานข้อมูลเมื่อเปิดหน้าต่างนี้</p>}</div><button onClick={()=>{setMaster(null);setMasterMsg("")}}><X/></button></div>
+      <div className="mt-4 grid gap-3">
+        {masterMsg&&<div className="rounded-2xl border border-amber-300 bg-amber-50 p-3 text-xs text-amber-800">{masterMsg}</div>}
+        <label className="text-xs text-slate-500">ชื่อรายการ<input value={master.name||""} onChange={e=>setMaster({...master,name:e.target.value})} placeholder="ชื่อวัตถุดิบ/บรรจุภัณฑ์" className="mt-1 w-full rounded-2xl border bg-slate-50 px-4 py-3 text-base"/></label>
+        {master.id&&<div className="rounded-2xl border border-slate-200 bg-slate-50 p-3 text-xs">
+          <div className="flex items-center justify-between gap-3"><span className="text-slate-500">หน่วยที่สูตร/Stock ใช้</span><b>{usageUnitLabel(master.originalUnit||master.unit)}</b></div>
+          {master.purchaseProfile?.packageUnit&&<><div className="mt-2 flex items-center justify-between gap-3"><span className="text-slate-500">หน่วยซื้อ/นับล่าสุด</span><b>{master.purchaseProfile.packageUnit}</b></div><div className="mt-1 text-slate-600">1 {master.purchaseProfile.packageUnit} = {Number(master.purchaseProfile.quantityPerPackage||0).toLocaleString()} {master.purchaseProfile.usageUnit||master.originalUnit||master.unit}</div></>}
+          {!master.purchaseProfile?.packageUnit&&<p className="mt-2 text-slate-500">ยังไม่มีข้อมูลแพ็กจากรายการรับเข้าล่าสุด · บันทึกจากปุ่ม “รับเข้า” ก่อน</p>}
+        </div>}
+        <div className="grid grid-cols-2 gap-2">
+          <label className="text-xs text-slate-500">หน่วยตัดสูตร<select value={master.unit||"piece"} disabled={!!master.id&&Number(master.qty||0)!==0} onChange={e=>setMaster({...master,unit:e.target.value})} className="mt-1 w-full rounded-2xl border bg-white px-3 py-3 disabled:bg-slate-100 disabled:text-slate-500">{usageUnits.map(([v,l])=><option key={v} value={v}>{l}</option>)}</select></label>
+          <label className="text-xs text-slate-500">Safety Stock<input type="number" min="0" value={Number(master.safetyStock)||0} onChange={e=>setMaster({...master,safetyStock:Number(e.target.value)})} placeholder="Safety Stock" className="mt-1 w-full rounded-2xl border bg-slate-50 px-3 py-3"/></label>
+        </div>
+        {!!master.id&&Number(master.qty||0)!==0&&<p className="text-[11px] text-slate-500">หน่วยตัดสูตรถูกล็อกเพราะมียอดคงเหลือ {Number(master.qty||0).toLocaleString()} {master.originalUnit||master.unit} · คุณยังแก้ชื่อและข้อมูล Master อื่นได้ตามปกติ</p>}
+        {master.purchaseProfile?.packageUnit&&<p className="text-[11px] text-[#765b08]">“{master.purchaseProfile.packageUnit}” เป็นหน่วยซื้อ/หน่วยนับ ไม่ใช่หน่วยตัดสูตร · แก้ขนาดแพ็กได้ที่ “แก้ข้อมูลซื้อล่าสุด”</p>}
+        <label className="text-xs text-slate-500">ประเภทต้นทุน<select value={master.costKind||"other"} onChange={e=>setMaster({...master,costKind:e.target.value,wasteMargin:["syrup","concentrate"].includes(e.target.value)?(master.wasteMargin||.05):0})} className="mt-1 w-full rounded-2xl border bg-white px-3 py-3"><option value="other">ทั่วไป/บรรจุภัณฑ์</option><option value="powder">ผง</option><option value="milk">นม</option><option value="water">น้ำ</option><option value="syrup">ไซรัป</option><option value="concentrate">น้ำเข้มข้น</option></select></label>
+        {["syrup","concentrate"].includes(master.costKind||"")&&<input type="number" min="0" max="50" value={Math.round(Number(master.wasteMargin||0)*100)} onChange={e=>setMaster({...master,wasteMargin:Number(e.target.value)/100})} placeholder="% เผื่อสูญเสีย" className="rounded-2xl border bg-slate-50 px-4 py-3"/>}
+        <button disabled={busy||String(master.name||"").trim().length<2} onClick={saveMaster} className="min-h-12 rounded-full bg-[#d4af37] font-bold text-black disabled:opacity-40">{busy?"กำลังบันทึก...":"บันทึก Master"}</button>
+        {master.id&&<div className="rounded-2xl bg-slate-50 p-3 text-xs text-slate-600"><b>เก็บรายการ</b> = ซ่อนและกู้คืนได้ · <b>ลบถาวร</b> = เอาออกจาก Stock Master โดยต้องมียอด 0 และไม่มีรายการรับเข้าที่ยังใช้งาน</div>}
+        {master.id&&!master.archived&&<><button onClick={()=>ingredientAction(master as Ingredient,"reset")} className="min-h-11 rounded-full border border-red-200 text-sm text-red-600">ล้างยอด/ราคาทดลอง</button><button onClick={()=>ingredientAction(master as Ingredient,"archive")} className="min-h-11 rounded-full border border-slate-300 text-sm text-slate-600"><Archive size={14} className="mr-1 inline"/>เก็บรายการ</button></>}
+        {master.id&&<button onClick={()=>purgeIngredient(master as Ingredient)} className="min-h-11 rounded-full border border-red-300 text-sm font-semibold text-red-700"><Trash2 size={14} className="mr-1 inline"/>ลบถาวร (ข้อมูลทดลอง)</button>}
+      </div></div></div>}
 
     {countOpen&&<div className="fixed inset-0 z-[80] grid place-items-center overflow-auto bg-black/70 p-3"><div className="glass card soft-scroll max-h-[92vh] w-full max-w-xl overflow-auto p-5"><div className="flex justify-between"><div><p className="gold text-[10px] tracking-[.25em]">DAILY COUNT</p><h3 className="mt-1 text-lg">นับของจริง</h3><p className="text-xs text-slate-500">นับเป็นกล่อง/แพ็กก่อน ระบบค่อยแปลงเป็นหน่วยใช้ในสูตร</p></div><button onClick={()=>setCountOpen(false)}><X/></button></div><div className="mt-4 space-y-2">{active.map(x=>{const per=Number(x.purchaseProfile?.quantityPerPackage)||0,row=counts[x.id]||{packs:"",loose:"",base:""};return <div key={x.id} className="rounded-2xl border bg-white p-3"><div className="flex justify-between"><b className="text-sm">{x.name}</b><small className="text-slate-500">ระบบ {x.qty.toLocaleString()} {x.unit}</small></div>{per>0?<div className="mt-2 grid grid-cols-2 gap-2"><label className="text-xs text-slate-500">จำนวน {x.purchaseProfile?.packageUnit}<input inputMode="decimal" value={row.packs} onChange={e=>setCounts({...counts,[x.id]:{...row,packs:e.target.value}})} className="mt-1 w-full rounded-xl border bg-slate-50 px-3 py-2 text-base"/></label><label className="text-xs text-slate-500">เศษ/เปิดแล้ว ({x.unit})<input inputMode="decimal" value={row.loose} onChange={e=>setCounts({...counts,[x.id]:{...row,loose:e.target.value}})} className="mt-1 w-full rounded-xl border bg-slate-50 px-3 py-2 text-base"/></label><small className="col-span-2 text-[#765b08]">รวม = {(Number(row.packs||0)*per+Number(row.loose||0)).toLocaleString()} {x.unit} · 1 {x.purchaseProfile?.packageUnit} = {per.toLocaleString()} {x.unit}</small></div>:<label className="mt-2 block text-xs text-slate-500">จำนวนจริง ({x.unit})<input inputMode="decimal" value={row.base} onChange={e=>setCounts({...counts,[x.id]:{...row,base:e.target.value}})} className="mt-1 w-full rounded-xl border bg-slate-50 px-3 py-2 text-base"/></label>}</div>})}</div><button disabled={busy} onClick={saveCount} className="mt-4 min-h-12 w-full rounded-full bg-[#d4af37] font-bold text-black">ยืนยันผลตรวจนับ</button></div></div>}
 
