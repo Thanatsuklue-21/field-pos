@@ -534,20 +534,20 @@ test('order-level pager call requires all drinks ready and completes the whole o
   assert.equal(replay.replayed,true);
 });
 
-test('pager call remains FIFO even when a later order finishes production first',async()=>{
+test('production and pager call both remain strict FIFO',async()=>{
   const db=fakeDb();
   const first=await checkoutPos({db,user,now:4000,body:{requestKey:'fifo-call-checkout-001',cart,date,payment:'cash',received:100}});
   const second=await checkoutPos({db,user,now:4010,body:{requestKey:'fifo-call-checkout-002',cart,date,payment:'cash',received:100}});
 
-  await queuePosAction({db,user,now:4020,body:{requestKey:'fifo-ready-002',action:'start',orderId:second.orderId,itemIndex:0,unit:1}});
   await assert.rejects(
-    ()=>queuePosAction({db,user,now:4030,body:{requestKey:'fifo-call-002',action:'call',orderId:second.orderId}}),
+    ()=>queuePosAction({db,user,now:4020,body:{requestKey:'fifo-ready-002',action:'start',orderId:second.orderId,itemIndex:0,unit:1}}),
     e=>e?.status===409&&e?.message==='fifo_violation'
   );
 
   await queuePosAction({db,user,now:4040,body:{requestKey:'fifo-ready-001',action:'start',orderId:first.orderId,itemIndex:0,unit:1}});
   await queuePosAction({db,user,now:4050,body:{requestKey:'fifo-call-001',action:'call',orderId:first.orderId}});
   await queuePosAction({db,user,now:4060,body:{requestKey:'fifo-return-001',action:'return',orderId:first.orderId}});
+  await queuePosAction({db,user,now:4065,body:{requestKey:'fifo-ready-002b',action:'start',orderId:second.orderId,itemIndex:0,unit:1}});
   const secondCall=await queuePosAction({db,user,now:4070,body:{requestKey:'fifo-call-002b',action:'call',orderId:second.orderId}});
   assert.equal(secondCall.action,'call');
 });
@@ -601,15 +601,16 @@ test('first FIFO order may call a completed menu early while keeping remaining m
   assert.equal(order.status,'ready');
 });
 
-test('menu-level early pickup is blocked for a later FIFO order',async()=>{
+test('later FIFO order cannot be prepared ahead for menu-level early pickup',async()=>{
   const db=fakeDb();
   const first=await checkoutPos({db,user,now:8200,body:{requestKey:'partial-fifo-checkout-001',cart,date,payment:'cash',received:100}});
   const second=await checkoutPos({db,user,now:8210,body:{requestKey:'partial-fifo-checkout-002',cart,date,payment:'cash',received:100}});
-  await queuePosAction({db,user,now:8220,body:{requestKey:'partial-fifo-ready-002',action:'start',orderId:second.orderId,itemIndex:0,unit:1}});
   await assert.rejects(
-    ()=>queuePosAction({db,user,now:8230,body:{requestKey:'partial-fifo-call-002',action:'call_item',orderId:second.orderId,itemIndex:0}}),
+    ()=>queuePosAction({db,user,now:8220,body:{requestKey:'partial-fifo-ready-002',action:'start',orderId:second.orderId,itemIndex:0,unit:1}}),
     e=>e?.status===409&&e?.message==='fifo_violation'
   );
+  const state=JSON.parse(db.storage.document);
+  assert.equal(state.orders.find(o=>o.id===second.orderId).items[0].readyQty||0,0);
   assert.ok(first.orderId);
 });
 

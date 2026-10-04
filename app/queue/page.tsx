@@ -22,14 +22,12 @@ const orderReady=(order:QOrder)=>(order.items||[]).length>0&&(order.items||[]).e
 const orderCalled=(order:QOrder)=>(order.items||[]).length>0&&(order.items||[]).every(itemCalled);
 
 function nextTask(orders:QOrder[]){
-  for(const order of orders){
-    for(let index=0;index<(order.items||[]).length;index++){
-      const item=order.items[index];
-      if(item.prepSelected&&!itemDone(item))return {order,item,index,selected:true};
-    }
-  }
   const first=orders[0];
   if(!first)return null;
+  for(let index=0;index<(first.items||[]).length;index++){
+    const item=first.items[index];
+    if(item.prepSelected&&!itemDone(item))return {order:first,item,index,selected:true};
+  }
   for(let index=0;index<(first.items||[]).length;index++){
     const item=first.items[index];
     if(!itemDone(item))return {order:first,item,index,selected:false};
@@ -94,31 +92,10 @@ function QueueView({session}:{session:Session}){
   const selectedTask=task?.selected?task:null;
   const recommendedTask=task&&!task.selected?task:null;
 
-  const baseBatch=useMemo(()=>{
-    const prep=task?.item.prepGroup,baseKey=prep?.compatibilityKey;
-    if(!baseKey||prep?.batchMode==="NONE")return null;
-    const window=orders.slice(0,3);
-    const matches=window.map(order=>{
-      const group=(order.prepGroups||[]).find(g=>g.compatibilityKey===baseKey&&g.batchMode!=="NONE");
-      return group?{order,group}:null;
-    }).filter(Boolean) as {order:QOrder;group:PrepGroup}[];
-    if(matches.length<2)return null;
-    const usage=new Map<string,PrepUsage>();
-    for(const row of matches)for(const u of row.group.baseUsage||[]){
-      const current=usage.get(u.id);
-      if(current)current.qty+=n(u.qty);
-      else usage.set(u.id,{...u,qty:n(u.qty)});
-    }
-    return {
-      id:matches[0].group.id,compatibilityKey:baseKey,label:matches[0].group.label,batchMode:matches[0].group.batchMode,
-      qty:matches.reduce((sum,row)=>sum+n(row.group.qty),0),
-      queues:matches.map(row=>({queueNo:row.order.queueNo,pagerNo:row.order.pagerNo,qty:n(row.group.qty)})),
-      baseUsage:[...usage.values()]
-    };
-  },[orders,task]);
+
 
   function errorText(code:string){
-    return code==="fifo_violation"?"ยังทำขั้นตอนเรียกลูกค้าของคิวนี้ไม่ได้ ต้องจัดการคิวก่อนหน้าก่อน":
+    return code==="fifo_violation"?"ต้องทำคิวแรกให้เสร็จก่อน ระบบไม่อนุญาตให้ข้ามไปทำคิวถัดไป":
       code==="order_not_ready"?"ยังทำเครื่องดื่มไม่ครบ":
       code==="item_not_ready_for_call"?"เมนูนี้ยังไม่มีแก้วที่พร้อมเรียก":
       code==="pager_already_called"?"บัตรคิวนี้ถูกบันทึกว่าเรียกแล้ว":
@@ -238,11 +215,9 @@ function QueueView({session}:{session:Session}){
 
       {!task&&(!first||firstCalled)&&<div className="mt-4 text-sm text-emerald-700">ไม่มีเมนูค้างทำ</div>}
 
-      {baseBatch&&<div className="mt-4 rounded-[18px] border border-[#d4af37]/40 bg-[#fffaf0] p-3">
-        <div className="flex flex-wrap items-center justify-between gap-2"><span className="flex items-center gap-2 text-sm font-bold text-[#765b08]"><Layers3 size={16}/>{baseBatch.batchMode==="COMBINED"?"ทำเบสรวมได้":"ทำเบสต่อเนื่อง"} · {baseBatch.label}</span><span className="rounded-full bg-[#f4ecd0] px-2.5 py-1 text-[10px] font-bold text-[#765b08]">{baseBatch.qty} แก้ว · {baseBatch.queues.length} คิว</span></div>
-        <div className="mt-2 flex flex-wrap gap-2">{baseBatch.queues.map(x=><span key={x.queueNo} className="rounded-full border border-[#eadb9b] bg-white px-3 py-1 text-xs">{x.queueNo} · บัตร {x.pagerNo} · {x.qty} แก้ว</span>)}</div>
-        {baseBatch.baseUsage.length>0&&<div className="mt-2 text-xs text-slate-600">เตรียมฐานรวม: {baseBatch.baseUsage.map(x=>x.name+" "+Number(x.qty.toFixed(2)).toLocaleString()+" "+x.unit).join(" · ")}</div>}
-        <p className="mt-2 text-[11px] text-slate-500">{baseBatch.batchMode==="COMBINED"?"พิจารณาเฉพาะ 3 คิวแรก · R&D อนุญาตให้รวมฐานสูตรนี้ได้ · ชั่งยอดรวมแล้วแบ่งตามจำนวนแก้ว/คิว · เรียกและส่งมอบยังคง FIFO":"พิจารณาเฉพาะ 3 คิวแรก · สูตรฐานตรงกัน จึงทำต่อเนื่องได้ · ห้ามเทรวมเป็น batch เดียว · แยกชั่ง/ประกอบแต่ละแก้วและเรียกหรือส่งมอบตาม FIFO"}</p>
+      {first&&<div className="mt-4 rounded-[18px] border border-[#d4af37]/40 bg-[#fffaf0] p-3 text-sm text-[#765b08]">
+        <b>ทำเบสตามคิว</b>
+        <p className="mt-1 text-[11px] text-slate-500">ทำและเตรียมเบสของ {first.queueNo} ให้ครบก่อน แล้วจึงไปคิวถัดไป · ไม่มีการรวมเบสหรือทำต่อเนื่องข้ามคิว</p>
       </div>}
     </div>
 
@@ -262,7 +237,7 @@ function QueueView({session}:{session:Session}){
 
           {(order.prepGroups||[]).length>0&&<div className="mt-4 rounded-[20px] border border-[#d4af37]/40 bg-[#fffaf0] p-3">
             <div className="flex items-center gap-2"><Layers3 size={16} className="text-[#765b08]"/><b className="text-sm">แผนเตรียมเบสของคิวนี้</b></div>
-            <p className="mt-1 text-[11px] text-slate-500">เตรียมของเบสพร้อมกันได้ แล้วค่อยแยกประกอบตามสูตรของแต่ละเมนู</p>
+            <p className="mt-1 text-[11px] text-slate-500">เตรียมเบสได้เฉพาะภายในคิวนี้ แล้วแยกประกอบตามสูตรของแต่ละเมนู · ไม่ข้ามไปเตรียมคิวถัดไป</p>
             <div className="mt-3 space-y-2">{(order.prepGroups||[]).map(group=><div key={group.id} className="rounded-2xl border border-[#eadb9b] bg-white p-3">
               <div className="flex flex-wrap items-center justify-between gap-2"><b className="text-sm text-[#765b08]">{group.label}</b><span className="rounded-full bg-[#f4ecd0] px-2 py-1 text-[10px] font-bold text-[#765b08]">{group.qty} แก้ว</span></div>
               <div className="mt-1 text-xs text-slate-600">{group.items.map(x=>x.name+" ×"+x.qty).join(" · ")}</div>

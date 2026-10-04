@@ -96,12 +96,31 @@ test('real libSQL: split rejects repeated indexes and fractional quantities with
   assert.equal(paid.completed,true);assert.equal((await state(db)).sales.length,1);
 });
 
-test('real libSQL: legacy finish cannot bypass FIFO; cancelled order cannot reopen',async t=>{
+test('real libSQL: preparation cannot start or complete a later queue before the oldest queue',async t=>{
+  const db=await setup(t);
+  const first=await sell(db,'prep-fifo-first');
+  const second=await sell(db,'prep-fifo-second');
+  await assert.rejects(act(db,second.orderId,'select',{itemIndex:0,selected:true}),/fifo_violation/);
+  await assert.rejects(act(db,second.orderId,'start',{itemIndex:0,unit:1}),/fifo_violation/);
+  await act(db,first.orderId,'select',{itemIndex:0,selected:true});
+  await act(db,first.orderId,'complete_item',{itemIndex:0,expectedReadyQty:0});
+  await assert.rejects(act(db,second.orderId,'select',{itemIndex:0,selected:true}),/fifo_violation/);
+  await act(db,first.orderId,'call');
+  await act(db,first.orderId,'return');
+  await act(db,second.orderId,'select',{itemIndex:0,selected:true});
+  const doc=await state(db);
+  assert.equal(doc.orders.find(x=>x.id===second.orderId).items[0].prepSelected,true);
+});
+
+test('real libSQL: legacy production actions cannot bypass FIFO; cancelled order cannot reopen',async t=>{
   const db=await setup(t);const first=await sell(db,'first-request');const second=await sell(db,'second-request');
-  await act(db,second.orderId,'start',{itemIndex:0,unit:1});
-  await assert.rejects(act(db,second.orderId,'finish',{itemIndex:0,unit:1}),/fifo_violation/);
-  const doc=await state(db);doc.orders[0].status='void';
+  await assert.rejects(act(db,second.orderId,'start',{itemIndex:0,unit:1}),/fifo_violation/);
+  const doc=await state(db);
+  doc.orders.find(x=>x.id===second.orderId).items[0].readyQty=1;
   await db.execute({sql:'UPDATE field_state SET document=? WHERE singleton=1',args:[JSON.stringify(doc)]});
+  await assert.rejects(act(db,second.orderId,'finish',{itemIndex:0,unit:1}),/fifo_violation/);
+  const next=await state(db);next.orders[0].status='void';
+  await db.execute({sql:'UPDATE field_state SET document=? WHERE singleton=1',args:[JSON.stringify(next)]});
   await assert.rejects(act(db,first.orderId,'select',{itemIndex:0,selected:true}),/order_not_found/);
   await assert.rejects(sell(db,'void-addon',{targetOrderId:first.orderId}),/target_order_unavailable/);
 });
