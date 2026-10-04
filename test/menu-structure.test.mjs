@@ -16,8 +16,10 @@ function doc(){
 test('menu structure derives legacy categories and default prep bases',()=>{
   const d=doc(),s=getMenuStructure(d);
   assert.deepEqual(s.categories.map(x=>x.name),['MATCHA','COFFEE']);
-  assert.ok(s.prepBases.some(x=>x.id==='MATCHA'));
-  assert.ok(s.prepBases.some(x=>x.id==='COFFEE'));
+  assert.equal(s.prepBases.find(x=>x.id==='MATCHA').batchMode,'SEQUENTIAL');
+  assert.equal(s.prepBases.find(x=>x.id==='COFFEE').batchMode,'SEQUENTIAL');
+  assert.equal(s.prepBases.find(x=>x.id==='FRUIT').batchMode,'NONE');
+  assert.equal(s.prepBases.find(x=>x.id==='SODA').batchMode,'NONE');
 });
 
 test('category rename updates every matching menu and preserves order',()=>{
@@ -50,10 +52,12 @@ test('category state exposes enabled and admin order',()=>{
 
 test('prep base validates ingredient references and preserves configured ingredients',()=>{
   const d=doc(),s=getMenuStructure(d);
-  const bases=s.prepBases.map(x=>x.id==='MATCHA'?{...x,label:'MATCHA STATION',ingredientIds:['matcha']}:x);
+  const bases=s.prepBases.map(x=>x.id==='MATCHA'?{...x,label:'MATCHA STATION',ingredientIds:['matcha'],batchMode:'COMBINED'}:x);
   applyMenuStructure(d,validateMenuStructure({categories:s.categories,prepBases:bases},d));
   const base=prepBaseState(d,'MATCHA');
   assert.equal(base.label,'MATCHA STATION');
   assert.deepEqual(base.ingredientIds,['matcha']);
-  assert.throws(()=>validateMenuStructure({categories:s.categories,prepBases:[...bases,{id:'CUSTOM',label:'CUSTOM',enabled:true,ingredientIds:['missing']}]},d),/prep_base_ingredient_missing/);
+  assert.equal(base.batchMode,'COMBINED');
+  assert.throws(()=>validateMenuStructure({categories:s.categories,prepBases:[...bases,{id:'CUSTOM',label:'CUSTOM',enabled:true,ingredientIds:['missing'],batchMode:'SEQUENTIAL'}]},d),/prep_base_ingredient_missing/);
+  assert.throws(()=>validateMenuStructure({categories:s.categories,prepBases:bases.map(x=>x.id==='MATCHA'?{...x,batchMode:'MIX_ANYTHING'}:x)},d),/invalid_prep_batch_mode/);
 });
