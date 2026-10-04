@@ -233,7 +233,7 @@ function QueueView({session}:{session:Session}){
         <div className="flex flex-wrap items-center justify-between gap-2"><span className="flex items-center gap-2 text-sm font-bold text-[#765b08]"><Layers3 size={16}/>{baseBatch.batchMode==="COMBINED"?"ทำเบสรวมได้":"ทำเบสต่อเนื่อง"} · {baseBatch.label}</span><span className="rounded-full bg-[#f4ecd0] px-2.5 py-1 text-[10px] font-bold text-[#765b08]">{baseBatch.qty} แก้ว · {baseBatch.queues.length} คิว</span></div>
         <div className="mt-2 flex flex-wrap gap-2">{baseBatch.queues.map(x=><span key={x.queueNo} className="rounded-full border border-[#eadb9b] bg-white px-3 py-1 text-xs">{x.queueNo} · บัตร {x.pagerNo} · {x.qty} แก้ว</span>)}</div>
         {baseBatch.baseUsage.length>0&&<div className="mt-2 text-xs text-slate-600">เตรียมฐานรวม: {baseBatch.baseUsage.map(x=>x.name+" "+Number(x.qty.toFixed(2)).toLocaleString()+" "+x.unit).join(" · ")}</div>}
-        <p className="mt-2 text-[11px] text-slate-500">{baseBatch.batchMode==="COMBINED"?"R&D อนุญาตให้รวมฐานสูตรนี้ได้ · ชั่งยอดรวมแล้วแบ่งตามจำนวนแก้ว/คิว · เรียกและส่งมอบยังคง FIFO":"สูตรฐานตรงกัน จึงทำต่อเนื่องได้ · ห้ามเทรวมเป็น batch เดียว · แยกชั่ง/ประกอบแต่ละแก้วและเรียกหรือส่งมอบตาม FIFO"}</p>
+        <p className="mt-2 text-[11px] text-slate-500">{baseBatch.batchMode==="COMBINED"?"พิจารณาเฉพาะ 3 คิวแรก · R&D อนุญาตให้รวมฐานสูตรนี้ได้ · ชั่งยอดรวมแล้วแบ่งตามจำนวนแก้ว/คิว · เรียกและส่งมอบยังคง FIFO":"พิจารณาเฉพาะ 3 คิวแรก · สูตรฐานตรงกัน จึงทำต่อเนื่องได้ · ห้ามเทรวมเป็น batch เดียว · แยกชั่ง/ประกอบแต่ละแก้วและเรียกหรือส่งมอบตาม FIFO"}</p>
       </div>}
     </div>
 
