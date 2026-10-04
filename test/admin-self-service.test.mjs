@@ -115,3 +115,21 @@ test('all stock overlays stay above mobile bottom navigation',async()=>{
   assert.doesNotMatch(ui,/fixed inset-0 z-50/);
   assert.ok((ui.match(/fixed inset-0 z-\[80\]/g)||[]).length>=4);
 });
+
+
+test('stock master refreshes latest database values and separates package unit from recipe unit',async()=>{
+  const ui=await read('app/stock/page.tsx');
+  assert.match(ui,/async function openMaster/);
+  assert.match(ui,/api<Overview>\("\/api\/stock\/overview"\)/);
+  assert.match(ui,/originalUnit:fresh\.unit/);
+  assert.match(ui,/หน่วยซื้อ\/นับล่าสุด/);
+  assert.match(ui,/หน่วยที่สูตร\/Stock ใช้/);
+  assert.match(ui,/เป็นหน่วยซื้อ\/หน่วยนับ ไม่ใช่หน่วยตัดสูตร/);
+});
+
+test('renaming stock master does not send unchanged unit and shows unit errors inside modal',async()=>{
+  const ui=await read('app/stock/page.tsx');
+  assert.match(ui,/if\(!master\.id\|\|master\.unit!==master\.originalUnit\)payload\.unit=/);
+  assert.match(ui,/setMasterMsg\(map\[e\.message\]\|\|e\.message\)/);
+  assert.match(ui,/แต่การเปลี่ยนชื่อทำได้โดยไม่ต้องเปลี่ยนหน่วย/);
+});
