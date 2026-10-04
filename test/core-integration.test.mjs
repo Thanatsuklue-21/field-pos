@@ -5,7 +5,7 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {createClient} from '@libsql/client';
 import {SCHEMA} from '../lib/schema.mjs';
-import {checkoutPos,queuePosAction,startSplitPayment,paySplitPayment,refundSale} from '../lib/pos-api.mjs';
+import {checkoutPos,queuePosAction,startSplitPayment,paySplitPayment,refundSale,getQueueSnapshot} from '../lib/pos-api.mjs';
 import {createApi} from '../lib/api.mjs';
 import {digest} from '../lib/security.mjs';
 import {bangkokDate} from '../lib/time.mjs';
@@ -171,4 +171,36 @@ test('real libSQL: payment reservation for next person can target the same queue
   assert.equal(doc.orders.length,1);
   assert.equal(doc.sales.length,2);
   assert.equal(doc.orders[0].saleIds.length,2);
+});
+
+
+test('real libSQL: queue merges duplicate menu lines across separate-person payments and groups shared prep base',async t=>{
+  const doc={
+    menu:[
+      {id:'pure',enabled:true,price:45,name:'Pure Matcha Iced',category:'MATCHA',variants:[{label:'0%',recipeVersion:1,recipe:{items:{matcha:4,water:170}}}]},
+      {id:'latte',enabled:true,price:55,name:'Matcha Latte',category:'MATCHA',variants:[{label:'100%',recipeVersion:1,recipe:{items:{matcha:5,water:40,milk:110}}}]}
+    ],
+    ingredients:{
+      matcha:{name:'Yamito Matcha',qty:1000,unit:'g',unitCost:2},
+      water:{name:'Water',qty:50000,unit:'g',unitCost:0},
+      milk:{name:'Milk',qty:30000,unit:'g',unitCost:.06}
+    },
+    settings:{pagerCount:10},sales:[],orders:[],billSeq:{}
+  };
+  const db=await setup(t,doc),date=bangkokDate();
+  const cart=[{id:'pure',variant:'0%',qty:1},{id:'latte',variant:'100%',qty:1}];
+  const first=await checkoutPos({db,user,body:{requestKey:'prep-group-p1',cart,date,payment:'cash',received:100}});
+  await checkoutPos({db,user,body:{requestKey:'prep-group-p2',cart,date,payment:'cash',received:100,targetOrderId:first.orderId}});
+  const snapshot=await getQueueSnapshot({db});
+  assert.equal(snapshot.orders.length,1);
+  const order=snapshot.orders[0];
+  assert.equal(order.items.length,2);
+  assert.equal(order.items.find(x=>x.id==='pure').qty,2);
+  assert.equal(order.items.find(x=>x.id==='latte').qty,2);
+  assert.equal(order.prepGroups.length,1);
+  assert.equal(order.prepGroups[0].id,'MATCHA');
+  assert.equal(order.prepGroups[0].qty,4);
+  const matcha=order.prepGroups[0].baseUsage.find(x=>x.id==='matcha');
+  assert.equal(matcha.qty,18);
+  assert.equal(matcha.unit,'g');
 });
