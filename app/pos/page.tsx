@@ -1,10 +1,10 @@
 "use client";
 
-import {useEffect,useMemo,useState} from "react";
+import {useEffect,useMemo,useRef,useState} from "react";
 import {useRouter} from "next/navigation";
 import {ArrowRight,CheckCircle2,Minus,Plus,Search,Trash2,WalletCards,X} from "lucide-react";
 import AuthGate from "@/components/auth-gate";
-import {api,type Bootstrap,type MenuItem,type Session} from "@/lib/api-client";
+import {api,type Bootstrap,type MenuItem,type RevisionUnchanged,type Session} from "@/lib/api-client";
 import {additionalServingsAvailable,cartAvailability} from "@/lib/domain/availability.mjs";
 import {useCartStore} from "@/stores/cart-store";
 
@@ -72,13 +72,20 @@ function PosView({session}:{session:Session}){
   const [splitBill,setSplitBill]=useState(false);
   const [splitSelection,setSplitSelection]=useState<Record<string,number>>({});
   const [splitGroup,setSplitGroup]=useState<SplitGroup|null>(null);
+  const revisionRef=useRef<number|null>(null);
   const cart=useCartStore();
 
-  const load=()=>api<Bootstrap>("/api/pos/bootstrap").then(setData);
+  const acceptBootstrap=(next:Bootstrap|RevisionUnchanged)=>{
+    if(next?.unchanged===true)return false;
+    revisionRef.current=Math.max(revisionRef.current||0,Number(next.revision)||0);
+    setData(prev=>!prev||next.revision>=prev.revision?next:prev);
+    return true;
+  };
+  const load=(force=false)=>api<Bootstrap|RevisionUnchanged>("/api/pos/bootstrap",!force&&revisionRef.current!==null?{headers:{"X-Field-Revision":String(revisionRef.current)}}:{}).then(acceptBootstrap);
 
   useEffect(()=>{
     const savedGroup=splitGroupRead();if(savedGroup?.orderId)setSplitGroup(savedGroup);
-    load().catch(()=>{});
+    load(true).catch(()=>{});
     api<any>("/api/customers").then(x=>setCustomers(x.customers||[])).catch(()=>{});
     api<any>("/api/payments/promptpay/config").then(setPromptConfig).catch(()=>setPromptConfig({ready:false,configured:false}));
     recoverCashCheckout().then(()=>recoverPending()).catch(()=>{});
@@ -153,7 +160,9 @@ function PosView({session}:{session:Session}){
   function applyServerState(r:any){
     const orders=Array.isArray(r?.orders)?r.orders:(r?.state?compactOrders(r.state):null);
     if(!orders)return;
-    setData(prev=>prev?{...prev,revision:Number(r.revision)||prev.revision,orders}:prev);
+    const revision=Number(r.revision)||0;
+    revisionRef.current=Math.max(revisionRef.current||0,revision);
+    setData(prev=>prev?{...prev,revision:revision||prev.revision,orders}:prev);
   }
 
   function subtractPaidCart(payload:{id:string;variant:string;qty:number}[]){
@@ -204,7 +213,7 @@ function PosView({session}:{session:Session}){
       recovered:opts.recovered
     });
     api<any>("/api/customers").then(x=>setCustomers(x.customers||[])).catch(()=>{});
-    load().catch(()=>{});
+    load(true).catch(()=>{});
   }
 
   function availabilityMessage(result:ReturnType<typeof cartAvailability>){
