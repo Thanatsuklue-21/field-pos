@@ -13,7 +13,7 @@ type BatchMode="NONE"|"SEQUENTIAL"|"COMBINED";
 type PrepGroup={id:string;compatibilityKey:string;label:string;batchMode:BatchMode;qty:number;items:{id:string;name:string;variant:string;qty:number}[];baseUsage:PrepUsage[]};
 type QItem={id:string;name:string;variant:string;qty:number;price:number|null;readyQty?:number;calledQty?:number;prepSelected?:boolean;prepGroup?:{id:string;compatibilityKey:string;label:string;batchMode:BatchMode};saleIds?:string[]};
 type QOrder={id:string;queueNo:string;pagerNo:number;status:string;time:number;total:number;billNo?:string|null;saleId?:string|null;saleIds?:string[];items:QItem[];prepGroups?:PrepGroup[]};
-type QueueSnapshot={revision:number;orders:QOrder[]};
+type QueueSnapshot={revision:number;unchanged?:false;orders:QOrder[]};
 
 const n=(v:any)=>Number(v)||0;
 const itemDone=(item:QItem)=>n(item.readyQty)>=n(item.qty);
