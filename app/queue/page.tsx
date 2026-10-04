@@ -6,7 +6,7 @@ import {useEffect,useMemo,useRef,useState} from "react";
 import {useRouter} from "next/navigation";
 import {BellRing,CheckCircle2,ChevronRight,Layers3,ReceiptText,Sparkles,X} from "lucide-react";
 import AuthGate from "@/components/auth-gate";
-import {api,type Session} from "@/lib/api-client";
+import {api,type RevisionUnchanged,type Session} from "@/lib/api-client";
 
 type PrepUsage={id:string;name:string;qty:number;unit:string};
 type BatchMode="NONE"|"SEQUENTIAL"|"COMBINED";
@@ -47,6 +47,7 @@ function QueueView({session}:{session:Session}){
   const [notice,setNotice]=useState("");
   const [toast,setToast]=useState("");
   const busyRef=useRef(false);
+  const revisionRef=useRef<number|null>(null);
   busyRef.current=busy!=="";
   const [callPrompt,setCallPrompt]=useState<{queueNo:string;pagerNo:number;scope:string}|null>(null);
 
@@ -54,15 +55,21 @@ function QueueView({session}:{session:Session}){
   const pulse=(message:string)=>{setToast(message);try{navigator.vibrate?.(35)}catch{}};
   const optimistic=(mutate:(orders:QOrder[])=>QOrder[])=>setData(prev=>prev?{...prev,orders:mutate(prev.orders)}:prev);
 
-  const load=()=>api<QueueSnapshot>("/api/pos/queue").then(next=>setData(prev=>!prev||next.revision>=prev.revision?next:prev));
+  const acceptSnapshot=(next:QueueSnapshot|RevisionUnchanged)=>{
+    if(next?.unchanged===true)return false;
+    revisionRef.current=Number(next.revision)||0;
+    setData(prev=>!prev||next.revision>=prev.revision?next:prev);
+    return true;
+  };
+  const load=()=>api<QueueSnapshot|RevisionUnchanged>("/api/pos/queue",revisionRef.current===null?{}:{headers:{"X-Field-Revision":String(revisionRef.current)}}).then(acceptSnapshot);
   useEffect(()=>{
     let disposed=false,inFlight=false;
     const refresh=async()=>{
       if(disposed||inFlight||busyRef.current||document.visibilityState==="hidden")return;
       inFlight=true;
       try{
-        const next=await api<QueueSnapshot>("/api/pos/queue");
-        if(!disposed)setData(prev=>!prev||next.revision>=prev.revision?next:prev);
+        const next=await api<QueueSnapshot|RevisionUnchanged>("/api/pos/queue",revisionRef.current===null?{}:{headers:{"X-Field-Revision":String(revisionRef.current)}});
+        if(!disposed)acceptSnapshot(next);
       }catch(e:any){if(!disposed)setMsg(e.message==="network_unavailable"?"ขาดการเชื่อมต่อ · ตรวจคิวล่าสุดก่อนทำต่อ":e.message)}
       finally{inFlight=false}
     };
@@ -76,7 +83,9 @@ function QueueView({session}:{session:Session}){
   const applyState=(r:any)=>{
     const orders=Array.isArray(r?.orders)?r.orders:null;
     if(!orders)return false;
-    setData(prev=>prev&&Number(r.revision)>=prev.revision?{...prev,revision:Number(r.revision),orders}:prev);
+    const revision=Number(r.revision)||0;
+    revisionRef.current=Math.max(revisionRef.current||0,revision);
+    setData(prev=>prev&&revision>=prev.revision?{...prev,revision,orders}:prev);
     return true;
   };
 
