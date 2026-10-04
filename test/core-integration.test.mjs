@@ -118,6 +118,39 @@ test('real libSQL: reused key with different cart or actor is rejected',async t=
 
 test('real libSQL: simultaneous checkout retries commit one sale and one stock deduction',async t=>{const db=await setup(t);const results=await Promise.all([sell(db,'concurrent-request'),sell(db,'concurrent-request')]);assert.equal(results[0].orderId,results[1].orderId);assert.equal(results.filter(x=>x.replayed).length,1);assert.equal((await state(db)).sales.length,1);assert.equal((await state(db)).ingredients.matcha.qty,990)});
 
+test('real libSQL: revision-aware POS and Queue reads skip unchanged state payloads',async t=>{
+  const db=await setup(t);
+  const firstQueue=await getQueueSnapshot({db});
+  assert.equal(firstQueue.revision,0);
+  assert.ok(Array.isArray(firstQueue.orders));
+  const sameQueue=await getQueueSnapshot({db,sinceRevision:firstQueue.revision});
+  assert.deepEqual(sameQueue,{revision:0,unchanged:true});
+
+  const token='revision-poll-token';
+  await db.execute({sql:'INSERT INTO field_sessions VALUES(?,?,?,?)',args:[digest(token),user.id,'csrf',Date.now()+60000]});
+  const handler=createApi({db,origin:'https://field.test'});
+  async function getBootstrap(revision){
+    const res={writeHead(status){this.status=status},end(raw){this.body=JSON.parse(raw)}};
+    const headers={cookie:'field_session='+token};
+    if(revision!==undefined)headers['x-field-revision']=String(revision);
+    await handler({method:'GET',query:{route:'pos/bootstrap'},headers},res);
+    return res;
+  }
+  const bootstrap=await getBootstrap();
+  assert.equal(bootstrap.status,200);
+  assert.equal(bootstrap.body.revision,0);
+  assert.ok(Array.isArray(bootstrap.body.menu));
+  assert.equal('orders' in bootstrap.body,false);
+  assert.deepEqual((await getBootstrap(0)).body,{revision:0,unchanged:true});
+
+  await sell(db,'revision-poll-sale');
+  const changed=await getBootstrap(0);
+  assert.equal(changed.body.revision,1);
+  assert.equal(changed.body.unchanged,undefined);
+  assert.ok(Array.isArray(changed.body.menu));
+  assert.deepEqual(await getQueueSnapshot({db,sinceRevision:1}),{revision:1,unchanged:true});
+});
+
 test('real libSQL: stale precheck still rejects stock race on the server',async t=>{const doc=seed();doc.ingredients.matcha.qty=10;doc.ingredients.milk.qty=220;const db=await setup(t,doc);const staleBootstrap=structuredClone(doc);assert.equal(staleBootstrap.ingredients.matcha.qty,10);await sell(db,'race-winner');await assert.rejects(sell(db,'race-stale-client'),/stock_shortage/);assert.equal((await state(db)).sales.length,1);assert.equal((await state(db)).ingredients.matcha.qty,0)});
 
 test('real libSQL: full backup restores ledger and durable retry together',async t=>{

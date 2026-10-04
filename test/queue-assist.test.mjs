@@ -18,8 +18,8 @@ test('queue UI keeps oldest-order guidance while batching shared prep bases acro
   assert.match(ui,/FIFO/);
 });
 
-test('queue selection marker is explicit and persists through bootstrap',async()=>{
-  const api=await read('lib/api.mjs');
+test('queue selection marker is explicit and persists through queue snapshot',async()=>{
+  const api=await read('lib/pos-api.mjs');
   const ui=await read('app/queue/page.tsx');
   assert.match(api,/prepSelected:!!x\.prepSelected/);
   assert.match(ui,/รับทำเมนูนี้/);
