@@ -17,10 +17,11 @@ test('product admin uses category and prep base masters instead of free-text onl
   assert.match(ui,/\/api\/admin\/menu-structure/);
 });
 
-test('pos bootstrap obeys category enabled state and admin category order',async()=>{
+test('pos bootstrap obeys category enabled state and admin category order without rescanning structure',async()=>{
   const api=await read('lib/api.mjs');
-  assert.match(api,/categoryState\(doc,m\.category\)\.enabled/);
-  assert.match(api,/categoryState\(doc,a\.category\)\.rank-categoryState\(doc,b\.category\)\.rank/);
+  assert.match(api,/const categoryMap=new Map/);
+  assert.match(api,/categoryInfo\(m\.category\)\.enabled/);
+  assert.match(api,/categoryInfo\(a\.category\)\.rank-categoryInfo\(b\.category\)\.rank/);
   assert.match(api,/categories:structure\.categories\.filter\(x=>x\.enabled\)/);
 });
 
