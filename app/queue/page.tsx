@@ -84,11 +84,27 @@ function QueueView({session}:{session:Session}){
   const selectedTask=task?.selected?task:null;
   const recommendedTask=task&&!task.selected?task:null;
 
-  const batch=useMemo(()=>{
-    if(!task)return [] as {queueNo:string;pagerNo:number;qty:number}[];
-    return orders.slice(1).flatMap(order=>(order.items||[])
-      .filter(item=>item.id===task.item.id&&item.variant===task.item.variant&&!itemDone(item))
-      .map(item=>({queueNo:order.queueNo,pagerNo:order.pagerNo,qty:n(item.qty)-n(item.readyQty)})));
+  const baseBatch=useMemo(()=>{
+    const baseId=task?.item.prepGroup?.id;
+    if(!baseId)return null;
+    const window=orders.slice(0,3);
+    const matches=window.map(order=>{
+      const group=(order.prepGroups||[]).find(g=>g.id===baseId);
+      return group?{order,group}:null;
+    }).filter(Boolean) as {order:QOrder;group:PrepGroup}[];
+    if(matches.length<2)return null;
+    const usage=new Map<string,PrepUsage>();
+    for(const row of matches)for(const u of row.group.baseUsage||[]){
+      const current=usage.get(u.id);
+      if(current)current.qty+=n(u.qty);
+      else usage.set(u.id,{...u,qty:n(u.qty)});
+    }
+    return {
+      id:baseId,label:matches[0].group.label,
+      qty:matches.reduce((sum,row)=>sum+n(row.group.qty),0),
+      queues:matches.map(row=>({queueNo:row.order.queueNo,pagerNo:row.order.pagerNo,qty:n(row.group.qty)})),
+      baseUsage:[...usage.values()]
+    };
   },[orders,task]);
 
   function errorText(code:string){
@@ -212,7 +228,12 @@ function QueueView({session}:{session:Session}){
 
       {!task&&(!first||firstCalled)&&<div className="mt-4 text-sm text-emerald-700">ไม่มีเมนูค้างทำ</div>}
 
-      {batch.length>0&&<div className="mt-4 flex flex-wrap items-center gap-2 border-t border-slate-200 pt-4 text-xs"><span className="flex items-center gap-1 text-slate-600"><Layers3 size={14}/>เมนูเดียวกันในคิวถัดไป:</span>{batch.map(x=><span key={x.queueNo} className="rounded-full border border-slate-300 bg-slate-50 px-3 py-1">{x.queueNo} · {x.qty} แก้ว</span>)}<span className="text-slate-500">เตรียม Batch ได้ แต่เรียกลูกค้ายังคงตาม FIFO</span></div>}
+      {baseBatch&&<div className="mt-4 rounded-[18px] border border-[#d4af37]/40 bg-[#fffaf0] p-3">
+        <div className="flex flex-wrap items-center justify-between gap-2"><span className="flex items-center gap-2 text-sm font-bold text-[#765b08]"><Layers3 size={16}/>ทำเบสต่อเนื่อง · {baseBatch.label}</span><span className="rounded-full bg-[#f4ecd0] px-2.5 py-1 text-[10px] font-bold text-[#765b08]">{baseBatch.qty} แก้ว · {baseBatch.queues.length} คิว</span></div>
+        <div className="mt-2 flex flex-wrap gap-2">{baseBatch.queues.map(x=><span key={x.queueNo} className="rounded-full border border-[#eadb9b] bg-white px-3 py-1 text-xs">{x.queueNo} · บัตร {x.pagerNo} · {x.qty} แก้ว</span>)}</div>
+        {baseBatch.baseUsage.length>0&&<div className="mt-2 text-xs text-slate-600">เตรียมฐานรวม: {baseBatch.baseUsage.map(x=>x.name+" "+Number(x.qty.toFixed(2)).toLocaleString()+" "+x.unit).join(" · ")}</div>}
+        <p className="mt-2 text-[11px] text-slate-500">แนะนำเฉพาะ 3 คิวแรก · เตรียมต่อเนื่องได้ แต่แยกแก้ว/สูตรตามคิว และเรียกหรือส่งมอบยังคง FIFO</p>
+      </div>}
     </div>
 
     <div className="mt-5 grid gap-4 xl:grid-cols-2">
