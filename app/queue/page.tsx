@@ -4,7 +4,7 @@
 
 import {useEffect,useMemo,useRef,useState} from "react";
 import {useRouter} from "next/navigation";
-import {BellRing,CheckCircle2,ChevronRight,Layers3,ReceiptText,Sparkles,X} from "lucide-react";
+import {BellRing,CheckCircle2,ChevronRight,Layers3,ReceiptText,RotateCcw,Sparkles,X} from "lucide-react";
 import AuthGate from "@/components/auth-gate";
 import {api,type RevisionUnchanged,type Session} from "@/lib/api-client";
 import {readQueueSnapshotCache,writeQueueSnapshotCache} from "@/lib/queue-cache";
@@ -12,7 +12,7 @@ import {readQueueSnapshotCache,writeQueueSnapshotCache} from "@/lib/queue-cache"
 type PrepUsage={id:string;name:string;qty:number;unit:string};
 type BatchMode="NONE"|"SEQUENTIAL"|"COMBINED";
 type PrepGroup={id:string;compatibilityKeys:string[];label:string;batchMode:BatchMode;qty:number;items:{id:string;name:string;variant:string;qty:number;compatibilityKey:string;baseUsage:{id:string;name:string;perCup:number;qty:number;unit:string}[]}[];baseUsage:PrepUsage[]};
-type QItem={id:string;name:string;variant:string;qty:number;price:number|null;readyQty?:number;calledQty?:number;prepSelected?:boolean;prepGroup?:{id:string;compatibilityKey:string;label:string;batchMode:BatchMode};saleIds?:string[]};
+type QItem={id:string;name:string;variant:string;qty:number;price:number|null;readyQty?:number;calledQty?:number;prepSelected?:boolean;wasteCount?:number;prepGroup?:{id:string;compatibilityKey:string;label:string;batchMode:BatchMode};saleIds?:string[]};
 type QOrder={id:string;queueNo:string;pagerNo:number;status:string;time:number;total:number;billNo?:string|null;saleId?:string|null;saleIds?:string[];items:QItem[];prepGroups?:PrepGroup[]};
 type QueueSnapshot={revision:number;unchanged?:false;orders:QOrder[]};
 
@@ -110,6 +110,10 @@ function QueueView({session}:{session:Session}){
       code==="order_not_ready"?"ยังทำเครื่องดื่มไม่ครบ":
       code==="item_not_ready_for_call"?"เมนูนี้ยังไม่มีแก้วที่พร้อมเรียก":
       code==="pager_already_called"?"บัตรคิวนี้ถูกบันทึกว่าเรียกแล้ว":
+      code==="waste_after_call_not_supported"?"เรียกลูกค้ารับเมนูนี้ครบแล้ว จึงไม่ย้อนเป็นชงเสียอัตโนมัติ":
+      code==="recipe_unavailable"?"ไม่พบสูตรที่ใช้ตอนขาย จึงบันทึกชงเสียอัตโนมัติไม่ได้":
+      code.startsWith("stock_shortage:")?"วัตถุดิบไม่พอสำหรับทำใหม่ 1 แก้ว · กรุณาตรวจ Stock":
+      code.startsWith("ingredient_missing:")?"สูตรอ้างวัตถุดิบที่ไม่มีใน Stock Master":
       code==="queue_state_changed"?"สถานะคิวเปลี่ยนแล้ว ระบบกำลังอัปเดต":code;
   }
 
@@ -138,6 +142,18 @@ function QueueView({session}:{session:Session}){
         const nextRecommended=nextTask((r.orders||[]) as QOrder[]);
         setNotice(nextRecommended?`ทำ ${item.name} ครบแล้ว · ถัดไป ${nextRecommended.item.name}`:`ทำ ${item.name} ครบแล้ว · ตรวจปุ่มเรียกบัตรด้านล่าง`);
       }
+    }catch(e:any){if(snapshot)setData(snapshot);setMsg(errorText(e.message));await load().catch(()=>{})}finally{setBusy("")}
+  }
+
+  async function wasteRemake(order:QOrder,item:QItem,itemIndex:number){
+    if(!window.confirm("บันทึก “ชงเสีย / ทำใหม่” "+item.name+" 1 แก้ว?\nระบบจะหักวัตถุดิบเพิ่มตามสูตรที่ใช้ตอนขาย และลงค่าใช้จ่าย WASTE อัตโนมัติ"))return;
+    const snapshot=data,key="waste:"+order.id+":"+itemIndex;setBusy(key);setMsg("");
+    optimistic(list=>list.map(o=>o.id!==order.id?o:{...o,status:"making",items:o.items.map((x,index)=>index===itemIndex?{...x,readyQty:n(x.readyQty)>n(x.calledQty)?n(x.readyQty)-1:n(x.readyQty),prepSelected:true,wasteCount:n(x.wasteCount)+1}:x)}));
+    pulse("บันทึกชงเสีย · เตรียมทำใหม่ 1 แก้ว");
+    try{
+      const r=await api<any>("/api/pos/queue",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({requestKey:crypto.randomUUID(),orderId:order.id,itemIndex,action:"waste_remake",reason:"ชงเสีย / ทำใหม่"})});
+      if(!applyState(r))load().catch(()=>{});
+      setNotice("บันทึก WASTE "+item.name+" 1 แก้วแล้ว · หัก Stock เพิ่มตามสูตร"+(Number(r?.wasteCost)>0?" · ต้นทุนของเสีย ฿"+Number(r.wasteCost).toFixed(2):"")+" · ทำใหม่ต่อในคิวเดิม");
     }catch(e:any){if(snapshot)setData(snapshot);setMsg(errorText(e.message));await load().catch(()=>{})}finally{setBusy("")}
   }
 
@@ -239,7 +255,7 @@ function QueueView({session}:{session:Session}){
               const canCallEarly=done&&!called&&!firstReady;
               return <div key={index} className={"rounded-2xl border px-2.5 py-2 "+(current?"border-emerald-400 bg-emerald-50":recommended?"border-[#d4af37] bg-[#fffaf0]":done?"border-emerald-200 bg-white":"border-slate-200 bg-slate-50")}>
                 <div className="flex items-start justify-between gap-2"><div className="min-w-0"><div className="flex items-center gap-1.5"><b className="truncate text-[12px] sm:text-sm">{item.name}</b>{current&&<span className="shrink-0 rounded-full bg-emerald-600 px-1.5 py-0.5 text-[8px] font-black text-white">กำลังทำ</span>}{recommended&&<span className="shrink-0 rounded-full bg-[#d4af37] px-1.5 py-0.5 text-[8px] font-black text-black">ทำก่อน</span>}</div><div className="mt-0.5 truncate text-[10px] text-slate-500">{item.variant} · ×{item.qty}{item.price==null?" · ราคาไม่พบ":" · ฿"+(item.price*n(item.qty)).toFixed(0)}</div></div>{done?<CheckCircle2 size={16} className="shrink-0 text-emerald-600"/>:<span className="shrink-0 text-[10px] font-bold text-slate-500">{n(item.readyQty)}/{n(item.qty)}</span>}</div>
-                <div className="mt-1.5 flex items-center justify-between gap-2"><span className={"text-[9px] font-semibold "+(done?"text-emerald-700":"text-slate-500")}>{done?"ทำเสร็จ":current?"กำลังผลิต":recommended?"ลำดับถัดไป":"รอทำ"}</span>{canCallEarly&&<button disabled={busy!==""} onClick={()=>callReadyItem(first,item,index)} className="rounded-full border border-[#d4af37] bg-white px-2 py-1 text-[9px] font-bold text-[#765b08]"><BellRing size={10} className="mr-1 inline"/>รับเมนูนี้ก่อน</button>}</div>
+                <div className="mt-1.5 flex flex-wrap items-center justify-between gap-1.5"><span className={"text-[9px] font-semibold "+(done?"text-emerald-700":"text-slate-500")}>{done?"ทำเสร็จ":current?"กำลังผลิต":recommended?"ลำดับถัดไป":"รอทำ"}{n(item.wasteCount)>0?" · ทำใหม่ "+n(item.wasteCount)+" ครั้ง":""}</span><div className="flex flex-wrap items-center justify-end gap-1">{!called&&<button disabled={busy!==""} onClick={()=>wasteRemake(first,item,index)} className="rounded-full border border-red-200 bg-white px-2 py-1 text-[9px] font-bold text-red-600 disabled:opacity-40"><RotateCcw size={10} className="mr-1 inline"/>ชงเสีย / ทำใหม่</button>}{canCallEarly&&<button disabled={busy!==""} onClick={()=>callReadyItem(first,item,index)} className="rounded-full border border-[#d4af37] bg-white px-2 py-1 text-[9px] font-bold text-[#765b08]"><BellRing size={10} className="mr-1 inline"/>รับเมนูนี้ก่อน</button>}</div></div>
               </div>;
             })}
           </div>
