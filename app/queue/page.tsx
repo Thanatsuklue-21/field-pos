@@ -10,7 +10,7 @@ import {api,type RevisionUnchanged,type Session} from "@/lib/api-client";
 
 type PrepUsage={id:string;name:string;qty:number;unit:string};
 type BatchMode="NONE"|"SEQUENTIAL"|"COMBINED";
-type PrepGroup={id:string;compatibilityKey:string;label:string;batchMode:BatchMode;qty:number;items:{id:string;name:string;variant:string;qty:number}[];baseUsage:PrepUsage[]};
+type PrepGroup={id:string;compatibilityKeys:string[];label:string;batchMode:BatchMode;qty:number;items:{id:string;name:string;variant:string;qty:number;compatibilityKey:string}[];baseUsage:PrepUsage[]};
 type QItem={id:string;name:string;variant:string;qty:number;price:number|null;readyQty?:number;calledQty?:number;prepSelected?:boolean;prepGroup?:{id:string;compatibilityKey:string;label:string;batchMode:BatchMode};saleIds?:string[]};
 type QOrder={id:string;queueNo:string;pagerNo:number;status:string;time:number;total:number;billNo?:string|null;saleId?:string|null;saleIds?:string[];items:QItem[];prepGroups?:PrepGroup[]};
 type QueueSnapshot={revision:number;unchanged?:false;orders:QOrder[]};
@@ -216,8 +216,9 @@ function QueueView({session}:{session:Session}){
       {!task&&(!first||firstCalled)&&<div className="mt-4 text-sm text-emerald-700">ไม่มีเมนูค้างทำ</div>}
 
       {first&&<div className="mt-4 rounded-[18px] border border-[#d4af37]/40 bg-[#fffaf0] p-3 text-sm text-[#765b08]">
-        <b>ทำเบสตามคิว</b>
-        <p className="mt-1 text-[11px] text-slate-500">ทำและเตรียมเบสของ {first.queueNo} ให้ครบก่อน แล้วจึงไปคิวถัดไป · ไม่มีการรวมเบสหรือทำต่อเนื่องข้ามคิว</p>
+        <b>เตรียมเบสของ {first.queueNo} พร้อมกันภายในคิว</b>
+        <p className="mt-1 text-[11px] text-slate-500">เมนูที่ใช้ Prep Base เดียวกันในบัตรนี้ให้เตรียมพร้อมกันทีเดียว แล้วแยกประกอบตามสูตรของแต่ละเมนู · ต้องทำคิวนี้ให้ครบก่อนจึงไปคิวถัดไป</p>
+        {(first.prepGroups||[]).length>0&&<div className="mt-2 flex flex-wrap gap-2">{(first.prepGroups||[]).map(group=><span key={group.id} className="rounded-full border border-[#eadb9b] bg-white px-3 py-1 text-xs font-bold">{group.label} · {group.qty} แก้ว</span>)}</div>}
       </div>}
     </div>
 
@@ -237,11 +238,11 @@ function QueueView({session}:{session:Session}){
 
           {(order.prepGroups||[]).length>0&&<div className="mt-4 rounded-[20px] border border-[#d4af37]/40 bg-[#fffaf0] p-3">
             <div className="flex items-center gap-2"><Layers3 size={16} className="text-[#765b08]"/><b className="text-sm">แผนเตรียมเบสของคิวนี้</b></div>
-            <p className="mt-1 text-[11px] text-slate-500">เตรียมเบสได้เฉพาะภายในคิวนี้ แล้วแยกประกอบตามสูตรของแต่ละเมนู · ไม่ข้ามไปเตรียมคิวถัดไป</p>
+            <p className="mt-1 text-[11px] text-slate-500">รวมเมนูที่ใช้ Prep Base เดียวกันในบัตรนี้เป็น 1 กลุ่มและเตรียมพร้อมกันทีเดียว แล้วค่อยแยกประกอบตามสูตร · ไม่ข้ามไปเตรียมคิวถัดไป</p>
             <div className="mt-3 space-y-2">{(order.prepGroups||[]).map(group=><div key={group.id} className="rounded-2xl border border-[#eadb9b] bg-white p-3">
               <div className="flex flex-wrap items-center justify-between gap-2"><b className="text-sm text-[#765b08]">{group.label}</b><span className="rounded-full bg-[#f4ecd0] px-2 py-1 text-[10px] font-bold text-[#765b08]">{group.qty} แก้ว</span></div>
               <div className="mt-1 text-xs text-slate-600">{group.items.map(x=>x.name+" ×"+x.qty).join(" · ")}</div>
-              {group.baseUsage?.length>0&&<div className="mt-2 text-[11px] text-slate-500">เตรียมฐาน: {group.baseUsage.map(x=>x.name+" "+Number(x.qty.toFixed(2)).toLocaleString()+" "+x.unit).join(" · ")}</div>}
+              {group.baseUsage?.length>0&&<div className="mt-2 text-[11px] font-semibold text-[#765b08]">เตรียมพร้อมกันสำหรับคิวนี้: {group.baseUsage.map(x=>x.name+" "+Number(x.qty.toFixed(2)).toLocaleString()+" "+x.unit).join(" · ")}</div>}
             </div>)}</div>
           </div>}
 

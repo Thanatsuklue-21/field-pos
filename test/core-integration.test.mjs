@@ -249,17 +249,26 @@ test('real libSQL: queue merges duplicate menu lines across separate-person paym
   assert.equal(order.items.length,2);
   assert.equal(order.items.find(x=>x.id==='pure').qty,2);
   assert.equal(order.items.find(x=>x.id==='latte').qty,2);
-  assert.equal(order.prepGroups.length,2);
-  const pureGroup=order.prepGroups.find(x=>x.items.some(i=>i.id==='pure'));
-  const latteGroup=order.prepGroups.find(x=>x.items.some(i=>i.id==='latte'));
-  assert.equal(pureGroup.id,'MATCHA');
-  assert.equal(latteGroup.id,'MATCHA');
-  assert.notEqual(pureGroup.compatibilityKey,latteGroup.compatibilityKey);
-  assert.equal(pureGroup.batchMode,'SEQUENTIAL');
-  assert.equal(latteGroup.batchMode,'SEQUENTIAL');
-  assert.equal(pureGroup.qty,2);
-  assert.equal(latteGroup.qty,2);
-  assert.equal(pureGroup.baseUsage.find(x=>x.id==='matcha').qty,8);
-  assert.equal(latteGroup.baseUsage.find(x=>x.id==='matcha').qty,10);
-  assert.equal(pureGroup.baseUsage.find(x=>x.id==='matcha').unit,'g');
+  assert.equal(order.prepGroups.length,1);
+  const matchaGroup=order.prepGroups[0];
+  assert.equal(matchaGroup.id,'MATCHA');
+  assert.equal(matchaGroup.batchMode,'SEQUENTIAL');
+  assert.equal(matchaGroup.qty,4);
+  assert.equal(matchaGroup.items.length,2);
+  assert.ok(matchaGroup.items.some(i=>i.id==='pure'&&i.qty===2));
+  assert.ok(matchaGroup.items.some(i=>i.id==='latte'&&i.qty===2));
+  assert.equal(matchaGroup.compatibilityKeys.length,2);
+  assert.equal(matchaGroup.baseUsage.find(x=>x.id==='matcha').qty,18);
+  assert.equal(matchaGroup.baseUsage.find(x=>x.id==='matcha').unit,'g');
+});
+
+
+test('real libSQL: identical prep bases stay separated between different queue cards',async t=>{
+  const db=await setup(t),date=bangkokDate();
+  const first=await checkoutPos({db,user,body:{requestKey:'queue-base-card-1',cart:[{id:'latte',variant:'100%',qty:2}],date,payment:'cash',received:200}});
+  const second=await checkoutPos({db,user,body:{requestKey:'queue-base-card-2',cart:[{id:'latte',variant:'100%',qty:2}],date,payment:'cash',received:200}});
+  const snapshot=await getQueueSnapshot({db});
+  assert.equal(snapshot.orders.length,2);
+  assert.equal(snapshot.orders.find(x=>x.id===first.orderId).prepGroups[0].qty,2);
+  assert.equal(snapshot.orders.find(x=>x.id===second.orderId).prepGroups[0].qty,2);
 });
