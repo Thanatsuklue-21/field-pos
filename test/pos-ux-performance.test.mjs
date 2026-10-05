@@ -291,7 +291,7 @@ test('queue groups duplicate lines and exposes prep base plan without changing F
   assert.match(api,/order\.items=normalizeQueueItems\(doc,order,buildQueueLookup\(doc\)\)/);
   assert.match(queue,/แผนเตรียมเบสของคิวนี้/);
   assert.match(queue,/รวมเมนูที่ใช้ Prep Base เดียวกันในบัตรนี้เป็น 1 กลุ่มและเตรียมพร้อมกันทีเดียว/);
-  assert.match(queue,/รวมสำหรับคิวนี้:/);
+  assert.doesNotMatch(queue,/รวมสำหรับคิวนี้:/);
   assert.match(queue,/u\.perCup/);
   assert.match(api,/baseUsage:menuBaseUsage/);
   assert.match(api,/fifo_violation/);
