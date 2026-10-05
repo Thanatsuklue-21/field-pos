@@ -192,7 +192,7 @@ function QueueView({session}:{session:Session}){
           <div className="flex items-center justify-between gap-3">
             <div className="flex min-w-0 items-center gap-3">
               <div className="shrink-0 rounded-2xl bg-[#fff3bf] px-3 py-2 text-center"><small className="block text-[9px] font-bold tracking-widest text-[#765b08]">คิวปัจจุบัน</small><div className="mt-0.5 text-2xl font-black leading-none text-[#6f5510]">{first.queueNo}</div></div>
-              <div className="min-w-0"><div className="text-sm font-bold">บัตรเรียกคิว {first.pagerNo||"—"}</div><div className="mt-0.5 text-[11px] text-slate-500">{firstCupCount} แก้ว · เหลือทำ {firstRemaining} แก้ว · ฿{n(first.total).toFixed(0)}</div></div>
+              <div className="min-w-0"><div className="text-sm font-bold">บัตรเรียกคิว {first.pagerNo||"—"}</div><div className="mt-0.5 text-[11px] text-slate-500">{firstCupCount} แก้ว · เหลือทำ {firstRemaining} แก้ว · ยอดรวม ฿{n(first.total).toFixed(0)}</div></div>
             </div>
             <button onClick={()=>router.push("/orders?queue="+encodeURIComponent(first.queueNo))} className="flex min-h-10 shrink-0 items-center gap-1.5 rounded-full border border-slate-300 bg-white px-3 text-[11px] font-semibold text-slate-700"><ReceiptText size={14}/>ดู/แก้</button>
           </div>
@@ -208,7 +208,7 @@ function QueueView({session}:{session:Session}){
               <button disabled={busy!==""} onClick={()=>selectTask(recommendedTask.order.id,recommendedTask.index)} className="min-h-12 rounded-2xl bg-[#d4af37] px-5 text-sm font-black text-black disabled:opacity-40">{busy==="select:"+recommendedTask.order.id+":"+recommendedTask.index?"กำลังบันทึก...":"รับทำเมนูนี้"}</button>
             </div>}
 
-            {!task&&firstReady&&!firstCalled&&<div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-center"><div><span className="rounded-full bg-emerald-100 px-2.5 py-1 text-[10px] font-black text-emerald-700">ทำครบทุกเมนูแล้ว</span><div className="mt-2 text-sm font-bold">พร้อมเรียกลูกค้ารับทั้งคิว</div></div><button disabled={busy!==""} onClick={()=>callOrder(first)} className="flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-[#d4af37] px-5 text-sm font-black text-black"><BellRing size={17}/>เรียกบัตร {first.pagerNo}</button></div>}
+            {!task&&firstReady&&!firstCalled&&<div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-center"><div><span className="rounded-full bg-emerald-100 px-2.5 py-1 text-[10px] font-black text-emerald-700">ทำครบทุกเมนูแล้ว</span><div className="mt-2 text-sm font-bold">พร้อมเรียกลูกค้ารับทั้งคิว</div></div><button disabled={busy!==""} onClick={()=>callOrder(first)} className="flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-[#d4af37] px-5 text-sm font-black text-black"><BellRing size={17}/>เรียกบัตร {first.pagerNo} · รับทั้งหมด</button></div>}
             {!task&&firstCalled&&<div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-center"><div><span className="rounded-full bg-emerald-100 px-2.5 py-1 text-[10px] font-black text-emerald-700">แจ้งลูกค้ารับครบแล้ว</span><div className="mt-2 text-sm font-bold">พร้อมส่งมอบและไปคิวถัดไป</div></div><button disabled={busy!==""} onClick={()=>deliver(first.id)} className="flex min-h-12 items-center justify-center gap-2 rounded-2xl border border-emerald-400 bg-white px-5 text-sm font-black text-emerald-700">ส่งมอบคิวนี้ <ChevronRight size={16}/></button></div>}
           </div>
         </div>
