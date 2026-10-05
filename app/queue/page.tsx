@@ -7,6 +7,7 @@ import {useRouter} from "next/navigation";
 import {BellRing,CheckCircle2,ChevronRight,Layers3,ReceiptText,Sparkles,X} from "lucide-react";
 import AuthGate from "@/components/auth-gate";
 import {api,type RevisionUnchanged,type Session} from "@/lib/api-client";
+import {readQueueSnapshotCache,writeQueueSnapshotCache} from "@/lib/queue-cache";
 
 type PrepUsage={id:string;name:string;qty:number;unit:string};
 type BatchMode="NONE"|"SEQUENTIAL"|"COMBINED";
@@ -40,6 +41,7 @@ export default function Queue(){return <AuthGate>{session=><QueueView session={s
 function QueueView({session}:{session:Session}){
   const router=useRouter();
   const [data,setData]=useState<QueueSnapshot|null>(null);
+  const [syncing,setSyncing]=useState(true);
   const [busy,setBusy]=useState("");
   const [msg,setMsg]=useState("");
   const [notice,setNotice]=useState("");
@@ -55,13 +57,17 @@ function QueueView({session}:{session:Session}){
   const optimistic=(mutate:(orders:QOrder[])=>QOrder[])=>setData(prev=>prev?{...prev,orders:mutate(prev.orders)}:prev);
 
   const acceptSnapshot=(next:QueueSnapshot|RevisionUnchanged)=>{
-    if(next?.unchanged===true)return false;
+    if(next?.unchanged===true){setSyncing(false);return false}
     revisionRef.current=Number(next.revision)||0;
     setData(prev=>!prev||next.revision>=prev.revision?next:prev);
+    writeQueueSnapshotCache(next as QueueSnapshot);
+    setSyncing(false);
     return true;
   };
   const load=()=>api<QueueSnapshot|RevisionUnchanged>("/api/pos/queue",revisionRef.current===null?{}:{headers:{"X-Field-Revision":String(revisionRef.current)}}).then(acceptSnapshot);
   useEffect(()=>{
+    const cached=readQueueSnapshotCache<QueueSnapshot>();
+    if(cached){revisionRef.current=cached.revision;setData(cached)}
     let disposed=false,inFlight=false;
     const refresh=async()=>{
       if(disposed||inFlight||busyRef.current||document.visibilityState==="hidden")return;
@@ -70,7 +76,7 @@ function QueueView({session}:{session:Session}){
         const next=await api<QueueSnapshot|RevisionUnchanged>("/api/pos/queue",revisionRef.current===null?{}:{headers:{"X-Field-Revision":String(revisionRef.current)}});
         if(!disposed)acceptSnapshot(next);
       }catch(e:any){if(!disposed)setMsg(e.message==="network_unavailable"?"ขาดการเชื่อมต่อ · ตรวจคิวล่าสุดก่อนทำต่อ":e.message)}
-      finally{inFlight=false}
+      finally{inFlight=false;if(!disposed)setSyncing(false)}
     };
     refresh();
     const timer=window.setInterval(refresh,5000);
@@ -84,7 +90,11 @@ function QueueView({session}:{session:Session}){
     if(!orders)return false;
     const revision=Number(r.revision)||0;
     revisionRef.current=Math.max(revisionRef.current||0,revision);
-    setData(prev=>prev&&revision>=prev.revision?{...prev,revision,orders}:prev);
+    setData(prev=>{
+      const next=prev&&revision>=prev.revision?{...prev,revision,orders}:prev;
+      if(next)writeQueueSnapshotCache(next as QueueSnapshot);
+      return next;
+    });
     return true;
   };
 
@@ -177,7 +187,7 @@ function QueueView({session}:{session:Session}){
     <div className="flex h-full min-h-0 flex-col gap-2.5 sm:gap-3">
       <header className="flex shrink-0 items-end justify-between gap-3">
         <div><p className="gold m-0 text-[9px] font-bold tracking-[.26em]">PRODUCTION CONTROL</p><h1 className="mt-0.5 text-lg font-semibold sm:text-xl">QUEUE CONTROL</h1></div>
-        <span className="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-[10px] font-semibold text-slate-600">{orders.length} ACTIVE</span>
+        <div className="flex items-center gap-2">{syncing&&<span className="text-[10px] text-slate-400">กำลังซิงก์…</span>}<span className="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-[10px] font-semibold text-slate-600">{orders.length} ACTIVE</span></div>
       </header>
 
       {msg&&<div className="shrink-0 rounded-2xl border border-red-300 bg-red-50 px-3 py-2 text-xs text-red-800">{msg}</div>}
@@ -189,12 +199,17 @@ function QueueView({session}:{session:Session}){
 
       {first&&<>
         <div className="shrink-0 rounded-[22px] border-2 border-[#d4af37]/55 bg-white p-3 shadow-sm sm:p-4">
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex min-w-0 items-center gap-3">
+          <div className="grid gap-2.5 sm:grid-cols-[1fr_auto] sm:items-center sm:gap-3">
+            <div className="grid min-w-0 grid-cols-[auto_1fr] items-center gap-3">
               <div className="shrink-0 rounded-2xl bg-[#fff3bf] px-3 py-2 text-center"><small className="block text-[9px] font-bold tracking-widest text-[#765b08]">คิวปัจจุบัน</small><div className="mt-0.5 text-2xl font-black leading-none text-[#6f5510]">{first.queueNo}</div></div>
-              <div className="min-w-0"><div className="text-sm font-bold">บัตรเรียกคิว {first.pagerNo||"—"}</div><div className="mt-0.5 text-[11px] text-slate-500">{firstCupCount} แก้ว · เหลือทำ {firstRemaining} แก้ว · ยอดรวม ฿{n(first.total).toFixed(0)}</div></div>
+              <div className="min-w-0">
+                <div className="whitespace-nowrap text-sm font-bold">บัตรเรียกคิว {first.pagerNo||"—"}</div>
+                <div className="mt-1 flex flex-wrap gap-x-2 gap-y-0.5 text-[11px] text-slate-500">
+                  <span className="whitespace-nowrap">{firstCupCount} แก้ว</span><span className="whitespace-nowrap">เหลือทำ {firstRemaining} แก้ว</span><span className="whitespace-nowrap">ยอดรวม ฿{n(first.total).toFixed(0)}</span>
+                </div>
+              </div>
             </div>
-            <button onClick={()=>router.push("/orders?queue="+encodeURIComponent(first.queueNo))} className="flex min-h-10 shrink-0 items-center gap-1.5 rounded-full border border-slate-300 bg-white px-3 text-[11px] font-semibold text-slate-700"><ReceiptText size={14}/>ดูรายการ / แก้ไขออเดอร์</button>
+            <button onClick={()=>router.push("/orders?queue="+encodeURIComponent(first.queueNo))} className="flex min-h-10 w-full items-center justify-center gap-1.5 rounded-full border border-slate-300 bg-white px-3 text-[11px] font-semibold text-slate-700 sm:w-auto sm:shrink-0"><ReceiptText size={14}/>ดูรายการ / แก้ไขออเดอร์</button>
           </div>
 
           <div className={"mt-3 rounded-[18px] border p-3 "+(selectedTask?"border-emerald-300 bg-emerald-50":recommendedTask?"border-[#d4af37] bg-[#fffaf0]":"border-slate-200 bg-slate-50")}>
