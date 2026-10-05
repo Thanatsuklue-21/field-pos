@@ -39,9 +39,11 @@ test('cancel purchase API reverses stock spend and excludes cancelled purchase f
   assert.match(api,/CANCEL PURCHASE/);
   assert.match(api,/PURCHASE_REVERSAL/);
   assert.match(api,/before_purchase_cancel/);
-  assert.match(api,/doc\.expenses=\(doc\.expenses\|\|\[\]\)\.filter/);
+  assert.match(api,/removePurchaseExpense\(doc\.expenses\|\|\[\],p,purchaseTx\)/);
+  assert.match(api,/DELETE FROM field_cost_history WHERE purchase_record_id=\?/);
   assert.match(api,/doc\.cancelledPurchases\[id\]/);
   assert.match(api,/stock_purchase_cancel/);
+  assert.match(api,/purchaseSpendChanged:!!expenseRemoval\.removed/);
   assert.match(api,/purchases\.rows\.filter\(x=>!cancelledPurchases\[String\(x\.id\)\]\)/);
   assert.match(stock,/ยกเลิกรับเข้า/);
   assert.match(stock,/Stock และ Purchase Spend ถูกย้อนกลับ/);
