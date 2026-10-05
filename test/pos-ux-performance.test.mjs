@@ -288,7 +288,7 @@ test('queue groups duplicate lines and exposes prep base plan without changing F
   assert.match(queue,/ไม่ข้ามไปเตรียมคิวถัดไป/);
   assert.match(api,/for\(const o of activeOrders\(doc\)\)/);
   assert.match(api,/target\.items=normalizeQueueItems/);
-  assert.match(api,/order\.items=normalizeQueueItems\(doc,order,buildQueueLookup\(doc\)\)/);
+  assert.match(api,/const queueLookup=buildQueueLookup\(doc\)/);assert.match(api,/order\.items=normalizeQueueItems\(doc,order,queueLookup\)/);
   assert.match(queue,/แผนเตรียมเบสของคิวนี้/);
   assert.match(queue,/รวมเมนูที่ใช้ Prep Base เดียวกันในบัตรนี้เป็น 1 กลุ่มและเตรียมพร้อมกันทีเดียว/);
   assert.doesNotMatch(queue,/รวมสำหรับคิวนี้:/);
