@@ -1,14 +1,4 @@
-impotest('real libSQL: identical prep bases stay separated between different queue cards',async t=>{
-  const db=await setup(t),date=bangkokDate();
-  const first=await checkoutPos({db,user,body:{requestKey:'queue-base-card-1',cart:[{id:'latte',variant:'100%',qty:2}],date,payment:'cash',received:200}});
-  const second=await checkoutPos({db,user,body:{requestKey:'queue-base-card-2',cart:[{id:'latte',variant:'100%',qty:2}],date,payment:'cash',received:200}});
-  const snapshot=await getQueueSnapshot({db});
-  assert.equal(snapshot.orders.length,2);
-  assert.equal(snapshot.orders.find(x=>x.id===first.orderId).prepGroups[0].qty,2);
-  assert.equal(snapshot.orders.find(x=>x.id===second.orderId).prepGroups[0].qty,2);
-});
-
-rt test from 'node:test';
+import test from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtemp,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
@@ -270,4 +260,15 @@ test('real libSQL: queue merges duplicate menu lines across separate-person paym
   assert.equal(matchaGroup.compatibilityKeys.length,2);
   assert.equal(matchaGroup.baseUsage.find(x=>x.id==='matcha').qty,18);
   assert.equal(matchaGroup.baseUsage.find(x=>x.id==='matcha').unit,'g');
+});
+
+
+test('real libSQL: identical prep bases stay separated between different queue cards',async t=>{
+  const db=await setup(t),date=bangkokDate();
+  const first=await checkoutPos({db,user,body:{requestKey:'queue-base-card-1',cart:[{id:'latte',variant:'100%',qty:2}],date,payment:'cash',received:200}});
+  const second=await checkoutPos({db,user,body:{requestKey:'queue-base-card-2',cart:[{id:'latte',variant:'100%',qty:2}],date,payment:'cash',received:200}});
+  const snapshot=await getQueueSnapshot({db});
+  assert.equal(snapshot.orders.length,2);
+  assert.equal(snapshot.orders.find(x=>x.id===first.orderId).prepGroups[0].qty,2);
+  assert.equal(snapshot.orders.find(x=>x.id===second.orderId).prepGroups[0].qty,2);
 });
