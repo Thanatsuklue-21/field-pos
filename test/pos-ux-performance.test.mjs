@@ -325,3 +325,32 @@ test('queue control room keeps current order overview above the fold',async()=>{
   assert.match(queue,/ดูแผนเบส/);
   assert.match(queue,/prepOpen&&first/);
 });
+
+
+test('queue mobile header keeps metadata readable and moves edit action out of the squeeze path',async()=>{
+  const queue=await read('app/queue/page.tsx');
+  assert.match(queue,/grid min-w-0 grid-cols-\[auto_1fr\]/);
+  assert.match(queue,/whitespace-nowrap text-sm font-bold/);
+  assert.match(queue,/w-full items-center justify-center/);
+  assert.match(queue,/sm:w-auto sm:shrink-0/);
+});
+
+test('queue hydrates from a short-lived snapshot cache before background sync',async()=>{
+  const queue=await read('app/queue/page.tsx'),cache=await read('lib/queue-cache.ts');
+  assert.match(queue,/readQueueSnapshotCache<QueueSnapshot>/);
+  assert.match(queue,/writeQueueSnapshotCache/);
+  assert.match(cache,/TTL_MS=30_000/);
+  assert.match(cache,/sessionStorage/);
+  assert.match(queue,/กำลังซิงก์/);
+});
+
+test('payment success prioritizes queue prefetch before noncritical refreshes',async()=>{
+  const pos=await read('app/pos/page.tsx');
+  const warm=pos.indexOf('warmQueueSnapshot();');
+  const bootstrap=pos.indexOf('window.setTimeout(()=>load(true)');
+  const customers=pos.indexOf('window.setTimeout(()=>loadCustomers()');
+  assert.ok(warm>0&&bootstrap>warm&&customers>bootstrap);
+  assert.match(pos,/router\.prefetch\("\/queue"\)/);
+  assert.match(pos,/api<any>\("\/api\/pos\/queue"\)/);
+  assert.match(pos,/writeQueueSnapshotCache/);
+});
