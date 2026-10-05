@@ -245,7 +245,7 @@ function QueueView({session}:{session:Session}){
                 <div className="flex flex-wrap items-center justify-between gap-2 text-xs"><b className="text-slate-800">{x.name}</b><span className="text-slate-500">{x.variant} ×{x.qty}</span></div>
                 {x.baseUsage?.length>0&&<div className="mt-1 text-[11px] text-[#765b08]">{x.baseUsage.map(u=>x.qty>1?u.name+" "+Number(u.perCup.toFixed(2)).toLocaleString()+" "+u.unit+"/แก้ว ×"+x.qty+" = "+Number(u.qty.toFixed(2)).toLocaleString()+" "+u.unit:u.name+" "+Number(u.perCup.toFixed(2)).toLocaleString()+" "+u.unit).join(" · ")}</div>}
               </div>)}</div>
-              {group.baseUsage?.length>0&&<div className="mt-2 text-[11px] font-semibold text-[#765b08]">รวมสำหรับคิวนี้: {group.baseUsage.map(x=>x.name+" "+Number(x.qty.toFixed(2)).toLocaleString()+" "+x.unit).join(" · ")}</div>}
+
             </div>)}</div>
           </div>}
 
