@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtemp,rm} from 'node:fs/promises';
+import {mkdtemp,rm,readFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {createClient} from '@libsql/client';
@@ -277,4 +277,65 @@ test('real libSQL: identical prep bases stay separated between different queue c
   assert.equal(snapshot.orders.length,2);
   assert.equal(snapshot.orders.find(x=>x.id===first.orderId).prepGroups[0].qty,2);
   assert.equal(snapshot.orders.find(x=>x.id===second.orderId).prepGroups[0].qty,2);
+});
+
+
+test('real libSQL: remake waste deducts one extra sale-time recipe once and reopens ready work',async t=>{
+  const db=await setup(t);
+  const sale=await sell(db,'remake-waste-sale');
+  await act(db,sale.orderId,'select',{itemIndex:0,selected:true});
+  await act(db,sale.orderId,'complete_item',{itemIndex:0,expectedReadyQty:0});
+  let doc=await state(db);
+  assert.equal(doc.ingredients.matcha.qty,990);
+  assert.equal(doc.ingredients.milk.qty,29780);
+  assert.equal(doc.orders[0].items[0].readyQty,2);
+
+  const body={requestKey:'remake-waste-0001',orderId:sale.orderId,itemIndex:0,action:'waste_remake',reason:'ทำหก'};
+  const first=await queuePosAction({db,user,now:5000,body});
+  assert.equal(first.wasteCost,16.6);
+  doc=await state(db);
+  assert.equal(doc.ingredients.matcha.qty,985);
+  assert.equal(doc.ingredients.milk.qty,29670);
+  assert.equal(doc.orders[0].items[0].readyQty,1);
+  assert.equal(doc.orders[0].items[0].prepSelected,true);
+  assert.equal(doc.orders[0].items[0].wasteCount,1);
+  const wasteExpenses=(doc.expenses||[]).filter(x=>x.sourceType==='STOCK_REMAKE_WASTE');
+  assert.equal(wasteExpenses.length,1);
+  assert.equal(wasteExpenses[0].amount,16.6);
+  assert.equal(wasteExpenses[0].paymentMethod,'noncash');
+  const wasteLedger=(await db.execute("SELECT * FROM field_stock_transactions WHERE tx_type='WASTE'")).rows;
+  assert.equal(wasteLedger.length,2);
+
+  const replay=await queuePosAction({db,user,now:6000,body});
+  assert.equal(replay.replayed,true);
+  doc=await state(db);
+  assert.equal(doc.ingredients.matcha.qty,985);
+  assert.equal(doc.ingredients.milk.qty,29670);
+  assert.equal((doc.expenses||[]).filter(x=>x.sourceType==='STOCK_REMAKE_WASTE').length,1);
+  assert.equal((await db.execute("SELECT * FROM field_stock_transactions WHERE tx_type='WASTE'")).rows.length,2);
+});
+
+test('real libSQL: remake waste obeys FIFO and cannot auto-reverse after item was fully called',async t=>{
+  const db=await setup(t);
+  const first=await sell(db,'remake-fifo-first');
+  const second=await sell(db,'remake-fifo-second');
+  await assert.rejects(
+    queuePosAction({db,user,body:{requestKey:'remake-fifo-block',orderId:second.orderId,itemIndex:0,action:'waste_remake'}}),
+    /fifo_violation/
+  );
+  await act(db,first.orderId,'select',{itemIndex:0,selected:true});
+  await act(db,first.orderId,'complete_item',{itemIndex:0,expectedReadyQty:0});
+  await act(db,first.orderId,'call');
+  await assert.rejects(
+    queuePosAction({db,user,body:{requestKey:'remake-after-call',orderId:first.orderId,itemIndex:0,action:'waste_remake'}}),
+    /waste_after_call_not_supported/
+  );
+});
+
+test('queue UI exposes one-person remake waste shortcut with explicit accounting wording',async()=>{
+  const queue=await readFile(new URL('../app/queue/page.tsx',import.meta.url),'utf8');
+  assert.match(queue,/ชงเสีย \/ ทำใหม่/);
+  assert.match(queue,/หักวัตถุดิบเพิ่มตามสูตรที่ใช้ตอนขาย/);
+  assert.match(queue,/ลงค่าใช้จ่าย WASTE อัตโนมัติ/);
+  assert.match(queue,/waste_remake/);
 });
