@@ -10,7 +10,7 @@ import {api,type RevisionUnchanged,type Session} from "@/lib/api-client";
 
 type PrepUsage={id:string;name:string;qty:number;unit:string};
 type BatchMode="NONE"|"SEQUENTIAL"|"COMBINED";
-type PrepGroup={id:string;compatibilityKeys:string[];label:string;batchMode:BatchMode;qty:number;items:{id:string;name:string;variant:string;qty:number;compatibilityKey:string}[];baseUsage:PrepUsage[]};
+type PrepGroup={id:string;compatibilityKeys:string[];label:string;batchMode:BatchMode;qty:number;items:{id:string;name:string;variant:string;qty:number;compatibilityKey:string;baseUsage:{id:string;name:string;perCup:number;qty:number;unit:string}[]}[];baseUsage:PrepUsage[]};
 type QItem={id:string;name:string;variant:string;qty:number;price:number|null;readyQty?:number;calledQty?:number;prepSelected?:boolean;prepGroup?:{id:string;compatibilityKey:string;label:string;batchMode:BatchMode};saleIds?:string[]};
 type QOrder={id:string;queueNo:string;pagerNo:number;status:string;time:number;total:number;billNo?:string|null;saleId?:string|null;saleIds?:string[];items:QItem[];prepGroups?:PrepGroup[]};
 type QueueSnapshot={revision:number;unchanged?:false;orders:QOrder[]};
@@ -241,8 +241,11 @@ function QueueView({session}:{session:Session}){
             <p className="mt-1 text-[11px] text-slate-500">รวมเมนูที่ใช้ Prep Base เดียวกันในบัตรนี้เป็น 1 กลุ่มและเตรียมพร้อมกันทีเดียว แล้วค่อยแยกประกอบตามสูตร · ไม่ข้ามไปเตรียมคิวถัดไป</p>
             <div className="mt-3 space-y-2">{(order.prepGroups||[]).map(group=><div key={group.id} className="rounded-2xl border border-[#eadb9b] bg-white p-3">
               <div className="flex flex-wrap items-center justify-between gap-2"><b className="text-sm text-[#765b08]">{group.label}</b><span className="rounded-full bg-[#f4ecd0] px-2 py-1 text-[10px] font-bold text-[#765b08]">{group.qty} แก้ว</span></div>
-              <div className="mt-1 text-xs text-slate-600">{group.items.map(x=>x.name+" ×"+x.qty).join(" · ")}</div>
-              {group.baseUsage?.length>0&&<div className="mt-2 text-[11px] font-semibold text-[#765b08]">เตรียมพร้อมกันสำหรับคิวนี้: {group.baseUsage.map(x=>x.name+" "+Number(x.qty.toFixed(2)).toLocaleString()+" "+x.unit).join(" · ")}</div>}
+              <div className="mt-2 space-y-2">{group.items.map(x=><div key={x.id+"|"+x.variant} className="rounded-xl border border-[#efe4b9] bg-[#fffdf6] px-3 py-2">
+                <div className="flex flex-wrap items-center justify-between gap-2 text-xs"><b className="text-slate-800">{x.name}</b><span className="text-slate-500">{x.variant} ×{x.qty}</span></div>
+                {x.baseUsage?.length>0&&<div className="mt-1 text-[11px] text-[#765b08]">{x.baseUsage.map(u=>x.qty>1?u.name+" "+Number(u.perCup.toFixed(2)).toLocaleString()+" "+u.unit+"/แก้ว ×"+x.qty+" = "+Number(u.qty.toFixed(2)).toLocaleString()+" "+u.unit:u.name+" "+Number(u.perCup.toFixed(2)).toLocaleString()+" "+u.unit).join(" · ")}</div>}
+              </div>)}</div>
+              {group.baseUsage?.length>0&&<div className="mt-2 text-[11px] font-semibold text-[#765b08]">รวมสำหรับคิวนี้: {group.baseUsage.map(x=>x.name+" "+Number(x.qty.toFixed(2)).toLocaleString()+" "+x.unit).join(" · ")}</div>}
             </div>)}</div>
           </div>}
 

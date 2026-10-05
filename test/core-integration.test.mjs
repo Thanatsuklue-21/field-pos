@@ -255,8 +255,14 @@ test('real libSQL: queue merges duplicate menu lines across separate-person paym
   assert.equal(matchaGroup.batchMode,'SEQUENTIAL');
   assert.equal(matchaGroup.qty,4);
   assert.equal(matchaGroup.items.length,2);
-  assert.ok(matchaGroup.items.some(i=>i.id==='pure'&&i.qty===2));
-  assert.ok(matchaGroup.items.some(i=>i.id==='latte'&&i.qty===2));
+  const pureItem=matchaGroup.items.find(i=>i.id==='pure');
+  const latteItem=matchaGroup.items.find(i=>i.id==='latte');
+  assert.equal(pureItem.qty,2);
+  assert.equal(latteItem.qty,2);
+  assert.equal(pureItem.baseUsage.find(x=>x.id==='matcha').perCup,4);
+  assert.equal(pureItem.baseUsage.find(x=>x.id==='matcha').qty,8);
+  assert.equal(latteItem.baseUsage.find(x=>x.id==='matcha').perCup,5);
+  assert.equal(latteItem.baseUsage.find(x=>x.id==='matcha').qty,10);
   assert.equal(matchaGroup.compatibilityKeys.length,2);
   assert.equal(matchaGroup.baseUsage.find(x=>x.id==='matcha').qty,18);
   assert.equal(matchaGroup.baseUsage.find(x=>x.id==='matcha').unit,'g');
