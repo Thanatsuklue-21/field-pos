@@ -194,7 +194,7 @@ function QueueView({session}:{session:Session}){
               <div className="shrink-0 rounded-2xl bg-[#fff3bf] px-3 py-2 text-center"><small className="block text-[9px] font-bold tracking-widest text-[#765b08]">คิวปัจจุบัน</small><div className="mt-0.5 text-2xl font-black leading-none text-[#6f5510]">{first.queueNo}</div></div>
               <div className="min-w-0"><div className="text-sm font-bold">บัตรเรียกคิว {first.pagerNo||"—"}</div><div className="mt-0.5 text-[11px] text-slate-500">{firstCupCount} แก้ว · เหลือทำ {firstRemaining} แก้ว · ยอดรวม ฿{n(first.total).toFixed(0)}</div></div>
             </div>
-            <button onClick={()=>router.push("/orders?queue="+encodeURIComponent(first.queueNo))} className="flex min-h-10 shrink-0 items-center gap-1.5 rounded-full border border-slate-300 bg-white px-3 text-[11px] font-semibold text-slate-700"><ReceiptText size={14}/>ดู/แก้</button>
+            <button onClick={()=>router.push("/orders?queue="+encodeURIComponent(first.queueNo))} className="flex min-h-10 shrink-0 items-center gap-1.5 rounded-full border border-slate-300 bg-white px-3 text-[11px] font-semibold text-slate-700"><ReceiptText size={14}/>ดูรายการ / แก้ไขออเดอร์</button>
           </div>
 
           <div className={"mt-3 rounded-[18px] border p-3 "+(selectedTask?"border-emerald-300 bg-emerald-50":recommendedTask?"border-[#d4af37] bg-[#fffaf0]":"border-slate-200 bg-slate-50")}>
