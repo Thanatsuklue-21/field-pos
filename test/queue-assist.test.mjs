@@ -8,12 +8,12 @@ test('queue UI keeps base preparation inside the oldest FIFO queue only',async()
   const ui=await read('app/queue/page.tsx');
   assert.match(ui,/sort\(\(a,b\)=>n\(a\.time\)-n\(b\.time\)\)/);
   assert.match(ui,/const first=orders\[0\]/);
-  assert.match(ui,/เตรียมเบสของ \{first\.queueNo\} พร้อมกันภายในคิว/);
-  assert.match(ui,/Prep Base เดียวกันในบัตรนี้ให้เตรียมพร้อมกันทีเดียว/);
-  assert.match(ui,/ต้องทำคิวนี้ให้ครบก่อนจึงไปคิวถัดไป/);
+  assert.match(ui,/เตรียมเฉพาะคิว \{first\.queueNo\} · ไม่ข้ามคิว/);
+  assert.match(ui,/แผนเตรียมเบสของคิวนี้/);
+  assert.match(ui,/คิวปัจจุบัน \+ แผนเบส \+ รายการเครื่องดื่ม อยู่ในหน้าจอเดียวสำหรับคนชง/);
   assert.doesNotMatch(ui,/orders\.slice\(0,3\)/);
   assert.doesNotMatch(ui,/เตรียมฐานรวม:/);
-  assert.match(ui,/รวมเมนูที่ใช้ Prep Base เดียวกันในบัตรนี้เป็น 1 กลุ่ม/);
+  assert.match(ui,/\(first\.prepGroups\|\|\[\]\)\.map/);
   assert.match(ui,/u\.name\+" "\+Number\(u\.perCup\.toFixed\(2\)\)/);
   assert.doesNotMatch(ui,/รวมสำหรับคิวนี้:/);
   assert.doesNotMatch(ui,/พิจารณาเฉพาะ 3 คิวแรก/);
