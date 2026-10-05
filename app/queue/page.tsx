@@ -186,7 +186,7 @@ function QueueView({session}:{session:Session}){
   return <section className="h-full overflow-hidden p-2.5 sm:p-4 md:p-6">
     <div className="flex h-full min-h-0 flex-col gap-2.5 sm:gap-3">
       <header className="flex shrink-0 items-end justify-between gap-3">
-        <div><p className="gold m-0 text-[9px] font-bold tracking-[.26em]">PRODUCTION CONTROL</p><h1 className="mt-0.5 text-lg font-semibold sm:text-xl">QUEUE CONTROL</h1></div>
+        <div><p className="gold m-0 text-[9px] font-bold tracking-[.26em]">SOLO PRODUCTION · FIFO</p><h1 className="mt-0.5 text-lg font-semibold sm:text-xl">QUEUE CONTROL</h1></div>
         <div className="flex items-center gap-2">{syncing&&<span className="text-[10px] text-slate-400">กำลังซิงก์…</span>}<span className="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-[10px] font-semibold text-slate-600">{orders.length} ACTIVE</span></div>
       </header>
 
@@ -194,7 +194,7 @@ function QueueView({session}:{session:Session}){
       {notice&&<div className="flex shrink-0 items-start justify-between gap-3 rounded-2xl border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs text-emerald-800"><span>{notice}</span><button onClick={()=>setNotice("")}><X size={15}/></button></div>}
 
       {!first&&<div className="grid min-h-0 flex-1 place-items-center rounded-[24px] border border-dashed border-slate-300 bg-white/70 p-6 text-center">
-        <div><CheckCircle2 size={34} className="mx-auto text-emerald-600"/><h2 className="mt-3 text-lg font-bold">ไม่มีคิวค้าง</h2><p className="mt-1 text-sm text-slate-500">เมื่อมีออเดอร์ใหม่ ระบบจะแสดงคิวและเมนูที่ควรทำก่อนตรงนี้</p></div>
+        <div><CheckCircle2 size={34} className="mx-auto text-emerald-600"/><h2 className="mt-3 text-lg font-bold">ไม่มีคิวค้าง</h2><p className="mt-1 text-sm text-slate-500">คิวว่างแล้ว · กลับไปรับออเดอร์ลูกค้าคนถัดไปได้ทันที</p><button onClick={()=>router.push("/pos")} className="mt-4 min-h-11 rounded-2xl bg-[#d4af37] px-5 text-sm font-bold text-black">กลับไปรับออเดอร์</button></div>
       </div>}
 
       {first&&<>
