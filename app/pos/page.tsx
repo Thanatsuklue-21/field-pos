@@ -113,8 +113,6 @@ function PosView({session}:{session:Session}){
     return()=>{clearInterval(timer);window.removeEventListener("focus",refresh);document.removeEventListener("visibilitychange",visible)};
   },[]);
 
-  useEffect(()=>{if(pointsRedeemed>maxRedeemPoints)setPointsRedeemed(maxRedeemPoints)},[pointsRedeemed,maxRedeemPoints]);
-
   useEffect(()=>{
     if(!lastSale)return;
     const timer=setTimeout(()=>setLastSale(null),8000);
@@ -161,6 +159,8 @@ function PosView({session}:{session:Session}){
   const remainingAfterBill=Math.max(0,cart.items.reduce((s,i)=>s+i.qty,0)-payableQty);
   const cashReceived=received.trim()===""?NaN:Number(received);
   const cashDelta=Number.isFinite(cashReceived)?cashReceived-netPayable:NaN;
+
+  useEffect(()=>{if(pointsRedeemed>maxRedeemPoints)setPointsRedeemed(maxRedeemPoints)},[pointsRedeemed,maxRedeemPoints]);
 
   function applyServerState(r:any){
     const revision=Number(r?.revision)||0;
