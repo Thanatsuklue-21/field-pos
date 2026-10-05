@@ -7,6 +7,7 @@ import AuthGate from "@/components/auth-gate";
 import {api,type Bootstrap,type MenuItem,type RevisionUnchanged,type Session} from "@/lib/api-client";
 import {additionalServingsAvailable,cartAvailability} from "@/lib/domain/availability.mjs";
 import {useCartStore} from "@/stores/cart-store";
+import {writeQueueSnapshotCache} from "@/lib/queue-cache";
 
 export default function Pos(){return <AuthGate>{s=><PosView session={s}/>}</AuthGate>}
 
@@ -69,6 +70,8 @@ function PosView({session}:{session:Session}){
   const [splitGroup,setSplitGroup]=useState<SplitGroup|null>(null);
   const revisionRef=useRef<number|null>(null);
   const cart=useCartStore();
+
+  useEffect(()=>{router.prefetch("/queue")},[router]);
 
   const acceptBootstrap=(next:Bootstrap|RevisionUnchanged)=>{
     if(next?.unchanged===true)return false;
@@ -180,6 +183,10 @@ function PosView({session}:{session:Session}){
     return remaining;
   }
 
+  function warmQueueSnapshot(){
+    api<any>("/api/pos/queue").then(snapshot=>{if(snapshot&&Array.isArray(snapshot.orders))writeQueueSnapshotCache(snapshot)}).catch(()=>{});
+  }
+
   function finishSale(r:any,opts:{payment:"cash"|"promptpay";total:number;received:number;recovered?:boolean;splitBill?:boolean;paidCart?:{id:string;variant:string;qty:number}[]}){
     applyServerState(r);
     const serverTotal=Number(r?.total??opts.total);
@@ -217,6 +224,7 @@ function PosView({session}:{session:Session}){
       payment:opts.payment,
       recovered:opts.recovered
     });
+    warmQueueSnapshot();
     loadCustomers().catch(()=>{});
     load(true).catch(()=>{});
   }
