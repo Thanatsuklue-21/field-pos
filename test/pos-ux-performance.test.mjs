@@ -284,8 +284,8 @@ test('queue groups duplicate lines and exposes prep base plan without changing F
   assert.match(api,/MATCHA BASE/);
   assert.match(api,/compatibilityKey/);
   assert.match(queue,/compatibilityKey/);
-  assert.match(queue,/เตรียมเบสของ \{first\.queueNo\} พร้อมกันภายในคิว/);
-  assert.match(queue,/ไม่ข้ามไปเตรียมคิวถัดไป/);
+  assert.match(queue,/เตรียมเฉพาะคิว \{first\.queueNo\} · ไม่ข้ามคิว/);
+  assert.match(queue,/ไม่ข้ามคิว/);
   assert.match(api,/for\(const o of activeOrders\(doc\)\)/);
   assert.match(api,/target\.items=normalizeQueueItems/);
   assert.match(api,/const queueLookup=buildQueueLookup\(doc\)/);assert.match(api,/order\.items=normalizeQueueItems\(doc,order,queueLookup\)/);
