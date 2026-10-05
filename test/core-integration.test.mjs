@@ -266,6 +266,20 @@ test('real libSQL: queue merges duplicate menu lines across separate-person paym
   assert.equal(matchaGroup.compatibilityKeys.length,2);
   assert.equal(matchaGroup.baseUsage.find(x=>x.id==='matcha').qty,18);
   assert.equal(matchaGroup.baseUsage.find(x=>x.id==='matcha').unit,'g');
+
+  await act(db,first.orderId,'select',{itemIndex:0,selected:true});
+  await act(db,first.orderId,'complete_item',{itemIndex:0,expectedReadyQty:0});
+  await act(db,first.orderId,'select',{itemIndex:1,selected:true});
+  await act(db,first.orderId,'complete_item',{itemIndex:1,expectedReadyQty:0});
+  const completedSnapshot=await getQueueSnapshot({db});
+  const completedGroup=completedSnapshot.orders[0].prepGroups.find(x=>x.id==='MATCHA');
+  assert.ok(completedGroup);
+  assert.equal(completedGroup.qty,4);
+  assert.equal(completedGroup.pendingQty,0);
+  assert.equal(completedGroup.items.find(i=>i.id==='pure').qty,2);
+  assert.equal(completedGroup.items.find(i=>i.id==='latte').qty,2);
+  assert.equal(completedGroup.items.find(i=>i.id==='pure').baseUsage.find(x=>x.id==='matcha').qty,8);
+  assert.equal(completedGroup.items.find(i=>i.id==='latte').baseUsage.find(x=>x.id==='matcha').qty,10);
 });
 
 

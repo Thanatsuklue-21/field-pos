@@ -374,3 +374,15 @@ test('solo operator daily flow keeps primary mobile actions short and connected'
   assert.match(close,/ไม่มีเงินทอน · ฿0/);
   assert.match(close,/setOpeningCash\("0"\)/);
 });
+
+
+test('queue prep plan remains visible after completion and cache schema invalidates old snapshots',async()=>{
+  const queue=await read('app/queue/page.tsx'),api=await read('lib/pos-api.mjs'),cache=await read('lib/queue-cache.ts');
+  assert.match(queue,/group\.pendingQty/);
+  assert.match(queue,/ครบแล้ว/);
+  assert.match(api,/pendingQty:g\.pendingQty/);
+  assert.match(api,/qty:total,pendingQty:pending/);
+  assert.match(cache,/SCHEMA_VERSION=2/);
+  assert.match(cache,/field-pos-queue-snapshot-v2/);
+  assert.match(cache,/schemaVersion:SCHEMA_VERSION/);
+});

@@ -11,7 +11,7 @@ import {readQueueSnapshotCache,writeQueueSnapshotCache} from "@/lib/queue-cache"
 
 type PrepUsage={id:string;name:string;qty:number;unit:string};
 type BatchMode="NONE"|"SEQUENTIAL"|"COMBINED";
-type PrepGroup={id:string;compatibilityKeys:string[];label:string;batchMode:BatchMode;qty:number;items:{id:string;name:string;variant:string;qty:number;compatibilityKey:string;baseUsage:{id:string;name:string;perCup:number;qty:number;unit:string}[]}[];baseUsage:PrepUsage[]};
+type PrepGroup={id:string;compatibilityKeys:string[];label:string;batchMode:BatchMode;qty:number;pendingQty?:number;items:{id:string;name:string;variant:string;qty:number;pendingQty?:number;compatibilityKey:string;baseUsage:{id:string;name:string;perCup:number;qty:number;pendingQty?:number;unit:string}[]}[];baseUsage:(PrepUsage&{pendingQty?:number})[]};
 type QItem={id:string;name:string;variant:string;qty:number;price:number|null;readyQty?:number;calledQty?:number;prepSelected?:boolean;wasteCount?:number;prepGroup?:{id:string;compatibilityKey:string;label:string;batchMode:BatchMode};saleIds?:string[]};
 type QOrder={id:string;queueNo:string;pagerNo:number;status:string;time:number;total:number;billNo?:string|null;saleId?:string|null;saleIds?:string[];items:QItem[];prepGroups?:PrepGroup[]};
 type QueueSnapshot={revision:number;unchanged?:false;orders:QOrder[]};
@@ -249,7 +249,7 @@ function QueueView({session}:{session:Session}){
           {(first.prepGroups||[]).length>0&&<div className="soft-scroll mt-2 max-h-[180px] shrink-0 overflow-y-auto rounded-[18px] border border-[#eadb9b] bg-[#fffaf0] p-2.5">
             <div className="flex items-center justify-between gap-2"><div><b className="text-[11px] text-[#765b08]">แผนเตรียมเบสของคิวนี้</b><p className="mt-0.5 text-[9px] text-slate-500">เตรียมเฉพาะคิว {first.queueNo} · ไม่ข้ามคิว</p></div><span className="rounded-full bg-white px-2 py-1 text-[9px] font-bold text-[#765b08]">{(first.prepGroups||[]).length} กลุ่ม</span></div>
             <div className="mt-2 space-y-1.5">{(first.prepGroups||[]).map(group=><div key={group.id} className="rounded-xl border border-[#f0e3ad] bg-white px-2.5 py-2">
-              <div className="flex items-center justify-between gap-2"><b className="text-[11px] text-[#765b08]">{group.label}</b><span className="shrink-0 text-[9px] font-bold text-slate-500">{group.qty} แก้ว</span></div>
+              <div className="flex items-center justify-between gap-2"><b className="text-[11px] text-[#765b08]">{group.label}</b><span className="shrink-0 text-[9px] font-bold text-slate-500">{group.qty} แก้ว{n(group.pendingQty)>0?" · เหลือ "+n(group.pendingQty):" · ครบแล้ว"}</span></div>
               <div className="mt-1 space-y-1">{group.items.map(x=><div key={x.id+"|"+x.variant} className="text-[10px] leading-4 text-slate-700"><b>{x.name}</b> <span className="text-slate-500">· {x.variant} ×{x.qty}</span>{x.baseUsage?.length>0&&<div className="text-[#765b08]">{x.baseUsage.map(u=>x.qty>1?u.name+" "+Number(u.perCup.toFixed(2)).toLocaleString()+" "+u.unit+"/แก้ว ×"+x.qty+" = "+Number(u.qty.toFixed(2)).toLocaleString()+" "+u.unit:u.name+" "+Number(u.perCup.toFixed(2)).toLocaleString()+" "+u.unit).join(" · ")}</div>}</div>)}</div>
             </div>)}</div>
           </div>}
