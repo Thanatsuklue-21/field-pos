@@ -199,7 +199,7 @@ test('mobile operational pages use compact density while preserving touch action
   assert.match(shell,/min-w-\[54px\]/);
   assert.match(pos,/min-h-\[154px\]/);
   assert.match(pos,/bottom-\[70px\]/);
-  assert.match(queue,/p-3 sm:p-5 md:p-7/);
+  assert.match(queue,/h-full overflow-hidden p-2\.5 sm:p-4 md:p-6/);
   assert.match(stock,/p-3 sm:p-5 md:p-7/);
   assert.match(orders,/p-3 sm:p-5 md:p-7/);
 });
@@ -309,4 +309,19 @@ test('CRM redemption makes the payment UI use net payable for cash and PromptPay
   assert.match(pos,/cashReceived<netPayable/);
   assert.match(pos,/ส่วนลดสมาชิก/);
   assert.match(pos,/ใช้ได้สูงสุด/);
+});
+
+
+test('queue control room keeps current order overview above the fold',async()=>{
+  const queue=await read('app/queue/page.tsx');
+  assert.match(queue,/QUEUE CONTROL/);
+  assert.match(queue,/แนะนำให้ทำก่อน/);
+  assert.match(queue,/ภาพรวมคิวนี้/);
+  assert.match(queue,/เห็นทุกเมนูในคิวเดียว ไม่ต้องเลื่อนไปดู card อื่น/);
+  assert.match(queue,/คิวถัดไป/);
+  assert.match(queue,/const upcoming=orders\.filter/);
+  assert.match(queue,/h-full overflow-hidden/);
+  assert.doesNotMatch(queue,/orders\.map\(\(order,orderIndex\)=>/);
+  assert.match(queue,/ดูแผนเบส/);
+  assert.match(queue,/prepOpen&&first/);
 });

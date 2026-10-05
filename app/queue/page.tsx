@@ -48,6 +48,7 @@ function QueueView({session}:{session:Session}){
   const revisionRef=useRef<number|null>(null);
   busyRef.current=busy!=="";
   const [callPrompt,setCallPrompt]=useState<{queueNo:string;pagerNo:number;scope:string}|null>(null);
+  const [prepOpen,setPrepOpen]=useState(false);
 
   useEffect(()=>{if(!toast)return;const timer=window.setTimeout(()=>setToast(""),2600);return()=>window.clearTimeout(timer)},[toast]);
   const pulse=(message:string)=>{setToast(message);try{navigator.vibrate?.(35)}catch{}};
@@ -167,120 +168,83 @@ function QueueView({session}:{session:Session}){
   const first=orders[0];
   const firstReady=first?orderReady(first):false;
   const firstCalled=first?orderCalled(first):false;
+  const firstCupCount=first?(first.items||[]).reduce((sum,item)=>sum+n(item.qty),0):0;
+  const firstRemaining=first?(first.items||[]).reduce((sum,item)=>sum+Math.max(0,n(item.qty)-n(item.readyQty)),0):0;
+  const upcoming=orders.filter((_,index)=>index>0&&index<4);
+  const extraUpcoming=Math.max(0,orders.length-1-upcoming.length);
 
-  return <section className="soft-scroll h-full overflow-auto p-3 sm:p-5 md:p-7">
-    <div className="flex items-end justify-between gap-4">
-      <div><p className="gold m-0 text-[9px] font-bold tracking-[.26em] sm:text-[10px] sm:tracking-[.3em]">PRODUCTION</p><h1 className="mt-1 text-xl font-semibold sm:text-2xl">QUEUE</h1></div>
-      <span className="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-[11px] text-slate-600 sm:py-2 sm:text-xs">{orders.length} ACTIVE</span>
-    </div>
+  return <section className="h-full overflow-hidden p-2.5 sm:p-4 md:p-6">
+    <div className="flex h-full min-h-0 flex-col gap-2.5 sm:gap-3">
+      <header className="flex shrink-0 items-end justify-between gap-3">
+        <div><p className="gold m-0 text-[9px] font-bold tracking-[.26em]">PRODUCTION CONTROL</p><h1 className="mt-0.5 text-lg font-semibold sm:text-xl">QUEUE CONTROL</h1></div>
+        <span className="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-[10px] font-semibold text-slate-600">{orders.length} ACTIVE</span>
+      </header>
 
-    {msg&&<div className="mt-4 rounded-2xl border border-red-300 bg-red-50 p-3 text-sm text-red-800">{msg}</div>}
-    {notice&&<div className="mt-4 flex items-start justify-between gap-3 rounded-2xl border border-emerald-300 bg-emerald-50 p-3 text-sm text-emerald-800"><span>{notice}</span><button onClick={()=>setNotice("")}><X size={16}/></button></div>}
+      {msg&&<div className="shrink-0 rounded-2xl border border-red-300 bg-red-50 px-3 py-2 text-xs text-red-800">{msg}</div>}
+      {notice&&<div className="flex shrink-0 items-start justify-between gap-3 rounded-2xl border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs text-emerald-800"><span>{notice}</span><button onClick={()=>setNotice("")}><X size={15}/></button></div>}
 
-    <div className="mt-3 rounded-[22px] border-2 border-[#d4af37]/50 bg-white p-4 shadow-sm sm:mt-5 sm:rounded-[28px] sm:p-5">
-      <div className="flex items-center gap-2"><Sparkles size={18} className="gold"/><b className="tracking-wide">ลำดับงานแนะนำ</b></div>
+      {!first&&<div className="grid min-h-0 flex-1 place-items-center rounded-[24px] border border-dashed border-slate-300 bg-white/70 p-6 text-center">
+        <div><CheckCircle2 size={34} className="mx-auto text-emerald-600"/><h2 className="mt-3 text-lg font-bold">ไม่มีคิวค้าง</h2><p className="mt-1 text-sm text-slate-500">เมื่อมีออเดอร์ใหม่ ระบบจะแสดงคิวและเมนูที่ควรทำก่อนตรงนี้</p></div>
+      </div>}
 
-      {selectedTask&&<div className="mt-4 grid gap-4 lg:grid-cols-[1fr_auto] lg:items-center">
-        <div>
-          <div className="mb-2 flex flex-wrap items-center gap-2">
-            <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-700">กำลังทำ</span>
-            <span className="rounded-full bg-[#fff3bf] px-3 py-1 text-xs font-bold text-[#765b08]">{selectedTask.order.queueNo} · บัตร {selectedTask.order.pagerNo}</span>
+      {first&&<>
+        <div className="shrink-0 rounded-[22px] border-2 border-[#d4af37]/55 bg-white p-3 shadow-sm sm:p-4">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex min-w-0 items-center gap-3">
+              <div className="shrink-0 rounded-2xl bg-[#fff3bf] px-3 py-2 text-center"><small className="block text-[9px] font-bold tracking-widest text-[#765b08]">คิวปัจจุบัน</small><div className="mt-0.5 text-2xl font-black leading-none text-[#6f5510]">{first.queueNo}</div></div>
+              <div className="min-w-0"><div className="text-sm font-bold">บัตรเรียกคิว {first.pagerNo||"—"}</div><div className="mt-0.5 text-[11px] text-slate-500">{firstCupCount} แก้ว · เหลือทำ {firstRemaining} แก้ว · ยอดรวม ฿{n(first.total).toFixed(0)}</div></div>
+            </div>
+            <button onClick={()=>router.push("/orders?queue="+encodeURIComponent(first.queueNo))} className="flex min-h-10 shrink-0 items-center gap-1.5 rounded-full border border-slate-300 bg-white px-3 text-[11px] font-semibold text-slate-700"><ReceiptText size={14}/>ดูรายการ / แก้ไขออเดอร์</button>
           </div>
-          <div className="flex flex-wrap items-center gap-2"><div className="text-lg font-bold sm:text-xl">{selectedTask.item.name}</div>{selectedTask.item.prepGroup&&<span className="rounded-full border border-[#d4af37]/60 bg-[#fff8dc] px-2 py-1 text-[10px] font-bold text-[#765b08]">{selectedTask.item.prepGroup.label}</span>}</div>
-          <div className="mt-1 text-sm text-slate-600">{selectedTask.item.variant} · {selectedTask.item.qty} แก้ว · เสร็จ {n(selectedTask.item.readyQty)}/{n(selectedTask.item.qty)}</div>
+
+          <div className={"mt-3 rounded-[18px] border p-3 "+(selectedTask?"border-emerald-300 bg-emerald-50":recommendedTask?"border-[#d4af37] bg-[#fffaf0]":"border-slate-200 bg-slate-50")}>
+            {selectedTask&&<div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-center">
+              <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><span className="rounded-full bg-emerald-600 px-2.5 py-1 text-[10px] font-black text-white">กำลังทำ · ทำก่อน</span>{selectedTask.item.prepGroup&&<span className="rounded-full bg-white px-2 py-1 text-[10px] font-bold text-[#765b08]">{selectedTask.item.prepGroup.label}</span>}</div><div className="mt-2 truncate text-lg font-black">{selectedTask.item.name}</div><div className="mt-0.5 text-xs text-slate-600">{selectedTask.item.variant} · {selectedTask.item.qty} แก้ว · เสร็จ {n(selectedTask.item.readyQty)}/{n(selectedTask.item.qty)}</div></div>
+              <button disabled={busy!==""} onClick={()=>completeNext(selectedTask.order,selectedTask.item,selectedTask.index)} className="min-h-12 rounded-2xl bg-[#d4af37] px-5 text-sm font-black text-black disabled:opacity-40">ทำเสร็จ {Math.max(0,n(selectedTask.item.qty)-n(selectedTask.item.readyQty))} แก้ว</button>
+            </div>}
+
+            {!selectedTask&&recommendedTask&&<div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-center">
+              <div className="min-w-0"><div className="mb-1 text-[9px] font-bold tracking-[.18em] text-slate-400">ลำดับงานแนะนำ</div><div className="flex flex-wrap items-center gap-2"><span className="rounded-full bg-[#d4af37] px-2.5 py-1 text-[10px] font-black text-black"><Sparkles size={11} className="mr-1 inline"/>แนะนำให้ทำก่อน</span>{recommendedTask.item.prepGroup&&<span className="rounded-full bg-white px-2 py-1 text-[10px] font-bold text-[#765b08]">{recommendedTask.item.prepGroup.label}</span>}</div><div className="mt-2 truncate text-lg font-black">{recommendedTask.item.name}</div><div className="mt-0.5 text-xs text-slate-600">{recommendedTask.item.variant} · เหลือ {Math.max(0,n(recommendedTask.item.qty)-n(recommendedTask.item.readyQty))}/{n(recommendedTask.item.qty)} แก้ว</div></div>
+              <button disabled={busy!==""} onClick={()=>selectTask(recommendedTask.order.id,recommendedTask.index)} className="min-h-12 rounded-2xl bg-[#d4af37] px-5 text-sm font-black text-black disabled:opacity-40">{busy==="select:"+recommendedTask.order.id+":"+recommendedTask.index?"กำลังบันทึก...":"รับทำเมนูนี้"}</button>
+            </div>}
+
+            {!task&&firstReady&&!firstCalled&&<div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-center"><div><span className="rounded-full bg-emerald-100 px-2.5 py-1 text-[10px] font-black text-emerald-700">ทำครบทุกเมนูแล้ว</span><div className="mt-2 text-sm font-bold">พร้อมเรียกลูกค้ารับทั้งคิว</div></div><button disabled={busy!==""} onClick={()=>callOrder(first)} className="flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-[#d4af37] px-5 text-sm font-black text-black"><BellRing size={17}/>เรียกบัตร {first.pagerNo} · รับทั้งหมด</button></div>}
+            {!task&&firstCalled&&<div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-center"><div><span className="rounded-full bg-emerald-100 px-2.5 py-1 text-[10px] font-black text-emerald-700">แจ้งลูกค้ารับครบแล้ว</span><div className="mt-2 text-sm font-bold">พร้อมส่งมอบและไปคิวถัดไป</div></div><button disabled={busy!==""} onClick={()=>deliver(first.id)} className="flex min-h-12 items-center justify-center gap-2 rounded-2xl border border-emerald-400 bg-white px-5 text-sm font-black text-emerald-700">ส่งมอบคิวนี้ <ChevronRight size={16}/></button></div>}
+          </div>
         </div>
-        <button disabled={busy!==""} onClick={()=>completeNext(selectedTask.order,selectedTask.item,selectedTask.index)} className="min-h-11 rounded-2xl bg-[#d4af37] px-4 py-3 text-sm font-black text-black disabled:opacity-40 sm:px-6 sm:py-4 sm:text-base">
-          ทำเสร็จ {n(selectedTask.item.qty)-n(selectedTask.item.readyQty)} แก้ว
-        </button>
-      </div>}
 
-      {!selectedTask&&recommendedTask&&<div className="mt-4 grid gap-4 lg:grid-cols-[1fr_auto] lg:items-center">
-        <div>
-          <div className="mb-2 flex flex-wrap items-center gap-2">
-            <span className="rounded-full bg-[#d4af37] px-3 py-1 text-xs font-bold text-black">แนะนำเมนูถัดไป</span>
-            <span className="rounded-full bg-[#fff3bf] px-3 py-1 text-xs font-bold text-[#765b08]">{recommendedTask.order.queueNo} · บัตร {recommendedTask.order.pagerNo}</span>
-          </div>
-          <div className="flex flex-wrap items-center gap-2"><div className="text-lg font-bold sm:text-xl">{recommendedTask.item.name}</div>{recommendedTask.item.prepGroup&&<span className="rounded-full border border-[#d4af37]/60 bg-[#fff8dc] px-2 py-1 text-[10px] font-bold text-[#765b08]">{recommendedTask.item.prepGroup.label}</span>}</div>
-          <div className="mt-1 text-sm text-slate-600">{recommendedTask.item.variant} · เหลือ {n(recommendedTask.item.qty)-n(recommendedTask.item.readyQty)} จาก {n(recommendedTask.item.qty)} แก้ว</div>
-        </div>
-        <button disabled={busy!==""} onClick={()=>selectTask(recommendedTask.order.id,recommendedTask.index)} className="rounded-2xl bg-[#d4af37] px-6 py-4 text-base font-black text-black disabled:cursor-wait disabled:bg-[#f4e7a6] disabled:text-[#765b08]">
-          {busy==="select:"+recommendedTask.order.id+":"+recommendedTask.index?"กำลังบันทึก...":"รับทำเมนูนี้"}
-        </button>
-      </div>}
+        <div className="min-h-0 flex-1 rounded-[22px] border border-slate-300 bg-white p-3 sm:p-4">
+          <div className="flex items-center justify-between gap-3"><div><b className="text-sm">ภาพรวมคิวนี้</b><p className="mt-0.5 text-[10px] text-slate-500">เห็นทุกเมนูในคิวเดียว ไม่ต้องเลื่อนไปดู card อื่น</p></div>{(first.prepGroups||[]).length>0&&<button onClick={()=>setPrepOpen(true)} className="flex min-h-9 items-center gap-1.5 rounded-full border border-[#d4af37]/60 bg-[#fffaf0] px-3 text-[10px] font-bold text-[#765b08]"><Layers3 size={13}/>ดูแผนเบส</button>}</div>
 
-      {!task&&first&&firstReady&&!firstCalled&&<div className="mt-4 grid gap-4 lg:grid-cols-[1fr_auto] lg:items-center">
-        <div><span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-700">ทำครบทุกเมนูแล้ว</span><div className="mt-2 text-xl font-bold">{first.queueNo} · บัตร {first.pagerNo}</div><div className="mt-1 text-sm text-slate-600">เลือกเรียกลูกค้ามารับทั้งหมดได้เลย</div></div>
-        <button disabled={busy!==""} onClick={()=>callOrder(first)} className="flex items-center justify-center gap-2 rounded-2xl bg-[#d4af37] px-6 py-4 text-base font-black text-black disabled:opacity-40"><BellRing size={19}/>เรียกบัตร {first.pagerNo}</button>
-      </div>}
-
-      {!task&&(!first||firstCalled)&&<div className="mt-4 text-sm text-emerald-700">ไม่มีเมนูค้างทำ</div>}
-
-      {first&&<div className="mt-4 rounded-[18px] border border-[#d4af37]/40 bg-[#fffaf0] p-3 text-sm text-[#765b08]">
-        <b>เตรียมเบสของ {first.queueNo} พร้อมกันภายในคิว</b>
-        <p className="mt-1 text-[11px] text-slate-500">เมนูที่ใช้ Prep Base เดียวกันในบัตรนี้ให้เตรียมพร้อมกันทีเดียว แล้วแยกประกอบตามสูตรของแต่ละเมนู · ต้องทำคิวนี้ให้ครบก่อนจึงไปคิวถัดไป</p>
-        {(first.prepGroups||[]).length>0&&<div className="mt-2 flex flex-wrap gap-2">{(first.prepGroups||[]).map(group=><span key={group.id} className="rounded-full border border-[#eadb9b] bg-white px-3 py-1 text-xs font-bold">{group.label} · {group.qty} แก้ว</span>)}</div>}
-      </div>}
-    </div>
-
-    <div className="mt-5 grid gap-4 xl:grid-cols-2">
-      {orders.map((order,orderIndex)=>{
-        const allReady=orderReady(order);
-        const allCalled=orderCalled(order);
-        return <div key={order.id} className={"glass card p-4 sm:p-5 "+(orderIndex===0?"border-[#d4af37]/50":"")}>
-          <div className="flex items-start justify-between gap-4">
-            <div><small className="text-slate-500">QUEUE</small><div className="mt-1 text-2xl font-black sm:text-3xl text-[#765b08]">{order.queueNo}</div></div>
-            <div className="rounded-2xl border-2 border-[#d4af37] bg-[#fff8dc] px-4 py-2 text-center"><small className="block text-[10px] font-bold tracking-widest text-[#765b08]">บัตรเรียกคิว</small><div className="mt-1 text-2xl font-black sm:text-3xl leading-none text-[#6f5510]">บัตร {order.pagerNo||"—"}</div></div>
-          </div>
-          <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-2xl bg-[#fffaf0] px-4 py-3 text-sm">
-            <span className="text-slate-600">{order.billNo||"รายการขาย"} · {(order.items||[]).reduce((sum,item)=>sum+n(item.qty),0)} แก้ว</span>
-            <b className="text-[#765b08]">ยอดรวม ฿{n(order.total).toFixed(0)}</b>
-          </div>
-
-          {(order.prepGroups||[]).length>0&&<div className="mt-4 rounded-[20px] border border-[#d4af37]/40 bg-[#fffaf0] p-3">
-            <div className="flex items-center gap-2"><Layers3 size={16} className="text-[#765b08]"/><b className="text-sm">แผนเตรียมเบสของคิวนี้</b></div>
-            <p className="mt-1 text-[11px] text-slate-500">รวมเมนูที่ใช้ Prep Base เดียวกันในบัตรนี้เป็น 1 กลุ่มและเตรียมพร้อมกันทีเดียว แล้วค่อยแยกประกอบตามสูตร · ไม่ข้ามไปเตรียมคิวถัดไป</p>
-            <div className="mt-3 space-y-2">{(order.prepGroups||[]).map(group=><div key={group.id} className="rounded-2xl border border-[#eadb9b] bg-white p-3">
-              <div className="flex flex-wrap items-center justify-between gap-2"><b className="text-sm text-[#765b08]">{group.label}</b><span className="rounded-full bg-[#f4ecd0] px-2 py-1 text-[10px] font-bold text-[#765b08]">{group.qty} แก้ว</span></div>
-              <div className="mt-2 space-y-2">{group.items.map(x=><div key={x.id+"|"+x.variant} className="rounded-xl border border-[#efe4b9] bg-[#fffdf6] px-3 py-2">
-                <div className="flex flex-wrap items-center justify-between gap-2 text-xs"><b className="text-slate-800">{x.name}</b><span className="text-slate-500">{x.variant} ×{x.qty}</span></div>
-                {x.baseUsage?.length>0&&<div className="mt-1 text-[11px] text-[#765b08]">{x.baseUsage.map(u=>x.qty>1?u.name+" "+Number(u.perCup.toFixed(2)).toLocaleString()+" "+u.unit+"/แก้ว ×"+x.qty+" = "+Number(u.qty.toFixed(2)).toLocaleString()+" "+u.unit:u.name+" "+Number(u.perCup.toFixed(2)).toLocaleString()+" "+u.unit).join(" · ")}</div>}
-              </div>)}</div>
-
-            </div>)}</div>
-          </div>}
-
-          <div className="mt-5 space-y-2">
-            {(order.items||[]).map((item,index)=>{
-              const done=itemDone(item);
-              const called=itemCalled(item);
-              const current=selectedTask?.order.id===order.id&&selectedTask.index===index;
-              const recommended=recommendedTask?.order.id===order.id&&recommendedTask.index===index;
-              const canCallEarly=orderIndex===0&&done&&!called&&!allReady;
-              return <div key={index} className={"rounded-[18px] border p-3 sm:rounded-[20px] sm:p-4 "+(current?"border-emerald-400 bg-emerald-50/50":recommended?"border-[#d4af37] bg-[#fffaf0]":"border-slate-300 bg-slate-50")}>
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <div className="flex flex-wrap items-center gap-2"><b>{item.name}</b><span className="text-sm text-slate-500">{item.variant} ×{item.qty}</span>{item.prepGroup&&<span className="rounded-full bg-[#f4ecd0] px-2 py-1 text-[10px] font-bold text-[#765b08]">{item.prepGroup.label}</span>}{item.price==null?<span className="text-xs font-semibold text-amber-700">ราคาไม่พบ</span>:<span className="text-sm font-semibold text-[#765b08]">฿{(item.price*n(item.qty)).toFixed(0)}</span>}{current&&<span className="rounded-full bg-emerald-100 px-2 py-1 text-[10px] font-bold text-emerald-700">กำลังทำ</span>}{recommended&&<span className="rounded-full bg-[#d4af37] px-2 py-1 text-[10px] font-bold text-black">ถัดไป</span>}</div>
-                    <div className="mt-2 text-sm"><span className={done?"font-semibold text-emerald-700":"text-slate-600"}>ทำเสร็จ {n(item.readyQty)}/{n(item.qty)}</span>{called&&<span className="ml-2 text-emerald-700">· แจ้งรับแล้ว</span>}</div>
-                  </div>
-                  {done&&<CheckCircle2 size={22} className="text-emerald-600"/>}
-                </div>
-
-                {canCallEarly&&<button disabled={busy!==""} onClick={()=>callReadyItem(order,item,index)} className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-[#d4af37] bg-white py-2.5 text-sm font-semibold text-[#765b08] disabled:opacity-40"><BellRing size={16}/>เรียกบัตร {order.pagerNo} · รับเมนูนี้ก่อน</button>}
+          <div className={"mt-2 grid gap-1.5 "+((first.items||[]).length>4?"grid-cols-2":"grid-cols-1 sm:grid-cols-2")}>
+            {(first.items||[]).map((item,index)=>{
+              const done=itemDone(item),called=itemCalled(item);
+              const current=selectedTask?.order.id===first.id&&selectedTask.index===index;
+              const recommended=recommendedTask?.order.id===first.id&&recommendedTask.index===index;
+              const canCallEarly=done&&!called&&!firstReady;
+              return <div key={index} className={"rounded-2xl border px-2.5 py-2 "+(current?"border-emerald-400 bg-emerald-50":recommended?"border-[#d4af37] bg-[#fffaf0]":done?"border-emerald-200 bg-white":"border-slate-200 bg-slate-50")}>
+                <div className="flex items-start justify-between gap-2"><div className="min-w-0"><div className="flex items-center gap-1.5"><b className="truncate text-[12px] sm:text-sm">{item.name}</b>{current&&<span className="shrink-0 rounded-full bg-emerald-600 px-1.5 py-0.5 text-[8px] font-black text-white">กำลังทำ</span>}{recommended&&<span className="shrink-0 rounded-full bg-[#d4af37] px-1.5 py-0.5 text-[8px] font-black text-black">ทำก่อน</span>}</div><div className="mt-0.5 truncate text-[10px] text-slate-500">{item.variant} · ×{item.qty}{item.price==null?" · ราคาไม่พบ":" · ฿"+(item.price*n(item.qty)).toFixed(0)}</div></div>{done?<CheckCircle2 size={16} className="shrink-0 text-emerald-600"/>:<span className="shrink-0 text-[10px] font-bold text-slate-500">{n(item.readyQty)}/{n(item.qty)}</span>}</div>
+                <div className="mt-1.5 flex items-center justify-between gap-2"><span className={"text-[9px] font-semibold "+(done?"text-emerald-700":"text-slate-500")}>{done?"ทำเสร็จ":current?"กำลังผลิต":recommended?"ลำดับถัดไป":"รอทำ"}</span>{canCallEarly&&<button disabled={busy!==""} onClick={()=>callReadyItem(first,item,index)} className="rounded-full border border-[#d4af37] bg-white px-2 py-1 text-[9px] font-bold text-[#765b08]"><BellRing size={10} className="mr-1 inline"/>รับเมนูนี้ก่อน</button>}</div>
               </div>;
             })}
           </div>
 
-          <button onClick={()=>router.push("/orders?queue="+encodeURIComponent(order.queueNo))} className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl border border-slate-300 bg-white py-3 text-sm font-semibold text-slate-700"><ReceiptText size={17}/>ดูรายการ / แก้ไขออเดอร์</button>
+          {(first.prepGroups||[]).length>0&&<div className="mt-2 flex flex-wrap items-center gap-1.5"><span className="text-[9px] font-bold text-slate-500">PREP BASE</span>{(first.prepGroups||[]).map(group=><span key={group.id} className="rounded-full bg-[#f4ecd0] px-2 py-1 text-[9px] font-bold text-[#765b08]">{group.label} · {group.qty} แก้ว</span>)}</div>}
+        </div>
 
-          <div className="mt-3 grid gap-2 border-t border-slate-200 pt-4">
-            {allReady&&!allCalled&&<button disabled={busy!==""||orderIndex!==0} onClick={()=>callOrder(order)} className="flex w-full items-center justify-center gap-2 rounded-2xl bg-[#d4af37] py-3 text-sm font-bold text-black disabled:bg-slate-200 disabled:text-slate-400"><BellRing size={17}/>{orderIndex===0?`เรียกบัตร ${order.pagerNo} · รับทั้งหมด`:"รอคิวก่อนหน้า"}</button>}
-            {!allReady&&<div className="rounded-2xl bg-slate-100 px-4 py-3 text-center text-sm text-slate-600">เหลือทำอีก {(order.items||[]).reduce((sum,item)=>sum+Math.max(0,n(item.qty)-n(item.readyQty)),0)} แก้ว</div>}
-            {allCalled&&<div className="flex items-center justify-center gap-2 rounded-2xl border border-emerald-300 bg-emerald-50 py-3 text-sm font-semibold text-emerald-700"><BellRing size={17}/>แจ้งลูกค้ารับครบแล้ว</div>}
-            <button disabled={busy!==""||!allCalled||orderIndex!==0} onClick={()=>deliver(order.id)} className="flex w-full items-center justify-center gap-2 rounded-2xl border border-emerald-400/40 bg-white py-3 text-sm font-semibold text-emerald-700 disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-500">{busy==="return:"+order.id?"กำลังส่งมอบ...":!allCalled?"ทำและเรียกลูกค้าให้ครบก่อน":orderIndex!==0?"รอส่งมอบคิวก่อนหน้า":"ส่งมอบคิวนี้"} <ChevronRight size={16}/></button>
-          </div>
-        </div>;
-      })}
+        <div className="shrink-0 rounded-[18px] border border-slate-300 bg-white px-3 py-2">
+          <div className="flex items-center gap-2"><b className="shrink-0 text-[10px] text-slate-500">คิวถัดไป</b><div className="grid min-w-0 flex-1 grid-cols-3 gap-1.5">{upcoming.map(order=><div key={order.id} className="min-w-0 rounded-xl bg-slate-50 px-2 py-1.5 text-center"><div className="truncate text-[10px] font-black text-slate-700">{order.queueNo}</div><div className="truncate text-[9px] text-slate-500">บัตร {order.pagerNo} · {(order.items||[]).reduce((sum,item)=>sum+n(item.qty),0)} แก้ว</div></div>)}{upcoming.length===0&&<div className="col-span-3 py-1 text-center text-[10px] text-slate-400">ไม่มีคิวถัดไป</div>}</div>{extraUpcoming>0&&<span className="shrink-0 text-[9px] font-bold text-slate-500">+{extraUpcoming}</span>}</div>
+        </div>
+      </>}
     </div>
+
+    {prepOpen&&first&&<div className="fixed inset-0 z-[80] grid place-items-center bg-black/55 p-3">
+      <div className="soft-scroll max-h-[88vh] w-full max-w-lg overflow-auto rounded-[26px] border border-[#d4af37]/50 bg-white p-4 shadow-2xl">
+        <div className="flex items-start justify-between gap-3"><div><p className="gold text-[9px] font-bold tracking-[.24em]">PREP PLAN</p><h2 className="mt-1 text-lg font-bold">แผนเตรียมเบสของคิวนี้</h2><p className="mt-1 text-xs text-slate-500">เตรียมเบสของ {first.queueNo} พร้อมกันภายในคิว · รวมเมนูที่ใช้ Prep Base เดียวกันในบัตรนี้เป็น 1 กลุ่มและเตรียมพร้อมกันทีเดียว · Prep Base เดียวกันในบัตรนี้ให้เตรียมพร้อมกันทีเดียว · ไม่ข้ามไปเตรียมคิวถัดไป · ต้องทำคิวนี้ให้ครบก่อนจึงไปคิวถัดไป</p></div><button onClick={()=>setPrepOpen(false)}><X size={20}/></button></div>
+        <div className="mt-4 space-y-2">{(first.prepGroups||[]).map(group=><div key={group.id} className="rounded-2xl border border-[#eadb9b] bg-[#fffaf0] p-3"><div className="flex justify-between gap-2"><b className="text-sm text-[#765b08]">{group.label}</b><span className="rounded-full bg-white px-2 py-1 text-[10px] font-bold">{group.qty} แก้ว</span></div><div className="mt-2 space-y-2">{group.items.map(x=><div key={x.id+"|"+x.variant} className="rounded-xl bg-white px-3 py-2"><div className="flex justify-between gap-2 text-xs"><b>{x.name}</b><span className="text-slate-500">{x.variant} ×{x.qty}</span></div>{x.baseUsage?.length>0&&<div className="mt-1 text-[11px] text-[#765b08]">{x.baseUsage.map(u=>x.qty>1?u.name+" "+Number(u.perCup.toFixed(2)).toLocaleString()+" "+u.unit+"/แก้ว ×"+x.qty+" = "+Number(u.qty.toFixed(2)).toLocaleString()+" "+u.unit:u.name+" "+Number(u.perCup.toFixed(2)).toLocaleString()+" "+u.unit).join(" · ")}</div>}</div>)}</div></div>)}</div>
+        <button onClick={()=>setPrepOpen(false)} className="mt-4 min-h-11 w-full rounded-2xl bg-[#d4af37] text-sm font-bold text-black">ปิดรายละเอียด</button>
+      </div>
+    </div>}
 
     {toast&&<div className="fixed bottom-[76px] sm:bottom-[92px] left-4 right-4 z-[95] mx-auto max-w-xl rounded-2xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-center text-sm font-semibold text-emerald-800 shadow-xl">{toast}</div>}
 
