@@ -17,9 +17,9 @@ test('cash shift opens once per business date and freezes opening cash for close
 
 test('close day UI records opening float before count and cannot edit it after shift opens',async()=>{
   const ui=await read('app/close/page.tsx');
-  assert.match(ui,/OPEN CASH SHIFT/);
+  assert.match(ui,/เปิดร้านวันนี้/);
   assert.match(ui,/เงินตั้งต้นที่ล็อก/);
-  assert.match(ui,/กรุณาเปิดกะและล็อกเงินตั้งต้นก่อนปิดวัน/);
+  assert.match(ui,/กรุณาเปิดร้านและล็อกเงินตั้งต้นก่อนปิดวัน/);
   assert.match(ui,/JSON\.stringify\(\{countedCash:counted\}\)/);
   assert.doesNotMatch(ui,/body:JSON\.stringify\(\{openingCash:opening,countedCash:counted\}\)/);
   assert.match(ui,/Expected Cash = เงินตั้งต้น \+ ยอดขายเงินสด − ค่าใช้จ่ายที่จ่ายสดจากลิ้นชัก/);
