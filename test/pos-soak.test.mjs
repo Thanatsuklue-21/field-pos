@@ -647,3 +647,29 @@ test('full PromptPay reservation deducts stock before QR payment and auto-releas
   assert.equal(state.ingredients.cup16.qty,1);
   assert.equal(state.paymentSessions[0].status,'expired');
 });
+
+
+test('CRM redemption reduces cash due, awards from net spend and void restores redeemed points',async()=>{
+  const seed=initialState();seed.settings.pointsRedeemValue=2;seed.customers[0].points=20;
+  const db=fakeDb(seed);
+  const paid=await checkoutPos({db,user,now:900,body:{requestKey:'crm-redeem-cash-001',cart,date,payment:'cash',received:50,customerId:'cus-1',pointsRedeemed:5}});
+  assert.equal(paid.subtotal,55);assert.equal(paid.discountTotal,10);assert.equal(paid.total,45);
+  let state=JSON.parse(db.storage.document),sale=state.sales[0],customer=state.customers[0];
+  assert.equal(sale.subtotal,55);assert.equal(sale.discountTotal,10);assert.equal(sale.total,45);
+  assert.equal(sale.pointsRedeemed,5);assert.equal(sale.pointsAwarded,0);
+  assert.equal(customer.points,15);assert.equal(customer.totalSpend,45);assert.equal(customer.visits,1);
+  await voidSale({db,user,now:950,body:{requestKey:'crm-redeem-void-001',saleId:sale.id,reason:'test'}});
+  state=JSON.parse(db.storage.document);customer=state.customers[0];
+  assert.equal(customer.points,20);assert.equal(customer.totalSpend,0);assert.equal(customer.visits,0);
+});
+
+test('PromptPay full reservation freezes CRM discount and provider amount at net total',async()=>{
+  const seed=initialState();seed.settings.pointsRedeemValue=2;seed.customers[0].points=20;
+  const db=fakeDb(seed);
+  const started=await startSplitPayment({db,user,now:1000,body:{requestKey:'crm-pp-start-001',cart,date,customerId:'cus-1',pointsRedeemed:5,mode:'promptpay_full'}});
+  assert.equal(started.session.subtotal,55);assert.equal(started.session.discountTotal,10);assert.equal(started.session.total,45);
+  const paid=await paySplitPayment({db,user,now:1100,body:{requestKey:'crm-pp-pay-001',sessionId:started.session.id,method:'promptpay',allocations:[{index:0,qty:1}],paymentReference:'beam-test',paymentVerified:'beam-test',paymentProviderAmount:45}});
+  assert.equal(paid.completed,true);
+  const state=JSON.parse(db.storage.document),sale=state.sales[0],customer=state.customers[0];
+  assert.equal(sale.total,45);assert.equal(sale.pointsRedeemed,5);assert.equal(customer.points,15);assert.equal(customer.totalSpend,45);
+});

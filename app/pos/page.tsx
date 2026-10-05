@@ -15,18 +15,18 @@ function localDate(){
 }
 
 const PENDING_KEY="field-pos-pending-promptpay-v1";
-type PendingPrompt={requestKey:string;payRequestKey?:string;sessionId?:string;date:string;cart:{id:string;variant:string;qty:number}[];paymentReference:string;total:number;customerId:string|null;createdAt:number;checkoutMode?:"full"|"split_bill";targetOrderId?:string|null};
+type PendingPrompt={requestKey:string;payRequestKey?:string;sessionId?:string;date:string;cart:{id:string;variant:string;qty:number}[];paymentReference:string;total:number;customerId:string|null;pointsRedeemed?:number;createdAt:number;checkoutMode?:"full"|"split_bill";targetOrderId?:string|null};
 const pendingRead=():PendingPrompt|null=>{try{return JSON.parse(localStorage.getItem(PENDING_KEY)||"null")}catch{return null}};
 const pendingWrite=(p:PendingPrompt)=>localStorage.setItem(PENDING_KEY,JSON.stringify(p));
 const pendingClear=()=>localStorage.removeItem(PENDING_KEY);
-const samePending=(p:PendingPrompt,total:number,cart:{id:string;variant:string;qty:number}[],customerId:string,targetOrderId?:string|null)=>p.total===total&&p.customerId===(customerId||null)&&String(p.targetOrderId||"")===String(targetOrderId||"")&&JSON.stringify(p.cart)===JSON.stringify(cart);
+const samePending=(p:PendingPrompt,total:number,cart:{id:string;variant:string;qty:number}[],customerId:string,pointsRedeemed:number,targetOrderId?:string|null)=>p.total===total&&p.customerId===(customerId||null)&&Number(p.pointsRedeemed||0)===pointsRedeemed&&String(p.targetOrderId||"")===String(targetOrderId||"")&&JSON.stringify(p.cart)===JSON.stringify(cart);
 
 const CASH_PENDING_KEY="field-pos-pending-cash-v1";
 type PendingCash={body:any;createdAt:number};
 const cashPendingRead=():PendingCash|null=>{try{return JSON.parse(localStorage.getItem(CASH_PENDING_KEY)||"null")}catch{return null}};
 const cashPendingWrite=(p:PendingCash)=>localStorage.setItem(CASH_PENDING_KEY,JSON.stringify(p));
 const cashPendingClear=()=>localStorage.removeItem(CASH_PENDING_KEY);
-const sameCashPending=(p:PendingCash,total:number,cart:{id:string;variant:string;qty:number}[],customerId:string,received:number,targetOrderId?:string|null)=>Number(p.body?.received)===received&&Number(p.body?.total??total)===total&&(p.body?.customerId||null)===(customerId||null)&&String(p.body?.targetOrderId||"")===String(targetOrderId||"")&&JSON.stringify(p.body?.cart||[])===JSON.stringify(cart);
+const sameCashPending=(p:PendingCash,total:number,cart:{id:string;variant:string;qty:number}[],customerId:string,received:number,pointsRedeemed:number,targetOrderId?:string|null)=>Number(p.body?.received)===received&&Number(p.body?.total??total)===total&&(p.body?.customerId||null)===(customerId||null)&&Number(p.body?.pointsRedeemed||0)===pointsRedeemed&&String(p.body?.targetOrderId||"")===String(targetOrderId||"")&&JSON.stringify(p.body?.cart||[])===JSON.stringify(cart);
 
 type LastSale={queueNo:string;pager:number;billNo?:string;total:number;received:number;change:number;payment:"cash"|"promptpay";recovered?:boolean};
 type SplitGroup={orderId:string;queueNo:string;pager:number;createdAt:number};
@@ -62,6 +62,8 @@ function PosView({session}:{session:Session}){
   const [promptConfig,setPromptConfig]=useState<any|null>(null);
   const [customers,setCustomers]=useState<any[]>([]);
   const [customerId,setCustomerId]=useState("");
+  const [loyalty,setLoyalty]=useState({pointsSpend:0,pointsRedeemValue:0});
+  const [pointsRedeemed,setPointsRedeemed]=useState(0);
   const [splitBill,setSplitBill]=useState(false);
   const [splitSelection,setSplitSelection]=useState<Record<string,number>>({});
   const [splitGroup,setSplitGroup]=useState<SplitGroup|null>(null);
@@ -75,11 +77,12 @@ function PosView({session}:{session:Session}){
     return true;
   };
   const load=(force=false)=>api<Bootstrap|RevisionUnchanged>("/api/pos/bootstrap",!force&&revisionRef.current!==null?{headers:{"X-Field-Revision":String(revisionRef.current)}}:{}).then(acceptBootstrap);
+  const loadCustomers=()=>api<any>("/api/customers").then(x=>{setCustomers(x.customers||[]);setLoyalty({pointsSpend:Number(x.loyalty?.pointsSpend)||0,pointsRedeemValue:Number(x.loyalty?.pointsRedeemValue)||0})});
 
   useEffect(()=>{
     const savedGroup=splitGroupRead();if(savedGroup?.orderId)setSplitGroup(savedGroup);
     load(true).catch(()=>{});
-    api<any>("/api/customers").then(x=>setCustomers(x.customers||[])).catch(()=>{});
+    loadCustomers().catch(()=>{});
     api<any>("/api/payments/promptpay/config").then(setPromptConfig).catch(()=>setPromptConfig({ready:false,configured:false}));
     recoverCashCheckout().then(()=>recoverPending()).catch(()=>{});
   },[]);
@@ -146,9 +149,18 @@ function PosView({session}:{session:Session}){
   const payableItems=splitBill?cart.items.map(i=>({...i,qty:Math.min(i.qty,Math.max(0,Number(splitSelection[i.key])||0))})).filter(i=>i.qty>0):cart.items;
   const payableQty=payableItems.reduce((s,i)=>s+i.qty,0);
   const payableTotal=payableItems.reduce((s,i)=>s+i.price*i.qty,0);
+  const selectedCustomer=customers.find(x=>x.id===customerId)||null;
+  const redeemValue=Math.max(0,Number(loyalty.pointsRedeemValue)||0);
+  const maxRedeemPoints=selectedCustomer&&redeemValue>0?Math.max(0,Math.min(Number(selectedCustomer.points)||0,Math.floor((payableTotal+1e-9)/redeemValue))):0;
+  const redeemPoints=Math.max(0,Math.min(Math.trunc(Number(pointsRedeemed)||0),maxRedeemPoints));
+  const crmDiscount=Math.round(redeemPoints*redeemValue*100)/100;
+  const netPayable=Math.max(0,Math.round((payableTotal-crmDiscount)*100)/100);
+  const estimatedPointsAwarded=selectedCustomer&&loyalty.pointsSpend>0?Math.floor(netPayable/loyalty.pointsSpend):0;
   const remainingAfterBill=Math.max(0,cart.items.reduce((s,i)=>s+i.qty,0)-payableQty);
   const cashReceived=received.trim()===""?NaN:Number(received);
-  const cashDelta=Number.isFinite(cashReceived)?cashReceived-payableTotal:NaN;
+  const cashDelta=Number.isFinite(cashReceived)?cashReceived-netPayable:NaN;
+
+  useEffect(()=>{if(pointsRedeemed>maxRedeemPoints)setPointsRedeemed(maxRedeemPoints)},[pointsRedeemed,maxRedeemPoints]);
 
   function applyServerState(r:any){
     const revision=Number(r?.revision)||0;
@@ -179,6 +191,7 @@ function PosView({session}:{session:Session}){
     const remaining=opts.splitBill&&opts.paidCart?subtractPaidCart(opts.paidCart):(cart.clearCart(),[]);
     setReceived("");
     setCustomerId("");
+    setPointsRedeemed(0);
     setSplitSelection({});
     setSplitBill(false);
     if(remaining.length&&(opts.splitBill||splitGroup)){
@@ -204,7 +217,7 @@ function PosView({session}:{session:Session}){
       payment:opts.payment,
       recovered:opts.recovered
     });
-    api<any>("/api/customers").then(x=>setCustomers(x.customers||[])).catch(()=>{});
+    loadCustomers().catch(()=>{});
     load(true).catch(()=>{});
   }
 
@@ -277,7 +290,7 @@ function PosView({session}:{session:Session}){
         throw e;
       }
     }
-    const body={requestKey:p.requestKey,date:p.date,cart:p.cart,payment:"promptpay",received:p.total,paymentReference:p.paymentReference,paymentVerified:verified,customerId:p.customerId,checkoutMode:p.checkoutMode||"full",targetOrderId:p.targetOrderId||undefined};
+    const body={requestKey:p.requestKey,date:p.date,cart:p.cart,payment:"promptpay",received:p.total,paymentReference:p.paymentReference,paymentVerified:verified,customerId:p.customerId,pointsRedeemed:Number(p.pointsRedeemed||0),checkoutMode:p.checkoutMode||"full",targetOrderId:p.targetOrderId||undefined};
     const r=await api<any>("/api/pos/checkout",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify(body)});
     pendingClear();
     cart.clearCart();
@@ -297,7 +310,7 @@ function PosView({session}:{session:Session}){
   async function ensurePendingPrompt(p:PendingPrompt){
     let next={...p};
     if(!next.sessionId){
-      const reserved=await api<any>("/api/pos/split/start",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({requestKey:next.requestKey,date:next.date,cart:next.cart,customerId:next.customerId,mode:"promptpay_full",targetOrderId:next.targetOrderId||undefined})});
+      const reserved=await api<any>("/api/pos/split/start",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({requestKey:next.requestKey,date:next.date,cart:next.cart,customerId:next.customerId,pointsRedeemed:Number(next.pointsRedeemed||0),mode:"promptpay_full",targetOrderId:next.targetOrderId||undefined})});
       const serverTotal=Number(reserved?.session?.total);
       if(!reserved?.session?.id||!Number.isFinite(serverTotal)||serverTotal<=0)throw new Error("promptpay_reservation_failed");
       next={...next,sessionId:reserved.session.id,total:serverTotal};
@@ -364,6 +377,12 @@ function PosView({session}:{session:Session}){
       code==="business_date_changed"?"วันธุรกิจเปลี่ยนแล้ว กรุณาตรวจ Orders ก่อนทำรายการใหม่":
       code==="offline_write_blocked"?"ออฟไลน์อยู่ ระบบหยุดรับการชำระเงินเพื่อป้องกันบิลซ้ำ":
       code==="network_unavailable"?"การเชื่อมต่อขาดหาย กรุณาตรวจอินเทอร์เน็ต ระบบจะไม่สร้างบิลซ้ำ":
+      code==="invalid_points_redeem"?"จำนวนแต้มที่ใช้ไม่ถูกต้อง":
+      code==="customer_required_for_points"?"ต้องเลือกลูกค้าก่อนใช้แต้ม":
+      code==="points_redemption_disabled"?"ยังไม่ได้เปิดการใช้แต้มเป็นส่วนลดใน Settings":
+      code==="insufficient_points"?"แต้มลูกค้าไม่เพียงพอ":
+      code==="points_discount_exceeds_total"?"แต้มที่ใช้มากกว่ายอดบิล":
+      code==="promptpay_zero_total"?"ยอดสุทธิเป็น 0 บาท กรุณาใช้ Cash/แต้มเต็มแทน PromptPay":
       code;
   }
 
@@ -372,7 +391,7 @@ function PosView({session}:{session:Session}){
     setBusy(true);
     setResult("");
     try{
-      let checkoutTotal=payableTotal;
+      let checkoutTotal=netPayable;
       const cartPayload=payableItems.map(i=>({id:i.id,variant:i.variant,qty:i.qty}));
       const checkoutMode=splitBill?"split_bill":"full";
       let paymentVerified:any=true,paymentReference:any=null,requestKey=crypto.randomUUID();
@@ -393,13 +412,13 @@ function PosView({session}:{session:Session}){
           if(!current)current=await api<any>("/api/payments/promptpay/status",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({chargeId:resumed.paymentReference})});
           if(current.paid){await finalizePending(resumed,current.chargeId||resumed.paymentReference);return}
           if(["failed","expired","reversed"].includes(String(current.status||"").toLowerCase())){await cancelPendingReservation(resumed);pendingClear()}
-          else if(!samePending(resumed,checkoutTotal,cartPayload,customerId,splitGroup?.orderId||null))throw Object.assign(new Error("pending_promptpay_exists"),{status:409});
+          else if(!samePending(resumed,checkoutTotal,cartPayload,customerId,redeemPoints,splitGroup?.orderId||null))throw Object.assign(new Error("pending_promptpay_exists"),{status:409});
           else{st=current;paymentReference=resumed.paymentReference;requestKey=resumed.requestKey;activePending=resumed;checkoutTotal=resumed.total}
         }
         if(!st){
           const reservationKey=crypto.randomUUID();
           const payRequestKey=crypto.randomUUID();
-          activePending={requestKey:reservationKey,payRequestKey,date:localDate(),cart:cartPayload,paymentReference:"",total:checkoutTotal,customerId:customerId||null,createdAt:Date.now(),checkoutMode,targetOrderId:splitGroup?.orderId||null};
+          activePending={requestKey:reservationKey,payRequestKey,date:localDate(),cart:cartPayload,paymentReference:"",total:checkoutTotal,customerId:customerId||null,pointsRedeemed:redeemPoints,createdAt:Date.now(),checkoutMode,targetOrderId:splitGroup?.orderId||null};
           pendingWrite(activePending);
           const setup=await ensurePendingPrompt(activePending);
           activePending=setup.pending;
@@ -428,13 +447,13 @@ function PosView({session}:{session:Session}){
       let body:any={
         requestKey,date:localDate(),cart:cartPayload,payment:method,
         received:method==="cash"?Number(received):checkoutTotal,
-        paymentReference,paymentVerified,customerId:customerId||null,total:checkoutTotal,checkoutMode,
+        paymentReference,paymentVerified,customerId:customerId||null,pointsRedeemed:redeemPoints,total:checkoutTotal,checkoutMode,
         targetOrderId:splitGroup?.orderId||undefined
       };
       if(method==="cash"){
         const existing=cashPendingRead();
         if(existing){
-          if(!sameCashPending(existing,checkoutTotal,cartPayload,customerId,Number(received),splitGroup?.orderId||null))throw Object.assign(new Error("pending_cash_checkout_exists"),{status:409});
+          if(!sameCashPending(existing,checkoutTotal,cartPayload,customerId,Number(received),redeemPoints,splitGroup?.orderId||null))throw Object.assign(new Error("pending_cash_checkout_exists"),{status:409});
           body=existing.body;
           requestKey=body.requestKey;
         }else cashPendingWrite({body,createdAt:Date.now()});
@@ -513,9 +532,9 @@ function PosView({session}:{session:Session}){
 
     {selected&&<div className="fixed inset-0 z-50 grid place-items-center bg-black/55 p-3 sm:p-4" onMouseDown={()=>setSelected(null)}><div className="card w-full max-w-md border border-slate-300 bg-white p-4 shadow-2xl sm:p-6" onMouseDown={e=>e.stopPropagation()}><div className="flex items-start justify-between"><div><p className="gold text-[10px] tracking-[.25em]">{selected.category||"DRINK"}</p><h3 className="mt-1 text-lg sm:text-xl">{selected.name}</h3></div><button onClick={()=>setSelected(null)}><X/></button></div><p className="mt-5 text-xs uppercase tracking-widest text-slate-500">Choose variant</p><div className="mt-3 grid gap-2">{selected.variants.map(v=><button key={v.label} disabled={!v.available} onClick={()=>addVariant(selected,v)} className="min-h-11 rounded-2xl border border-slate-300 bg-slate-50 px-3 py-2.5 text-left hover:border-[#c59b19] sm:px-4 sm:py-3 disabled:bg-slate-100 disabled:text-slate-400"><span>{v.label||"Standard"}{!v.available&&<small className="ml-2 text-red-600">หมดชั่วคราว</small>}{v.available&&v.lowStock&&<small className="ml-2 text-amber-700">เหลือประมาณ {v.maxServings} แก้ว</small>}</span><span className="float-right font-semibold text-[#765b08]">฿{selected.price.toFixed(0)}</span>{!v.available&&v.missingIngredients?.length>0&&<small className="mt-1 block text-xs text-red-500">ขาด: {v.missingIngredients.map(i=>i.name).join(", ")}</small>}</button>)}</div></div></div>}
 
-    {payOpen&&<div className="fixed inset-0 z-[90] grid place-items-center bg-black/55 p-2 sm:p-4"><div className="soft-scroll card max-h-[calc(100dvh-1rem)] w-full max-w-md overflow-auto border border-slate-300 bg-white p-4 shadow-2xl sm:max-h-[94vh] sm:p-6"><div className="flex justify-between gap-3"><div><p className="gold text-[10px] tracking-[.25em]">PAYMENT</p><h3 className="mt-1 text-2xl font-semibold">ยอดชำระ ฿{payableTotal.toFixed(0)}</h3><p className="mt-1 text-xs text-slate-500">{splitBill?"บิลนี้ "+payableQty+" แก้ว · เหลือ "+remainingAfterBill+" แก้ว":payableQty+" แก้ว · "+cart.items.length+" เมนู"}</p></div><button disabled={busy} onClick={()=>setPayOpen(false)} className="disabled:cursor-not-allowed disabled:opacity-30"><X/></button></div>
+    {payOpen&&<div className="fixed inset-0 z-[90] grid place-items-center bg-black/55 p-2 sm:p-4"><div className="soft-scroll card max-h-[calc(100dvh-1rem)] w-full max-w-md overflow-auto border border-slate-300 bg-white p-4 shadow-2xl sm:max-h-[94vh] sm:p-6"><div className="flex justify-between gap-3"><div><p className="gold text-[10px] tracking-[.25em]">PAYMENT</p><h3 className="mt-1 text-2xl font-semibold">ยอดชำระ ฿{netPayable.toFixed(0)}</h3><p className="mt-1 text-xs text-slate-500">{splitBill?"บิลนี้ "+payableQty+" แก้ว · เหลือ "+remainingAfterBill+" แก้ว":payableQty+" แก้ว · "+cart.items.length+" เมนู"}</p></div><button disabled={busy} onClick={()=>setPayOpen(false)} className="disabled:cursor-not-allowed disabled:opacity-30"><X/></button></div>
 
-      <button type="button" disabled={busy||cart.items.reduce((s,i)=>s+i.qty,0)<2} onClick={()=>{setSplitBill(v=>!v);setSplitSelection({});setReceived("");setResult("")}} className={"mt-4 min-h-11 w-full rounded-2xl border px-4 text-sm font-semibold "+(splitBill?"border-[#d4af37] bg-[#fff8dc] text-[#765b08]":"border-slate-300 bg-white text-slate-700")+" disabled:opacity-40"}>{splitBill?"ยกเลิกแยกบิล":"แยกบิล / จ่ายแยกตามคน"}</button>
+      <button type="button" disabled={busy||cart.items.reduce((s,i)=>s+i.qty,0)<2} onClick={()=>{setSplitBill(v=>!v);setSplitSelection({});setPointsRedeemed(0);setReceived("");setResult("")}} className={"mt-4 min-h-11 w-full rounded-2xl border px-4 text-sm font-semibold "+(splitBill?"border-[#d4af37] bg-[#fff8dc] text-[#765b08]":"border-slate-300 bg-white text-slate-700")+" disabled:opacity-40"}>{splitBill?"ยกเลิกแยกบิล":"แยกบิล / จ่ายแยกตามคน"}</button>
       {splitBill&&<div className="mt-2 rounded-2xl border border-[#d4af37]/40 bg-[#fffaf0] px-3 py-2 text-xs text-slate-700">เลือกจำนวนแก้วของ <b>คนที่กำลังจ่าย</b> · หลังชำระ รายการที่เหลือยังอยู่ในตะกร้าเพื่อรับเงินคนถัดไป</div>}
       {splitGroup&&<div className="mt-2 rounded-2xl border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs text-emerald-800"><b>กลุ่มเดียวกัน · คิว ${splitGroup.queueNo}</b> · การจ่ายคนถัดไปจะใช้คิวและบัตรเรียกเดิมอัตโนมัติ</div>}
 
@@ -527,17 +546,18 @@ function PosView({session}:{session:Session}){
             <div className="mt-3 flex items-center justify-between gap-3">{splitBill?<div className="flex items-center gap-2"><button disabled={busy||selectedQty<=0} onClick={()=>setSplitSelection(s=>({...s,[i.key]:Math.max(0,selectedQty-1)}))} className="grid h-9 w-9 place-items-center rounded-xl border border-slate-300 bg-white disabled:opacity-30"><Minus size={13}/></button><span className="min-w-[68px] text-center text-xs font-semibold">บิลนี้ {selectedQty}/{i.qty}</span><button disabled={busy||selectedQty>=i.qty} onClick={()=>setSplitSelection(s=>({...s,[i.key]:Math.min(i.qty,selectedQty+1)}))} className="grid h-9 w-9 place-items-center rounded-xl border border-slate-300 bg-white disabled:opacity-30"><Plus size={13}/></button></div>:<div className="flex items-center gap-2"><button disabled={busy} onClick={()=>updateCartQuantity(i.key,i.qty-1)} className="grid h-9 w-9 place-items-center rounded-xl border border-slate-300 bg-white disabled:opacity-30"><Minus size={13}/></button><span className="min-w-6 text-center text-sm font-semibold">{i.qty}</span><button disabled={busy} onClick={()=>updateCartQuantity(i.key,i.qty+1)} className="grid h-9 w-9 place-items-center rounded-xl border border-slate-300 bg-white disabled:opacity-30"><Plus size={13}/></button></div>}<div className="text-right"><small className="block text-[10px] text-slate-500">{selectedQty} × ฿{i.price.toFixed(0)}</small><b className="text-sm text-[#765b08]">฿{(selectedQty*i.price).toFixed(0)}</b></div></div>
           </div>})}
         </div>
-        <div className="mt-3 flex items-center justify-between border-t border-slate-200 pt-3"><span className="text-sm font-semibold">{splitBill?"บิลนี้":"รวม"} {payableQty} แก้ว</span><b className="text-xl text-[#765b08]">฿{payableTotal.toFixed(0)}</b></div>
+        <div className="mt-3 border-t border-slate-200 pt-3">{crmDiscount>0&&<div className="mb-1 flex items-center justify-between text-xs text-slate-500"><span>ยอดก่อนส่วนลด</span><span>฿{payableTotal.toFixed(0)}</span></div>}{crmDiscount>0&&<div className="mb-1 flex items-center justify-between text-xs text-amber-700"><span>ส่วนลดสมาชิก</span><span>−฿{crmDiscount.toFixed(0)}</span></div>}<div className="flex items-center justify-between"><span className="text-sm font-semibold">{splitBill?"บิลนี้":"รวม"} {payableQty} แก้ว</span><b className="text-xl text-[#765b08]">฿{netPayable.toFixed(0)}</b></div></div>
       </div>
 
-      <div className="mt-4 grid grid-cols-2 gap-2 rounded-2xl bg-slate-100 p-1"><button onClick={()=>setMethod("cash")} className={"rounded-xl p-3 "+(method==="cash"?"bg-[#d4af37] font-semibold text-black shadow-sm":"text-slate-700")}>Cash</button><button disabled={promptConfig?.ready!==true} onClick={()=>setMethod("promptpay")} title={promptConfig?.ready===true?"PromptPay พร้อมใช้งาน":"รอ Beam อนุมัติ / ตั้งค่า API และ Webhook"} className={"rounded-xl p-3 disabled:cursor-not-allowed disabled:opacity-45 "+(method==="promptpay"?"bg-[#d4af37] font-semibold text-black shadow-sm":"text-slate-700")}>PromptPay{promptConfig?.selectedProvider==="beam"&&promptConfig?.mode==="test"?" · TEST":""}</button></div>
+      <div className="mt-4 grid grid-cols-2 gap-2 rounded-2xl bg-slate-100 p-1"><button onClick={()=>setMethod("cash")} className={"rounded-xl p-3 "+(method==="cash"?"bg-[#d4af37] font-semibold text-black shadow-sm":"text-slate-700")}>Cash</button><button disabled={promptConfig?.ready!==true||netPayable<=0} onClick={()=>setMethod("promptpay")} title={promptConfig?.ready===true?"PromptPay พร้อมใช้งาน":"รอ Beam อนุมัติ / ตั้งค่า API และ Webhook"} className={"rounded-xl p-3 disabled:cursor-not-allowed disabled:opacity-45 "+(method==="promptpay"?"bg-[#d4af37] font-semibold text-black shadow-sm":"text-slate-700")}>PromptPay{promptConfig?.selectedProvider==="beam"&&promptConfig?.mode==="test"?" · TEST":""}</button></div>
       {promptConfig?.ready!==true&&<div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">PromptPay ยังไม่เปิดรับเงินจริง · ระบบกำลังรอ Beam Merchant/API/Webhook ให้พร้อม</div>}
-      {customers.length>0&&<select value={customerId} onChange={e=>setCustomerId(e.target.value)} className="mt-4 w-full rounded-2xl border border-slate-300 bg-white px-4 py-3"><option value="">ลูกค้าทั่วไป / ไม่สะสมแต้ม</option>{customers.map(x=><option key={x.id} value={x.id}>{x.name} · {x.points||0} pts</option>)}</select>}
-      {method==="cash"&&<><div className="mt-4 grid grid-cols-[1fr_auto] gap-2"><input autoFocus inputMode="decimal" value={received} onChange={e=>setReceived(e.target.value)} placeholder="จำนวนเงินที่รับ" className="min-w-0 rounded-2xl border border-slate-300 bg-slate-100 px-4 py-3 text-lg outline-none focus:border-[#c59b19]"/><button type="button" disabled={busy||!payableItems.length} onClick={()=>setReceived(String(payableTotal))} className="min-h-12 rounded-2xl border border-[#d4af37] bg-[#fff8dc] px-3 text-sm font-bold text-[#765b08] disabled:opacity-40">รับพอดี ฿{payableTotal.toFixed(0)}</button></div>{received.trim()!==""&&Number.isFinite(cashDelta)&&<div className={"mt-3 flex items-center justify-between rounded-2xl border px-4 py-3 "+(cashDelta>=0?"border-emerald-300 bg-emerald-50 text-emerald-900":"border-red-300 bg-red-50 text-red-800")}><span>{cashDelta>=0?"เงินทอน":"ขาดอีก"}</span><b className="text-xl">฿{Math.abs(cashDelta).toFixed(0)}</b></div>}</>}
+      {customers.length>0&&<select value={customerId} onChange={e=>{setCustomerId(e.target.value);setPointsRedeemed(0);setReceived("")}} className="mt-4 w-full rounded-2xl border border-slate-300 bg-white px-4 py-3"><option value="">ลูกค้าทั่วไป / ไม่สะสมแต้ม</option>{customers.map(x=><option key={x.id} value={x.id}>{x.name} · {x.points||0} pts</option>)}</select>}
+      {selectedCustomer&&redeemValue>0&&<div className="mt-3 rounded-2xl border border-[#d4af37]/40 bg-[#fffaf0] p-3"><div className="flex items-center justify-between text-sm"><span><b>{selectedCustomer.name}</b> · มี {Number(selectedCustomer.points)||0} แต้ม</span><span className="text-xs text-slate-500">1 แต้ม = ฿{redeemValue.toFixed(2)}</span></div><div className="mt-2 grid grid-cols-[1fr_auto] gap-2"><input type="number" inputMode="numeric" min="0" max={maxRedeemPoints} step="1" value={pointsRedeemed} onChange={e=>{setPointsRedeemed(Math.max(0,Math.min(maxRedeemPoints,Math.trunc(Number(e.target.value)||0))));setReceived("")}} className="min-h-11 rounded-xl border border-slate-300 bg-white px-3" placeholder="แต้มที่ใช้"/><button type="button" disabled={maxRedeemPoints<1} onClick={()=>{setPointsRedeemed(maxRedeemPoints);setReceived("")}} className="rounded-xl border border-[#d4af37] px-3 text-xs font-bold text-[#765b08] disabled:opacity-40">ใช้ได้สูงสุด {maxRedeemPoints}</button></div>{redeemPoints>0&&<div className="mt-3 space-y-1 border-t border-amber-200 pt-2 text-sm"><div className="flex justify-between"><span>ยอดก่อนส่วนลด</span><b>฿{payableTotal.toFixed(0)}</b></div><div className="flex justify-between text-amber-800"><span>ใช้ {redeemPoints} แต้ม</span><b>−฿{crmDiscount.toFixed(0)}</b></div><div className="flex justify-between text-base"><b>ยอดสุทธิ</b><b className="text-[#765b08]">฿{netPayable.toFixed(0)}</b></div><p className="text-[11px] text-slate-500">บิลนี้คาดว่าจะได้ +{estimatedPointsAwarded} แต้ม จากยอดจ่ายจริง</p></div>}</div>}
+      {method==="cash"&&<><div className="mt-4 grid grid-cols-[1fr_auto] gap-2"><input autoFocus inputMode="decimal" value={received} onChange={e=>setReceived(e.target.value)} placeholder="จำนวนเงินที่รับ" className="min-w-0 rounded-2xl border border-slate-300 bg-slate-100 px-4 py-3 text-lg outline-none focus:border-[#c59b19]"/><button type="button" disabled={busy||!payableItems.length} onClick={()=>setReceived(String(netPayable))} className="min-h-12 rounded-2xl border border-[#d4af37] bg-[#fff8dc] px-3 text-sm font-bold text-[#765b08] disabled:opacity-40">รับพอดี ฿{netPayable.toFixed(0)}</button></div>{received.trim()!==""&&Number.isFinite(cashDelta)&&<div className={"mt-3 flex items-center justify-between rounded-2xl border px-4 py-3 "+(cashDelta>=0?"border-emerald-300 bg-emerald-50 text-emerald-900":"border-red-300 bg-red-50 text-red-800")}><span>{cashDelta>=0?"เงินทอน":"ขาดอีก"}</span><b className="text-xl">฿{Math.abs(cashDelta).toFixed(0)}</b></div>}</>}
       {method==="promptpay"&&prompt?.qrUrl&&<div className="mt-4 rounded-[20px] border border-slate-300 bg-white p-4 text-center"><img src={prompt.qrUrl} alt="PromptPay QR" className="mx-auto max-h-56 w-auto"/><p className="mt-2 text-xs font-semibold text-black">{prompt.paid?"ชำระเงินแล้ว":"สแกน QR แล้วระบบจะตรวจสอบอัตโนมัติ"}</p></div>}
       <div className="sticky bottom-0 z-10 -mx-4 mt-4 border-t border-slate-200 bg-white/95 px-4 pb-[max(.5rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur sm:-mx-6 sm:px-6">
-        <button disabled={busy||!payableItems.length||(method==="cash"&&(!Number.isFinite(cashReceived)||cashReceived<payableTotal))} onClick={checkout} className="w-full rounded-2xl bg-[#d4af37] py-3.5 font-bold text-black shadow-sm disabled:opacity-40">{busy?(method==="promptpay"&&prompt?"WAITING FOR PAYMENT...":"กำลังบันทึกบิล..."):(method==="promptpay"?"CREATE QR / PAY":"CONFIRM PAYMENT")}</button>
-        {method==="cash"&&Number.isFinite(cashReceived)&&cashReceived===payableTotal&&<p className="mt-2 text-center text-xs font-semibold text-emerald-700">รับเงินพอดียอด · กดยืนยันชำระได้เลย</p>}
+        <button disabled={busy||!payableItems.length||(method==="cash"&&(!Number.isFinite(cashReceived)||cashReceived<netPayable))} onClick={checkout} className="w-full rounded-2xl bg-[#d4af37] py-3.5 font-bold text-black shadow-sm disabled:opacity-40">{busy?(method==="promptpay"&&prompt?"WAITING FOR PAYMENT...":"กำลังบันทึกบิล..."):(method==="promptpay"?"CREATE QR / PAY":"CONFIRM PAYMENT")}</button>
+        {method==="cash"&&Number.isFinite(cashReceived)&&cashReceived===netPayable&&<p className="mt-2 text-center text-xs font-semibold text-emerald-700">รับเงินพอดียอด · กดยืนยันชำระได้เลย</p>}
         {result&&<p className="mt-2 rounded-xl bg-slate-100 px-3 py-2 text-center text-sm text-slate-700">{result}</p>}
       </div>
     </div></div>}

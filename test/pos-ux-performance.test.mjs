@@ -227,8 +227,8 @@ test('payment modal stays above mobile navigation with sticky confirm and exact-
   assert.match(pos,/z-\[90\]/);
   assert.match(pos,/max-h-\[calc\(100dvh-1rem\)\]/);
   assert.match(pos,/sticky bottom-0 z-10/);
-  assert.match(pos,/รับพอดี ฿\{payableTotal\.toFixed\(0\)\}/);
-  assert.match(pos,/setReceived\(String\(payableTotal\)\)/);
+  assert.match(pos,/รับพอดี ฿\{netPayable\.toFixed\(0\)\}/);
+  assert.match(pos,/setReceived\(String\(netPayable\)\)/);
   assert.match(pos,/รับเงินพอดียอด · กดยืนยันชำระได้เลย/);
 });
 
@@ -295,4 +295,18 @@ test('queue groups duplicate lines and exposes prep base plan without changing F
   assert.match(queue,/u\.perCup/);
   assert.match(api,/baseUsage:menuBaseUsage/);
   assert.match(api,/fifo_violation/);
+});
+
+
+test('CRM redemption makes the payment UI use net payable for cash and PromptPay',async()=>{
+  const pos=await read('app/pos/page.tsx');
+  assert.match(pos,/pointsRedeemValue/);
+  assert.match(pos,/maxRedeemPoints/);
+  assert.match(pos,/crmDiscount/);
+  assert.match(pos,/netPayable/);
+  assert.match(pos,/pointsRedeemed:redeemPoints/);
+  assert.match(pos,/รับพอดี ฿\{netPayable\.toFixed\(0\)\}/);
+  assert.match(pos,/cashReceived<netPayable/);
+  assert.match(pos,/ส่วนลดสมาชิก/);
+  assert.match(pos,/ใช้ได้สูงสุด/);
 });

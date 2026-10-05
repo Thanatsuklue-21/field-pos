@@ -10,7 +10,7 @@ import {useCartStore} from "@/stores/cart-store";
 
 type SaleItem={id:string;name:string;variant:string;qty:number;price:number};
 type Sale={
-  id:string;billNo:string;date:string;time:number;total:number;payment:string;paymentMethods?:string[];
+  id:string;billNo:string;date:string;time:number;subtotal?:number;discountTotal?:number;crmDiscount?:number;pointsRedeemed?:number;pointsAwarded?:number;total:number;payment:string;paymentMethods?:string[];
   status:string;queueNo:string;itemCount:number;received?:number;change?:number;orderId?:string|null;
   orderStatus?:string|null;productionStarted?:boolean;items:SaleItem[];
 };
@@ -125,7 +125,7 @@ function OrdersView({session}:{session:Session}){
         <div className="flex items-start justify-between gap-3"><div><p className="gold text-[10px] tracking-[.25em]">{detail.billNo}</p><h3 className="mt-1 text-xl">{detail.queueNo}</h3></div><button onClick={()=>setDetail(null)}><X/></button></div>
         <div className="mt-2 flex flex-wrap gap-2 text-xs"><span className="rounded-full bg-slate-100 px-3 py-1 uppercase">{detail.status}</span>{detail.productionStarted?<span className="rounded-full bg-amber-100 px-3 py-1 text-amber-800">เริ่มผลิตแล้ว</span>:detail.status==="paid"?<span className="rounded-full bg-emerald-100 px-3 py-1 text-emerald-800">ยังแก้ก่อนผลิตได้</span>:null}</div>
         <div className="mt-4 space-y-2">{detail.items.map((i,n)=><div key={n} className="flex justify-between gap-3 rounded-2xl bg-slate-50 p-3"><span><b>{i.name}</b><small className="block text-slate-500">{i.variant} ×{i.qty} · ฿{i.price.toFixed(0)}/แก้ว</small></span><b className="shrink-0">฿{(i.price*i.qty).toFixed(0)}</b></div>)}</div>
-        <div className="mt-5 flex justify-between border-t border-slate-200 pt-4 text-lg"><b>Total</b><b className="gold">฿{detail.total.toFixed(0)}</b></div>
+        {Number(detail.discountTotal||0)>0&&<div className="mt-4 rounded-2xl bg-amber-50 p-3 text-sm"><div className="flex justify-between"><span>ยอดก่อนส่วนลด</span><b>฿{Number(detail.subtotal??detail.total).toFixed(0)}</b></div><div className="mt-1 flex justify-between text-amber-800"><span>ส่วนลดสมาชิก{detail.pointsRedeemed?" · "+detail.pointsRedeemed+" แต้ม":""}</span><b>−฿{Number(detail.discountTotal||0).toFixed(0)}</b></div></div>}<div className="mt-5 flex justify-between border-t border-slate-200 pt-4 text-lg"><b>ยอดสุทธิ</b><b className="gold">฿{detail.total.toFixed(0)}</b></div>{Number(detail.pointsAwarded||0)>0&&<p className="mt-2 text-right text-xs text-emerald-700">ได้รับ +{detail.pointsAwarded} แต้ม</p>}
 
         {session.user.role==="admin"&&detail.payment==="cash"&&detail.status==="paid"&&!detail.productionStarted&&<button disabled={busy} onClick={()=>editCashOrder(detail)} className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl bg-[#d4af37] py-3 text-sm font-black text-black disabled:opacity-50"><Pencil size={16}/>{busy?"กำลังบันทึก...":"แก้ไข / ลด / เปลี่ยนเมนู"}</button>}
         {session.user.role==="admin"&&detail.payment==="cash"&&detail.status==="paid"&&<button disabled={busy} onClick={()=>voidCash(detail)} className="mt-2 flex w-full items-center justify-center gap-2 rounded-2xl border border-red-400/30 py-3 text-sm font-semibold text-red-600 disabled:opacity-40"><Ban size={16}/>VOID CASH SALE + RESTORE STOCK / ยกเลิกบิลเงินสด</button>}
