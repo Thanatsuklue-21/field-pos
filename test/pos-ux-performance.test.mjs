@@ -354,3 +354,20 @@ test('payment success prioritizes queue prefetch before noncritical refreshes',a
   assert.match(pos,/api<any>\("\/api\/pos\/queue"\)/);
   assert.match(pos,/writeQueueSnapshotCache/);
 });
+
+
+test('solo operator daily flow keeps primary mobile actions short and connected',async()=>{
+  const shell=await read('components/app-shell.tsx'),pos=await read('app/pos/page.tsx'),queue=await read('app/queue/page.tsx'),close=await read('app/close/page.tsx');
+  assert.match(shell,/\["\/pos","\/queue","\/stock","\/expenses","\/close","\/settings"\]/);
+  assert.doesNotMatch(shell,/\["\/dashboard","\/pos","\/queue","\/stock","\/orders","\/backup","\/settings"\]/);
+  assert.match(pos,/ไปทำคิว \{lastSale\.queueNo\}/);
+  assert.match(pos,/รับลูกค้าคนถัดไป/);
+  assert.match(queue,/SOLO PRODUCTION · FIFO/);
+  assert.match(queue,/กลับไปรับออเดอร์/);
+  assert.match(queue,/router\.push\("\/pos"\)/);
+  assert.match(close,/OPEN \/ CLOSE DAY/);
+  assert.match(close,/เปิดร้านวันนี้/);
+  assert.match(close,/ปิดร้านวันนี้/);
+  assert.match(close,/ไม่มีเงินทอน · ฿0/);
+  assert.match(close,/setOpeningCash\("0"\)/);
+});
