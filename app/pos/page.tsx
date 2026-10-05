@@ -225,8 +225,8 @@ function PosView({session}:{session:Session}){
       recovered:opts.recovered
     });
     warmQueueSnapshot();
-    loadCustomers().catch(()=>{});
-    load(true).catch(()=>{});
+    window.setTimeout(()=>load(true).catch(()=>{}),250);
+    window.setTimeout(()=>loadCustomers().catch(()=>{}),500);
   }
 
   function availabilityMessage(result:ReturnType<typeof cartAvailability>){
