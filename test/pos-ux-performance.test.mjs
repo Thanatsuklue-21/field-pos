@@ -374,10 +374,10 @@ test('solo operator daily flow keeps sales and production as separate focused sc
   assert.match(close,/ปิดร้านวันนี้/);
 });
 
-test('queue grouped base progress remains visible while cache schema protects snapshots',async()=>{
+test('queue grouped menu progress remains visible while cache schema protects snapshots',async()=>{
   const queue=await read('app/queue/page.tsx'),api=await read('lib/pos-api.mjs'),cache=await read('lib/queue-cache.ts');
   assert.match(queue,/category\.pendingQty/);
-  assert.match(queue,/base\.pendingQty/);
+  assert.match(queue,/menu\.pendingQty/);
   assert.match(queue,/ครบแล้ว/);
   assert.match(queue,/สรุปตามหมวดเมนู/);
   assert.match(api,/pendingQty:g\.pendingQty/);
@@ -386,13 +386,14 @@ test('queue grouped base progress remains visible while cache schema protects sn
   assert.match(cache,/field-pos-queue-snapshot-v3/);
 });
 
-test('queue guides one production category and compatible base inside the pager card',async()=>{
+test('queue guides one production category and active menu inside the pager card',async()=>{
   const queue=await read('app/queue/page.tsx'),api=await read('lib/pos-api.mjs');
   assert.match(queue,/ขั้นตอนปัจจุบัน/);
   assert.match(queue,/สรุปตามหมวดเมนู/);
   assert.match(queue,/activeCategory/);
-  assert.match(queue,/activeBase/);
-  assert.match(queue,/baseTitle/);
+  assert.match(queue,/activeMenu/);
+  assert.doesNotMatch(queue,/baseTitle/);
+  assert.doesNotMatch(queue,/Base เดียวกัน/);
   assert.doesNotMatch(queue,/RECIPE REMINDER/);
   assert.doesNotMatch(queue,/สูตรต่อ 1 แก้ว/);
   assert.match(api,/a\.compatibilityKey\.localeCompare\(b\.compatibilityKey\)/);
