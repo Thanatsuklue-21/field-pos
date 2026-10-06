@@ -85,3 +85,9 @@ button:disabled{cursor:not-allowed}
 @media (max-width:767px){
   .card{border-radius:18px}
 }
+
+
+/* Mobile interaction hardening */
+button,a,[role="button"]{touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+html{-webkit-text-size-adjust:100%}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}
