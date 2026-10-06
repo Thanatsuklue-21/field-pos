@@ -8,11 +8,35 @@ export type RevisionUnchanged={revision:number;unchanged:true};
 
 const SAFE_GET_CACHE=new Set(["/api/pos/bootstrap"]);
 const SESSION_TTL_MS=30_000;
+const GET_TIMEOUT_MS=8_000;
 let sessionCache:{value:Session;at:number}|null=null;
 let sessionInFlight:Promise<Session>|null=null;
+const getInFlight=new Map<string,Promise<unknown>>();
 
 function emit(status:"online"|"offline"|"cached"){
   if(typeof window!=="undefined")window.dispatchEvent(new CustomEvent("field:network",{detail:{status}}));
+}
+
+function getRequestKey(path:string,init:RequestInit){
+  const headers=new Headers(init.headers||{});
+  const normalized=[...headers.entries()].sort(([a],[b])=>a.localeCompare(b));
+  return path+"|"+JSON.stringify(normalized);
+}
+
+async function fetchWithPolicy(path:string,init:RequestInit,method:string){
+  const controller=method==="GET"&&!init.signal?new AbortController():null;
+  const timer=controller?setTimeout(()=>controller.abort("field_get_timeout"),GET_TIMEOUT_MS):null;
+  try{
+    return await fetch(path,{
+      ...init,
+      headers:{"Content-Type":"application/json",...(init.headers||{})},
+      credentials:"same-origin",
+      cache:"no-store",
+      signal:controller?.signal||init.signal,
+    });
+  }finally{
+    if(timer)clearTimeout(timer);
+  }
 }
 
 export function setSessionCache(session:Session){
@@ -21,6 +45,7 @@ export function setSessionCache(session:Session){
 export function clearSessionCache(){
   sessionCache=null;
   sessionInFlight=null;
+  getInFlight.delete("/api/auth/session|[]");
 }
 export async function getSessionCached(force=false){
   if(!force&&sessionCache&&(Date.now()-sessionCache.at)<SESSION_TTL_MS)return sessionCache.value;
@@ -32,11 +57,9 @@ export async function getSessionCached(force=false){
   return sessionInFlight;
 }
 
-export async function api<T>(path:string,init:RequestInit={}){
-  const method=String(init.method||"GET").toUpperCase();
-  if(method!=="GET"&&typeof navigator!=="undefined"&&!navigator.onLine)throw Object.assign(new Error("offline_write_blocked"),{status:0});
+async function executeApi<T>(path:string,init:RequestInit,method:string){
   try{
-    const res=await fetch(path,{...init,headers:{"Content-Type":"application/json",...(init.headers||{})},credentials:"same-origin",cache:"no-store"});
+    const res=await fetchWithPolicy(path,init,method);
     const data=await res.json().catch(()=>({}));
     if(res.status===401){
       clearSessionCache();
@@ -59,4 +82,20 @@ export async function api<T>(path:string,init:RequestInit={}){
     }
     throw error;
   }
+}
+
+export async function api<T>(path:string,init:RequestInit={}){
+  const method=String(init.method||"GET").toUpperCase();
+  if(method!=="GET"&&typeof navigator!=="undefined"&&!navigator.onLine)throw Object.assign(new Error("offline_write_blocked"),{status:0});
+
+  // Reads are safe to coalesce. Writes are never deduplicated or retried here:
+  // transaction endpoints own their idempotency semantics server-side.
+  if(method==="GET"){
+    const key=getRequestKey(path,init),existing=getInFlight.get(key);
+    if(existing)return existing as Promise<T>;
+    const request=executeApi<T>(path,init,method).finally(()=>getInFlight.delete(key));
+    getInFlight.set(key,request);
+    return request;
+  }
+  return executeApi<T>(path,init,method);
 }

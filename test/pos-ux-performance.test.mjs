@@ -439,3 +439,15 @@ test('queue screen contains only production and handoff actions',async()=>{
  assert.ok(!pos.includes('setTimeout(()=>setLastSale(null),8000)'));
 });
 
+
+
+test('safe GET requests are bounded and coalesced while writes remain single-attempt',async()=>{
+  const client=await read('lib/api-client.ts');
+  assert.match(client,/GET_TIMEOUT_MS=8_000/);
+  assert.match(client,/const getInFlight=new Map/);
+  assert.match(client,/const key=getRequestKey\(path,init\),existing=getInFlight\.get\(key\)/);
+  assert.match(client,/controller=method==="GET"&&!init\.signal\?new AbortController\(\):null/);
+  assert.match(client,/if\(method==="GET"\)\{/);
+  assert.match(client,/return executeApi<T>\(path,init,method\);/);
+  assert.doesNotMatch(client,/retry/i);
+});
