@@ -116,10 +116,10 @@ test('cash checkout skips the redundant replay read while PromptPay still replay
 });
 
 
-test('queue production flow is one guided base at a time without early-pickup branching',async()=>{
+test('queue production flow stays guided by FIFO while summary is menu-category based',async()=>{
   const queue=await read('app/queue/page.tsx');
-  assert.match(queue,/หมวดงาน \/ Base เดียวกัน/);
-  assert.match(queue,/activeBase/);
+  assert.match(queue,/สรุปตามหมวดเมนู/);
+  assert.match(queue,/activeMenu/);
   assert.match(queue,/ทำ \{task\.item\.name\} ครบ/);
   assert.doesNotMatch(queue,/action:"call_item"/);
   assert.doesNotMatch(queue,/รับเมนูนี้ก่อน/);
@@ -135,7 +135,7 @@ test('queue reads a compact snapshot and renders order production details',async
   assert.match(api,/getQueueSnapshot/);
   assert.match(posApi,/price:x\.price/);
   assert.match(queue,/รายการรวมในบัตรนี้/);
-  assert.match(queue,/หมวดงาน \/ Base เดียวกัน/);
+  assert.match(queue,/สรุปตามหมวดเมนู/);
   assert.doesNotMatch(queue,/ยอดรวม ฿/);
 });
 
@@ -276,17 +276,17 @@ test('split-person flow retains one group queue between payments',async()=>{
 });
 
 
-test('queue groups duplicate lines and exposes grouped bases without recipe detail',async()=>{
+test('queue groups duplicate lines by menu and variant without exposing base detail',async()=>{
   const queue=await read('app/queue/page.tsx'),api=await read('lib/pos-api.mjs');
   assert.match(api,/function normalizeQueueItems/);
   assert.match(api,/function prepGroupsView/);
   assert.match(api,/function prepCompatibilityKey/);
   assert.match(api,/MATCHA BASE/);
   assert.match(api,/compatibilityKey/);
-  assert.match(queue,/compatibilityKey/);
-  assert.match(queue,/baseTitle/);
-  assert.match(queue,/หมวดงาน \/ Base เดียวกัน/);
-  assert.match(queue,/category\.baseGroups\.map/);
+  assert.match(queue,/type FlowMenu=/);
+  assert.match(queue,/menuKey=String\(item\.id\)\+"\|"\+variant/);
+  assert.match(queue,/สรุปตามหมวดเมนู/);
+  assert.match(queue,/category\.menus\.map/);
   assert.match(api,/for\(const o of activeOrders\(doc\)\)/);
   assert.match(api,/target\.items=normalizeQueueItems/);
   assert.match(api,/const queueLookup=buildQueueLookup\(doc\)/);
@@ -311,17 +311,18 @@ test('CRM redemption makes the payment UI use net payable for cash and PromptPay
 });
 
 
-test('queue production view centers one pager card with order summary and grouped bases',async()=>{
+test('queue production view centers one pager card with order summary and menu-category counts',async()=>{
   const queue=await read('app/queue/page.tsx');
   assert.match(queue,/ทำออเดอร์ \/ รันบัตร/);
   assert.match(queue,/บัตรผลิตปัจจุบัน/);
   assert.match(queue,/รายการรวมในบัตรนี้/);
-  assert.match(queue,/หมวดงาน \/ Base เดียวกัน/);
+  assert.match(queue,/สรุปตามหมวดเมนู/);
   assert.match(queue,/ขั้นตอนปัจจุบัน/);
   assert.match(queue,/บัตรถัดไป/);
   assert.match(queue,/รอลูกค้ารับ/);
-  assert.match(queue,/activeBase/);
-  assert.match(queue,/baseTitle/);
+  assert.match(queue,/activeMenu/);
+  assert.doesNotMatch(queue,/baseTitle/);
+  assert.doesNotMatch(queue,/Base เดียวกัน/);
   assert.doesNotMatch(queue,/ดูสูตร \/ Base/);
   assert.doesNotMatch(queue,/สูตรกันลืม/);
   assert.doesNotMatch(queue,/ดูบิล \/ ย้อนรายการ/);
@@ -373,25 +374,26 @@ test('solo operator daily flow keeps sales and production as separate focused sc
   assert.match(close,/ปิดร้านวันนี้/);
 });
 
-test('queue grouped base progress remains visible while cache schema protects snapshots',async()=>{
+test('queue grouped menu progress remains visible while cache schema protects snapshots',async()=>{
   const queue=await read('app/queue/page.tsx'),api=await read('lib/pos-api.mjs'),cache=await read('lib/queue-cache.ts');
   assert.match(queue,/category\.pendingQty/);
-  assert.match(queue,/base\.pendingQty/);
+  assert.match(queue,/menu\.pendingQty/);
   assert.match(queue,/ครบแล้ว/);
-  assert.match(queue,/หมวดงาน \/ Base เดียวกัน/);
+  assert.match(queue,/สรุปตามหมวดเมนู/);
   assert.match(api,/pendingQty:g\.pendingQty/);
   assert.match(api,/qty:total,pendingQty:pending/);
   assert.match(cache,/SCHEMA_VERSION=3/);
   assert.match(cache,/field-pos-queue-snapshot-v3/);
 });
 
-test('queue guides one production category and compatible base inside the pager card',async()=>{
+test('queue guides one production category and active menu inside the pager card',async()=>{
   const queue=await read('app/queue/page.tsx'),api=await read('lib/pos-api.mjs');
   assert.match(queue,/ขั้นตอนปัจจุบัน/);
-  assert.match(queue,/หมวดงาน \/ Base เดียวกัน/);
+  assert.match(queue,/สรุปตามหมวดเมนู/);
   assert.match(queue,/activeCategory/);
-  assert.match(queue,/activeBase/);
-  assert.match(queue,/baseTitle/);
+  assert.match(queue,/activeMenu/);
+  assert.doesNotMatch(queue,/baseTitle/);
+  assert.doesNotMatch(queue,/Base เดียวกัน/);
   assert.doesNotMatch(queue,/RECIPE REMINDER/);
   assert.doesNotMatch(queue,/สูตรต่อ 1 แก้ว/);
   assert.match(api,/a\.compatibilityKey\.localeCompare\(b\.compatibilityKey\)/);
@@ -424,7 +426,7 @@ test('queue removes secondary detail overlays and keeps all production details o
   assert.doesNotMatch(queue,/prepPlanOpen/);
   assert.doesNotMatch(queue,/RECIPE REMINDER/);
   assert.match(queue,/รายการรวมในบัตรนี้/);
-  assert.match(queue,/หมวดงาน \/ Base เดียวกัน/);
+  assert.match(queue,/สรุปตามหมวดเมนู/);
 });
 
 test('queue screen contains only production and handoff actions',async()=>{

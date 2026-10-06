@@ -4,16 +4,21 @@ import {readFile} from 'node:fs/promises';
 
 const read=p=>readFile(new URL('../'+p,import.meta.url),'utf8');
 
-test('queue UI keeps base preparation inside the oldest FIFO pager card only',async()=>{
+test('queue UI summarizes the oldest FIFO pager by menu category and quantity',async()=>{
   const ui=await read('app/queue/page.tsx');
   assert.match(ui,/sort\(\(a,b\)=>n\(a\.time\)-n\(b\.time\)\)/);
   assert.match(ui,/const first=orders\.find/);
   assert.match(ui,/function buildCategoryFlow/);
-  assert.match(ui,/function baseTitle/);
+  assert.match(ui,/type FlowMenu=/);
   assert.match(ui,/บัตรผลิตปัจจุบัน/);
   assert.match(ui,/รายการรวมในบัตรนี้/);
-  assert.match(ui,/หมวดงาน \/ Base เดียวกัน/);
+  assert.match(ui,/สรุปตามหมวดเมนู/);
   assert.match(ui,/categoryFlow\.map/);
+  assert.match(ui,/category\.menus\.map/);
+  assert.match(ui,/menu\.name/);
+  assert.match(ui,/×\{menu\.qty\}/);
+  assert.doesNotMatch(ui,/Base เดียวกัน/);
+  assert.doesNotMatch(ui,/baseTitle/);
   assert.match(ui,/overflow-y-auto overscroll-contain/);
   assert.doesNotMatch(ui,/ดูสูตร \/ Base/);
   assert.doesNotMatch(ui,/สูตรกันลืม/);

@@ -34,8 +34,8 @@ function nextTask(orders:QOrder[]){
   return null;
 }
 
-type FlowBase={key:string;qty:number;pendingQty:number;items:PrepGroup["items"]};
-type FlowCategory={id:string;label:string;qty:number;pendingQty:number;baseGroups:FlowBase[];items:QItem[]};
+type FlowMenu={key:string;id:string;name:string;variant:string;qty:number;pendingQty:number};
+type FlowCategory={id:string;label:string;qty:number;pendingQty:number;menus:FlowMenu[];items:QItem[]};
 
 function categoryName(id:string,label?:string){
   const clean=String(id||label||"OTHER").replaceAll("_"," ").trim();
@@ -47,20 +47,20 @@ function buildCategoryFlow(order:QOrder):FlowCategory[]{
     const id=String(item.prepGroup?.id||"OTHER");
     const list=itemGroups.get(id)||[];list.push(item);itemGroups.set(id,list);
   }
-  return (order.prepGroups||[]).map(group=>{
-    const bases=new Map<string,FlowBase>();
-    for(const item of group.items||[]){
-      const key=String(item.compatibilityKey||group.id);
-      let base=bases.get(key);if(!base){base={key,qty:0,pendingQty:0,items:[]};bases.set(key,base)}
-      base.qty+=n(item.qty);base.pendingQty+=n(item.pendingQty);base.items.push(item);
+  const labels=new Map((order.prepGroups||[]).map(group=>[String(group.id),String(group.label||group.id)]));
+  return [...itemGroups.entries()].map(([id,items])=>{
+    const menus=new Map<string,FlowMenu>();
+    for(const item of items){
+      const variant=String(item.variant||"Standard"),menuKey=String(item.id)+"|"+variant;
+      let menu=menus.get(menuKey);
+      if(!menu){menu={key:menuKey,id:String(item.id),name:String(item.name||item.id),variant,qty:0,pendingQty:0};menus.set(menuKey,menu)}
+      menu.qty+=n(item.qty);
+      menu.pendingQty+=Math.max(0,n(item.qty)-n(item.readyQty));
     }
-    return {id:group.id,label:categoryName(group.id,group.label),qty:n(group.qty),pendingQty:n(group.pendingQty),baseGroups:[...bases.values()],items:itemGroups.get(group.id)||[]};
+    const qty=items.reduce((sum,item)=>sum+n(item.qty),0);
+    const pendingQty=items.reduce((sum,item)=>sum+Math.max(0,n(item.qty)-n(item.readyQty)),0);
+    return {id,label:categoryName(id,labels.get(id)),qty,pendingQty,menus:[...menus.values()],items};
   });
-}
-function baseTitle(base:FlowBase,index:number,total:number){
-  if(base.items.length>1)return "เบสเดียวกัน "+base.qty+" แก้ว";
-  if(total>1)return "เบสชุด "+(index+1)+" · "+base.qty+" แก้ว";
-  return "เบสของหมวดนี้ · "+base.qty+" แก้ว";
 }
 
 export default function Queue(){return <AuthGate>{session=><QueueView session={session}/>}</AuthGate>}
@@ -205,8 +205,7 @@ function QueueView({session}:{session:Session}){
   const activeCategoryId=String(task?.item.prepGroup?.id||categoryFlow.find(x=>x.pendingQty>0)?.id||"");
   const activeCategoryIndex=Math.max(0,categoryFlow.findIndex(x=>x.id===activeCategoryId));
   const activeCategory=categoryFlow.find(x=>x.id===activeCategoryId)||null;
-  const activeBaseKey=String(task?.item.prepGroup?.compatibilityKey||activeCategory?.baseGroups.find(x=>x.pendingQty>0)?.key||"");
-  const activeBase=activeCategory?.baseGroups.find(x=>x.key===activeBaseKey)||activeCategory?.baseGroups.find(x=>x.pendingQty>0)||null;
+  const activeMenu=task&&activeCategory?activeCategory.menus.find(x=>x.id===task.item.id&&x.variant===String(task.item.variant||"Standard"))||null:null;
   const upcoming=orders.filter(order=>!orderCalled(order)&&order.id!==first?.id).slice(0,3);
   const extraUpcoming=Math.max(0,orders.filter(order=>!orderCalled(order)).length-1-upcoming.length);
   const waitingPickup=orders.filter(orderCalled);
@@ -248,18 +247,18 @@ function QueueView({session}:{session:Session}){
         </div>
 
         {categoryFlow.length>0&&<div className="mt-3 border-t border-slate-200 pt-3">
-          <div className="flex items-center justify-between gap-2"><div><p className="text-[10px] font-bold tracking-[.14em] text-slate-500">หมวดงาน / Base เดียวกัน</p><p className="mt-0.5 text-[10px] text-slate-400">รวมเมนูที่เตรียม Base ร่วมกันไว้ในบัตรเดียว</p></div><span className="text-[10px] font-semibold text-slate-500">{categoryFlow.length} หมวด</span></div>
+          <div className="flex items-center justify-between gap-2"><div><p className="text-[10px] font-bold tracking-[.14em] text-slate-500">สรุปตามหมวดเมนู</p><p className="mt-0.5 text-[10px] text-slate-400">รวมเมนูชื่อเดียวกันและ Variant เดียวกัน พร้อมจำนวนในบัตรนี้</p></div><span className="text-[10px] font-semibold text-slate-500">{categoryFlow.length} หมวด</span></div>
           <div className="mt-2 space-y-2">{categoryFlow.map((category,categoryIndex)=><div key={category.id} className={"rounded-2xl border p-2.5 "+(category.id===activeCategoryId?"border-[#d4af37] bg-[#fffaf0]":category.pendingQty<=0?"border-emerald-200 bg-emerald-50":"border-slate-200 bg-slate-50")}>
             <div className="flex items-center justify-between gap-2"><b className="text-[11px]">{categoryIndex+1}. {category.label} · {category.qty} แก้ว</b><span className="text-[9px] font-bold text-slate-500">{category.pendingQty>0?"เหลือ "+category.pendingQty:"ครบแล้ว"}</span></div>
-            <div className="mt-2 grid gap-1.5 sm:grid-cols-2">{category.baseGroups.map((base,baseIndex)=><div key={base.key} className={"rounded-xl border bg-white px-2.5 py-2 "+(base.key===activeBase?.key&&category.id===activeCategoryId?"border-[#d4af37]":"border-slate-200")}>
-              <div className="flex items-center justify-between gap-2"><b className="text-[10px] text-[#765b08]">{baseTitle(base,baseIndex,category.baseGroups.length)}</b><span className="text-[9px] text-slate-400">{base.pendingQty>0?"เหลือ "+base.pendingQty:"ครบ"}</span></div>
-              <div className="mt-1 flex flex-wrap gap-1">{base.items.map(x=><span key={x.id+"|"+x.variant} className="rounded-full bg-slate-100 px-2 py-1 text-[9px] font-semibold text-slate-600">{x.name} ×{x.qty}</span>)}</div>
+            <div className="mt-2 grid gap-1.5 sm:grid-cols-2">{category.menus.map(menu=><div key={menu.key} className={"rounded-xl border bg-white px-2.5 py-2 "+(activeMenu?.key===menu.key&&category.id===activeCategoryId?"border-[#d4af37]":"border-slate-200")}>
+              <div className="flex items-center justify-between gap-2"><div className="min-w-0"><b className="block truncate text-[11px] text-slate-700">{menu.name}</b>{menu.variant&&menu.variant!=="Standard"&&<span className="text-[9px] text-slate-500">{menu.variant}</span>}</div><b className="shrink-0 text-[11px] text-[#765b08]">×{menu.qty}</b></div>
+              <div className="mt-1 text-right text-[9px] text-slate-400">{menu.pendingQty>0?"เหลือทำ "+menu.pendingQty+" แก้ว":"ครบแล้ว"}</div>
             </div>)}</div>
           </div>)}</div>
         </div>}
 
-        {task&&activeCategory&&activeBase&&<div className="mt-3 rounded-[20px] border-2 border-[#d4af37] bg-[#fffaf0] p-3">
-          <div className="flex flex-wrap items-start justify-between gap-2"><div><p className="text-[9px] font-bold tracking-[.16em] text-[#9a7a16]">ขั้นตอนปัจจุบัน</p><h3 className="mt-1 text-base font-black">{task.item.name}</h3><p className="mt-1 text-[11px] text-slate-500">{task.item.variant&&task.item.variant!=="Standard"?task.item.variant+" · ":""}ทำอีก {Math.max(0,n(task.item.qty)-n(task.item.readyQty))} แก้ว · {activeCategory.label}</p></div><span className="rounded-full bg-white px-2.5 py-1 text-[10px] font-bold text-[#765b08]">{baseTitle(activeBase,Math.max(0,activeCategory.baseGroups.findIndex(x=>x.key===activeBase.key)),activeCategory.baseGroups.length)}</span></div>
+        {task&&activeCategory&&<div className="mt-3 rounded-[20px] border-2 border-[#d4af37] bg-[#fffaf0] p-3">
+          <div className="flex flex-wrap items-start justify-between gap-2"><div><p className="text-[9px] font-bold tracking-[.16em] text-[#9a7a16]">ขั้นตอนปัจจุบัน</p><h3 className="mt-1 text-base font-black">{task.item.name}</h3><p className="mt-1 text-[11px] text-slate-500">{task.item.variant&&task.item.variant!=="Standard"?task.item.variant+" · ":""}ทำอีก {Math.max(0,n(task.item.qty)-n(task.item.readyQty))} แก้ว · {activeCategory.label}</p></div><span className="rounded-full bg-white px-2.5 py-1 text-[10px] font-bold text-[#765b08]">{activeMenu?activeMenu.name+" ×"+activeMenu.qty:task.item.name+" ×"+task.item.qty}</span></div>
           <div className="mt-3 grid grid-cols-[auto_1fr] gap-2"><button disabled={busy!==""||itemCalled(task.item)} onClick={()=>wasteRemake(task.order,task.item,task.index)} className="min-h-12 rounded-2xl border border-red-200 bg-white px-3 text-[10px] font-bold text-red-600 disabled:opacity-40"><RotateCcw size={12} className="mr-1 inline"/>ชงเสีย / ทำใหม่</button><button disabled={busy!==""} onClick={()=>completeNext(task.order,task.item,task.index)} className="min-h-12 rounded-2xl bg-[#d4af37] px-4 text-sm font-black text-black disabled:opacity-40">ทำ {task.item.name} ครบ</button></div>
         </div>}
 
