@@ -5,7 +5,7 @@ import {useRouter} from "next/navigation";
 import {ArrowRight,CheckCircle2,Clock3,Minus,Plus,Search,Trash2,WalletCards,X} from "lucide-react";
 import AuthGate from "@/components/auth-gate";
 import {api,type Bootstrap,type MenuItem,type RevisionUnchanged,type Session} from "@/lib/api-client";
-import {cachePut} from "@/lib/offline-db";
+import {cacheGet,cachePut} from "@/lib/offline-db";
 import {applyOfflineCashToBootstrap,getOfflineCashSummary,queueOfflineCashSale,syncOfflineCashSales,type OfflineCashSummary} from "@/lib/offline-sales";
 import {additionalServingsAvailable,cartAvailability} from "@/lib/domain/availability.mjs";
 import {useCartStore} from "@/stores/cart-store";
@@ -21,6 +21,7 @@ function localTime(ts:number){
   return new Intl.DateTimeFormat("th-TH",{timeZone:"Asia/Bangkok",hour:"2-digit",minute:"2-digit"}).format(new Date(ts));
 }
 
+const BOOTSTRAP_CACHE_MAX_AGE_MS=36*60*60*1000;
 const PENDING_KEY="field-pos-pending-promptpay-v1";
 type PendingPrompt={requestKey:string;payRequestKey?:string;sessionId?:string;date:string;cart:{id:string;variant:string;qty:number}[];paymentReference:string;total:number;customerId:string|null;pointsRedeemed?:number;createdAt:number;checkoutMode?:"full"|"split_bill";targetOrderId?:string|null};
 const pendingRead=():PendingPrompt|null=>{try{return JSON.parse(localStorage.getItem(PENDING_KEY)||"null")}catch{return null}};
@@ -94,11 +95,21 @@ function PosView({session}:{session:Session}){
   const loadCustomers=()=>api<any>("/api/customers").then(x=>{setCustomers(x.customers||[]);setLoyalty({pointsSpend:Number(x.loyalty?.pointsSpend)||0,pointsRedeemValue:Number(x.loyalty?.pointsRedeemValue)||0})});
 
   useEffect(()=>{
+    let active=true;
     const savedGroup=splitGroupRead();if(savedGroup?.orderId)setSplitGroup(savedGroup);
+
+    // Render the last known sellable catalog immediately, then revalidate from Cloud.
+    // acceptBootstrap is revision-aware, so a late cache read cannot overwrite newer server data.
+    cacheGet<Bootstrap>("/api/pos/bootstrap",BOOTSTRAP_CACHE_MAX_AGE_MS)
+      .then(cached=>{if(active&&cached)acceptBootstrap(cached)})
+      .catch(()=>{});
     load(true).catch(()=>{});
+
+    // These calls are non-blocking secondary data; the menu can render from IndexedDB first.
     loadCustomers().catch(()=>{});
     api<any>("/api/payments/promptpay/config").then(setPromptConfig).catch(()=>setPromptConfig({ready:false,configured:false}));
     recoverCashCheckout().then(()=>recoverPending()).catch(()=>{});
+    return()=>{active=false};
   },[]);
 
   useEffect(()=>{
