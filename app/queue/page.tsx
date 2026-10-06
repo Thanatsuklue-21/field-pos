@@ -4,7 +4,7 @@
 
 import {useEffect,useMemo,useRef,useState} from "react";
 import {useRouter} from "next/navigation";
-import {BellRing,CheckCircle2,ChevronRight,ReceiptText,RotateCcw,Sparkles,X} from "lucide-react";
+import {BellRing,CheckCircle2,ChevronRight,Maximize2,ReceiptText,RotateCcw,Sparkles,X} from "lucide-react";
 import AuthGate from "@/components/auth-gate";
 import {api,type RevisionUnchanged,type Session} from "@/lib/api-client";
 import {readQueueSnapshotCache,writeQueueSnapshotCache} from "@/lib/queue-cache";
@@ -50,6 +50,7 @@ function QueueView({session}:{session:Session}){
   const revisionRef=useRef<number|null>(null);
   busyRef.current=busy!=="";
   const [callPrompt,setCallPrompt]=useState<{queueNo:string;pagerNo:number;scope:string}|null>(null);
+  const [prepPlanOpen,setPrepPlanOpen]=useState(false);
 
   useEffect(()=>{if(!toast)return;const timer=window.setTimeout(()=>setToast(""),2600);return()=>window.clearTimeout(timer)},[toast]);
   const pulse=(message:string)=>{setToast(message);try{navigator.vibrate?.(35)}catch{}};
@@ -247,10 +248,10 @@ function QueueView({session}:{session:Session}){
           <div className="shrink-0"><b className="text-sm">ภาพรวมคิวนี้</b><p className="mt-0.5 text-[10px] text-slate-500">คิวปัจจุบัน + แผนเบส + รายการเครื่องดื่ม อยู่ในหน้าจอเดียวสำหรับคนชง</p></div>
 
           {(first.prepGroups||[]).length>0&&<div className="soft-scroll mt-2 max-h-[180px] shrink-0 overflow-y-auto rounded-[18px] border border-[#eadb9b] bg-[#fffaf0] p-2.5">
-            <div className="flex items-center justify-between gap-2"><div><b className="text-[11px] text-[#765b08]">แผนเตรียมเบสของคิวนี้</b><p className="mt-0.5 text-[9px] text-slate-500">เตรียมเฉพาะคิว {first.queueNo} · ไม่ข้ามคิว</p></div><span className="rounded-full bg-white px-2 py-1 text-[9px] font-bold text-[#765b08]">{(first.prepGroups||[]).length} กลุ่ม</span></div>
+            <div className="flex items-center justify-between gap-2"><div><b className="text-[11px] text-[#765b08]">แผนเตรียมเบสของคิวนี้</b><p className="mt-0.5 text-[9px] text-slate-500">เตรียมเฉพาะคิว {first.queueNo} · ไม่ข้ามคิว</p></div><button onClick={()=>setPrepPlanOpen(true)} className="flex min-h-9 shrink-0 items-center gap-1 rounded-full border border-[#eadb9b] bg-white px-2.5 text-[9px] font-bold text-[#765b08]"><Maximize2 size={12}/>เปิดเต็มจอ</button></div>
             <div className="mt-2 space-y-1.5">{(first.prepGroups||[]).map(group=><div key={group.id} className="rounded-xl border border-[#f0e3ad] bg-white px-2.5 py-2">
-              <div className="flex items-center justify-between gap-2"><b className="text-[11px] text-[#765b08]">{group.label}</b><span className="shrink-0 text-[9px] font-bold text-slate-500">{group.qty} แก้ว{n(group.pendingQty)>0?" · เหลือ "+n(group.pendingQty):" · ครบแล้ว"}</span></div>
-              <div className="mt-1 space-y-1">{group.items.map(x=><div key={x.id+"|"+x.variant} className="text-[10px] leading-4 text-slate-700"><b>{x.name}</b> <span className="text-slate-500">· {x.variant} ×{x.qty}</span>{x.baseUsage?.length>0&&<div className="text-[#765b08]">{x.baseUsage.map(u=>x.qty>1?u.name+" "+Number(u.perCup.toFixed(2)).toLocaleString()+" "+u.unit+"/แก้ว ×"+x.qty+" = "+Number(u.qty.toFixed(2)).toLocaleString()+" "+u.unit:u.name+" "+Number(u.perCup.toFixed(2)).toLocaleString()+" "+u.unit).join(" · ")}</div>}</div>)}</div>
+              <div className="flex items-center justify-between gap-2"><b className="text-[11px] text-[#765b08]">{group.label}</b><span className="shrink-0 text-[9px] font-bold text-slate-500">{n(group.pendingQty)>0?"กำลังเตรียม":"ครบแล้ว"}</span></div>
+              <div className="mt-1 space-y-1">{group.items.map(x=><div key={x.id+"|"+x.variant} className="text-[10px] leading-4 text-slate-700"><b>{x.name}</b> <span className="text-slate-500">· {x.variant} ×{x.qty}</span>{x.baseUsage?.length>0&&<div className="text-[#765b08]">{x.baseUsage.map(u=>u.name+" "+Number(u.perCup.toFixed(2)).toLocaleString()+" "+u.unit+(x.qty>1?" / แก้ว":"")).join(" · ")}</div>}</div>)}</div>
             </div>)}</div>
           </div>}
 
@@ -275,6 +276,23 @@ function QueueView({session}:{session:Session}){
         </div>
       </>}
     </div>
+
+    {prepPlanOpen&&first&&(first.prepGroups||[]).length>0&&<div className="fixed inset-0 z-[110] bg-[#f3f5f7]">
+      <div className="flex h-[100dvh] min-h-0 flex-col">
+        <div className="shrink-0 border-b border-slate-200 bg-white px-4 pb-3 pt-[max(1rem,env(safe-area-inset-top))] shadow-sm">
+          <div className="flex items-start justify-between gap-3"><div><p className="gold m-0 text-[10px] font-bold tracking-[.22em]">BASE PREP PLAN</p><h2 className="mt-1 text-xl font-black">แผนเตรียมเบส · คิว {first.queueNo}</h2><p className="mt-1 text-xs text-slate-500">แสดงแยกตามเมนู · ไม่รวมกรัมข้ามเมนู · ไม่ข้ามคิว</p></div><button onClick={()=>setPrepPlanOpen(false)} className="grid h-11 w-11 shrink-0 place-items-center rounded-full border border-slate-300 bg-white"><X size={20}/></button></div>
+        </div>
+        <div className="soft-scroll min-h-0 flex-1 overflow-y-auto px-3 py-3 pb-[max(1rem,env(safe-area-inset-bottom))] sm:px-5">
+          <div className="mx-auto max-w-2xl space-y-3">{(first.prepGroups||[]).map(group=><section key={group.id} className="rounded-[22px] border border-[#eadb9b] bg-[#fffaf0] p-3.5 shadow-sm">
+            <div className="flex items-center justify-between gap-3"><b className="text-sm text-[#765b08]">{group.label}</b><span className={"rounded-full px-2.5 py-1 text-[10px] font-bold "+(n(group.pendingQty)>0?"bg-amber-100 text-amber-700":"bg-emerald-100 text-emerald-700")}>{n(group.pendingQty)>0?"กำลังเตรียม":"ครบแล้ว"}</span></div>
+            <div className="mt-3 space-y-2">{group.items.map(x=><div key={x.id+"|"+x.variant} className="rounded-2xl border border-[#f0e3ad] bg-white p-3">
+              <div className="flex items-start justify-between gap-3"><div className="min-w-0"><b className="block text-sm">{x.name}</b><span className="mt-0.5 block text-xs text-slate-500">{x.variant} · ×{x.qty}</span></div></div>
+              {x.baseUsage?.length>0&&<div className="mt-2 flex flex-wrap gap-1.5">{x.baseUsage.map(u=><span key={u.id} className="rounded-full bg-[#fff3bf] px-2.5 py-1 text-xs font-bold text-[#765b08]">{u.name} {Number(u.perCup.toFixed(2)).toLocaleString()} {u.unit}{x.qty>1?" / แก้ว":""}</span>)}</div>}
+            </div>)}</div>
+          </section>)}</div>
+        </div>
+      </div>
+    </div>}
 
     {toast&&<div className="fixed bottom-[76px] sm:bottom-[92px] left-4 right-4 z-[95] mx-auto max-w-xl rounded-2xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-center text-sm font-semibold text-emerald-800 shadow-xl">{toast}</div>}
 
