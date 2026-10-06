@@ -5,6 +5,8 @@ import {useRouter} from "next/navigation";
 import {ArrowRight,CheckCircle2,Minus,Plus,Search,Trash2,WalletCards,X} from "lucide-react";
 import AuthGate from "@/components/auth-gate";
 import {api,type Bootstrap,type MenuItem,type RevisionUnchanged,type Session} from "@/lib/api-client";
+import {cachePut} from "@/lib/offline-db";
+import {applyOfflineCashToBootstrap,getOfflineCashSummary,queueOfflineCashSale,syncOfflineCashSales,type OfflineCashSummary} from "@/lib/offline-sales";
 import {additionalServingsAvailable,cartAvailability} from "@/lib/domain/availability.mjs";
 import {useCartStore} from "@/stores/cart-store";
 import {writeQueueSnapshotCache} from "@/lib/queue-cache";
@@ -29,7 +31,7 @@ const cashPendingWrite=(p:PendingCash)=>localStorage.setItem(CASH_PENDING_KEY,JS
 const cashPendingClear=()=>localStorage.removeItem(CASH_PENDING_KEY);
 const sameCashPending=(p:PendingCash,total:number,cart:{id:string;variant:string;qty:number}[],customerId:string,received:number,pointsRedeemed:number,targetOrderId?:string|null)=>Number(p.body?.received)===received&&Number(p.body?.total??total)===total&&(p.body?.customerId||null)===(customerId||null)&&Number(p.body?.pointsRedeemed||0)===pointsRedeemed&&String(p.body?.targetOrderId||"")===String(targetOrderId||"")&&JSON.stringify(p.body?.cart||[])===JSON.stringify(cart);
 
-type LastSale={queueNo:string;pager:number;billNo?:string;total:number;received:number;change:number;payment:"cash"|"promptpay";recovered?:boolean};
+type LastSale={queueNo:string;pager:number;billNo?:string;total:number;received:number;change:number;payment:"cash"|"promptpay";recovered?:boolean;offline?:boolean};
 type SplitGroup={orderId:string;queueNo:string;pager:number;createdAt:number};
 const SPLIT_GROUP_KEY="field-pos-split-group-v1";
 const splitGroupRead=():SplitGroup|null=>{try{return JSON.parse(sessionStorage.getItem(SPLIT_GROUP_KEY)||"null")}catch{return null}};
@@ -68,7 +70,10 @@ function PosView({session}:{session:Session}){
   const [splitBill,setSplitBill]=useState(false);
   const [splitSelection,setSplitSelection]=useState<Record<string,number>>({});
   const [splitGroup,setSplitGroup]=useState<SplitGroup|null>(null);
+  const [online,setOnline]=useState(true);
+  const [offlineStats,setOfflineStats]=useState<OfflineCashSummary>({pending:0,needsReview:0,total:0});
   const revisionRef=useRef<number|null>(null);
+  const offlineSyncRef=useRef(false);
   const cart=useCartStore();
 
   useEffect(()=>{router.prefetch("/queue")},[router]);
@@ -89,6 +94,28 @@ function PosView({session}:{session:Session}){
     api<any>("/api/payments/promptpay/config").then(setPromptConfig).catch(()=>setPromptConfig({ready:false,configured:false}));
     recoverCashCheckout().then(()=>recoverPending()).catch(()=>{});
   },[]);
+
+  useEffect(()=>{
+    const networkChanged=()=>{
+      const next=typeof navigator==="undefined"||navigator.onLine;
+      setOnline(next);
+      refreshOfflineStats().catch(()=>{});
+      if(next)syncOfflineQueue().catch(()=>{});
+    };
+    networkChanged();
+    window.addEventListener("online",networkChanged);
+    window.addEventListener("offline",networkChanged);
+    return()=>{window.removeEventListener("online",networkChanged);window.removeEventListener("offline",networkChanged)};
+  },[]);
+
+  useEffect(()=>{
+    if(online)return;
+    setMethod("cash");
+    setSplitBill(false);
+    setSplitSelection({});
+    setCustomerId("");
+    setPointsRedeemed(0);
+  },[online]);
 
   useEffect(()=>{
     if(splitGroup&&cart.items.length===0){splitGroupClear();setSplitGroup(null)}
@@ -181,6 +208,46 @@ function PosView({session}:{session:Session}){
 
   function warmQueueSnapshot(){
     api<any>("/api/pos/queue").then(snapshot=>{if(snapshot&&Array.isArray(snapshot.orders))writeQueueSnapshotCache(snapshot)}).catch(()=>{});
+  }
+
+  async function refreshOfflineStats(){
+    setOfflineStats(await getOfflineCashSummary());
+  }
+
+  async function syncOfflineQueue(){
+    if(offlineSyncRef.current||typeof navigator!=="undefined"&&!navigator.onLine)return;
+    offlineSyncRef.current=true;
+    try{
+      const sync=await syncOfflineCashSales(session);
+      setOfflineStats({pending:sync.pending,needsReview:sync.needsReview,total:sync.total});
+      if(sync.synced>0){
+        setNotice("ซิงก์ยอดเงินสด Offline สำเร็จ "+sync.synced+" บิล · Cloud/Stock อัปเดตแล้ว");
+        await load(true).catch(()=>{});
+        await loadCustomers().catch(()=>{});
+      }
+      if(sync.needsReview>0)setNotice("มีบิล Offline "+sync.needsReview+" รายการที่ต้องตรวจสอบก่อนลง Cloud · ระบบเก็บรายการไว้และไม่ลบทิ้ง");
+    }finally{offlineSyncRef.current=false}
+  }
+
+  function finishOfflineSale(localNo:string,opts:{total:number;received:number;paidCart:{id:string;variant:string;qty:number}[]}){
+    const projected=applyOfflineCashToBootstrap(data,opts.paidCart);
+    if(projected){
+      setData(projected);
+      cachePut("/api/pos/bootstrap",projected).catch(()=>{});
+    }
+    setPayOpen(false);
+    setResult("");
+    setPrompt(null);
+    cart.clearCart();
+    setReceived("");
+    setCustomerId("");
+    setPointsRedeemed(0);
+    setSplitSelection({});
+    setSplitBill(false);
+    splitGroupClear();setSplitGroup(null);
+    setLastSale({queueNo:localNo,pager:0,total:opts.total,received:opts.received,change:Math.max(0,opts.received-opts.total),payment:"cash",offline:true});
+    setNotice("บันทึกเงินสดแบบ Offline แล้ว · "+localNo+" · ระบบจะซิงก์ Cloud อัตโนมัติเมื่ออินเทอร์เน็ตกลับมา");
+    refreshOfflineStats().catch(()=>{});
   }
 
   function finishSale(r:any,opts:{payment:"cash"|"promptpay";total:number;received:number;recovered?:boolean;splitBill?:boolean;paidCart?:{id:string;variant:string;qty:number}[]}){
@@ -392,7 +459,13 @@ function PosView({session}:{session:Session}){
       code==="pending_promptpay_exists"?"มี PromptPay รายการเดิมที่ยังไม่สิ้นสุด กรุณาชำระหรือรอผลรายการเดิม":
       code==="pending_cash_checkout_exists"?"มีออเดอร์เงินสดเดิมที่ยังไม่ทราบผล กรุณารอระบบตรวจรายการเดิมก่อนรับบิลใหม่":
       code==="business_date_changed"?"วันธุรกิจเปลี่ยนแล้ว กรุณาตรวจ Orders ก่อนทำรายการใหม่":
-      code==="offline_write_blocked"?"ออฟไลน์อยู่ ระบบหยุดรับการชำระเงินเพื่อป้องกันบิลซ้ำ":
+      code==="offline_cash_only"?"โหมด Offline รับได้เฉพาะเงินสด":
+      code==="offline_split_not_supported"?"โหมด Offline ยังไม่รองรับแยกบิล/เพิ่มเข้าคิวเดิม กรุณารับเป็นบิลปกติ":
+      code==="offline_loyalty_not_supported"?"โหมด Offline งดสะสม/ใช้แต้มชั่วคราว เพื่อป้องกันแต้มซ้ำข้ามอุปกรณ์":
+      code==="offline_storage_unavailable"?"เครื่องนี้ไม่สามารถเปิดพื้นที่เก็บ Offline ได้ กรุณาเชื่อมต่ออินเทอร์เน็ตก่อนขาย":
+      code==="offline_catalog_unavailable"?"ไม่มีข้อมูลเมนู/สต็อกที่ cache ไว้ จึงยังขาย Offline ไม่ได้":
+      code==="offline_price_changed"?"ราคาบน Cloud เปลี่ยนจากตอนขาย Offline · เก็บบิลไว้ให้ตรวจสอบ ไม่ลงยอดผิด":
+      code==="offline_write_blocked"?"ออฟไลน์อยู่ · ระบบรองรับเฉพาะเงินสดแบบ Offline":
       code==="network_unavailable"?"การเชื่อมต่อขาดหาย กรุณาตรวจอินเทอร์เน็ต ระบบจะไม่สร้างบิลซ้ำ":
       code==="invalid_points_redeem"?"จำนวนแต้มที่ใช้ไม่ถูกต้อง":
       code==="customer_required_for_points"?"ต้องเลือกลูกค้าก่อนใช้แต้ม":
@@ -413,6 +486,23 @@ function PosView({session}:{session:Session}){
       const checkoutMode=splitBill?"split_bill":"full";
       let paymentVerified:any=true,paymentReference:any=null,requestKey=crypto.randomUUID();
       if(method==="cash"&&Number(received)<checkoutTotal)throw Object.assign(new Error("cash_insufficient"),{status:409});
+
+      const offlineAtStart=typeof navigator!=="undefined"&&!navigator.onLine;
+      if(offlineAtStart){
+        if(method!=="cash")throw Object.assign(new Error("offline_cash_only"),{status:409});
+        if(splitBill||splitGroup)throw Object.assign(new Error("offline_split_not_supported"),{status:409});
+        if(customerId||redeemPoints>0)throw Object.assign(new Error("offline_loyalty_not_supported"),{status:409});
+        if(!data)throw Object.assign(new Error("offline_catalog_unavailable"),{status:409});
+        const offlineCreatedAt=Date.now();
+        const body={
+          requestKey,date:localDate(),cart:cartPayload,payment:"cash",received:Number(received),
+          customerId:null,pointsRedeemed:0,total:checkoutTotal,checkoutMode:"full",
+          offlineFulfilled:true,offlineCreatedAt,offlineMenuRevision:data.revision
+        };
+        const queued=await queueOfflineCashSale(body);
+        finishOfflineSale(queued.localNo,{total:checkoutTotal,received:Number(received),paidCart:cartPayload});
+        return;
+      }
 
       if(method==="promptpay"){
         if(promptConfig?.ready!==true)throw Object.assign(new Error("promptpay_not_ready"),{status:503});
@@ -521,7 +611,10 @@ function PosView({session}:{session:Session}){
     <div className="flex min-w-0 flex-1 flex-col p-3 sm:p-4 md:p-6">
       <div className="mb-3 flex items-center justify-between gap-2">
         <div><p className="gold m-0 text-[10px] font-bold tracking-[.3em]">POINT OF SALE</p><h1 className="m-0 mt-1 text-xl font-semibold tracking-wide md:text-2xl">FIELD DRINKS</h1></div>
-        <div className="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-[11px] text-slate-600 sm:px-4 sm:py-2 sm:text-xs">{session.user.username}</div>
+        <div className="flex items-center gap-2">
+          {(!online||offlineStats.total>0)&&<div className={"rounded-full border px-2.5 py-1.5 text-[10px] font-bold sm:text-xs "+(!online?"border-amber-300 bg-amber-50 text-amber-800":offlineStats.needsReview>0?"border-red-300 bg-red-50 text-red-700":"border-emerald-300 bg-emerald-50 text-emerald-700")}>{!online?"OFFLINE · เงินสดเท่านั้น":offlineStats.needsReview>0?"Offline ต้องตรวจ "+offlineStats.needsReview:"Offline รอ Sync "+offlineStats.pending}</div>}
+          <div className="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-[11px] text-slate-600 sm:px-4 sm:py-2 sm:text-xs">{session.user.username}</div>
+        </div>
       </div>
 
       {notice&&<div className="mb-3 flex items-start justify-between gap-3 rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900"><span>{notice}</span><button onClick={()=>setNotice("")} className="shrink-0"><X size={16}/></button></div>}
@@ -551,7 +644,7 @@ function PosView({session}:{session:Session}){
 
     {payOpen&&<div className="fixed inset-0 z-[90] grid place-items-center bg-black/55 p-2 sm:p-4"><div className="soft-scroll card max-h-[calc(100dvh-1rem)] w-full max-w-md overflow-auto border border-slate-300 bg-white p-4 shadow-2xl sm:max-h-[94vh] sm:p-6"><div className="flex justify-between gap-3"><div><p className="gold text-[10px] tracking-[.25em]">PAYMENT</p><h3 className="mt-1 text-2xl font-semibold">ยอดชำระ ฿{netPayable.toFixed(0)}</h3><p className="mt-1 text-xs text-slate-500">{splitBill?"บิลนี้ "+payableQty+" แก้ว · เหลือ "+remainingAfterBill+" แก้ว":payableQty+" แก้ว · "+cart.items.length+" เมนู"}</p></div><button disabled={busy} onClick={()=>setPayOpen(false)} className="disabled:cursor-not-allowed disabled:opacity-30"><X/></button></div>
 
-      <button type="button" disabled={busy||cart.items.reduce((s,i)=>s+i.qty,0)<2} onClick={()=>{setSplitBill(v=>!v);setSplitSelection({});setPointsRedeemed(0);setReceived("");setResult("")}} className={"mt-4 min-h-11 w-full rounded-2xl border px-4 text-sm font-semibold "+(splitBill?"border-[#d4af37] bg-[#fff8dc] text-[#765b08]":"border-slate-300 bg-white text-slate-700")+" disabled:opacity-40"}>{splitBill?"ยกเลิกแยกบิล":"แยกบิล / จ่ายแยกตามคน"}</button>
+      <button type="button" disabled={busy||!online||cart.items.reduce((s,i)=>s+i.qty,0)<2} onClick={()=>{setSplitBill(v=>!v);setSplitSelection({});setPointsRedeemed(0);setReceived("");setResult("")}} className={"mt-4 min-h-11 w-full rounded-2xl border px-4 text-sm font-semibold "+(splitBill?"border-[#d4af37] bg-[#fff8dc] text-[#765b08]":"border-slate-300 bg-white text-slate-700")+" disabled:opacity-40"}>{splitBill?"ยกเลิกแยกบิล":"แยกบิล / จ่ายแยกตามคน"}</button>
       {splitBill&&<div className="mt-2 rounded-2xl border border-[#d4af37]/40 bg-[#fffaf0] px-3 py-2 text-xs text-slate-700">เลือกจำนวนแก้วของ <b>คนที่กำลังจ่าย</b> · หลังชำระ รายการที่เหลือยังอยู่ในตะกร้าเพื่อรับเงินคนถัดไป</div>}
       {splitGroup&&<div className="mt-2 rounded-2xl border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs text-emerald-800"><b>กลุ่มเดียวกัน · คิว ${splitGroup.queueNo}</b> · การจ่ายคนถัดไปจะใช้คิวและบัตรเรียกเดิมอัตโนมัติ</div>}
 
@@ -566,19 +659,20 @@ function PosView({session}:{session:Session}){
         <div className="mt-3 border-t border-slate-200 pt-3">{crmDiscount>0&&<div className="mb-1 flex items-center justify-between text-xs text-slate-500"><span>ยอดก่อนส่วนลด</span><span>฿{payableTotal.toFixed(0)}</span></div>}{crmDiscount>0&&<div className="mb-1 flex items-center justify-between text-xs text-amber-700"><span>ส่วนลดสมาชิก</span><span>−฿{crmDiscount.toFixed(0)}</span></div>}<div className="flex items-center justify-between"><span className="text-sm font-semibold">{splitBill?"บิลนี้":"รวม"} {payableQty} แก้ว</span><b className="text-xl text-[#765b08]">฿{netPayable.toFixed(0)}</b></div></div>
       </div>
 
-      <div className="mt-4 grid grid-cols-2 gap-2 rounded-2xl bg-slate-100 p-1"><button onClick={()=>setMethod("cash")} className={"rounded-xl p-3 "+(method==="cash"?"bg-[#d4af37] font-semibold text-black shadow-sm":"text-slate-700")}>Cash</button><button disabled={promptConfig?.ready!==true||netPayable<=0} onClick={()=>setMethod("promptpay")} title={promptConfig?.ready===true?"PromptPay พร้อมใช้งาน":"รอ Beam อนุมัติ / ตั้งค่า API และ Webhook"} className={"rounded-xl p-3 disabled:cursor-not-allowed disabled:opacity-45 "+(method==="promptpay"?"bg-[#d4af37] font-semibold text-black shadow-sm":"text-slate-700")}>PromptPay{promptConfig?.selectedProvider==="beam"&&promptConfig?.mode==="test"?" · TEST":""}</button></div>
-      {promptConfig?.ready!==true&&<div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">PromptPay ยังไม่เปิดรับเงินจริง · ระบบกำลังรอ Beam Merchant/API/Webhook ให้พร้อม</div>}
-      {customers.length>0&&<select value={customerId} onChange={e=>{setCustomerId(e.target.value);setPointsRedeemed(0);setReceived("")}} className="mt-4 w-full rounded-2xl border border-slate-300 bg-white px-4 py-3"><option value="">ลูกค้าทั่วไป / ไม่สะสมแต้ม</option>{customers.map(x=><option key={x.id} value={x.id}>{x.name} · {x.points||0} pts</option>)}</select>}
+      {!online&&<div className="mt-4 rounded-2xl border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900"><b>Offline Mode</b> · รับเงินสดได้ตามปกติ บิลจะเก็บในเครื่องและ Sync อัตโนมัติเมื่อเน็ตกลับ · QR / แยกบิล / แต้มถูกปิดชั่วคราว</div>}
+      <div className="mt-4 grid grid-cols-2 gap-2 rounded-2xl bg-slate-100 p-1"><button onClick={()=>setMethod("cash")} className={"rounded-xl p-3 "+(method==="cash"?"bg-[#d4af37] font-semibold text-black shadow-sm":"text-slate-700")}>Cash</button><button disabled={!online||promptConfig?.ready!==true||netPayable<=0} onClick={()=>setMethod("promptpay")} title={!online?"PromptPay ต้องใช้อินเทอร์เน็ต":promptConfig?.ready===true?"PromptPay พร้อมใช้งาน":"รอ Beam อนุมัติ / ตั้งค่า API และ Webhook"} className={"rounded-xl p-3 disabled:cursor-not-allowed disabled:opacity-45 "+(method==="promptpay"?"bg-[#d4af37] font-semibold text-black shadow-sm":"text-slate-700")}>PromptPay{promptConfig?.selectedProvider==="beam"&&promptConfig?.mode==="test"?" · TEST":""}</button></div>
+      {online&&promptConfig?.ready!==true&&<div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">PromptPay ยังไม่เปิดรับเงินจริง · ระบบกำลังรอ Beam Merchant/API/Webhook ให้พร้อม</div>}
+      {customers.length>0&&<select disabled={!online} value={customerId} onChange={e=>{setCustomerId(e.target.value);setPointsRedeemed(0);setReceived("")}} className="mt-4 w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 disabled:bg-slate-100 disabled:text-slate-400"><option value="">ลูกค้าทั่วไป / ไม่สะสมแต้ม</option>{customers.map(x=><option key={x.id} value={x.id}>{x.name} · {x.points||0} pts</option>)}</select>}
       {selectedCustomer&&redeemValue>0&&<div className="mt-3 rounded-2xl border border-[#d4af37]/40 bg-[#fffaf0] p-3"><div className="flex items-center justify-between text-sm"><span><b>{selectedCustomer.name}</b> · มี {Number(selectedCustomer.points)||0} แต้ม</span><span className="text-xs text-slate-500">1 แต้ม = ฿{redeemValue.toFixed(2)}</span></div><div className="mt-2 grid grid-cols-[1fr_auto] gap-2"><input type="number" inputMode="numeric" min="0" max={maxRedeemPoints} step="1" value={pointsRedeemed} onChange={e=>{setPointsRedeemed(Math.max(0,Math.min(maxRedeemPoints,Math.trunc(Number(e.target.value)||0))));setReceived("")}} className="min-h-11 rounded-xl border border-slate-300 bg-white px-3" placeholder="แต้มที่ใช้"/><button type="button" disabled={maxRedeemPoints<1} onClick={()=>{setPointsRedeemed(maxRedeemPoints);setReceived("")}} className="rounded-xl border border-[#d4af37] px-3 text-xs font-bold text-[#765b08] disabled:opacity-40">ใช้ได้สูงสุด {maxRedeemPoints}</button></div>{redeemPoints>0&&<div className="mt-3 space-y-1 border-t border-amber-200 pt-2 text-sm"><div className="flex justify-between"><span>ยอดก่อนส่วนลด</span><b>฿{payableTotal.toFixed(0)}</b></div><div className="flex justify-between text-amber-800"><span>ใช้ {redeemPoints} แต้ม</span><b>−฿{crmDiscount.toFixed(0)}</b></div><div className="flex justify-between text-base"><b>ยอดสุทธิ</b><b className="text-[#765b08]">฿{netPayable.toFixed(0)}</b></div><p className="text-[11px] text-slate-500">บิลนี้คาดว่าจะได้ +{estimatedPointsAwarded} แต้ม จากยอดจ่ายจริง</p></div>}</div>}
       {method==="cash"&&<><div className="mt-4 grid grid-cols-[1fr_auto] gap-2"><input autoFocus inputMode="decimal" value={received} onChange={e=>setReceived(e.target.value)} placeholder="จำนวนเงินที่รับ" className="min-w-0 rounded-2xl border border-slate-300 bg-slate-100 px-4 py-3 text-lg outline-none focus:border-[#c59b19]"/><button type="button" disabled={busy||!payableItems.length} onClick={()=>setReceived(String(netPayable))} className="min-h-12 rounded-2xl border border-[#d4af37] bg-[#fff8dc] px-3 text-sm font-bold text-[#765b08] disabled:opacity-40">รับพอดี ฿{netPayable.toFixed(0)}</button></div>{received.trim()!==""&&Number.isFinite(cashDelta)&&<div className={"mt-3 flex items-center justify-between rounded-2xl border px-4 py-3 "+(cashDelta>=0?"border-emerald-300 bg-emerald-50 text-emerald-900":"border-red-300 bg-red-50 text-red-800")}><span>{cashDelta>=0?"เงินทอน":"ขาดอีก"}</span><b className="text-xl">฿{Math.abs(cashDelta).toFixed(0)}</b></div>}</>}
       {method==="promptpay"&&prompt?.qrUrl&&<div className="mt-4 rounded-[20px] border border-slate-300 bg-white p-4 text-center"><img src={prompt.qrUrl} alt="PromptPay QR" className="mx-auto max-h-56 w-auto"/><p className="mt-2 text-xs font-semibold text-black">{prompt.paid?"ชำระเงินแล้ว":"สแกน QR แล้วระบบจะตรวจสอบอัตโนมัติ"}</p></div>}
       <div className="sticky bottom-0 z-10 -mx-4 mt-4 border-t border-slate-200 bg-white/95 px-4 pb-[max(.5rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur sm:-mx-6 sm:px-6">
-        <button disabled={busy||!payableItems.length||(method==="cash"&&(!Number.isFinite(cashReceived)||cashReceived<netPayable))} onClick={checkout} className="w-full rounded-2xl bg-[#d4af37] py-3.5 font-bold text-black shadow-sm disabled:opacity-40">{busy?(method==="promptpay"&&prompt?"WAITING FOR PAYMENT...":"กำลังบันทึกบิล..."):(method==="promptpay"?"CREATE QR / PAY":"CONFIRM PAYMENT")}</button>
+        <button disabled={busy||!payableItems.length||(method==="cash"&&(!Number.isFinite(cashReceived)||cashReceived<netPayable))} onClick={checkout} className="w-full rounded-2xl bg-[#d4af37] py-3.5 font-bold text-black shadow-sm disabled:opacity-40">{busy?(method==="promptpay"&&prompt?"WAITING FOR PAYMENT...":"กำลังบันทึกบิล..."):(method==="promptpay"?"CREATE QR / PAY":!online?"SAVE OFFLINE CASH":"CONFIRM PAYMENT")}</button>
         {method==="cash"&&Number.isFinite(cashReceived)&&cashReceived===netPayable&&<p className="mt-2 text-center text-xs font-semibold text-emerald-700">รับเงินพอดียอด · กดยืนยันชำระได้เลย</p>}
         {result&&<p className="mt-2 rounded-xl bg-slate-100 px-3 py-2 text-center text-sm text-slate-700">{result}</p>}
       </div>
     </div></div>}
 
-    {lastSale&&<div className="fixed bottom-[92px] right-4 z-[70] w-[min(460px,calc(100vw-2rem))] rounded-[26px] border border-emerald-300 bg-white p-5 shadow-2xl md:bottom-6 md:right-6"><div className="flex items-start gap-3"><div className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-emerald-100 text-emerald-700"><CheckCircle2 size={22}/></div><div className="min-w-0 flex-1"><div className="flex items-start justify-between gap-2"><div><b className="text-lg">ชำระเงินสำเร็จ</b><p className="mt-1 text-sm text-slate-600">คิว {lastSale.queueNo}{lastSale.recovered?" · กู้คืนรายการเดิม":""}</p></div><button onClick={()=>setLastSale(null)}><X size={18}/></button></div><div className="mt-3 rounded-[20px] border-2 border-[#d4af37] bg-[#fff8dc] p-4 text-center"><div className="text-xs font-bold tracking-[.18em] text-[#765b08]">หยิบบัตรให้ลูกค้า</div><div className="mt-1 text-4xl font-black leading-none text-[#6f5510] md:text-5xl">บัตร {lastSale.pager||"—"}</div></div>{lastSale.payment==="cash"&&<div className="mt-3 flex items-center justify-between rounded-2xl bg-emerald-50 p-3"><span className="text-sm font-semibold text-emerald-800">เงินทอน</span><div className="text-2xl font-bold text-emerald-800">฿{lastSale.change.toFixed(0)}</div></div>}<div className="mt-3 grid grid-cols-2 gap-2"><button onClick={startNextOrder} className="flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-[#d4af37] px-3 text-sm font-bold text-black"><Plus size={16}/>รับออเดอร์ถัดไป</button><button onClick={()=>router.push("/queue")} className="flex min-h-12 items-center justify-center gap-2 rounded-2xl border border-slate-300 bg-white px-3 text-xs font-semibold text-slate-700">ไปทำคิว {lastSale.queueNo} <ArrowRight size={15}/></button></div><p className="mt-2 text-center text-[11px] text-slate-500">รับออเดอร์ถัดไปได้ทันทีโดยไม่ออกจากหน้า POS</p></div></div></div>}
+    {lastSale&&<div className={"fixed bottom-[92px] right-4 z-[70] w-[min(460px,calc(100vw-2rem))] rounded-[26px] border bg-white p-5 shadow-2xl md:bottom-6 md:right-6 "+(lastSale.offline?"border-amber-300":"border-emerald-300")}><div className="flex items-start gap-3"><div className={"grid h-10 w-10 shrink-0 place-items-center rounded-full "+(lastSale.offline?"bg-amber-100 text-amber-700":"bg-emerald-100 text-emerald-700")}><CheckCircle2 size={22}/></div><div className="min-w-0 flex-1"><div className="flex items-start justify-between gap-2"><div><b className="text-lg">{lastSale.offline?"บันทึกเงินสด Offline แล้ว":"ชำระเงินสำเร็จ"}</b><p className="mt-1 text-sm text-slate-600">{lastSale.offline?"เลขชั่วคราว "+lastSale.queueNo+" · รอ Sync Cloud":"คิว "+lastSale.queueNo+(lastSale.recovered?" · กู้คืนรายการเดิม":"")}</p></div><button onClick={()=>setLastSale(null)}><X size={18}/></button></div>{lastSale.offline?<div className="mt-3 rounded-[20px] border-2 border-amber-300 bg-amber-50 p-4 text-center"><div className="text-xs font-bold tracking-[.12em] text-amber-800">OFFLINE ORDER</div><div className="mt-1 text-3xl font-black leading-none text-amber-900">{lastSale.queueNo}</div><p className="mt-2 text-xs text-amber-800">ทำและส่งมอบออเดอร์นี้ตามลำดับที่รับ · เมื่อเน็ตกลับระบบจะลงบัญชี/Stock โดยไม่สร้างคิวผลิตซ้ำ</p></div>:<div className="mt-3 rounded-[20px] border-2 border-[#d4af37] bg-[#fff8dc] p-4 text-center"><div className="text-xs font-bold tracking-[.18em] text-[#765b08]">หยิบบัตรให้ลูกค้า</div><div className="mt-1 text-4xl font-black leading-none text-[#6f5510] md:text-5xl">บัตร {lastSale.pager||"—"}</div></div>}{lastSale.payment==="cash"&&<div className="mt-3 flex items-center justify-between rounded-2xl bg-emerald-50 p-3"><span className="text-sm font-semibold text-emerald-800">เงินทอน</span><div className="text-2xl font-bold text-emerald-800">฿{lastSale.change.toFixed(0)}</div></div>}<div className={"mt-3 grid gap-2 "+(lastSale.offline?"grid-cols-1":"grid-cols-2")}><button onClick={startNextOrder} className="flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-[#d4af37] px-3 text-sm font-bold text-black"><Plus size={16}/>รับออเดอร์ถัดไป</button>{!lastSale.offline&&<button onClick={()=>router.push("/queue")} className="flex min-h-12 items-center justify-center gap-2 rounded-2xl border border-slate-300 bg-white px-3 text-xs font-semibold text-slate-700">ไปทำคิว {lastSale.queueNo} <ArrowRight size={15}/></button>}</div><p className="mt-2 text-center text-[11px] text-slate-500">{lastSale.offline?"ยอดถูกเก็บในเครื่องแล้ว ห้ามล้างข้อมูล Browser จนกว่าจะ Sync สำเร็จ":"รับออเดอร์ถัดไปได้ทันทีโดยไม่ออกจากหน้า POS"}</p></div></div></div>}
   </section>;
 }

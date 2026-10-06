@@ -24,7 +24,7 @@ Checkout and queue operations have durable request keys stored in `field_pos_req
 
 ## Data and recovery
 
-The server is authoritative for transactions made in the current Next.js app. IndexedDB caches bootstrap data for viewing when connectivity is lost; checkout is blocked offline. Keep an unresolved checkout's original request key and reconcile its result instead of creating a new bill.
+The server remains authoritative for shared transactions. IndexedDB caches POS bootstrap data and also holds a durable cash outbox: when the browser is explicitly offline, the POS may capture a normal full cash sale locally, project recipe usage against cached stock, and sync the same idempotent request when connectivity returns. Offline mode deliberately disables PromptPay, split bills, loyalty redemption/earning and add-ons to an existing queue. Synced offline sales are recorded as already fulfilled so they do not re-enter the live production FIFO; any stock deficit is preserved for reconciliation. If a write becomes network-ambiguous after transmission starts, keep the original request key and reconcile it instead of creating a second bill.
 
 Use the full backup page for state plus stock, purchase, recipe, cost and durable request ledgers. Version 2 backups include request keys; version 1 backups remain readable. Export reads all tables in a consistent transaction. Restore requires an owner confirmation and matching revision. Test recovery on a separate database before using it for an emergency.
 
