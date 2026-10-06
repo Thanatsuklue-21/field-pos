@@ -22,6 +22,10 @@ Checkout and queue operations have durable request keys stored in `field_pos_req
 - Session cookies are HttpOnly/Secure/SameSite=Strict; writes validate origin, CSRF and server action permissions.
 - `npm test` includes real file-backed libSQL tests of checkout, stock deduction, grouped preparation, FIFO, close day, split payments, concurrent retries and durable idempotency.
 
+## Solo-operator order entry
+
+The POS keeps cart interactions local and immediate. An unpaid cart can be parked with **Hold Bill** and restored on the same device without creating a sale, deducting stock, or entering the production queue. Restoring a held cart re-reads current menu names, prices, variants and availability before checkout. A held bill cannot be created while a payment result is ambiguous or while the cart is the unpaid remainder of an existing split-payment queue.
+
 ## Data and recovery
 
 The server remains authoritative for shared transactions. IndexedDB caches POS bootstrap data and also holds a durable cash outbox: when the browser is explicitly offline, the POS may capture a normal full cash sale locally, project recipe usage against cached stock, and sync the same idempotent request when connectivity returns. Offline mode deliberately disables PromptPay, split bills, loyalty redemption/earning and add-ons to an existing queue. Synced offline sales are recorded as already fulfilled so they do not re-enter the live production FIFO; any stock deficit is preserved for reconciliation. If a write becomes network-ambiguous after transmission starts, keep the original request key and reconcile it instead of creating a second bill.
