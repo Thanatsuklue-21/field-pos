@@ -121,7 +121,7 @@ test('queue production flow is one guided base at a time with optional early pic
   assert.match(queue,/BASE ปัจจุบัน · แสดงครั้งเดียว/);
   assert.match(queue,/activeBase\.items\.map/);
   assert.match(queue,/"รับทำ "\+recommendedTask\.item\.name/);
-  assert.match(queue,/"ทำ "\+selectedTask\.item\.name\+" ครบ/);
+  assert.match(queue,/ทำ \{selectedTask\.item\.name\} ครบ/);
   assert.match(queue,/action:"call_item"/);
   assert.match(queue,/รับเมนูนี้ก่อน/);
   assert.match(queue,/รับทั้งหมด/);
