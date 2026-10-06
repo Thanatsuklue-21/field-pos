@@ -32,7 +32,7 @@ test('queue selection marker is explicit and persists through queue snapshot',as
   const api=await read('lib/pos-api.mjs');
   const ui=await read('app/queue/page.tsx');
   assert.match(api,/prepSelected:!!x\.prepSelected/);
-  assert.match(ui,/รับทำ \{recommendedTask\.item\.name\}/);
+  assert.match(ui,/"รับทำ "\+recommendedTask\.item\.name/);
   assert.match(ui,/กำลังทำ/);
   assert.match(ui,/action:"select"/);
   assert.match(ui,/prepSelected/);
