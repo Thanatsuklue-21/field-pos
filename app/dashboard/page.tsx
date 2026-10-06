@@ -1,10 +1,12 @@
 "use client";
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import {
   AlertTriangle,
   Clock3,
   Lightbulb,
   PackageSearch,
+  ShoppingBag,
   TrendingUp,
   Users,
 } from "lucide-react";
@@ -80,7 +82,13 @@ function View() {
       <p className="gold m-0 text-[10px] font-bold tracking-[.3em]">
         FIELD MANAGEMENT
       </p>
-      <h1 className="mt-1 text-2xl font-semibold">DASHBOARD</h1>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <h1 className="mt-1 text-2xl font-semibold">DASHBOARD</h1>
+        <Link href="/pos" className="flex min-h-12 items-center gap-2 rounded-2xl bg-[#d4af37] px-5 text-sm font-bold text-black shadow-sm">
+          <ShoppingBag size={18}/>
+          รับออเดอร์
+        </Link>
+      </div>
       {d?.profitEstimated && (
         <div className="mt-4 rounded-2xl border border-amber-400/25 bg-amber-400/[.08] p-4 text-sm text-amber-800">
           <b>ESTIMATED PROFIT</b>
