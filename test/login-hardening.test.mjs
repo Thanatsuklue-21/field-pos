@@ -19,9 +19,11 @@ test('normal login remains cheap and successful sign-in cleans expired sessions'
   const api=await read('lib/api.mjs');
   const login=api.slice(api.indexOf("if(path==='/api/auth/login'"),api.indexOf("if(path==='/api/payments/promptpay/webhook'"));
   assert.match(login,/if\(!row\|\|!row\.active\)\{/);
-  assert.match(login,/registerUnknownLoginFailure\(db,req,now\)/);
+  const unknownBranch=login.slice(login.indexOf('if(!row||!row.active){'),login.indexOf('if(Number(row.locked_until)>now)'));
+  const passwordBranch=login.slice(login.indexOf('if(!await verifyPassword'),login.indexOf("await db.execute({sql:'UPDATE field_users SET failed_count=0"));
+  assert.match(unknownBranch,/registerUnknownLoginFailure\(db,req,now\)/);
+  assert.doesNotMatch(passwordBranch,/registerUnknownLoginFailure/);
   assert.match(login,/DELETE FROM field_sessions WHERE expires_at<=\?/);
-  assert.doesNotMatch(login,/registerUnknownLoginFailure\(db,req,now\).*verifyPassword/s);
 });
 
 test('login rate storage does not persist raw source addresses',async()=>{
