@@ -80,7 +80,16 @@ function QueueView({session}:{session:Session}){
   busyRef.current=busy!=="";
   const [callPrompt,setCallPrompt]=useState<{queueNo:string;pagerNo:number;scope:string}|null>(null);
   const [prepPlanOpen,setPrepPlanOpen]=useState(false);
+  const [orderOverviewOpen,setOrderOverviewOpen]=useState(false);
+  const overviewTimerRef=useRef<number|null>(null);
+  const overviewSeenRef=useRef("");
+  const showOrderOverview=(ms=3000)=>{
+    if(overviewTimerRef.current!==null)window.clearTimeout(overviewTimerRef.current);
+    setOrderOverviewOpen(true);
+    overviewTimerRef.current=window.setTimeout(()=>{setOrderOverviewOpen(false);overviewTimerRef.current=null},ms);
+  };
 
+  useEffect(()=>()=>{if(overviewTimerRef.current!==null)window.clearTimeout(overviewTimerRef.current)},[]);
   useEffect(()=>{if(!toast)return;const timer=window.setTimeout(()=>setToast(""),2600);return()=>window.clearTimeout(timer)},[toast]);
   const pulse=(message:string)=>{setToast(message);try{navigator.vibrate?.(35)}catch{}};
   const optimistic=(mutate:(orders:QOrder[])=>QOrder[])=>setData(prev=>prev?{...prev,orders:mutate(prev.orders)}:prev);
@@ -236,6 +245,13 @@ function QueueView({session}:{session:Session}){
   const upcoming=orders.filter((_,index)=>index>0&&index<4);
   const extraUpcoming=Math.max(0,orders.length-1-upcoming.length);
 
+  useEffect(()=>{
+    if(!first){overviewSeenRef.current="";setOrderOverviewOpen(false);return}
+    if(overviewSeenRef.current===first.id)return;
+    overviewSeenRef.current=first.id;
+    showOrderOverview(2800);
+  },[first?.id]);
+
   return <section className="soft-scroll h-full overflow-y-auto overscroll-contain p-2.5 pb-28 sm:p-4 sm:pb-24 md:p-6 md:pb-8">
     <div className="mx-auto w-full max-w-5xl space-y-2.5 sm:space-y-3">
       <header className="flex shrink-0 items-end justify-between gap-3">
@@ -263,47 +279,50 @@ function QueueView({session}:{session:Session}){
             <button onClick={()=>router.push("/orders?queue="+encodeURIComponent(first.queueNo))} className="flex min-h-10 w-full items-center justify-center gap-1.5 rounded-full border border-slate-300 bg-white px-3 text-[11px] font-semibold text-slate-700 sm:w-auto sm:shrink-0"><ReceiptText size={14}/>ดูรายการ / แก้ไขออเดอร์</button>
           </div>
 
-          <div className="mt-3 rounded-[18px] border border-slate-200 bg-slate-50 p-3">
-            <div className="flex flex-wrap items-center justify-between gap-2"><div><b className="text-sm">ภาพรวมออเดอร์ก่อนเริ่มทำ</b><p className="mt-0.5 text-[10px] text-slate-500">ดูเมนูทั้งหมด → ดูหมวด → ทำ Base ของหมวดนั้นทีละชุด</p></div><span className="rounded-full bg-white px-2.5 py-1 text-[10px] font-bold text-slate-600">{categoryFlow.length} หมวด</span></div>
-            <div className="mt-2 flex flex-wrap gap-1.5">{categoryFlow.map((category,index)=><span key={category.id} className={"rounded-full border px-2.5 py-1 text-[10px] font-bold "+(category.pendingQty<=0?"border-emerald-200 bg-emerald-50 text-emerald-700":category.id===activeCategoryId?"border-[#d4af37] bg-[#fff3bf] text-[#765b08]":"border-slate-200 bg-white text-slate-600")}>หมวด {index+1} · {category.label} · {category.qty} แก้ว</span>)}</div>
-            <div className="mt-3 grid gap-2 sm:grid-cols-2">
-              {(first.items||[]).map((item,index)=>{
-                const done=itemDone(item),called=itemCalled(item),canCallEarly=done&&!called&&!firstReady;
-                return <div key={item.id+"|"+item.variant+"|"+index} className={"rounded-2xl border p-2.5 "+(done?"border-emerald-200 bg-emerald-50/60":"border-slate-200 bg-white")}>
-                  <div className="flex items-start justify-between gap-2"><div className="min-w-0"><b className="block text-[12px] sm:text-sm">{item.name}</b><div className="mt-0.5 text-[10px] text-slate-500">{item.variant} · ×{item.qty}{item.price==null?" · ราคาไม่พบ":" · ฿"+(item.price*n(item.qty)).toFixed(0)}</div><span className="mt-1 inline-block rounded-full bg-slate-100 px-2 py-0.5 text-[9px] font-bold text-slate-600">{categoryName(item.prepGroup?.id||"OTHER")}</span></div>{done?<CheckCircle2 size={16} className="shrink-0 text-emerald-600"/>:<span className="shrink-0 text-[10px] font-bold text-slate-500">{n(item.readyQty)}/{n(item.qty)}</span>}</div>
-                  <div className="mt-2 flex flex-wrap items-center justify-between gap-1.5"><span className={"text-[9px] font-semibold "+(done?"text-emerald-700":"text-slate-500")}>{done?"ทำเสร็จ":"รอทำ"}{n(item.wasteCount)>0?" · ทำใหม่ "+n(item.wasteCount)+" ครั้ง":""}</span><div className="flex flex-wrap gap-1">{!called&&<button disabled={busy!==""} onClick={()=>wasteRemake(first,item,index)} className="rounded-full border border-red-200 bg-white px-2 py-1 text-[9px] font-bold text-red-600 disabled:opacity-40"><RotateCcw size={10} className="mr-1 inline"/>ชงเสีย / ทำใหม่</button>}{canCallEarly&&<button disabled={busy!==""} onClick={()=>callReadyItem(first,item,index)} className="rounded-full border border-[#d4af37] bg-white px-2 py-1 text-[9px] font-bold text-[#765b08]"><BellRing size={10} className="mr-1 inline"/>รับเมนูนี้ก่อน</button>}</div></div>
-                </div>;
-              })}
-            </div>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <button onClick={()=>showOrderOverview(3600)} className="flex min-h-9 items-center gap-1.5 rounded-full border border-slate-300 bg-white px-3 text-[10px] font-bold text-slate-700"><ReceiptText size={13}/>ดูภาพรวม {firstCupCount} แก้ว</button>
+            {categoryFlow.length>0&&<button onClick={()=>setPrepPlanOpen(true)} className="flex min-h-9 items-center gap-1.5 rounded-full border border-[#eadb9b] bg-white px-3 text-[10px] font-bold text-[#765b08]"><Maximize2 size={13}/>ดูสูตร / Base</button>}
+            {activeCategory&&<span className="ml-auto text-[10px] font-semibold text-slate-500">หมวด {activeCategoryIndex+1}/{categoryFlow.length} · {activeCategory.label}</span>}
           </div>
         </section>
 
         <section className={"rounded-[22px] border-2 p-3 shadow-sm sm:p-4 "+(selectedTask?"border-emerald-300 bg-emerald-50":recommendedTask?"border-[#d4af37] bg-[#fffaf0]":"border-slate-200 bg-white")}>
-          {(selectedTask||recommendedTask)&&activeCategory&&<div className="mb-3">
-            <div className="flex flex-wrap items-center justify-between gap-2"><div><p className="text-[9px] font-bold tracking-[.18em] text-slate-400">ขั้นตอนปัจจุบัน</p><h2 className="mt-1 text-base font-black">หมวด {activeCategoryIndex+1}/{categoryFlow.length} · {activeCategory.label}</h2></div><span className="rounded-full bg-white px-2.5 py-1 text-[10px] font-bold text-slate-600">เหลือ {activeCategory.pendingQty}/{activeCategory.qty} แก้ว</span></div>
-            {activeBase&&<div className="mt-2 rounded-2xl border border-[#eadb9b] bg-white p-2.5"><div className="flex items-center justify-between gap-2"><b className="text-[11px] text-[#765b08]">{baseTitle(activeBase,Math.max(0,activeCategory.baseGroups.findIndex(x=>x.key===activeBase.key)),activeCategory.baseGroups.length)}</b><span className="text-[9px] font-bold text-slate-500">เหลือ {activeBase.pendingQty} แก้ว</span></div><div className="mt-1 text-[10px] leading-4 text-slate-600"><span className="text-slate-400">ใช้กับ: </span>{activeBase.items.map(x=>x.name+" ×"+x.qty+(x.variant&&x.variant!=="Standard"?" ("+x.variant+")":"")).join(" · ")}</div></div>}
-          </div>}
+          {(selectedTask||recommendedTask)&&activeCategory&&activeBase&&<>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div><p className="text-[9px] font-bold tracking-[.18em] text-slate-400">ขั้นตอนปัจจุบัน</p><h2 className="mt-1 text-base font-black">หมวด {activeCategoryIndex+1}/{categoryFlow.length} · {activeCategory.label}</h2></div>
+              <span className="rounded-full bg-white px-2.5 py-1 text-[10px] font-bold text-slate-600">เหลือ {activeCategory.pendingQty}/{activeCategory.qty} แก้ว</span>
+            </div>
 
-          {selectedTask&&<div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-center"><div className="min-w-0"><span className="rounded-full bg-emerald-600 px-2.5 py-1 text-[10px] font-black text-white">กำลังทำ</span><div className="mt-2 text-lg font-black">{selectedTask.item.name}</div><div className="mt-0.5 text-xs text-slate-600">{selectedTask.item.variant} · {selectedTask.item.qty} แก้ว · เสร็จ {n(selectedTask.item.readyQty)}/{n(selectedTask.item.qty)}</div></div><button disabled={busy!==""} onClick={()=>completeNext(selectedTask.order,selectedTask.item,selectedTask.index)} className="min-h-12 rounded-2xl bg-[#d4af37] px-5 text-sm font-black text-black disabled:opacity-40">ทำเมนูนี้ครบ {Math.max(0,n(selectedTask.item.qty)-n(selectedTask.item.readyQty))} แก้ว</button></div>}
+            <div className="mt-2 rounded-[18px] border-2 border-[#eadb9b] bg-white p-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div><p className="text-[9px] font-bold tracking-[.14em] text-[#9a7a16]">BASE ปัจจุบัน · แสดงครั้งเดียว</p><b className="mt-0.5 block text-sm text-[#765b08]">{baseTitle(activeBase,Math.max(0,activeCategory.baseGroups.findIndex(x=>x.key===activeBase.key)),activeCategory.baseGroups.length)}</b></div>
+                <span className="rounded-full bg-[#fff8dc] px-2.5 py-1 text-[10px] font-bold text-[#765b08]">เหลือ {activeBase.pendingQty} แก้ว</span>
+              </div>
+              <div className="mt-2 space-y-1.5">{activeBase.items.map(x=>{
+                const queueIndex=(first.items||[]).findIndex(q=>q.id===x.id&&q.variant===x.variant);
+                const queueItem=queueIndex>=0?first.items[queueIndex]:null;
+                const current=queueIndex===task?.index;
+                const done=queueItem?itemDone(queueItem):n(x.pendingQty)<=0;
+                return <div key={x.id+"|"+x.variant} className={"flex items-center justify-between gap-2 rounded-xl border px-2.5 py-2 "+(current?"border-[#d4af37] bg-[#fffaf0]":done?"border-emerald-200 bg-emerald-50":"border-slate-200 bg-slate-50")}>
+                  <div className="min-w-0"><b className="block truncate text-[12px]">{x.name}</b><span className="text-[10px] text-slate-500">{x.variant&&x.variant!=="Standard"?x.variant+" · ":""}×{x.qty}</span></div>
+                  <span className={"shrink-0 rounded-full px-2 py-1 text-[9px] font-bold "+(current&&selectedTask?"bg-emerald-600 text-white":current?"bg-[#d4af37] text-black":done?"bg-emerald-100 text-emerald-700":"bg-white text-slate-500")}>{current&&selectedTask?"กำลังทำ":current?"ทำถัดไป":done?"ครบแล้ว":"รอ"}</span>
+                </div>;
+              })}</div>
+            </div>
 
-          {!selectedTask&&recommendedTask&&<div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-center"><div className="min-w-0"><div className="mb-1 text-[9px] font-bold tracking-[.18em] text-slate-400">ลำดับงานแนะนำ</div><div className="flex flex-wrap items-center gap-2"><span className="rounded-full bg-[#d4af37] px-2.5 py-1 text-[10px] font-black text-black"><Sparkles size={11} className="mr-1 inline"/>แนะนำให้ทำก่อน</span></div><div className="mt-2 text-lg font-black">{recommendedTask.item.name}</div><div className="mt-0.5 text-xs text-slate-600">{recommendedTask.item.variant} · เหลือ {Math.max(0,n(recommendedTask.item.qty)-n(recommendedTask.item.readyQty))}/{n(recommendedTask.item.qty)} แก้ว</div></div><button disabled={busy!==""} onClick={()=>selectTask(recommendedTask.order.id,recommendedTask.index)} className="min-h-12 rounded-2xl bg-[#d4af37] px-5 text-sm font-black text-black disabled:opacity-40">{busy==="select:"+recommendedTask.order.id+":"+recommendedTask.index?"กำลังบันทึก...":"รับทำเมนูนี้"}</button></div>}
+            {selectedTask&&<div className="mt-3 grid gap-2 sm:grid-cols-[1fr_auto] sm:items-center">
+              <div className="text-xs text-slate-600">ทำเมนูที่ไฮไลต์ให้ครบ แล้วระบบจะไปเมนูถัดไปใน Base เดิมอัตโนมัติ</div>
+              <div className="flex gap-2"><button disabled={busy!==""||itemCalled(selectedTask.item)} onClick={()=>wasteRemake(selectedTask.order,selectedTask.item,selectedTask.index)} className="min-h-11 rounded-2xl border border-red-200 bg-white px-3 text-[10px] font-bold text-red-600 disabled:opacity-40"><RotateCcw size={12} className="mr-1 inline"/>ชงเสีย / ทำใหม่</button><button disabled={busy!==""} onClick={()=>completeNext(selectedTask.order,selectedTask.item,selectedTask.index)} className="min-h-11 rounded-2xl bg-[#d4af37] px-4 text-xs font-black text-black disabled:opacity-40">ทำ {selectedTask.item.name} ครบ {Math.max(0,n(selectedTask.item.qty)-n(selectedTask.item.readyQty))} แก้ว</button></div>
+            </div>}
+
+            {!selectedTask&&recommendedTask&&<div className="mt-3 grid gap-2 sm:grid-cols-[1fr_auto] sm:items-center">
+              <div className="text-xs text-slate-600"><Sparkles size={12} className="mr-1 inline text-[#9a7a16]"/>เริ่มจากเมนูที่ไฮไลต์ แล้วทำเมนูอื่นใน Base เดียวกันต่อให้ครบ</div>
+              <button disabled={busy!==""} onClick={()=>selectTask(recommendedTask.order.id,recommendedTask.index)} className="min-h-11 rounded-2xl bg-[#d4af37] px-4 text-xs font-black text-black disabled:opacity-40">{busy==="select:"+recommendedTask.order.id+":"+recommendedTask.index?"กำลังบันทึก...":"รับทำ "+recommendedTask.item.name}</button>
+            </div>}
+          </>}
 
           {!task&&firstReady&&!firstCalled&&<div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-center"><div><span className="rounded-full bg-emerald-100 px-2.5 py-1 text-[10px] font-black text-emerald-700">ทำครบทุกหมวดแล้ว</span><div className="mt-2 text-sm font-bold">พร้อมเรียกลูกค้ารับทั้งคิว</div></div><button disabled={busy!==""} onClick={()=>callOrder(first)} className="flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-[#d4af37] px-5 text-sm font-black text-black"><BellRing size={17}/>เรียกบัตร {first.pagerNo} · รับทั้งหมด</button></div>}
           {!task&&firstCalled&&<div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-center"><div><span className="rounded-full bg-emerald-100 px-2.5 py-1 text-[10px] font-black text-emerald-700">แจ้งลูกค้ารับครบแล้ว</span><div className="mt-2 text-sm font-bold">พร้อมส่งมอบและไปคิวถัดไป</div></div><button disabled={busy!==""} onClick={()=>deliver(first.id)} className="flex min-h-12 items-center justify-center gap-2 rounded-2xl border border-emerald-400 bg-white px-5 text-sm font-black text-emerald-700">ส่งมอบคิวนี้ <ChevronRight size={16}/></button></div>}
-        </section>
-
-        <section className="rounded-[22px] border border-slate-300 bg-white p-3 sm:p-4">
-          <div className="flex items-center justify-between gap-2"><div><b className="text-sm">ลำดับหมวดและ Base ของคิวนี้</b><p className="mt-0.5 text-[10px] text-slate-500">ทำทีละหมวด · ภายในหมวดทำ Base เดียวกันติดกันก่อน</p></div>{categoryFlow.length>0&&<button onClick={()=>setPrepPlanOpen(true)} className="flex min-h-9 shrink-0 items-center gap-1 rounded-full border border-[#eadb9b] bg-white px-2.5 text-[9px] font-bold text-[#765b08]"><Maximize2 size={12}/>สูตรเต็มจอ</button>}</div>
-          <div className="mt-3 space-y-2">{categoryFlow.map((category,categoryIndex)=>{
-            const done=category.pendingQty<=0,current=category.id===activeCategoryId&&!done;
-            return <div key={category.id} className={"rounded-[18px] border p-3 "+(current?"border-[#d4af37] bg-[#fffaf0]":done?"border-emerald-200 bg-emerald-50/50":"border-slate-200 bg-slate-50")}>
-              <div className="flex flex-wrap items-center justify-between gap-2"><div className="flex items-center gap-2"><span className={"grid h-7 w-7 place-items-center rounded-full text-[10px] font-black "+(done?"bg-emerald-600 text-white":current?"bg-[#d4af37] text-black":"bg-white text-slate-500")}>{done?"✓":categoryIndex+1}</span><div><b className="text-sm">หมวด {category.label}</b><p className="text-[10px] text-slate-500">{category.qty} แก้ว · {category.baseGroups.length} Base</p></div></div><span className={"rounded-full px-2.5 py-1 text-[9px] font-bold "+(done?"bg-emerald-100 text-emerald-700":current?"bg-[#fff3bf] text-[#765b08]":"bg-white text-slate-500")}>{done?"ครบแล้ว":current?"กำลังทำ · เหลือ "+category.pendingQty:"รอ "+category.pendingQty+" แก้ว"}</span></div>
-              <div className="mt-2 space-y-1.5">{category.baseGroups.map((base,baseIndex)=>{
-                const baseDone=base.pendingQty<=0,baseCurrent=current&&base.key===activeBase?.key;
-                return <div key={base.key} className={"rounded-xl border px-2.5 py-2 "+(baseCurrent?"border-[#d4af37] bg-white":baseDone?"border-emerald-100 bg-white":"border-slate-200 bg-white")}><div className="flex items-center justify-between gap-2"><b className="text-[11px] text-[#765b08]">{baseTitle(base,baseIndex,category.baseGroups.length)}</b><span className="text-[9px] font-bold text-slate-500">{baseDone?"ครบแล้ว":"เหลือ "+base.pendingQty+" แก้ว"}</span></div><div className="mt-1 text-[10px] leading-4 text-slate-600"><span className="text-slate-400">ใช้กับ: </span>{base.items.map(x=>x.name+" ×"+x.qty).join(" · ")}</div></div>;
-              })}</div>
-            </div>;
-          })}</div>
         </section>
 
         <section className="rounded-[18px] border border-slate-300 bg-white px-3 py-2">
@@ -311,6 +330,15 @@ function QueueView({session}:{session:Session}){
         </section>
       </>}
     </div>
+
+    {orderOverviewOpen&&first&&<div className="fixed left-3 right-3 top-[max(4.75rem,env(safe-area-inset-top))] z-[105] mx-auto max-w-xl rounded-[22px] border-2 border-[#d4af37]/70 bg-white p-3 shadow-2xl">
+      <div className="flex items-start justify-between gap-3"><div><p className="gold text-[9px] font-bold tracking-[.18em]">ORDER OVERVIEW · เด้งแล้วหายเอง</p><h3 className="mt-1 text-sm font-black">คิว {first.queueNo} · {firstCupCount} แก้ว · {categoryFlow.length} หมวด</h3></div><button onClick={()=>setOrderOverviewOpen(false)} className="grid h-8 w-8 shrink-0 place-items-center rounded-full border border-slate-200"><X size={15}/></button></div>
+      <div className="mt-2 flex flex-wrap gap-1.5">{categoryFlow.map((category,index)=><span key={category.id} className={"rounded-full border px-2 py-1 text-[9px] font-bold "+(category.pendingQty<=0?"border-emerald-200 bg-emerald-50 text-emerald-700":category.id===activeCategoryId?"border-[#d4af37] bg-[#fff3bf] text-[#765b08]":"border-slate-200 bg-slate-50 text-slate-600")}>{index+1}. {category.label} · {category.qty} แก้ว</span>)}</div>
+      <div className="soft-scroll mt-2 max-h-[46vh] space-y-1.5 overflow-y-auto">{(first.items||[]).map((item,index)=>{
+        const done=itemDone(item),called=itemCalled(item),canCallEarly=done&&!called&&!firstReady;
+        return <div key={item.id+"|"+item.variant+"|"+index} className={"rounded-xl border px-2.5 py-2 "+(done?"border-emerald-200 bg-emerald-50":"border-slate-200 bg-slate-50")}><div className="flex items-center justify-between gap-2"><div className="min-w-0"><b className="block truncate text-[11px]">{item.name}</b><span className="text-[9px] text-slate-500">{item.variant} · ×{item.qty}{item.price==null?" · ราคาไม่พบ":" · ฿"+(item.price*n(item.qty)).toFixed(0)}</span></div><span className="shrink-0 text-[9px] font-bold text-slate-500">{done?"ครบ":"รอ "+Math.max(0,n(item.qty)-n(item.readyQty))}</span></div>{canCallEarly&&<button disabled={busy!==""} onClick={()=>{setOrderOverviewOpen(false);callReadyItem(first,item,index)}} className="mt-1.5 rounded-full border border-[#d4af37] bg-white px-2 py-1 text-[9px] font-bold text-[#765b08]"><BellRing size={10} className="mr-1 inline"/>รับเมนูนี้ก่อน</button>}</div>;
+      })}</div>
+    </div>}
 
     {prepPlanOpen&&first&&categoryFlow.length>0&&<div className="fixed inset-0 z-[110] bg-[#f3f5f7]">
       <div className="flex h-[100dvh] min-h-0 flex-col">

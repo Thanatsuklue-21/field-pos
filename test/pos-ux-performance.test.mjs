@@ -78,9 +78,9 @@ test('payment success makes the physical pager card visually dominant',async()=>
 test('queue shows pager number, guided active work, and Bluetooth reminder',async()=>{
   const queue=await read('app/queue/page.tsx');
   assert.match(queue,/บัตรเรียกคิว/);
-  assert.match(queue,/รับทำเมนูนี้/);
+  assert.match(queue,/"รับทำ "\+recommendedTask\.item\.name/);
   assert.match(queue,/กำลังทำ/);
-  assert.match(queue,/ทำเสร็จ/);
+  assert.match(queue,/ทำ .* ครบ/);
   assert.match(queue,/เครื่องเรียกคิว Bluetooth/);
   assert.match(queue,/กดเครื่องเรียกแล้ว \/ ปิด/);
   assert.match(queue,/setCallPrompt/);
@@ -116,12 +116,12 @@ test('cash checkout skips the redundant replay read while PromptPay still replay
 });
 
 
-test('queue production flow is one guided task at a time with optional early pickup',async()=>{
+test('queue production flow is one guided base at a time with optional early pickup',async()=>{
   const queue=await read('app/queue/page.tsx');
-  assert.doesNotMatch(queue,/ทำถัดไป/);
-  assert.match(queue,/ลำดับงานแนะนำ/);
-  assert.match(queue,/รับทำเมนูนี้/);
-  assert.match(queue,/ทำเสร็จ/);
+  assert.match(queue,/BASE ปัจจุบัน · แสดงครั้งเดียว/);
+  assert.match(queue,/activeBase\.items\.map/);
+  assert.match(queue,/"รับทำ "\+recommendedTask\.item\.name/);
+  assert.match(queue,/ทำ \{selectedTask\.item\.name\} ครบ/);
   assert.match(queue,/action:"call_item"/);
   assert.match(queue,/รับเมนูนี้ก่อน/);
   assert.match(queue,/รับทั้งหมด/);
@@ -285,16 +285,16 @@ test('queue groups duplicate lines and exposes prep base plan without changing F
   assert.match(api,/compatibilityKey/);
   assert.match(queue,/compatibilityKey/);
   assert.match(queue,/baseTitle/);
-  assert.match(queue,/ใช้กับ:/);
+  assert.match(queue,/activeBase\.items\.map/);
   assert.match(api,/for\(const o of activeOrders\(doc\)\)/);
   assert.match(api,/target\.items=normalizeQueueItems/);
   assert.match(api,/const queueLookup=buildQueueLookup\(doc\)/);assert.match(api,/order\.items=normalizeQueueItems\(doc,order,queueLookup\)/);
-  assert.match(queue,/สูตรเต็มจอ/);
+  assert.match(queue,/ดูสูตร \/ Base/);
   assert.match(queue,/baseTitle/);
-  assert.match(queue,/ใช้กับ:/);
+  assert.match(queue,/activeBase\.items\.map/);
+  assert.match(queue,/BASE ปัจจุบัน · แสดงครั้งเดียว/);
+  assert.doesNotMatch(queue,/ลำดับหมวดและ Base ของคิวนี้/);
   assert.doesNotMatch(queue,/รวมสำหรับคิวนี้:/);
-  const inline=queue.slice(queue.indexOf('ลำดับหมวดและ Base ของคิวนี้'),queue.indexOf('prepPlanOpen&&first'));
-  assert.doesNotMatch(inline,/u\.perCup/);
   assert.match(queue,/สูตรต่อ 1 แก้ว/);
   assert.match(queue,/recipeUsage/);
   assert.match(queue,/h-\[100dvh\]/);
@@ -319,20 +319,21 @@ test('CRM redemption makes the payment UI use net payable for cash and PromptPay
 });
 
 
-test('queue control room keeps current order overview above the fold',async()=>{
+test('queue control room keeps one active base above the fold and flashes overview',async()=>{
   const queue=await read('app/queue/page.tsx');
   assert.match(queue,/QUEUE CONTROL/);
-  assert.match(queue,/แนะนำให้ทำก่อน/);
-  assert.match(queue,/ภาพรวมออเดอร์ก่อนเริ่มทำ/);
-  assert.match(queue,/ลำดับหมวดและ Base ของคิวนี้/);
-  assert.match(queue,/หมวด \{category\.label\}/);
+  assert.match(queue,/BASE ปัจจุบัน · แสดงครั้งเดียว/);
+  assert.match(queue,/ORDER OVERVIEW · เด้งแล้วหายเอง/);
+  assert.match(queue,/showOrderOverview\(2800\)/);
+  assert.match(queue,/showOrderOverview\(3600\)/);
+  assert.doesNotMatch(queue,/ลำดับหมวดและ Base ของคิวนี้/);
+  assert.match(queue,/activeCategory\.label/);
   assert.match(queue,/baseTitle/);
   assert.match(queue,/คิวถัดไป/);
   assert.match(queue,/const upcoming=orders\.filter/);
   assert.match(queue,/h-full overflow-y-auto overscroll-contain/);
   assert.doesNotMatch(queue,/orders\.map\(\(order,orderIndex\)=>/);
-  assert.match(queue,/สูตรเต็มจอ/);
-  assert.match(queue,/ใช้กับ:/);
+  assert.match(queue,/ดูสูตร \/ Base/);
   assert.doesNotMatch(queue,/min-h-0 flex-1 overflow-y-auto pb-3/);
   assert.match(queue,/pb-28/);
   assert.match(queue,/สูตรกันลืม/);
@@ -399,14 +400,13 @@ test('queue prep plan remains visible after completion and cache schema invalida
 });
 
 
-test('queue guides production category before base before menu and keeps same base contiguous',async()=>{
+test('queue guides production category then one compatible base without duplicate plan cards',async()=>{
   const queue=await read('app/queue/page.tsx'),api=await read('lib/pos-api.mjs');
-  assert.match(queue,/ภาพรวมออเดอร์ก่อนเริ่มทำ/);
-  assert.match(queue,/ดูเมนูทั้งหมด → ดูหมวด → ทำ Base ของหมวดนั้นทีละชุด/);
   assert.match(queue,/ขั้นตอนปัจจุบัน/);
   assert.match(queue,/หมวด \{activeCategoryIndex\+1\}\/\{categoryFlow\.length\}/);
-  assert.match(queue,/ลำดับหมวดและ Base ของคิวนี้/);
-  assert.match(queue,/category\.baseGroups\.map/);
+  assert.match(queue,/BASE ปัจจุบัน · แสดงครั้งเดียว/);
+  assert.match(queue,/activeBase\.items\.map/);
+  assert.doesNotMatch(queue,/ลำดับหมวดและ Base ของคิวนี้/);
   assert.match(queue,/activeBase/);
   assert.match(api,/a\.compatibilityKey\.localeCompare\(b\.compatibilityKey\)/);
   assert.match(queue,/หมวด \$\{categoryName\(fromCategory\)\} ครบแล้ว · ต่อหมวด/);

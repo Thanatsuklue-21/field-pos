@@ -10,13 +10,13 @@ test('queue UI keeps base preparation inside the oldest FIFO queue only',async()
   assert.match(ui,/const first=orders\[0\]/);
   assert.match(ui,/function buildCategoryFlow/);
   assert.match(ui,/function baseTitle/);
-  assert.match(ui,/ใช้กับ:/);
-  assert.match(ui,/ภาพรวมออเดอร์ก่อนเริ่มทำ/);
-  assert.match(ui,/ลำดับหมวดและ Base ของคิวนี้/);
+  assert.match(ui,/BASE ปัจจุบัน · แสดงครั้งเดียว/);
+  assert.match(ui,/ORDER OVERVIEW · เด้งแล้วหายเอง/);
+  assert.doesNotMatch(ui,/ลำดับหมวดและ Base ของคิวนี้/);
   assert.doesNotMatch(ui,/orders\.slice\(0,3\)/);
   assert.doesNotMatch(ui,/เตรียมฐานรวม:/);
   assert.match(ui,/categoryFlow\.map/);
-  assert.match(ui,/สูตรเต็มจอ/);
+  assert.match(ui,/ดูสูตร \/ Base/);
   assert.match(ui,/h-\[100dvh\]/);
   assert.match(ui,/สูตรกันลืม/);
   assert.match(ui,/สูตรต่อ 1 แก้ว/);
@@ -32,7 +32,7 @@ test('queue selection marker is explicit and persists through queue snapshot',as
   const api=await read('lib/pos-api.mjs');
   const ui=await read('app/queue/page.tsx');
   assert.match(api,/prepSelected:!!x\.prepSelected/);
-  assert.match(ui,/รับทำเมนูนี้/);
+  assert.match(ui,/"รับทำ "\+recommendedTask\.item\.name/);
   assert.match(ui,/กำลังทำ/);
   assert.match(ui,/action:"select"/);
   assert.match(ui,/prepSelected/);
