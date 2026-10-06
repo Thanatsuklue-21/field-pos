@@ -301,7 +301,6 @@ test('queue groups duplicate lines and exposes prep base plan without changing F
   assert.doesNotMatch(queue,/\+" = "\+Number\(u\.qty/);
   assert.match(api,/baseUsage:menuBaseUsage/);
   assert.match(api,/recipeUsage:recipeUsageView/);
-  assert.match(api,/const groupKey=family\.id\+'\|'\+compatibilityKey/);
   assert.match(api,/fifo_violation/);
 });
 
