@@ -364,7 +364,7 @@ test('solo operator daily flow keeps sales and production as separate focused sc
   const shell=await read('components/app-shell.tsx'),pos=await read('app/pos/page.tsx'),queue=await read('app/queue/page.tsx'),close=await read('app/close/page.tsx');
   assert.match(shell,/\["\/pos","\/queue","\/stock","\/expenses","\/close","\/orders","\/settings"\]/);
   assert.match(pos,/ไปทำคิว \{lastSale\.queueNo\}/);
-  assert.match(pos,/รับลูกค้าคนถัดไป/);
+  assert.match(pos,/รับออเดอร์ถัดไป/);
   assert.match(queue,/PRODUCTION RUN/);
   assert.match(queue,/ทำออเดอร์ \/ รันบัตร/);
   assert.doesNotMatch(queue,/router\.push\("\/orders/);
@@ -467,4 +467,19 @@ test('called pickup cards can reveal ordered menu details before handoff',async(
   const pickup=queue.slice(queue.indexOf('waitingPickup.length>0'));
   assert.ok(pickup.indexOf('ดูรายการ')<pickup.indexOf('ลูกค้ารับแล้ว'));
   assert.doesNotMatch(pickup,/action:"call"/);
+});
+
+
+test('continuous next-order action remains on POS and resets operator UI without touching queue',async()=>{
+  const pos=await read('app/pos/page.tsx');
+  assert.match(pos,/function startNextOrder\(\)/);
+  assert.match(pos,/setLastSale\(null\)/);
+  assert.match(pos,/setMethod\("cash"\)/);
+  assert.match(pos,/setQ\(""\)/);
+  assert.match(pos,/setCat\("ทั้งหมด"\)/);
+  assert.match(pos,/รับออเดอร์ถัดไป/);
+  assert.match(pos,/รับออเดอร์ถัดไปได้ทันทีโดยไม่ออกจากหน้า POS/);
+  const block=pos.slice(pos.indexOf('function startNextOrder'),pos.indexOf('function startNextOrder')+500);
+  assert.doesNotMatch(block,/router\.push/);
+  assert.doesNotMatch(block,/clearCart/);
 });
