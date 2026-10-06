@@ -284,7 +284,6 @@ function QueueView({session}:{session:Session}){
             {categoryFlow.length>0&&<button onClick={()=>setPrepPlanOpen(true)} className="flex min-h-9 items-center gap-1.5 rounded-full border border-[#eadb9b] bg-white px-3 text-[10px] font-bold text-[#765b08]"><Maximize2 size={13}/>ดูสูตร / Base</button>}
             {activeCategory&&<span className="ml-auto text-[10px] font-semibold text-slate-500">หมวด {activeCategoryIndex+1}/{categoryFlow.length} · {activeCategory.label}</span>}
           </div>
-          </div>
         </section>
 
         <section className={"rounded-[22px] border-2 p-3 shadow-sm sm:p-4 "+(selectedTask?"border-emerald-300 bg-emerald-50":recommendedTask?"border-[#d4af37] bg-[#fffaf0]":"border-slate-200 bg-white")}>
