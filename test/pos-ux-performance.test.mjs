@@ -121,7 +121,7 @@ test('queue production flow stays guided by FIFO while summary is menu-category 
   assert.match(queue,/สรุปตามหมวดเมนู/);
   assert.match(queue,/activeMenu/);
   assert.match(queue,/ทำ \{task\.item\.name\} ครบ/);
-  assert.doesNotMatch(queue,/action:"call_item"/);
+  assert.match(queue,/action:"call_item"/);
   assert.doesNotMatch(queue,/รับเมนูนี้ก่อน/);
   assert.match(queue,/เรียกบัตร \{first\.pagerNo\}/);
   assert.match(queue,/ลูกค้ารับแล้ว/);
@@ -482,4 +482,26 @@ test('continuous next-order action remains on POS and resets operator UI without
   const block=pos.slice(pos.indexOf('function startNextOrder'),pos.indexOf('function startNextOrder')+500);
   assert.doesNotMatch(block,/router\.push/);
   assert.doesNotMatch(block,/clearCart/);
+});
+
+
+test('queue can return to POS and call finished categories independently',async()=>{
+  const queue=await read('app/queue/page.tsx');
+  assert.match(queue,/href="\/pos"/);
+  assert.match(queue,/aria-label="กลับหน้าเมนู"/);
+  assert.match(queue,/async function callCategory/);
+  assert.match(queue,/action:"call_item"/);
+  assert.match(queue,/category\.calledQty>=category\.qty/);
+  assert.match(queue,/เรียกลูกค้ารับหมวดนี้/);
+  assert.match(queue,/เรียกลูกค้าหมวดนี้แล้ว/);
+  assert.match(queue,/ทำหมวดนี้ให้ครบก่อน/);
+  assert.match(queue,/เรียกแล้ว ✓/);
+});
+
+test('queue category call status derives from persisted calledQty rather than local-only flags',async()=>{
+  const queue=await read('app/queue/page.tsx');
+  assert.match(queue,/menu\.calledQty\+=Math\.min\(n\(item\.qty\),n\(item\.calledQty\)\)/);
+  assert.match(queue,/const calledQty=items\.reduce/);
+  assert.match(queue,/menu\.calledQty>=menu\.qty/);
+  assert.doesNotMatch(queue,/categoryCalledIds/);
 });
