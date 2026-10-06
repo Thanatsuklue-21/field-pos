@@ -81,9 +81,8 @@ test('queue shows pager number, guided active work, and Bluetooth reminder',asyn
   assert.match(queue,/"ทำ "\+recommendedTask\.item\.name\+" เสร็จแล้ว"/);
   assert.match(queue,/กำลังทำ/);
   assert.match(queue,/ทำ .* ครบ/);
-  assert.match(queue,/เครื่องเรียกคิว Bluetooth/);
-  assert.match(queue,/ปิดแจ้งเตือนเรียกคิว/);
-  assert.match(queue,/setCallPrompt/);
+  assert.doesNotMatch(queue,/setCallPrompt|ปิดแจ้งเตือนเรียกคิว/);
+  assert.match(queue,/text-2xl font-black/);
 });
 
 test('cold-start schema checks are batched instead of one Turso request per DDL statement',async()=>{
@@ -325,7 +324,7 @@ test('queue control room keeps one active base and opens overview only on reques
   assert.match(queue,/BASE ปัจจุบัน · แสดงครั้งเดียว/);
   assert.match(queue,/รายการในคิว/);
   assert.doesNotMatch(queue,/showOrderOverview\(2800\)/);
-  assert.match(queue,/showOrderOverview\(3600\)/);
+  assert.match(queue,/showOrderOverview\(first\.id\)/);
   assert.doesNotMatch(queue,/ลำดับหมวดและ Base ของคิวนี้/);
   assert.match(queue,/activeCategory\.label/);
   assert.match(queue,/baseTitle/);
@@ -344,7 +343,7 @@ test('queue control room keeps one active base and opens overview only on reques
 test('queue mobile header keeps metadata readable and moves edit action out of the squeeze path',async()=>{
   const queue=await read('app/queue/page.tsx');
   assert.match(queue,/grid min-w-0 grid-cols-\[auto_1fr\]/);
-  assert.match(queue,/whitespace-nowrap text-sm font-bold/);
+  assert.match(queue,/whitespace-nowrap font-bold/);
   assert.match(queue,/w-full items-center justify-center/);
   assert.match(queue,/sm:w-auto sm:shrink-0/);
 });
@@ -419,4 +418,27 @@ test('queue mobile page uses a single primary scroll surface so bottom content r
   const main=queue.slice(queue.indexOf('return <section'),queue.indexOf('{prepPlanOpen&&first'));
   assert.doesNotMatch(main,/min-h-0 flex-1 overflow-y-auto/);
   assert.doesNotMatch(main,/max-h-\[132px\].*overflow-y-auto/);
+});
+
+
+test('queue production header advances past called orders without waiting for pickup',async()=>{
+  const queue=await read('app/queue/page.tsx');
+  const view=queue.slice(queue.indexOf('function QueueView'));
+  assert.ok(view.includes('const first=orders.find(order=>!orderCalled(order));'));
+  assert.ok(!view.includes('const first=orders[0]'));
+  assert.ok(view.includes('title:"รอทำ"'));
+  assert.ok(view.includes('title:"เสร็จแล้ว · รอลูกค้ารับ"'));
+  for(const name of ['callReadyItem','callOrder']){
+    const action=view.slice(view.indexOf('async function '+name),view.indexOf('}finally',view.indexOf('async function '+name)));
+    assert.ok(!action.includes('pulse('));
+    assert.ok(!action.includes('setCallPrompt'));
+  }
+});
+
+test('each queue can reopen its own details without an automatic close timer',async()=>{
+  const queue=await read('app/queue/page.tsx');
+  assert.ok(queue.includes('showOrderOverview(order.id)'));
+  assert.ok(queue.includes('orders.find(order=>order.id===detailOrderId)'));
+  assert.ok(queue.includes('(detailOrder.items||[]).map'));
+  assert.ok(!queue.includes('overviewTimerRef'));
 });
