@@ -1,6 +1,6 @@
 export type QueueCachePayload={schemaVersion:number;revision:number;orders:any[];cachedAt:number};
-const SCHEMA_VERSION=2;
-const KEY="field-pos-queue-snapshot-v2";
+const SCHEMA_VERSION=3;
+const KEY="field-pos-queue-snapshot-v3";
 const TTL_MS=30_000;
 
 export function readQueueSnapshotCache<T extends {revision:number;orders:any[]}>():T|null{
