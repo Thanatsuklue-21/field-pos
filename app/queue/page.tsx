@@ -1,6 +1,6 @@
 "use client";
 
-// FIELD guided single-task production flow: recommend → acknowledge → complete → call → handoff.
+// FIELD pager-first production flow: pager → items/base → complete → call → handoff.
 
 import {useEffect,useMemo,useRef,useState} from "react";
 import {BellRing,CheckCircle2,RotateCcw,X} from "lucide-react";
@@ -8,11 +8,10 @@ import AuthGate from "@/components/auth-gate";
 import {api,type RevisionUnchanged,type Session} from "@/lib/api-client";
 import {readQueueSnapshotCache,writeQueueSnapshotCache} from "@/lib/queue-cache";
 
-type PrepUsage={id:string;name:string;qty:number;unit:string};
 type BatchMode="NONE"|"SEQUENTIAL"|"COMBINED";
-type PrepGroup={id:string;compatibilityKeys:string[];label:string;batchMode:BatchMode;qty:number;pendingQty?:number;items:{id:string;name:string;variant:string;qty:number;pendingQty?:number;compatibilityKey:string;baseUsage:{id:string;name:string;perCup:number;qty:number;pendingQty?:number;unit:string}[];recipeUsage:{id:string;name:string;perCup:number;unit:string}[]}[];baseUsage:(PrepUsage&{pendingQty?:number})[]};
-type QItem={id:string;name:string;variant:string;qty:number;price:number|null;readyQty?:number;calledQty?:number;prepSelected?:boolean;wasteCount?:number;prepGroup?:{id:string;compatibilityKey:string;label:string;batchMode:BatchMode};saleIds?:string[]};
-type QOrder={id:string;queueNo:string;pagerNo:number;status:string;time:number;total:number;billNo?:string|null;saleId?:string|null;saleIds?:string[];items:QItem[];prepGroups?:PrepGroup[]};
+type PrepGroup={id:string;label:string;batchMode:BatchMode;qty:number;pendingQty?:number;items:{id:string;name:string;variant:string;qty:number;pendingQty?:number;compatibilityKey:string}[]};
+type QItem={id:string;name:string;variant:string;qty:number;readyQty?:number;calledQty?:number;prepSelected?:boolean;wasteCount?:number;prepGroup?:{id:string;compatibilityKey:string;label:string;batchMode:BatchMode}};
+type QOrder={id:string;queueNo:string;pagerNo:number;status:string;time:number;items:QItem[];prepGroups?:PrepGroup[]};
 type QueueSnapshot={revision:number;unchanged?:false;orders:QOrder[]};
 
 const n=(v:any)=>Number(v)||0;
@@ -125,10 +124,6 @@ function QueueView({session}:{session:Session}){
 
   const orders=useMemo(()=>((data?.orders||[]) as QOrder[]).slice().sort((a,b)=>n(a.time)-n(b.time)),[data]);
   const task=useMemo(()=>nextTask(orders),[orders]);
-  const selectedTask=task?.selected?task:null;
-  const recommendedTask=task&&!task.selected?task:null;
-
-
 
   function errorText(code:string){
     return code==="fifo_violation"?"ต้องทำคิวแรกให้เสร็จก่อน ระบบไม่อนุญาตให้ข้ามไปทำคิวถัดไป":
