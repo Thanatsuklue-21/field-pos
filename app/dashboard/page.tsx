@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import {
   AlertTriangle,
   Clock3,
@@ -7,6 +8,10 @@ import {
   PackageSearch,
   TrendingUp,
   Users,
+  ShoppingBag,
+  ArrowRight,
+  ListOrdered,
+  ClipboardList,
 } from "lucide-react";
 import AuthGate from "@/components/auth-gate";
 import { api } from "@/lib/api-client";
@@ -76,11 +81,22 @@ function View() {
     ["Gross Margin", d?.grossMargin || 0, "%"],
   ];
   return (
-    <section className="soft-scroll h-full overflow-auto p-5 md:p-7">
+    <section className="soft-scroll h-full overflow-auto p-3 sm:p-5 md:p-7">
       <p className="gold m-0 text-[10px] font-bold tracking-[.3em]">
         FIELD MANAGEMENT
       </p>
       <h1 className="mt-1 text-2xl font-semibold">DASHBOARD</h1>
+      <div className="mt-4 grid gap-2 sm:grid-cols-[1.5fr_1fr_1fr]">
+        <Link href="/pos" className="flex min-h-[92px] items-center justify-between rounded-[24px] border border-[#d4af37]/50 bg-[#fff8dc] p-4 shadow-sm transition hover:border-[#c59b19]">
+          <div className="flex items-center gap-3">
+            <div className="grid h-12 w-12 place-items-center rounded-2xl bg-[#d4af37] text-black"><ShoppingBag size={21}/></div>
+            <div><p className="text-[10px] font-bold tracking-[.18em] text-[#765b08]">FRONT COUNTER</p><h2 className="mt-1 text-lg font-bold text-slate-900">รับออเดอร์</h2><p className="mt-1 text-xs text-slate-600">เลือกเมนู → ทวนรายการ → รับเงิน → ออกคิว</p></div>
+          </div>
+          <ArrowRight size={20} className="shrink-0 text-[#765b08]"/>
+        </Link>
+        <Link href="/queue" className="flex min-h-[74px] items-center gap-3 rounded-[22px] border border-slate-200 bg-white p-4 shadow-sm"><div className="grid h-10 w-10 place-items-center rounded-xl bg-slate-100"><ListOrdered size={18}/></div><div><b className="text-sm">คิวที่ต้องทำ</b><p className="mt-1 text-[11px] text-slate-500">ดู FIFO / ส่งมอบ</p></div></Link>
+        <Link href="/orders" className="flex min-h-[74px] items-center gap-3 rounded-[22px] border border-slate-200 bg-white p-4 shadow-sm"><div className="grid h-10 w-10 place-items-center rounded-xl bg-slate-100"><ClipboardList size={18}/></div><div><b className="text-sm">รายการออเดอร์</b><p className="mt-1 text-[11px] text-slate-500">ดูบิล / แก้รายการ</p></div></Link>
+      </div>
       {d?.profitEstimated && (
         <div className="mt-4 rounded-2xl border border-amber-400/25 bg-amber-400/[.08] p-4 text-sm text-amber-800">
           <b>ESTIMATED PROFIT</b>
