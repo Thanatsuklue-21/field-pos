@@ -382,3 +382,25 @@ test('real libSQL: signed payment webhook duplicate keeps one sale, stock deduct
  const doc=await state(db);assert.equal(doc.sales.length,1);assert.equal(doc.orders.length,1);assert.equal(doc.ingredients.matcha.qty,990);assert.equal(pushes,1);
  assert.equal((await db.execute('SELECT state FROM field_line_outbox')).rows[0].state,'sent');
 });
+
+
+test('real libSQL: called queues wait for pickup without blocking production or out-of-order handoff',async t=>{
+ const db=await setup(t),first=await sell(db,'pickup-first'),second=await sell(db,'pickup-second');
+ await assert.rejects(act(db,second.orderId,'complete_item',{itemIndex:0,expectedReadyQty:0}),/fifo_violation/);
+ // One completion tap no longer needs a select round trip.
+ await act(db,first.orderId,'complete_item',{itemIndex:0,expectedReadyQty:0});
+ await assert.rejects(act(db,second.orderId,'complete_item',{itemIndex:0,expectedReadyQty:0}),/fifo_violation/);
+ await act(db,first.orderId,'call');
+ await act(db,second.orderId,'complete_item',{itemIndex:0,expectedReadyQty:0});
+ await assert.rejects(act(db,second.orderId,'complete_item',{itemIndex:0,expectedReadyQty:0}),/queue_state_changed/);
+ await act(db,second.orderId,'call');
+ assert.equal((await getQueueSnapshot({db})).orders.length,2);
+ const handoffKey='pickup-second-return';
+ const body={requestKey:handoffKey,orderId:second.orderId,action:'return'};
+ await queuePosAction({db,user,body});
+ assert.equal((await queuePosAction({db,user,body})).replayed,true);
+ const pending=(await getQueueSnapshot({db})).orders;assert.equal(pending.length,1);assert.equal(pending[0].id,first.orderId);assert.equal(pending[0].status,'ready');
+ await act(db,first.orderId,'return');assert.equal((await getQueueSnapshot({db})).orders.length,0);
+ const doc=await state(db);assert.equal(doc.sales.length,2);assert.equal(doc.ingredients.matcha.qty,980);
+ for(const cached of Object.values(doc.posRequestKeys))assert.equal(cached.response.orders,undefined);
+});

@@ -4,7 +4,7 @@
 
 import {useEffect,useMemo,useRef,useState} from "react";
 import {useRouter} from "next/navigation";
-import {BellRing,CheckCircle2,ChevronRight,Maximize2,ReceiptText,RotateCcw,Sparkles,X} from "lucide-react";
+import {BellRing,CheckCircle2,Maximize2,ReceiptText,RotateCcw,Sparkles,X} from "lucide-react";
 import AuthGate from "@/components/auth-gate";
 import {api,type RevisionUnchanged,type Session} from "@/lib/api-client";
 import {readQueueSnapshotCache,writeQueueSnapshotCache} from "@/lib/queue-cache";
@@ -23,7 +23,7 @@ const orderReady=(order:QOrder)=>(order.items||[]).length>0&&(order.items||[]).e
 const orderCalled=(order:QOrder)=>(order.items||[]).length>0&&(order.items||[]).every(itemCalled);
 
 function nextTask(orders:QOrder[]){
-  const first=orders[0];
+  const first=orders.find(order=>!orderCalled(order));
   if(!first)return null;
   for(let index=0;index<(first.items||[]).length;index++){
     const item=first.items[index];
@@ -82,7 +82,6 @@ function QueueView({session}:{session:Session}){
   const [prepPlanOpen,setPrepPlanOpen]=useState(false);
   const [orderOverviewOpen,setOrderOverviewOpen]=useState(false);
   const overviewTimerRef=useRef<number|null>(null);
-  const overviewSeenRef=useRef("");
   const showOrderOverview=(ms=3000)=>{
     if(overviewTimerRef.current!==null)window.clearTimeout(overviewTimerRef.current);
     setOrderOverviewOpen(true);
@@ -91,11 +90,13 @@ function QueueView({session}:{session:Session}){
 
   useEffect(()=>()=>{if(overviewTimerRef.current!==null)window.clearTimeout(overviewTimerRef.current)},[]);
   useEffect(()=>{if(!toast)return;const timer=window.setTimeout(()=>setToast(""),2600);return()=>window.clearTimeout(timer)},[toast]);
+  useEffect(()=>{if(!callPrompt)return;const timer=window.setTimeout(()=>setCallPrompt(null),6000);return()=>window.clearTimeout(timer)},[callPrompt]);
   const pulse=(message:string)=>{setToast(message);try{navigator.vibrate?.(35)}catch{}};
   const optimistic=(mutate:(orders:QOrder[])=>QOrder[])=>setData(prev=>prev?{...prev,orders:mutate(prev.orders)}:prev);
 
   const acceptSnapshot=(next:QueueSnapshot|RevisionUnchanged)=>{
     if(next?.unchanged===true){setSyncing(false);return false}
+    if(next.revision<(revisionRef.current??0))return false;
     revisionRef.current=Number(next.revision)||0;
     setData(prev=>!prev||next.revision>=prev.revision?next:prev);
     writeQueueSnapshotCache(next as QueueSnapshot);
@@ -112,7 +113,7 @@ function QueueView({session}:{session:Session}){
       inFlight=true;
       try{
         const next=await api<QueueSnapshot|RevisionUnchanged>("/api/pos/queue",revisionRef.current===null?{}:{headers:{"X-Field-Revision":String(revisionRef.current)}});
-        if(!disposed)acceptSnapshot(next);
+        if(!disposed&&!busyRef.current)acceptSnapshot(next);
       }catch(e:any){if(!disposed)setMsg(e.message==="network_unavailable"?"ขาดการเชื่อมต่อ · ตรวจคิวล่าสุดก่อนทำต่อ":e.message)}
       finally{inFlight=false;if(!disposed)setSyncing(false)}
     };
@@ -155,20 +156,10 @@ function QueueView({session}:{session:Session}){
       code==="queue_state_changed"?"สถานะคิวเปลี่ยนแล้ว ระบบกำลังอัปเดต":code;
   }
 
-  async function selectTask(orderId:string,itemIndex:number){
-    const snapshot=data;const key="select:"+orderId+":"+itemIndex;setBusy(key);setMsg("");
-    optimistic(list=>list.map(order=>({...order,items:(order.items||[]).map((item,index)=>({...item,prepSelected:order.id===orderId&&index===itemIndex}))})));
-    pulse("รับงานแล้ว · กำลังบันทึก");
-    try{
-      const r=await api<any>("/api/pos/queue",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({requestKey:crypto.randomUUID(),orderId,itemIndex,action:"select",selected:true})});
-      if(!applyState(r))load().catch(()=>{});
-      setNotice("รับงานแล้ว · ระบบจะแสดงเมนูนี้เป็น “กำลังทำ” จนกว่าจะทำครบ");
-    }catch(e:any){if(snapshot)setData(snapshot);setMsg(errorText(e.message));await load().catch(()=>{})}finally{setBusy("")}
-  }
-
   async function completeNext(order:QOrder,item:QItem,itemIndex:number){
+    if(busyRef.current)return;
     const expectedReadyQty=n(item.readyQty),snapshot=data,key="done:"+order.id+":"+itemIndex;
-    setBusy(key);setMsg("");
+    busyRef.current=true;setBusy(key);setMsg("");
     optimistic(list=>list.map(o=>o.id!==order.id?o:{...o,status:"making",items:o.items.map((x,index)=>index===itemIndex?{...x,readyQty:x.qty,prepSelected:false}:x)}));
     pulse("บันทึกว่าทำ "+item.name+" ครบแล้ว");
     try{
@@ -180,55 +171,59 @@ function QueueView({session}:{session:Session}){
         const nextRecommended=nextTask((r.orders||[]) as QOrder[]);
         const fromCategory=String(item.prepGroup?.id||"");
         const toCategory=String(nextRecommended?.item.prepGroup?.id||"");
-        setNotice(nextRecommended?(fromCategory&&toCategory&&fromCategory!==toCategory?`หมวด ${categoryName(fromCategory)} ครบแล้ว · ต่อหมวด ${categoryName(toCategory)} · ${nextRecommended.item.name}`:`ทำ ${item.name} ครบแล้ว · ถัดไป ${nextRecommended.item.name}`):`ทำ ${item.name} ครบแล้ว · ตรวจปุ่มเรียกบัตรด้านล่าง`);
+        setNotice(nextRecommended?`เสร็จแล้ว · ทำ ${nextRecommended.item.name} ต่อ`:`เสร็จครบแล้ว · กดเรียกคิว`);
       }
-    }catch(e:any){if(snapshot)setData(snapshot);setMsg(errorText(e.message));await load().catch(()=>{})}finally{setBusy("")}
+    }catch(e:any){if(snapshot)setData(snapshot);setMsg(errorText(e.message));await load().catch(()=>{})}finally{busyRef.current=false;setBusy("")}
   }
 
   async function wasteRemake(order:QOrder,item:QItem,itemIndex:number){
+    if(busyRef.current)return;
     if(!window.confirm("บันทึก “ชงเสีย / ทำใหม่” "+item.name+" 1 แก้ว?\nระบบจะหักวัตถุดิบเพิ่มตามสูตรที่ใช้ตอนขาย และลงค่าใช้จ่าย WASTE อัตโนมัติ"))return;
-    const snapshot=data,key="waste:"+order.id+":"+itemIndex;setBusy(key);setMsg("");
+    const snapshot=data,key="waste:"+order.id+":"+itemIndex;busyRef.current=true;setBusy(key);setMsg("");
     optimistic(list=>list.map(o=>o.id!==order.id?o:{...o,status:"making",items:o.items.map((x,index)=>index===itemIndex?{...x,readyQty:n(x.readyQty)>n(x.calledQty)?n(x.readyQty)-1:n(x.readyQty),prepSelected:true,wasteCount:n(x.wasteCount)+1}:x)}));
     pulse("บันทึกชงเสีย · เตรียมทำใหม่ 1 แก้ว");
     try{
       const r=await api<any>("/api/pos/queue",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({requestKey:crypto.randomUUID(),orderId:order.id,itemIndex,action:"waste_remake",reason:"ชงเสีย / ทำใหม่"})});
       if(!applyState(r))load().catch(()=>{});
       setNotice("บันทึก WASTE "+item.name+" 1 แก้วแล้ว · หัก Stock เพิ่มตามสูตร"+(Number(r?.wasteCost)>0?" · ต้นทุนของเสีย ฿"+Number(r.wasteCost).toFixed(2):"")+" · ทำใหม่ต่อในคิวเดิม");
-    }catch(e:any){if(snapshot)setData(snapshot);setMsg(errorText(e.message));await load().catch(()=>{})}finally{setBusy("")}
+    }catch(e:any){if(snapshot)setData(snapshot);setMsg(errorText(e.message));await load().catch(()=>{})}finally{busyRef.current=false;setBusy("")}
   }
 
   async function callReadyItem(order:QOrder,item:QItem,itemIndex:number){
-    const snapshot=data,key="callitem:"+order.id+":"+itemIndex;setBusy(key);setMsg("");
+    if(busyRef.current)return;
+    const snapshot=data,key="callitem:"+order.id+":"+itemIndex;busyRef.current=true;setBusy(key);setMsg("");
     optimistic(list=>list.map(o=>o.id!==order.id?o:{...o,items:o.items.map((x,index)=>index===itemIndex?{...x,calledQty:x.readyQty}:x)}));
     pulse("บันทึกการเรียกบัตร "+order.pagerNo);
     try{
       const r=await api<any>("/api/pos/queue",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({requestKey:crypto.randomUUID(),orderId:order.id,itemIndex,action:"call_item"})});
       if(!applyState(r))load().catch(()=>{});
       setCallPrompt({queueNo:order.queueNo,pagerNo:order.pagerNo,scope:`รับ ${item.name} ก่อน`});
-    }catch(e:any){if(snapshot)setData(snapshot);setMsg(errorText(e.message));await load().catch(()=>{})}finally{setBusy("")}
+    }catch(e:any){if(snapshot)setData(snapshot);setMsg(errorText(e.message));await load().catch(()=>{})}finally{busyRef.current=false;setBusy("")}
   }
 
   async function callOrder(order:QOrder){
-    const snapshot=data,key="call:"+order.id;setBusy(key);setMsg("");
+    if(busyRef.current)return;
+    const snapshot=data,key="call:"+order.id;busyRef.current=true;setBusy(key);setMsg("");
     optimistic(list=>list.map(o=>o.id!==order.id?o:{...o,status:"ready",items:o.items.map(x=>({...x,calledQty:x.qty,prepSelected:false}))}));
     pulse("บันทึกการเรียกบัตร "+order.pagerNo);
     try{
       const r=await api<any>("/api/pos/queue",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({requestKey:crypto.randomUUID(),orderId:order.id,action:"call"})});
       if(!applyState(r))load().catch(()=>{});
       setCallPrompt({queueNo:order.queueNo,pagerNo:order.pagerNo,scope:"รับออเดอร์ทั้งหมด"});
-    }catch(e:any){if(snapshot)setData(snapshot);setMsg(errorText(e.message));await load().catch(()=>{})}finally{setBusy("")}
+    }catch(e:any){if(snapshot)setData(snapshot);setMsg(errorText(e.message));await load().catch(()=>{})}finally{busyRef.current=false;setBusy("")}
   }
 
   async function deliver(orderId:string){
-    const snapshot=data,order=orders.find(x=>x.id===orderId),key="return:"+orderId;setBusy(key);setMsg("");
+    if(busyRef.current)return;
+    const snapshot=data,order=orders.find(x=>x.id===orderId),key="return:"+orderId;busyRef.current=true;setBusy(key);setMsg("");
     optimistic(list=>list.filter(o=>o.id!==orderId));
     pulse("กำลังส่งมอบ "+(order?.queueNo||"คิว")+"…");
     try{
       const r=await api<any>("/api/pos/queue",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({requestKey:crypto.randomUUID(),orderId,action:"return"})});
       if(!applyState(r))load().catch(()=>{});
-      setNotice("ส่งมอบคิวแล้ว · ระบบเลื่อนไปคิวถัดไป");
+      setNotice("ลูกค้ารับสินค้าแล้ว");
       pulse("✓ ส่งมอบ "+(order?.queueNo||"คิว")+" เรียบร้อยแล้ว");
-    }catch(e:any){if(snapshot)setData(snapshot);setMsg(errorText(e.message));pulse("ส่งมอบไม่สำเร็จ · ระบบคืนคิวกลับแล้ว");await load().catch(()=>{})}finally{setBusy("")}
+    }catch(e:any){if(snapshot)setData(snapshot);setMsg(errorText(e.message));pulse("ส่งมอบไม่สำเร็จ · ระบบคืนคิวกลับแล้ว");await load().catch(()=>{})}finally{busyRef.current=false;setBusy("")}
   }
 
   const first=orders[0];
@@ -242,27 +237,22 @@ function QueueView({session}:{session:Session}){
   const activeCategory=categoryFlow.find(x=>x.id===activeCategoryId)||null;
   const activeBaseKey=String(task?.item.prepGroup?.compatibilityKey||activeCategory?.baseGroups.find(x=>x.pendingQty>0)?.key||"");
   const activeBase=activeCategory?.baseGroups.find(x=>x.key===activeBaseKey)||activeCategory?.baseGroups.find(x=>x.pendingQty>0)||null;
-  const upcoming=orders.filter((_,index)=>index>0&&index<4);
-  const extraUpcoming=Math.max(0,orders.length-1-upcoming.length);
+  const upcoming=orders.filter(order=>!orderCalled(order)&&order.id!==first?.id).slice(0,3);
+  const extraUpcoming=Math.max(0,orders.filter(order=>!orderCalled(order)).length-1-upcoming.length);
 
-  useEffect(()=>{
-    if(!first){overviewSeenRef.current="";setOrderOverviewOpen(false);return}
-    if(overviewSeenRef.current===first.id)return;
-    overviewSeenRef.current=first.id;
-    showOrderOverview(2800);
-  },[first?.id]);
+
 
   return <section className="soft-scroll h-full overflow-y-auto overscroll-contain p-2.5 pb-28 sm:p-4 sm:pb-24 md:p-6 md:pb-8">
     <div className="mx-auto w-full max-w-5xl space-y-2.5 sm:space-y-3">
       <header className="flex shrink-0 items-end justify-between gap-3">
-        <div><p className="gold m-0 text-[9px] font-bold tracking-[.26em]">SOLO PRODUCTION · FIFO</p><h1 className="mt-0.5 text-lg font-semibold sm:text-xl">QUEUE CONTROL</h1></div>
-        <div className="flex items-center gap-2">{syncing&&<span className="text-[10px] text-slate-400">กำลังซิงก์…</span>}<span className="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-[10px] font-semibold text-slate-600">{orders.length} ACTIVE</span></div>
+        <div><p className="gold m-0 text-[9px] font-bold tracking-[.26em]">ทำตามลำดับ · เรียกแล้วทำคิวถัดไป</p><h1 className="mt-0.5 text-lg font-semibold sm:text-xl">คิวครัว</h1></div>
+        <div className="flex items-center gap-2">{syncing&&<span className="text-[10px] text-slate-400">กำลังซิงก์…</span>}<span className="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-[10px] font-semibold text-slate-600">{orders.length} คิว</span></div>
       </header>
 
       {msg&&<div className="shrink-0 rounded-2xl border border-red-300 bg-red-50 px-3 py-2 text-xs text-red-800">{msg}</div>}
       {notice&&<div className="flex shrink-0 items-start justify-between gap-3 rounded-2xl border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs text-emerald-800"><span>{notice}</span><button onClick={()=>setNotice("")}><X size={15}/></button></div>}
 
-      {!first&&<div className="grid min-h-[55vh] place-items-center rounded-[24px] border border-dashed border-slate-300 bg-white/70 p-6 text-center">
+      {orders.length===0&&<div className="grid min-h-[55vh] place-items-center rounded-[24px] border border-dashed border-slate-300 bg-white/70 p-6 text-center">
         <div><CheckCircle2 size={34} className="mx-auto text-emerald-600"/><h2 className="mt-3 text-lg font-bold">ไม่มีคิวค้าง</h2><p className="mt-1 text-sm text-slate-500">คิวว่างแล้ว · กลับไปรับออเดอร์ลูกค้าคนถัดไปได้ทันที</p><button onClick={()=>router.push("/pos")} className="mt-4 min-h-11 rounded-2xl bg-[#d4af37] px-5 text-sm font-bold text-black">กลับไปรับออเดอร์</button></div>
       </div>}
 
@@ -316,23 +306,34 @@ function QueueView({session}:{session:Session}){
             </div>}
 
             {!selectedTask&&recommendedTask&&<div className="mt-3 grid gap-2 sm:grid-cols-[1fr_auto] sm:items-center">
-              <div className="text-xs text-slate-600"><Sparkles size={12} className="mr-1 inline text-[#9a7a16]"/>เริ่มจากเมนูที่ไฮไลต์ แล้วทำเมนูอื่นใน Base เดียวกันต่อให้ครบ</div>
-              <button disabled={busy!==""} onClick={()=>selectTask(recommendedTask.order.id,recommendedTask.index)} className="min-h-11 rounded-2xl bg-[#d4af37] px-4 text-xs font-black text-black disabled:opacity-40">{busy==="select:"+recommendedTask.order.id+":"+recommendedTask.index?"กำลังบันทึก...":"รับทำ "+recommendedTask.item.name}</button>
+              <div className="text-xs text-slate-600"><Sparkles size={12} className="mr-1 inline text-[#9a7a16]"/>ทำเมนูที่แสดงให้ครบ แล้วกด “เสร็จแล้ว”</div>
+              <div className="flex gap-2"><button disabled={busy!==""} onClick={()=>wasteRemake(recommendedTask.order,recommendedTask.item,recommendedTask.index)} className="min-h-11 rounded-xl border border-red-200 px-3 text-xs text-red-700">ชงเสีย / ทำใหม่</button><button disabled={busy!==""} onClick={()=>completeNext(recommendedTask.order,recommendedTask.item,recommendedTask.index)} className="min-h-11 rounded-2xl bg-[#d4af37] px-4 text-xs font-black text-black disabled:opacity-40">{"ทำ "+recommendedTask.item.name+" เสร็จแล้ว"}</button></div>
             </div>}
           </>}
 
-          {!task&&firstReady&&!firstCalled&&<div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-center"><div><span className="rounded-full bg-emerald-100 px-2.5 py-1 text-[10px] font-black text-emerald-700">ทำครบทุกหมวดแล้ว</span><div className="mt-2 text-sm font-bold">พร้อมเรียกลูกค้ารับทั้งคิว</div></div><button disabled={busy!==""} onClick={()=>callOrder(first)} className="flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-[#d4af37] px-5 text-sm font-black text-black"><BellRing size={17}/>เรียกบัตร {first.pagerNo} · รับทั้งหมด</button></div>}
-          {!task&&firstCalled&&<div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-center"><div><span className="rounded-full bg-emerald-100 px-2.5 py-1 text-[10px] font-black text-emerald-700">แจ้งลูกค้ารับครบแล้ว</span><div className="mt-2 text-sm font-bold">พร้อมส่งมอบและไปคิวถัดไป</div></div><button disabled={busy!==""} onClick={()=>deliver(first.id)} className="flex min-h-12 items-center justify-center gap-2 rounded-2xl border border-emerald-400 bg-white px-5 text-sm font-black text-emerald-700">ส่งมอบคิวนี้ <ChevronRight size={16}/></button></div>}
+          {!task&&firstReady&&!firstCalled&&<div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-center"><div><span className="rounded-full bg-emerald-100 px-2.5 py-1 text-[10px] font-black text-emerald-700">ทำครบทุกหมวดแล้ว</span><div className="mt-2 text-sm font-bold">พร้อมเรียกลูกค้ารับทั้งคิว</div></div><button disabled={busy!==""} onClick={()=>callOrder(first)} className="flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-[#d4af37] px-5 text-sm font-black text-black"><BellRing size={17}/>เรียกคิว {first.queueNo}</button></div>}
+
         </section>
 
         <section className="rounded-[18px] border border-slate-300 bg-white px-3 py-2">
           <div className="flex items-center gap-2"><b className="shrink-0 text-[10px] text-slate-500">คิวถัดไป</b><div className="grid min-w-0 flex-1 grid-cols-3 gap-1.5">{upcoming.map(order=><div key={order.id} className="min-w-0 rounded-xl bg-slate-50 px-2 py-1.5 text-center"><div className="truncate text-[10px] font-black text-slate-700">{order.queueNo}</div><div className="truncate text-[9px] text-slate-500">บัตร {order.pagerNo} · {(order.items||[]).reduce((sum,item)=>sum+n(item.qty),0)} แก้ว</div></div>)}{upcoming.length===0&&<div className="col-span-3 py-1 text-center text-[10px] text-slate-400">ไม่มีคิวถัดไป</div>}</div>{extraUpcoming>0&&<span className="shrink-0 text-[9px] font-bold text-slate-500">+{extraUpcoming}</span>}</div>
         </section>
       </>}
+      <section className="rounded-2xl border border-slate-200 bg-white p-3">
+        <h2 className="text-sm font-bold">คิวรวม · สีเขียวรอลูกค้ารับ</h2>
+        <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">{orders.map(order=>{
+          const waiting=orderCalled(order);
+          return <div key={order.id} className={"rounded-2xl border-2 p-3 "+(waiting?"border-emerald-400 bg-emerald-50":"border-slate-200 bg-slate-50")}>
+            <b className="text-lg">{order.queueNo}</b><p className="text-xs">บัตร {order.pagerNo} · {waiting?"เรียกแล้ว · รอรับ":"กำลังรอทำ"}</p>
+            {waiting&&<><button disabled={busy!==""} onClick={()=>deliver(order.id)} className="mt-2 min-h-12 w-full rounded-xl bg-emerald-600 px-2 text-sm font-bold text-white disabled:opacity-50">ลูกค้ารับแล้ว</button><button onClick={()=>setCallPrompt({queueNo:order.queueNo,pagerNo:order.pagerNo,scope:"เรียกซ้ำ"})} className="mt-1 min-h-10 w-full text-xs font-semibold text-emerald-800">เรียกอีกครั้ง</button></>}
+          </div>;
+        })}</div>
+        {!first&&orders.length>0&&<p className="mt-2 text-sm text-emerald-700">ทำครบแล้ว · รอลูกค้ารับได้เลย</p>}
+      </section>
     </div>
 
     {orderOverviewOpen&&first&&<div className="fixed left-3 right-3 top-[max(4.75rem,env(safe-area-inset-top))] z-[105] mx-auto max-w-xl rounded-[22px] border-2 border-[#d4af37]/70 bg-white p-3 shadow-2xl">
-      <div className="flex items-start justify-between gap-3"><div><p className="gold text-[9px] font-bold tracking-[.18em]">ORDER OVERVIEW · เด้งแล้วหายเอง</p><h3 className="mt-1 text-sm font-black">คิว {first.queueNo} · {firstCupCount} แก้ว · {categoryFlow.length} หมวด</h3></div><button onClick={()=>setOrderOverviewOpen(false)} className="grid h-8 w-8 shrink-0 place-items-center rounded-full border border-slate-200"><X size={15}/></button></div>
+      <div className="flex items-start justify-between gap-3"><div><p className="gold text-[9px] font-bold tracking-[.18em]">รายการในคิว</p><h3 className="mt-1 text-sm font-black">คิว {first.queueNo} · {firstCupCount} แก้ว · {categoryFlow.length} หมวด</h3></div><button onClick={()=>setOrderOverviewOpen(false)} className="grid h-8 w-8 shrink-0 place-items-center rounded-full border border-slate-200"><X size={15}/></button></div>
       <div className="mt-2 flex flex-wrap gap-1.5">{categoryFlow.map((category,index)=><span key={category.id} className={"rounded-full border px-2 py-1 text-[9px] font-bold "+(category.pendingQty<=0?"border-emerald-200 bg-emerald-50 text-emerald-700":category.id===activeCategoryId?"border-[#d4af37] bg-[#fff3bf] text-[#765b08]":"border-slate-200 bg-slate-50 text-slate-600")}>{index+1}. {category.label} · {category.qty} แก้ว</span>)}</div>
       <div className="soft-scroll mt-2 max-h-[46vh] space-y-1.5 overflow-y-auto">{(first.items||[]).map((item,index)=>{
         const done=itemDone(item),called=itemCalled(item),canCallEarly=done&&!called&&!firstReady;
@@ -362,16 +363,7 @@ function QueueView({session}:{session:Session}){
 
     {toast&&<div className="fixed bottom-[76px] sm:bottom-[92px] left-4 right-4 z-[95] mx-auto max-w-xl rounded-2xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-center text-sm font-semibold text-emerald-800 shadow-xl">{toast}</div>}
 
-    {callPrompt&&<div className="fixed inset-0 z-[80] grid place-items-center bg-black/55 p-4">
-      <div className="w-full max-w-lg rounded-[28px] border-2 border-[#d4af37] bg-white p-6 text-center shadow-2xl">
-        <div className="flex justify-end"><button onClick={()=>setCallPrompt(null)}><X size={22}/></button></div>
-        <div className="mx-auto grid h-16 w-16 place-items-center rounded-full bg-[#fff3bf] text-[#765b08]"><BellRing size={30}/></div>
-        <p className="mt-4 text-sm font-bold tracking-[.18em] text-[#765b08]">{callPrompt.queueNo} · {callPrompt.scope}</p>
-        <div className="mt-2 text-5xl font-black leading-none text-[#6f5510] md:text-6xl">บัตร {callPrompt.pagerNo||"—"}</div>
-        <p className="mt-4 text-base font-semibold text-slate-800">กดหมายเลข {callPrompt.pagerNo||"—"} ที่เครื่องเรียกคิว Bluetooth ตอนนี้</p>
-        <p className="mt-1 text-sm text-slate-500">FIELD POS บันทึกการเรียกในระบบ แต่ต้องกดเครื่องเรียกจริงอีกครั้ง</p>
-        <button onClick={()=>setCallPrompt(null)} className="mt-6 w-full rounded-2xl bg-[#d4af37] py-3.5 text-base font-bold text-black">กดเครื่องเรียกแล้ว / ปิด</button>
-      </div>
-    </div>}
+    {callPrompt&&<div role="status" className="fixed bottom-24 left-3 right-3 z-[95] mx-auto flex max-w-xl items-center justify-between gap-3 rounded-2xl border border-amber-300 bg-amber-50 p-3 shadow-lg"><div><b>เรียกคิว {callPrompt.queueNo} · บัตร {callPrompt.pagerNo}</b><p className="text-xs">กดหมายเลขที่เครื่องเรียกคิว Bluetooth · ทำคิวถัดไปได้เลย</p></div><button aria-label="ปิดแจ้งเตือนเรียกคิว" onClick={()=>setCallPrompt(null)}><X size={20}/></button></div>}
+
   </section>;
 }

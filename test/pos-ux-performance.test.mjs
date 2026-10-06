@@ -78,11 +78,11 @@ test('payment success makes the physical pager card visually dominant',async()=>
 test('queue shows pager number, guided active work, and Bluetooth reminder',async()=>{
   const queue=await read('app/queue/page.tsx');
   assert.match(queue,/บัตรเรียกคิว/);
-  assert.match(queue,/"รับทำ "\+recommendedTask\.item\.name/);
+  assert.match(queue,/"ทำ "\+recommendedTask\.item\.name\+" เสร็จแล้ว"/);
   assert.match(queue,/กำลังทำ/);
   assert.match(queue,/ทำ .* ครบ/);
   assert.match(queue,/เครื่องเรียกคิว Bluetooth/);
-  assert.match(queue,/กดเครื่องเรียกแล้ว \/ ปิด/);
+  assert.match(queue,/ปิดแจ้งเตือนเรียกคิว/);
   assert.match(queue,/setCallPrompt/);
 });
 
@@ -120,12 +120,12 @@ test('queue production flow is one guided base at a time with optional early pic
   const queue=await read('app/queue/page.tsx');
   assert.match(queue,/BASE ปัจจุบัน · แสดงครั้งเดียว/);
   assert.match(queue,/activeBase\.items\.map/);
-  assert.match(queue,/"รับทำ "\+recommendedTask\.item\.name/);
+  assert.match(queue,/"ทำ "\+recommendedTask\.item\.name\+" เสร็จแล้ว"/);
   assert.match(queue,/ทำ \{selectedTask\.item\.name\} ครบ/);
   assert.match(queue,/action:"call_item"/);
   assert.match(queue,/รับเมนูนี้ก่อน/);
-  assert.match(queue,/รับทั้งหมด/);
-  assert.match(queue,/ส่งมอบคิวนี้/);
+  assert.match(queue,/เรียกคิว \{first\.queueNo\}/);
+  assert.match(queue,/ลูกค้ารับแล้ว/);
 });
 
 test('queue reads a compact snapshot and renders priced order details',async()=>{
@@ -170,7 +170,7 @@ test('queue actions use optimistic feedback and delivery has a visible fixed toa
   assert.match(queue,/pulse\("กำลังส่งมอบ/);
   assert.match(queue,/ส่งมอบ .*เรียบร้อยแล้ว/);
   assert.match(queue,/fixed bottom-\[76px\]/);
-  assert.match(queue,/กำลังบันทึก\.\.\./);
+  assert.match(queue,/busyRef\.current=true/);
 });
 
 test('cash order can be safely voided and loaded back into POS before production',async()=>{
@@ -319,12 +319,12 @@ test('CRM redemption makes the payment UI use net payable for cash and PromptPay
 });
 
 
-test('queue control room keeps one active base above the fold and flashes overview',async()=>{
+test('queue control room keeps one active base and opens overview only on request',async()=>{
   const queue=await read('app/queue/page.tsx');
-  assert.match(queue,/QUEUE CONTROL/);
+  assert.match(queue,/คิวครัว/);
   assert.match(queue,/BASE ปัจจุบัน · แสดงครั้งเดียว/);
-  assert.match(queue,/ORDER OVERVIEW · เด้งแล้วหายเอง/);
-  assert.match(queue,/showOrderOverview\(2800\)/);
+  assert.match(queue,/รายการในคิว/);
+  assert.doesNotMatch(queue,/showOrderOverview\(2800\)/);
   assert.match(queue,/showOrderOverview\(3600\)/);
   assert.doesNotMatch(queue,/ลำดับหมวดและ Base ของคิวนี้/);
   assert.match(queue,/activeCategory\.label/);
@@ -376,7 +376,7 @@ test('solo operator daily flow keeps primary mobile actions short and connected'
   assert.doesNotMatch(shell,/\["\/dashboard","\/pos","\/queue","\/stock","\/orders","\/backup","\/settings"\]/);
   assert.match(pos,/ไปทำคิว \{lastSale\.queueNo\}/);
   assert.match(pos,/รับลูกค้าคนถัดไป/);
-  assert.match(queue,/SOLO PRODUCTION · FIFO/);
+  assert.match(queue,/ทำตามลำดับ · เรียกแล้วทำคิวถัดไป/);
   assert.match(queue,/กลับไปรับออเดอร์/);
   assert.match(queue,/router\.push\("\/pos"\)/);
   assert.match(close,/OPEN \/ CLOSE DAY/);
@@ -409,7 +409,7 @@ test('queue guides production category then one compatible base without duplicat
   assert.doesNotMatch(queue,/ลำดับหมวดและ Base ของคิวนี้/);
   assert.match(queue,/activeBase/);
   assert.match(api,/a\.compatibilityKey\.localeCompare\(b\.compatibilityKey\)/);
-  assert.match(queue,/หมวด \$\{categoryName\(fromCategory\)\} ครบแล้ว · ต่อหมวด/);
+  assert.match(queue,/เสร็จแล้ว · ทำ \$\{nextRecommended\.item\.name\} ต่อ/);
 });
 
 test('queue mobile page uses a single primary scroll surface so bottom content remains reachable',async()=>{
