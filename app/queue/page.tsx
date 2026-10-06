@@ -23,6 +23,184 @@ const orderCalled=(order:QOrder)=>(order.items||[]).length>0&&(order.items||[]).
 
 function nextTask(orders:QOrder[]){
   const first=orders.find(order=>!orderCalled(order));
+  if(!first)return null;
+  for(let index=0;index<(first.items||[]).length;index++){
+    const item=first.items[index];
+    if(item.prepSelected&&!itemDone(item))return {order:first,item,index,selected:true};
+  }
+  for(let index=0;index<(first.items||[]).length;index++){
+    const item=first.items[index];
+    if(!itemDone(item))return {order:first,item,index,selected:false};
+  }
+  return null;
+}
+
+type FlowBase={key:string;qty:number;pendingQty:number;items:PrepGroup["items"]};
+type FlowCategory={id:string;label:string;qty:number;pendingQty:number;baseGroups:FlowBase[];items:QItem[]};
+
+function categoryName(id:string,label?:string){
+  const clean=String(id||label||"OTHER").replaceAll("_"," ").trim();
+  return clean||"OTHER";
+}
+function buildCategoryFlow(order:QOrder):FlowCategory[]{
+  const itemGroups=new Map<string,QItem[]>();
+  for(const item of order.items||[]){
+    const id=String(item.prepGroup?.id||"OTHER");
+    const list=itemGroups.get(id)||[];list.push(item);itemGroups.set(id,list);
+  }
+  return (order.prepGroups||[]).map(group=>{
+    const bases=new Map<string,FlowBase>();
+    for(const item of group.items||[]){
+      const key=String(item.compatibilityKey||group.id);
+      let base=bases.get(key);if(!base){base={key,qty:0,pendingQty:0,items:[]};bases.set(key,base)}
+      base.qty+=n(item.qty);base.pendingQty+=n(item.pendingQty);base.items.push(item);
+    }
+    return {id:group.id,label:categoryName(group.id,group.label),qty:n(group.qty),pendingQty:n(group.pendingQty),baseGroups:[...bases.values()],items:itemGroups.get(group.id)||[]};
+  });
+}
+function baseTitle(base:FlowBase,index:number,total:number){
+  if(base.items.length>1)return "เบสเดียวกัน "+base.qty+" แก้ว";
+  if(total>1)return "เบสชุด "+(index+1)+" · "+base.qty+" แก้ว";
+  return "เบสของหมวดนี้ · "+base.qty+" แก้ว";
+}
+
+export default function Queue(){return <AuthGate>{session=><QueueView session={session}/>}</AuthGate>}
+
+function QueueView({session}:{session:Session}){
+  const [data,setData]=useState<QueueSnapshot|null>(null);
+  const [syncing,setSyncing]=useState(true);
+  const [busy,setBusy]=useState("");
+  const [msg,setMsg]=useState("");
+  const [notice,setNotice]=useState("");
+  const [toast,setToast]=useState("");
+  const busyRef=useRef(false);
+  const revisionRef=useRef<number|null>(null);
+  busyRef.current=busy!=="";
+  useEffect(()=>{if(!toast)return;const timer=window.setTimeout(()=>setToast(""),2600);return()=>window.clearTimeout(timer)},[toast]);
+  const pulse=(message:string)=>{setToast(message);try{navigator.vibrate?.(35)}catch{}};
+  const optimistic=(mutate:(orders:QOrder[])=>QOrder[])=>setData(prev=>prev?{...prev,orders:mutate(prev.orders)}:prev);
+
+  const acceptSnapshot=(next:QueueSnapshot|RevisionUnchanged)=>{
+    if(next?.unchanged===true){setSyncing(false);return false}
+    if(next.revision<(revisionRef.current??0))return false;
+    revisionRef.current=Number(next.revision)||0;
+    setData(prev=>!prev||next.revision>=prev.revision?next:prev);
+    writeQueueSnapshotCache(next as QueueSnapshot);
+    setSyncing(false);
+    return true;
+  };
+  const load=()=>api<QueueSnapshot|RevisionUnchanged>("/api/pos/queue",revisionRef.current===null?{}:{headers:{"X-Field-Revision":String(revisionRef.current)}}).then(acceptSnapshot);
+  useEffect(()=>{
+    const cached=readQueueSnapshotCache<QueueSnapshot>();
+    if(cached){revisionRef.current=cached.revision;setData(cached)}
+    let disposed=false,inFlight=false;
+    const refresh=async()=>{
+      if(disposed||inFlight||busyRef.current||document.visibilityState==="hidden")return;
+      inFlight=true;
+      try{
+        const next=await api<QueueSnapshot|RevisionUnchanged>("/api/pos/queue",revisionRef.current===null?{}:{headers:{"X-Field-Revision":String(revisionRef.current)}});
+        if(!disposed&&!busyRef.current)acceptSnapshot(next);
+      }catch(e:any){if(!disposed)setMsg(e.message==="network_unavailable"?"ขาดการเชื่อมต่อ · ตรวจคิวล่าสุดก่อนทำต่อ":e.message)}
+      finally{inFlight=false;if(!disposed)setSyncing(false)}
+    };
+    refresh();
+    const timer=window.setInterval(refresh,5000);
+    window.addEventListener("focus",refresh);
+    document.addEventListener("visibilitychange",refresh);
+    return()=>{disposed=true;window.clearInterval(timer);window.removeEventListener("focus",refresh);document.removeEventListener("visibilitychange",refresh)};
+  },[]);
+
+  const applyState=(r:any)=>{
+    const orders=Array.isArray(r?.orders)?r.orders:null;
+    if(!orders)return false;
+    const revision=Number(r.revision)||0;
+    revisionRef.current=Math.max(revisionRef.current||0,revision);
+    setData(prev=>{
+      const next=prev&&revision>=prev.revision?{...prev,revision,orders}:prev;
+      if(next)writeQueueSnapshotCache(next as QueueSnapshot);
+      return next;
+    });
+    return true;
+  };
+
+  const orders=useMemo(()=>((data?.orders||[]) as QOrder[]).slice().sort((a,b)=>n(a.time)-n(b.time)),[data]);
+  const task=useMemo(()=>nextTask(orders),[orders]);
+  const selectedTask=task?.selected?task:null;
+  const recommendedTask=task&&!task.selected?task:null;
+
+
+
+  function errorText(code:string){
+    return code==="fifo_violation"?"ต้องทำคิวแรกให้เสร็จก่อน ระบบไม่อนุญาตให้ข้ามไปทำคิวถัดไป":
+      code==="order_not_ready"?"ยังทำเครื่องดื่มไม่ครบ":
+      code==="item_not_ready_for_call"?"เมนูนี้ยังไม่มีแก้วที่พร้อมเรียก":
+      code==="pager_already_called"?"บัตรคิวนี้ถูกบันทึกว่าเรียกแล้ว":
+      code==="waste_after_call_not_supported"?"เรียกลูกค้ารับเมนูนี้ครบแล้ว จึงไม่ย้อนเป็นชงเสียอัตโนมัติ":
+      code==="recipe_unavailable"?"ไม่พบสูตรที่ใช้ตอนขาย จึงบันทึกชงเสียอัตโนมัติไม่ได้":
+      code.startsWith("stock_shortage:")?"วัตถุดิบไม่พอสำหรับทำใหม่ 1 แก้ว · กรุณาตรวจ Stock":
+      code.startsWith("ingredient_missing:")?"สูตรอ้างวัตถุดิบที่ไม่มีใน Stock Master":
+      code==="queue_state_changed"?"สถานะคิวเปลี่ยนแล้ว ระบบกำลังอัปเดต":code;
+  }
+
+  async function completeNext(order:QOrder,item:QItem,itemIndex:number){
+    if(busyRef.current)return;
+    const expectedReadyQty=n(item.readyQty),snapshot=data,key="done:"+order.id+":"+itemIndex;
+    busyRef.current=true;setBusy(key);setMsg("");
+    optimistic(list=>list.map(o=>o.id!==order.id?o:{...o,status:"making",items:o.items.map((x,index)=>index===itemIndex?{...x,readyQty:x.qty,prepSelected:false}:x)}));
+    pulse("บันทึกว่าทำ "+item.name+" ครบแล้ว");
+    try{
+      const r=await api<any>("/api/pos/queue",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({requestKey:crypto.randomUUID(),orderId:order.id,itemIndex,action:"complete_item",expectedReadyQty})});
+      if(!applyState(r))load().catch(()=>{});
+      const updated=(r?.orders||[]).find((x:any)=>x.id===order.id);
+      const updatedItem=updated?.items?.[itemIndex];
+      if(updatedItem&&n(updatedItem.readyQty)>=n(updatedItem.qty)){
+        const nextRecommended=nextTask((r.orders||[]) as QOrder[]);
+        const fromCategory=String(item.prepGroup?.id||"");
+        const toCategory=String(nextRecommended?.item.prepGroup?.id||"");
+        setNotice(nextRecommended?`เสร็จแล้ว · ทำ ${nextRecommended.item.name} ต่อ`:`เสร็จครบแล้ว · กดเรียกคิว`);
+      }
+    }catch(e:any){if(snapshot)setData(snapshot);setMsg(errorText(e.message));await load().catch(()=>{})}finally{busyRef.current=false;setBusy("")}
+  }
+
+  async function wasteRemake(order:QOrder,item:QItem,itemIndex:number){
+    if(busyRef.current)return;
+    if(!window.confirm("บันทึก “ชงเสีย / ทำใหม่” "+item.name+" 1 แก้ว?\nระบบจะหักวัตถุดิบเพิ่มตามสูตรที่ใช้ตอนขาย และลงค่าใช้จ่าย WASTE อัตโนมัติ"))return;
+    const snapshot=data,key="waste:"+order.id+":"+itemIndex;busyRef.current=true;setBusy(key);setMsg("");
+    optimistic(list=>list.map(o=>o.id!==order.id?o:{...o,status:"making",items:o.items.map((x,index)=>index===itemIndex?{...x,readyQty:n(x.readyQty)>n(x.calledQty)?n(x.readyQty)-1:n(x.readyQty),prepSelected:true,wasteCount:n(x.wasteCount)+1}:x)}));
+    pulse("บันทึกชงเสีย · เตรียมทำใหม่ 1 แก้ว");
+    try{
+      const r=await api<any>("/api/pos/queue",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({requestKey:crypto.randomUUID(),orderId:order.id,itemIndex,action:"waste_remake",reason:"ชงเสีย / ทำใหม่"})});
+      if(!applyState(r))load().catch(()=>{});
+      setNotice("บันทึก WASTE "+item.name+" 1 แก้วแล้ว · หัก Stock เพิ่มตามสูตร"+(Number(r?.wasteCost)>0?" · ต้นทุนของเสีย ฿"+Number(r.wasteCost).toFixed(2):"")+" · ทำใหม่ต่อในคิวเดิม");
+    }catch(e:any){if(snapshot)setData(snapshot);setMsg(errorText(e.message));await load().catch(()=>{})}finally{busyRef.current=false;setBusy("")}
+  }
+
+  async function callOrder(order:QOrder){
+    if(busyRef.current)return;
+    const snapshot=data,key="call:"+order.id;busyRef.current=true;setBusy(key);setMsg("");
+    optimistic(list=>list.map(o=>o.id!==order.id?o:{...o,status:"ready",items:o.items.map(x=>({...x,calledQty:x.qty,prepSelected:false}))}));
+    setToast("");setNotice("");
+    try{
+      const r=await api<any>("/api/pos/queue",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({requestKey:crypto.randomUUID(),orderId:order.id,action:"call"})});
+      if(!applyState(r))load().catch(()=>{});
+
+    }catch(e:any){if(snapshot)setData(snapshot);setMsg(errorText(e.message));await load().catch(()=>{})}finally{busyRef.current=false;setBusy("")}
+  }
+
+  async function deliver(orderId:string){
+    if(busyRef.current)return;
+    const snapshot=data,order=orders.find(x=>x.id===orderId),key="return:"+orderId;busyRef.current=true;setBusy(key);setMsg("");
+    optimistic(list=>list.filter(o=>o.id!==orderId));
+    pulse("กำลังส่งมอบ "+(order?.queueNo||"คิว")+"…");
+    try{
+      const r=await api<any>("/api/pos/queue",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({requestKey:crypto.randomUUID(),orderId,action:"return"})});
+      if(!applyState(r))load().catch(()=>{});
+      setNotice("ลูกค้ารับสินค้าแล้ว");
+      pulse("✓ ส่งมอบ "+(order?.queueNo||"คิว")+" เรียบร้อยแล้ว");
+    }catch(e:any){if(snapshot)setData(snapshot);setMsg(errorText(e.message));pulse("ส่งมอบไม่สำเร็จ · ระบบคืนคิวกลับแล้ว");await load().catch(()=>{})}finally{busyRef.current=false;setBusy("")}
+  }
+
+  const first=orders.find(order=>!orderCalled(order));
   const firstReady=first?orderReady(first):false;
   const firstCalled=first?orderCalled(first):false;
   const firstCupCount=first?(first.items||[]).reduce((sum,item)=>sum+n(item.qty),0):0;
