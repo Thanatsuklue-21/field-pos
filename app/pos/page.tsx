@@ -244,6 +244,19 @@ function PosView({session}:{session:Session}){
     cart.updateQuantity(key,nextQty);
   }
 
+  function startNextOrder(){
+    setLastSale(null);
+    setNotice("");
+    setResult("");
+    setPrompt(null);
+    setReceived("");
+    setMethod("cash");
+    setSelected(null);
+    setQ("");
+    setCat("ทั้งหมด");
+  }
+
+
   async function recoverCashCheckout(){
     const p=cashPendingRead();
     if(!p)return;
@@ -566,6 +579,6 @@ function PosView({session}:{session:Session}){
       </div>
     </div></div>}
 
-    {lastSale&&<div className="fixed bottom-[92px] right-4 z-[70] w-[min(460px,calc(100vw-2rem))] rounded-[26px] border border-emerald-300 bg-white p-5 shadow-2xl md:bottom-6 md:right-6"><div className="flex items-start gap-3"><div className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-emerald-100 text-emerald-700"><CheckCircle2 size={22}/></div><div className="min-w-0 flex-1"><div className="flex items-start justify-between gap-2"><div><b className="text-lg">ชำระเงินสำเร็จ</b><p className="mt-1 text-sm text-slate-600">คิว {lastSale.queueNo}{lastSale.recovered?" · กู้คืนรายการเดิม":""}</p></div><button onClick={()=>setLastSale(null)}><X size={18}/></button></div><div className="mt-3 rounded-[20px] border-2 border-[#d4af37] bg-[#fff8dc] p-4 text-center"><div className="text-xs font-bold tracking-[.18em] text-[#765b08]">หยิบบัตรให้ลูกค้า</div><div className="mt-1 text-4xl font-black leading-none text-[#6f5510] md:text-5xl">บัตร {lastSale.pager||"—"}</div></div>{lastSale.payment==="cash"&&<div className="mt-3 flex items-center justify-between rounded-2xl bg-emerald-50 p-3"><span className="text-sm font-semibold text-emerald-800">เงินทอน</span><div className="text-2xl font-bold text-emerald-800">฿{lastSale.change.toFixed(0)}</div></div>}<div className="mt-3 grid grid-cols-2 gap-2"><button onClick={()=>router.push("/queue")} className="flex min-h-11 items-center justify-center gap-2 rounded-2xl bg-[#d4af37] px-3 text-sm font-bold text-black">ไปทำคิว {lastSale.queueNo} <ArrowRight size={16}/></button><button onClick={()=>setLastSale(null)} className="min-h-11 rounded-2xl border border-slate-300 bg-white px-3 text-xs font-semibold text-slate-700">รับลูกค้าคนถัดไป</button></div></div></div></div>}
+    {lastSale&&<div className="fixed bottom-[92px] right-4 z-[70] w-[min(460px,calc(100vw-2rem))] rounded-[26px] border border-emerald-300 bg-white p-5 shadow-2xl md:bottom-6 md:right-6"><div className="flex items-start gap-3"><div className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-emerald-100 text-emerald-700"><CheckCircle2 size={22}/></div><div className="min-w-0 flex-1"><div className="flex items-start justify-between gap-2"><div><b className="text-lg">ชำระเงินสำเร็จ</b><p className="mt-1 text-sm text-slate-600">คิว {lastSale.queueNo}{lastSale.recovered?" · กู้คืนรายการเดิม":""}</p></div><button onClick={()=>setLastSale(null)}><X size={18}/></button></div><div className="mt-3 rounded-[20px] border-2 border-[#d4af37] bg-[#fff8dc] p-4 text-center"><div className="text-xs font-bold tracking-[.18em] text-[#765b08]">หยิบบัตรให้ลูกค้า</div><div className="mt-1 text-4xl font-black leading-none text-[#6f5510] md:text-5xl">บัตร {lastSale.pager||"—"}</div></div>{lastSale.payment==="cash"&&<div className="mt-3 flex items-center justify-between rounded-2xl bg-emerald-50 p-3"><span className="text-sm font-semibold text-emerald-800">เงินทอน</span><div className="text-2xl font-bold text-emerald-800">฿{lastSale.change.toFixed(0)}</div></div>}<div className="mt-3 grid grid-cols-2 gap-2"><button onClick={startNextOrder} className="flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-[#d4af37] px-3 text-sm font-bold text-black"><Plus size={16}/>รับออเดอร์ถัดไป</button><button onClick={()=>router.push("/queue")} className="flex min-h-12 items-center justify-center gap-2 rounded-2xl border border-slate-300 bg-white px-3 text-xs font-semibold text-slate-700">ไปทำคิว {lastSale.queueNo} <ArrowRight size={15}/></button></div><p className="mt-2 text-center text-[11px] text-slate-500">รับออเดอร์ถัดไปได้ทันทีโดยไม่ออกจากหน้า POS</p></div></div></div>}
   </section>;
 }
