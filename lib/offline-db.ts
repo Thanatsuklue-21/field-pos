@@ -66,11 +66,11 @@ export async function offlineCashDelete(requestKey:string){
 }
 export async function offlineCashPatch(requestKey:string,patch:Partial<OfflineCashRecord>){
   const db=await openDb();if(!db)return;
-  const store=db.transaction(OUTBOX_STORE,"readwrite").objectStore(OUTBOX_STORE);
-  const row=await new Promise<OfflineCashRecord|null>(resolve=>{
-    const r=store.get(requestKey);r.onsuccess=()=>resolve(r.result||null);r.onerror=()=>resolve(null);
-  });
-  if(row)store.put({...row,...patch,requestKey:row.requestKey});
-  const tx=store.transaction;
+  const tx=db.transaction(OUTBOX_STORE,"readwrite"),store=tx.objectStore(OUTBOX_STORE);
+  const r=store.get(requestKey);
+  r.onsuccess=()=>{
+    const row=r.result as OfflineCashRecord|undefined;
+    if(row)store.put({...row,...patch,requestKey:row.requestKey});
+  };
   await txDone(tx);db.close();
 }
