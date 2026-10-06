@@ -451,3 +451,17 @@ test('safe GET requests are bounded and coalesced while writes remain single-att
   assert.match(client,/return executeApi<T>\(path,init,method\);/);
   assert.doesNotMatch(client,/retry/i);
 });
+
+
+test('called pickup cards can reopen order details before handoff',async()=>{
+  const queue=await read('app/queue/page.tsx');
+  assert.match(queue,/pickupDetailId/);
+  assert.match(queue,/ดูรายการ/);
+  assert.match(queue,/ซ่อนรายการ/);
+  assert.match(queue,/pickupVariantLabel/);
+  assert.match(queue,/หวานปกติ 100%/);
+  assert.match(queue,/หวานน้อย 50%/);
+  assert.match(queue,/ไม่หวาน 0%/);
+  assert.match(queue,/setPickupDetailId\(order\.id\)/);
+  assert.match(queue,/ลูกค้ารับแล้ว/);
+});
