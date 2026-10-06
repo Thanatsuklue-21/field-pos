@@ -78,7 +78,7 @@ test('payment success makes the physical pager card visually dominant',async()=>
 test('queue shows pager number, guided active work, and Bluetooth reminder',async()=>{
   const queue=await read('app/queue/page.tsx');
   assert.match(queue,/บัตรเรียกคิว/);
-  assert.match(queue,/รับทำ \{recommendedTask\.item\.name\}/);
+  assert.match(queue,/"รับทำ "\+recommendedTask\.item\.name/);
   assert.match(queue,/กำลังทำ/);
   assert.match(queue,/ทำ .* ครบ/);
   assert.match(queue,/เครื่องเรียกคิว Bluetooth/);
@@ -120,8 +120,8 @@ test('queue production flow is one guided base at a time with optional early pic
   const queue=await read('app/queue/page.tsx');
   assert.match(queue,/BASE ปัจจุบัน · แสดงครั้งเดียว/);
   assert.match(queue,/activeBase\.items\.map/);
-  assert.match(queue,/รับทำ \{recommendedTask\.item\.name\}/);
-  assert.match(queue,/ทำ \{selectedTask\.item\.name\} ครบ/);
+  assert.match(queue,/"รับทำ "\+recommendedTask\.item\.name/);
+  assert.match(queue,/"ทำ "\+selectedTask\.item\.name\+" ครบ/);
   assert.match(queue,/action:"call_item"/);
   assert.match(queue,/รับเมนูนี้ก่อน/);
   assert.match(queue,/รับทั้งหมด/);
@@ -285,7 +285,7 @@ test('queue groups duplicate lines and exposes prep base plan without changing F
   assert.match(api,/compatibilityKey/);
   assert.match(queue,/compatibilityKey/);
   assert.match(queue,/baseTitle/);
-  assert.match(queue,/ใช้กับ:/);
+  assert.match(queue,/activeBase\.items\.map/);
   assert.match(api,/for\(const o of activeOrders\(doc\)\)/);
   assert.match(api,/target\.items=normalizeQueueItems/);
   assert.match(api,/const queueLookup=buildQueueLookup\(doc\)/);assert.match(api,/order\.items=normalizeQueueItems\(doc,order,queueLookup\)/);
