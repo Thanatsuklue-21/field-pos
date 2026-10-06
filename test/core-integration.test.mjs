@@ -1,3 +1,4 @@
+import {createHmac} from 'node:crypto';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtemp,rm,readFile} from 'node:fs/promises';
@@ -15,7 +16,15 @@ const cart=[{id:'latte',variant:'100%',qty:2}];
 const seed=()=>({menu:[{id:'latte',enabled:true,price:55,name:'Latte',variants:[{label:'100%',recipe:{items:{matcha:5,milk:110}}}]}],ingredients:{matcha:{qty:1000,unitCost:2},milk:{qty:30000,unitCost:0.06}},settings:{pagerCount:10},sales:[],orders:[],billSeq:{}});
 async function setup(t,doc=seed()){
   const dir=await mkdtemp(join(tmpdir(),'field-core-'));
-  const db=createClient({url:'file:'+join(dir,'test.db')});t.after(async()=>{db.close();await rm(dir,{recursive:true,force:true})});
+  const db=createClient({url:'file:'+join(dir,'test.db')});t.after(async()=>{
+    db.close();
+    try{await rm(dir,{recursive:true,force:true})}
+    catch(error){
+      // libSQL retains native handles until process exit on Windows.
+      // Only temp-file cleanup can be deferred; assertion/SQL errors still fail.
+      if(process.platform!=='win32'||error.code!=='EBUSY')throw error;
+    }
+  });
   await db.batch(SCHEMA,'write');
   await db.execute({sql:"INSERT INTO field_users(id,username,password_hash,role,created_at,updated_at) VALUES('owner','owner','unused','admin',0,0)",args:[]});
   await db.execute({sql:'UPDATE field_state SET document=? WHERE singleton=1',args:[JSON.stringify(doc)]});
@@ -352,4 +361,24 @@ test('queue UI exposes one-person remake waste shortcut with explicit accounting
   assert.match(queue,/หักวัตถุดิบเพิ่มตามสูตรที่ใช้ตอนขาย/);
   assert.match(queue,/ลงค่าใช้จ่าย WASTE อัตโนมัติ/);
   assert.match(queue,/waste_remake/);
+});
+
+
+test('real libSQL: signed payment webhook duplicate keeps one sale, stock deduction, queue and LINE message',async t=>{
+ const db=await setup(t),now=Date.now();
+ const started=await startSplitPayment({db,user,body:{requestKey:'webhook-start',cart,date:bangkokDate(),mode:'promptpay_full'},now});
+ const sessionId=started.session.id,chargeId='ch_webhook_test';
+ const saved={...process.env},originalFetch=globalThis.fetch;
+ process.env.PROMPTPAY_PROVIDER='beam';process.env.BEAM_MERCHANT_ID='merchant';process.env.BEAM_API_KEY='key';process.env.BEAM_WEBHOOK_HMAC_KEY=Buffer.from('test-webhook-key').toString('base64');
+ process.env.LINE_CHANNEL_ACCESS_TOKEN='test-token';process.env.LINE_KITCHEN_GROUP_ID='C'+'a'.repeat(32);
+ t.after(()=>{globalThis.fetch=originalFetch;for(const key of ['PROMPTPAY_PROVIDER','BEAM_MERCHANT_ID','BEAM_API_KEY','BEAM_WEBHOOK_HMAC_KEY','LINE_CHANNEL_ACCESS_TOKEN','LINE_KITCHEN_GROUP_ID']){if(saved[key]===undefined)delete process.env[key];else process.env[key]=saved[key]}});
+ const event={merchantId:'merchant',chargeId,status:'SUCCEEDED',amount:11000,currency:'THB',referenceId:sessionId};
+ let pushes=0;
+ globalThis.fetch=async url=>{if(String(url).startsWith('https://api.line.me/')){pushes++;return new Response('{}',{status:200})}return new Response(JSON.stringify(event),{status:200})};
+ const rawBody=JSON.stringify(event),signature=createHmac('sha256',Buffer.from('test-webhook-key')).update(rawBody).digest('base64');
+ const handler=createApi({db,origin:'https://field.test'});
+ async function callback(){const res={writeHead(status){this.status=status},end(body){this.body=JSON.parse(body)}};await handler({method:'POST',query:{route:['payments','promptpay','webhook']},headers:{'x-beam-signature':signature,'x-beam-event':'charge.succeeded'},body:event,rawBody},res);return res}
+ assert.equal((await callback()).status,200);assert.equal((await callback()).status,200);
+ const doc=await state(db);assert.equal(doc.sales.length,1);assert.equal(doc.orders.length,1);assert.equal(doc.ingredients.matcha.qty,990);assert.equal(pushes,1);
+ assert.equal((await db.execute('SELECT state FROM field_line_outbox')).rows[0].state,'sent');
 });
