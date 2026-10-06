@@ -293,6 +293,10 @@ test('queue groups duplicate lines and exposes prep base plan without changing F
   assert.match(queue,/เตรียมเฉพาะคิว \{first\.queueNo\} · ไม่ข้ามคิว/);
   assert.doesNotMatch(queue,/รวมสำหรับคิวนี้:/);
   assert.match(queue,/u\.perCup/);
+  assert.match(queue,/เปิดเต็มจอ/);
+  assert.match(queue,/h-\[100dvh\]/);
+  assert.match(queue,/ไม่รวมกรัมข้ามเมนู/);
+  assert.doesNotMatch(queue,/\+" = "\+Number\(u\.qty/);
   assert.match(api,/baseUsage:menuBaseUsage/);
   assert.match(api,/fifo_violation/);
 });
@@ -325,8 +329,8 @@ test('queue control room keeps current order overview above the fold',async()=>{
   assert.match(queue,/แผนเตรียมเบสของคิวนี้/);
   assert.match(queue,/เตรียมเฉพาะคิว \{first\.queueNo\} · ไม่ข้ามคิว/);
   assert.match(queue,/min-h-0 flex-1 overflow-y-auto/);
-  assert.doesNotMatch(queue,/ดูแผนเบส/);
-  assert.doesNotMatch(queue,/prepOpen&&first/);
+  assert.match(queue,/เปิดเต็มจอ/);
+  assert.match(queue,/prepPlanOpen&&first/);
 });
 
 

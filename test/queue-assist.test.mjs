@@ -14,7 +14,11 @@ test('queue UI keeps base preparation inside the oldest FIFO queue only',async()
   assert.doesNotMatch(ui,/orders\.slice\(0,3\)/);
   assert.doesNotMatch(ui,/เตรียมฐานรวม:/);
   assert.match(ui,/\(first\.prepGroups\|\|\[\]\)\.map/);
+  assert.match(ui,/เปิดเต็มจอ/);
+  assert.match(ui,/h-\[100dvh\]/);
+  assert.match(ui,/ไม่รวมกรัมข้ามเมนู/);
   assert.match(ui,/u\.name\+" "\+Number\(u\.perCup\.toFixed\(2\)\)/);
+  assert.doesNotMatch(ui,/\+" = "\+Number\(u\.qty/);
   assert.doesNotMatch(ui,/รวมสำหรับคิวนี้:/);
   assert.doesNotMatch(ui,/พิจารณาเฉพาะ 3 คิวแรก/);
 });
