@@ -199,7 +199,7 @@ test('mobile operational pages use compact density while preserving touch action
   assert.match(shell,/min-w-\[54px\]/);
   assert.match(pos,/min-h-\[154px\]/);
   assert.match(pos,/bottom-\[70px\]/);
-  assert.match(queue,/h-full overflow-hidden p-2\.5 sm:p-4 md:p-6/);
+  assert.match(queue,/h-full overflow-y-auto overscroll-contain p-2\.5 pb-28/);
   assert.match(stock,/p-3 sm:p-5 md:p-7/);
   assert.match(orders,/p-3 sm:p-5 md:p-7/);
 });
@@ -284,16 +284,16 @@ test('queue groups duplicate lines and exposes prep base plan without changing F
   assert.match(api,/MATCHA BASE/);
   assert.match(api,/compatibilityKey/);
   assert.match(queue,/compatibilityKey/);
-  assert.match(queue,/เบสเดียวกัน \{n\(group\.qty\)\} แก้ว/);
+  assert.match(queue,/baseTitle/);
   assert.match(queue,/ใช้กับ:/);
   assert.match(api,/for\(const o of activeOrders\(doc\)\)/);
   assert.match(api,/target\.items=normalizeQueueItems/);
   assert.match(api,/const queueLookup=buildQueueLookup\(doc\)/);assert.match(api,/order\.items=normalizeQueueItems\(doc,order,queueLookup\)/);
   assert.match(queue,/สูตรเต็มจอ/);
-  assert.match(queue,/เบสเดียวกัน \{n\(group\.qty\)\} แก้ว/);
+  assert.match(queue,/baseTitle/);
   assert.match(queue,/ใช้กับ:/);
   assert.doesNotMatch(queue,/รวมสำหรับคิวนี้:/);
-  const inline=queue.slice(queue.indexOf('สรุปเบสที่ทำร่วมกัน'),queue.indexOf('prepPlanOpen&&first'));
+  const inline=queue.slice(queue.indexOf('ลำดับหมวดและ Base ของคิวนี้'),queue.indexOf('prepPlanOpen&&first'));
   assert.doesNotMatch(inline,/u\.perCup/);
   assert.match(queue,/สูตรต่อ 1 แก้ว/);
   assert.match(queue,/recipeUsage/);
@@ -323,17 +323,20 @@ test('queue control room keeps current order overview above the fold',async()=>{
   const queue=await read('app/queue/page.tsx');
   assert.match(queue,/QUEUE CONTROL/);
   assert.match(queue,/แนะนำให้ทำก่อน/);
-  assert.match(queue,/สรุปเบสที่ทำร่วมกัน \+ รายการเครื่องดื่ม/);
-  assert.match(queue,/เบสเดียวกัน/);
+  assert.match(queue,/ภาพรวมออเดอร์ก่อนเริ่มทำ/);
+  assert.match(queue,/ลำดับหมวดและ Base ของคิวนี้/);
+  assert.match(queue,/หมวด \{category\.label\}/);
+  assert.match(queue,/baseTitle/);
   assert.match(queue,/คิวถัดไป/);
   assert.match(queue,/const upcoming=orders\.filter/);
-  assert.match(queue,/h-full overflow-hidden/);
+  assert.match(queue,/h-full overflow-y-auto overscroll-contain/);
   assert.doesNotMatch(queue,/orders\.map\(\(order,orderIndex\)=>/);
   assert.match(queue,/สูตรเต็มจอ/);
   assert.match(queue,/ใช้กับ:/);
-  assert.match(queue,/min-h-0 flex-1 overflow-y-auto pb-3/);
+  assert.doesNotMatch(queue,/min-h-0 flex-1 overflow-y-auto pb-3/);
+  assert.match(queue,/pb-28/);
   assert.match(queue,/สูตรกันลืม/);
-  assert.match(queue,/prepPlanOpen&&first/);
+  assert.match(queue,/prepPlanOpen&&first&&categoryFlow\.length>0/);
 });
 
 
@@ -385,11 +388,35 @@ test('solo operator daily flow keeps primary mobile actions short and connected'
 
 test('queue prep plan remains visible after completion and cache schema invalidates old snapshots',async()=>{
   const queue=await read('app/queue/page.tsx'),api=await read('lib/pos-api.mjs'),cache=await read('lib/queue-cache.ts');
-  assert.match(queue,/group\.pendingQty/);
+  assert.match(queue,/category\.pendingQty/);
+  assert.match(queue,/base\.pendingQty/);
   assert.match(queue,/ครบแล้ว/);
   assert.match(api,/pendingQty:g\.pendingQty/);
   assert.match(api,/qty:total,pendingQty:pending/);
   assert.match(cache,/SCHEMA_VERSION=3/);
   assert.match(cache,/field-pos-queue-snapshot-v3/);
   assert.match(cache,/schemaVersion:SCHEMA_VERSION/);
+});
+
+
+test('queue guides production category before base before menu and keeps same base contiguous',async()=>{
+  const queue=await read('app/queue/page.tsx'),api=await read('lib/pos-api.mjs');
+  assert.match(queue,/ภาพรวมออเดอร์ก่อนเริ่มทำ/);
+  assert.match(queue,/ดูเมนูทั้งหมด → ดูหมวด → ทำ Base ของหมวดนั้นทีละชุด/);
+  assert.match(queue,/ขั้นตอนปัจจุบัน/);
+  assert.match(queue,/หมวด \{activeCategoryIndex\+1\}\/\{categoryFlow\.length\}/);
+  assert.match(queue,/ลำดับหมวดและ Base ของคิวนี้/);
+  assert.match(queue,/category\.baseGroups\.map/);
+  assert.match(queue,/activeBase/);
+  assert.match(api,/a\.compatibilityKey\.localeCompare\(b\.compatibilityKey\)/);
+  assert.match(queue,/หมวด \$\{categoryName\(fromCategory\)\} ครบแล้ว · ต่อหมวด/);
+});
+
+test('queue mobile page uses a single primary scroll surface so bottom content remains reachable',async()=>{
+  const queue=await read('app/queue/page.tsx');
+  assert.match(queue,/soft-scroll h-full overflow-y-auto overscroll-contain/);
+  assert.match(queue,/pb-28/);
+  const main=queue.slice(queue.indexOf('return <section'),queue.indexOf('{prepPlanOpen&&first'));
+  assert.doesNotMatch(main,/min-h-0 flex-1 overflow-y-auto/);
+  assert.doesNotMatch(main,/max-h-\[132px\].*overflow-y-auto/);
 });
