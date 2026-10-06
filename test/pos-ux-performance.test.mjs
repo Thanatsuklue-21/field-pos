@@ -185,12 +185,13 @@ test('cash order can be safely voided and loaded back into POS before production
 });
 
 
-test('order items preserve sale-time price across normal add-on and split flows',async()=>{
+test('order items preserve sale-time price while production queue hides commercial pricing',async()=>{
   const api=await read('lib/pos-api.mjs'),queue=await read('app/queue/page.tsx');
   assert.match(api,/price:x\.price,readyQty:0,calledQty:0,addedAt:now/);
   assert.ok((api.match(/qty:x\.qty,price:x\.price,readyQty:0,calledQty:0/g)||[]).length>=2);
   assert.match(api,/function saleTimeItemPrice/);
-  assert.match(queue,/ราคาไม่พบ/);
+  assert.doesNotMatch(queue,/ราคาไม่พบ/);
+  assert.doesNotMatch(queue,/ยอดรวม ฿/);
 });
 
 test('mobile operational pages use compact density while preserving touch actions',async()=>{
