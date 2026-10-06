@@ -2,19 +2,23 @@
 
 import {useEffect,useMemo,useRef,useState} from "react";
 import {useRouter} from "next/navigation";
-import {ArrowRight,CheckCircle2,Minus,Plus,Search,Trash2,WalletCards,X} from "lucide-react";
+import {ArrowRight,CheckCircle2,Clock3,Minus,Plus,Search,Trash2,WalletCards,X} from "lucide-react";
 import AuthGate from "@/components/auth-gate";
 import {api,type Bootstrap,type MenuItem,type RevisionUnchanged,type Session} from "@/lib/api-client";
 import {cachePut} from "@/lib/offline-db";
 import {applyOfflineCashToBootstrap,getOfflineCashSummary,queueOfflineCashSale,syncOfflineCashSales,type OfflineCashSummary} from "@/lib/offline-sales";
 import {additionalServingsAvailable,cartAvailability} from "@/lib/domain/availability.mjs";
 import {useCartStore} from "@/stores/cart-store";
+import {useHeldCartStore} from "@/stores/held-cart-store";
 import {writeQueueSnapshotCache} from "@/lib/queue-cache";
 
 export default function Pos(){return <AuthGate>{s=><PosView session={s}/>}</AuthGate>}
 
 function localDate(){
   return new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Bangkok",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date());
+}
+function localTime(ts:number){
+  return new Intl.DateTimeFormat("th-TH",{timeZone:"Asia/Bangkok",hour:"2-digit",minute:"2-digit"}).format(new Date(ts));
 }
 
 const PENDING_KEY="field-pos-pending-promptpay-v1";
@@ -55,6 +59,7 @@ function PosView({session}:{session:Session}){
   const [cat,setCat]=useState("ทั้งหมด");
   const [selected,setSelected]=useState<MenuItem|null>(null);
   const [payOpen,setPayOpen]=useState(false);
+  const [heldOpen,setHeldOpen]=useState(false);
   const [method,setMethod]=useState<"cash"|"promptpay">("cash");
   const [received,setReceived]=useState("");
   const [busy,setBusy]=useState(false);
@@ -75,6 +80,7 @@ function PosView({session}:{session:Session}){
   const revisionRef=useRef<number|null>(null);
   const offlineSyncRef=useRef(false);
   const cart=useCartStore();
+  const heldBills=useHeldCartStore();
 
   useEffect(()=>{router.prefetch("/queue")},[router]);
 
@@ -309,6 +315,59 @@ function PosView({session}:{session:Session}){
     const remaining=additionalServingsAvailable({cart:cart.items,menu:data?.menu||[],stock:data?.availabilityStock||{},menuId:item.id,variantLabel:item.variant});
     if(remaining<1){setNotice("วัตถุดิบเพียงพออีก 0 แก้วเท่านั้น");return}
     cart.updateQuantity(key,nextQty);
+  }
+
+  function holdCurrentBill(){
+    if(!cart.items.length)return;
+    if(pendingRead()||cashPendingRead()){
+      setNotice("ยังมีรายการชำระเงินเดิมที่รอตรวจสอบ · ยังพักบิลนี้ไม่ได้จนกว่าจะยืนยันสถานะเดิม");
+      return;
+    }
+    if(splitGroup){
+      setNotice("บิลนี้เป็นการจ่ายต่อของคิว "+splitGroup.queueNo+" · ต้องรับเงินกลุ่มนี้ให้ครบก่อน จึงไม่สามารถพักเป็นบิลใหม่ได้");
+      return;
+    }
+    const qty=cart.items.reduce((s,i)=>s+i.qty,0);
+    const saved=heldBills.holdCart(cart.items);
+    cart.clearCart();
+    setSelected(null);
+    setPayOpen(false);
+    setReceived("");
+    setCustomerId("");
+    setPointsRedeemed(0);
+    setSplitBill(false);
+    setSplitSelection({});
+    setNotice("พักบิลแล้ว · "+qty+" แก้ว · เวลา "+localTime(saved.createdAt)+" · รับลูกค้าคิวถัดไปได้ทันที");
+  }
+
+  function resumeHeldBill(id:string){
+    if(cart.items.length){
+      setHeldOpen(false);
+      setNotice("ตะกร้าปัจจุบันยังมีสินค้า · กดพักบิลปัจจุบันก่อน แล้วจึงเรียกบิลเดิมกลับ");
+      return;
+    }
+    const held=heldBills.held.find(x=>x.id===id);
+    if(!held)return;
+    const byId=new Map((data?.menu||[]).filter(sellable).map(x=>[x.id,x]));
+    const removed:string[]=[];
+    const next=held.items.flatMap(item=>{
+      const current=byId.get(item.id),variant=current?.variants?.find(v=>v.label===item.variant);
+      if(!current||!variant||!variant.available){removed.push(item.name);return []}
+      return [{...item,name:current.name,price:current.price}];
+    });
+    heldBills.removeHeld(id);
+    setHeldOpen(false);
+    if(!next.length){
+      setNotice("บิลที่พักไว้ไม่สามารถขายได้แล้ว เพราะเมนู/สูตร/สต็อกเปลี่ยน · ลบบิลพักออกแล้ว");
+      return;
+    }
+    cart.replaceItems(next);
+    const availability=cartAvailability({cart:next,menu:data?.menu||[],stock:data?.availabilityStock||{}});
+    const notes:string[]=["เรียกบิลพักเวลา "+localTime(held.createdAt)+" กลับมาแล้ว"];
+    if(removed.length)notes.push("นำ "+removed.join(", ")+" ออกเพราะหมดหรือสูตรไม่พร้อม");
+    if(!availability.available)notes.push(availabilityMessage(availability));
+    else notes.push("ตรวจราคาและจำนวนแล้วกดชำระได้");
+    setNotice(notes.join(" · "));
   }
 
   function startNextOrder(){
@@ -611,9 +670,10 @@ function PosView({session}:{session:Session}){
     <div className="flex min-w-0 flex-1 flex-col p-3 sm:p-4 md:p-6">
       <div className="mb-3 flex items-center justify-between gap-2">
         <div><p className="gold m-0 text-[10px] font-bold tracking-[.3em]">POINT OF SALE</p><h1 className="m-0 mt-1 text-xl font-semibold tracking-wide md:text-2xl">FIELD DRINKS</h1></div>
-        <div className="flex items-center gap-2">
-          {(!online||offlineStats.total>0)&&<div className={"rounded-full border px-2.5 py-1.5 text-[10px] font-bold sm:text-xs "+(!online?"border-amber-300 bg-amber-50 text-amber-800":offlineStats.needsReview>0?"border-red-300 bg-red-50 text-red-700":"border-emerald-300 bg-emerald-50 text-emerald-700")}>{!online?"OFFLINE · เงินสดเท่านั้น":offlineStats.needsReview>0?"Offline ต้องตรวจ "+offlineStats.needsReview:"Offline รอ Sync "+offlineStats.pending}</div>}
-          <div className="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-[11px] text-slate-600 sm:px-4 sm:py-2 sm:text-xs">{session.user.username}</div>
+        <div className="flex items-center gap-1.5 sm:gap-2">
+          {(!online||offlineStats.total>0)&&<div className={"hidden rounded-full border px-2.5 py-1.5 text-[10px] font-bold sm:block sm:text-xs "+(!online?"border-amber-300 bg-amber-50 text-amber-800":offlineStats.needsReview>0?"border-red-300 bg-red-50 text-red-700":"border-emerald-300 bg-emerald-50 text-emerald-700")}>{!online?"OFFLINE · เงินสดเท่านั้น":offlineStats.needsReview>0?"Offline ต้องตรวจ "+offlineStats.needsReview:"Offline รอ Sync "+offlineStats.pending}</div>}
+          <button onClick={()=>setHeldOpen(true)} className="relative flex min-h-9 items-center gap-1.5 rounded-full border border-slate-300 bg-white px-2.5 text-[11px] font-semibold text-slate-700 sm:px-3 sm:text-xs"><Clock3 size={14}/>พักบิล{heldBills.held.length>0&&<span className="grid h-5 min-w-5 place-items-center rounded-full bg-[#d4af37] px-1 text-[10px] font-black text-black">{heldBills.held.length}</span>}</button>
+          <div className="hidden rounded-full border border-slate-300 bg-white px-3 py-1.5 text-[11px] text-slate-600 sm:block sm:px-4 sm:py-2 sm:text-xs">{session.user.username}</div>
         </div>
       </div>
 
@@ -629,16 +689,19 @@ function PosView({session}:{session:Session}){
       </div>
     </div>
 
-    <div className="fixed bottom-[70px] left-2 right-2 z-30 flex items-center justify-between rounded-[18px] border border-slate-300 bg-white/95 p-1.5 pl-4 shadow-lg backdrop-blur sm:bottom-[78px] sm:left-4 sm:right-4 sm:rounded-[22px] sm:p-2 sm:pl-5 lg:hidden">
-      <div><small className="block text-[10px] tracking-widest text-slate-500">{cart.items.reduce((s,i)=>s+i.qty,0)} ITEMS</small><b className="text-lg text-[#765b08]">฿{cart.getTotal().toFixed(0)}</b></div>
-      <button disabled={!cart.items.length} onClick={openPayment} className="min-h-11 rounded-2xl bg-[#d4af37] px-4 py-2.5 text-sm font-bold text-black disabled:opacity-30 sm:px-5 sm:py-3">CHECKOUT</button>
+    <div className="fixed bottom-[70px] left-2 right-2 z-30 flex items-center justify-between gap-2 rounded-[18px] border border-slate-300 bg-white/95 p-1.5 pl-3 shadow-lg backdrop-blur sm:bottom-[78px] sm:left-4 sm:right-4 sm:rounded-[22px] sm:p-2 sm:pl-5 lg:hidden">
+      <div className="min-w-0 flex-1"><small className="block text-[10px] tracking-widest text-slate-500">{cart.items.reduce((s,i)=>s+i.qty,0)} ITEMS</small><b className="text-lg text-[#765b08]">฿{cart.getTotal().toFixed(0)}</b></div>
+      <button disabled={!cart.items.length} onClick={holdCurrentBill} className="min-h-11 shrink-0 rounded-2xl border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 disabled:opacity-30"><Clock3 size={14} className="mx-auto mb-0.5"/>พักบิล</button>
+      <button disabled={!cart.items.length} onClick={openPayment} className="min-h-11 shrink-0 rounded-2xl bg-[#d4af37] px-4 py-2.5 text-sm font-bold text-black disabled:opacity-30 sm:px-5 sm:py-3">CHECKOUT</button>
     </div>
 
     <aside className="glass m-3 ml-0 hidden w-[360px] shrink-0 flex-col rounded-[24px] p-5 lg:flex">
       <div className="mb-4 flex items-center justify-between"><div><p className="m-0 text-[10px] tracking-[.25em] text-slate-500">CURRENT ORDER</p><h2 className="m-0 mt-1 text-lg">CART</h2></div><span className="rounded-full border border-slate-200 bg-slate-100 px-3 py-1 text-xs">{cart.items.reduce((s,i)=>s+i.qty,0)} ITEMS</span></div>
       <div className="soft-scroll min-h-0 flex-1 overflow-auto">{cart.items.length===0?<div className="grid h-full place-items-center text-sm text-slate-400">เลือกเมนูเพื่อเริ่มออเดอร์</div>:cart.items.map(i=><div key={i.key} className="mb-3 rounded-[18px] border border-slate-200 bg-slate-100/70 p-4"><div className="flex gap-3"><div className="flex-1"><b className="text-sm">{i.name}</b><small className="mt-1 block text-slate-500">{i.variant}</small></div><button onClick={()=>cart.removeItem(i.key)} className="text-slate-500 hover:text-red-600"><Trash2 size={16}/></button></div><div className="mt-3 flex items-center justify-between"><div className="flex items-center gap-2"><button onClick={()=>updateCartQuantity(i.key,i.qty-1)} className="grid h-9 w-9 place-items-center rounded-xl border border-slate-300 bg-white"><Minus size={13}/></button><span className="w-5 text-center">{i.qty}</span><button onClick={()=>updateCartQuantity(i.key,i.qty+1)} className="grid h-9 w-9 place-items-center rounded-xl border border-slate-300 bg-white"><Plus size={13}/></button></div><b className="text-[#765b08]">฿{(i.price*i.qty).toFixed(0)}</b></div></div>)}</div>
-      <div className="border-t border-slate-300 pt-4"><div className="mb-2 flex justify-between text-sm text-slate-600"><span>Subtotal</span><span>฿{cart.getSubtotal().toFixed(0)}</span></div><div className="mb-4 flex justify-between text-xl font-semibold"><span>Total</span><span className="text-[#765b08]">฿{cart.getTotal().toFixed(0)}</span></div><button disabled={!cart.items.length} onClick={openPayment} className="flex w-full items-center justify-center gap-2 rounded-2xl bg-[#d4af37] py-3 font-bold text-black disabled:opacity-30"><WalletCards size={18}/>CHECKOUT / PAY</button></div>
+      <div className="border-t border-slate-300 pt-4"><div className="mb-2 flex justify-between text-sm text-slate-600"><span>Subtotal</span><span>฿{cart.getSubtotal().toFixed(0)}</span></div><div className="mb-4 flex justify-between text-xl font-semibold"><span>Total</span><span className="text-[#765b08]">฿{cart.getTotal().toFixed(0)}</span></div><div className="grid grid-cols-[auto_1fr] gap-2"><button disabled={!cart.items.length} onClick={holdCurrentBill} className="flex min-h-12 items-center justify-center gap-2 rounded-2xl border border-slate-300 bg-white px-4 text-sm font-bold text-slate-700 disabled:opacity-30"><Clock3 size={17}/>พักบิล</button><button disabled={!cart.items.length} onClick={openPayment} className="flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-[#d4af37] px-4 font-bold text-black disabled:opacity-30"><WalletCards size={18}/>CHECKOUT / PAY</button></div></div>
     </aside>
+
+    {heldOpen&&<div className="fixed inset-0 z-[85] grid place-items-center bg-black/55 p-3" onMouseDown={()=>setHeldOpen(false)}><div className="card soft-scroll max-h-[85dvh] w-full max-w-lg overflow-auto border border-slate-300 bg-white p-4 shadow-2xl sm:p-5" onMouseDown={e=>e.stopPropagation()}><div className="flex items-start justify-between gap-3"><div><p className="gold text-[10px] font-bold tracking-[.25em]">HOLD BILL</p><h3 className="mt-1 text-xl font-semibold">บิลที่พักไว้ · {heldBills.held.length}</h3><p className="mt-1 text-xs text-slate-500">ยังไม่สร้างยอดขาย ไม่ตัด Stock และไม่เข้าคิวจนกว่าจะชำระจริง</p></div><button onClick={()=>setHeldOpen(false)} className="grid h-9 w-9 place-items-center rounded-xl hover:bg-slate-100"><X size={18}/></button></div>{heldBills.held.length===0?<div className="mt-5 rounded-2xl border border-dashed border-slate-300 p-8 text-center text-sm text-slate-400">ยังไม่มีบิลพัก</div>:<div className="mt-4 space-y-2">{heldBills.held.map(h=>{const qty=h.items.reduce((s,i)=>s+i.qty,0),amount=h.items.reduce((s,i)=>s+i.price*i.qty,0);return <div key={h.id} className="rounded-[20px] border border-slate-200 bg-slate-50 p-3 sm:p-4"><div className="flex items-start justify-between gap-3"><div><b className="text-sm">พักเวลา {localTime(h.createdAt)}</b><p className="mt-1 text-xs text-slate-500">{qty} แก้ว · {h.items.length} เมนู · ฿{amount.toFixed(0)}</p><p className="mt-1 line-clamp-2 text-[11px] text-slate-500">{h.items.map(i=>i.name+" ×"+i.qty).join(" · ")}</p></div><button onClick={()=>{if(window.confirm("ยกเลิกบิลพักนี้?"))heldBills.removeHeld(h.id)}} className="grid h-9 w-9 shrink-0 place-items-center rounded-xl text-slate-400 hover:bg-red-50 hover:text-red-600" aria-label="ลบบิลพัก"><Trash2 size={15}/></button></div><button onClick={()=>resumeHeldBill(h.id)} className="mt-3 min-h-11 w-full rounded-2xl bg-[#d4af37] px-4 text-sm font-bold text-black">เรียกบิลนี้กลับ</button></div>})}</div>}</div></div>}
 
     {selected&&<div className="fixed inset-0 z-50 grid place-items-center bg-black/55 p-3 sm:p-4" onMouseDown={()=>setSelected(null)}><div className="card w-full max-w-md border border-slate-300 bg-white p-4 shadow-2xl sm:p-6" onMouseDown={e=>e.stopPropagation()}><div className="flex items-start justify-between"><div><p className="gold text-[10px] tracking-[.25em]">{selected.category||"DRINK"}</p><h3 className="mt-1 text-lg sm:text-xl">{selected.name}</h3></div><button onClick={()=>setSelected(null)}><X/></button></div><p className="mt-5 text-xs uppercase tracking-widest text-slate-500">Choose variant</p><div className="mt-3 grid gap-2">{selected.variants.map(v=><button key={v.label} disabled={!v.available} onClick={()=>addVariant(selected,v)} className="min-h-11 rounded-2xl border border-slate-300 bg-slate-50 px-3 py-2.5 text-left hover:border-[#c59b19] sm:px-4 sm:py-3 disabled:bg-slate-100 disabled:text-slate-400"><span>{v.label||"Standard"}{!v.available&&<small className="ml-2 text-red-600">หมดชั่วคราว</small>}{v.available&&v.lowStock&&<small className="ml-2 text-amber-700">เหลือประมาณ {v.maxServings} แก้ว</small>}</span><span className="float-right font-semibold text-[#765b08]">฿{selected.price.toFixed(0)}</span>{!v.available&&v.missingIngredients?.length>0&&<small className="mt-1 block text-xs text-red-500">ขาด: {v.missingIngredients.map(i=>i.name).join(", ")}</small>}</button>)}</div></div></div>}
 
