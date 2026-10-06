@@ -116,11 +116,7 @@ function PosView({session}:{session:Session}){
     return()=>{clearInterval(timer);window.removeEventListener("focus",refresh);document.removeEventListener("visibilitychange",visible)};
   },[]);
 
-  useEffect(()=>{
-    if(!lastSale)return;
-    const timer=setTimeout(()=>setLastSale(null),8000);
-    return()=>clearTimeout(timer);
-  },[lastSale]);
+  // Keep pager and change visible until the operator chooses the next step.
 
   useEffect(()=>{
     if(!data)return;

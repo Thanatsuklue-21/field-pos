@@ -371,7 +371,7 @@ test('payment success prioritizes queue prefetch before noncritical refreshes',a
 
 test('solo operator daily flow keeps primary mobile actions short and connected',async()=>{
   const shell=await read('components/app-shell.tsx'),pos=await read('app/pos/page.tsx'),queue=await read('app/queue/page.tsx'),close=await read('app/close/page.tsx');
-  assert.match(shell,/\["\/pos","\/queue","\/stock","\/expenses","\/close","\/settings"\]/);
+  assert.match(shell,/\["\/pos","\/queue","\/stock","\/expenses","\/close","\/orders","\/settings"\]/);
   assert.doesNotMatch(shell,/\["\/dashboard","\/pos","\/queue","\/stock","\/orders","\/backup","\/settings"\]/);
   assert.match(pos,/ไปทำคิว \{lastSale\.queueNo\}/);
   assert.match(pos,/รับลูกค้าคนถัดไป/);
@@ -441,4 +441,15 @@ test('each queue can reopen its own details without an automatic close timer',as
   assert.ok(queue.includes('orders.find(order=>order.id===detailOrderId)'));
   assert.ok(queue.includes('(detailOrder.items||[]).map'));
   assert.ok(!queue.includes('overviewTimerRef'));
+});
+
+
+test('solo operator can return to sales while pickup queues remain active',async()=>{
+ const queue=await read('app/queue/page.tsx'),orders=await read('app/orders/page.tsx'),pos=await read('app/pos/page.tsx');
+ const header=queue.slice(queue.indexOf('<header'),queue.indexOf('</header>'));
+ assert.ok(header.includes('รับออเดอร์ใหม่'));
+ assert.ok(header.includes('ดูบิล / ย้อนรายการ'));
+ assert.ok(header.includes('canSell'));
+ assert.ok(orders.includes('ไปคิวครัว'));
+ assert.ok(!pos.includes('setTimeout(()=>setLastSale(null),8000)'));
 });

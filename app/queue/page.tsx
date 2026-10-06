@@ -69,6 +69,8 @@ export default function Queue(){return <AuthGate>{session=><QueueView session={s
 
 function QueueView({session}:{session:Session}){
   const router=useRouter();
+  const canSell=session.user.role==="admin"||session.user.permissions?.order===true;
+  useEffect(()=>{if(canSell){router.prefetch("/pos");router.prefetch("/orders")}},[router,canSell]);
   const [data,setData]=useState<QueueSnapshot|null>(null);
   const [syncing,setSyncing]=useState(true);
   const [busy,setBusy]=useState("");
@@ -236,9 +238,10 @@ function QueueView({session}:{session:Session}){
 
   return <section className="soft-scroll h-full overflow-y-auto overscroll-contain p-2.5 pb-28 sm:p-4 sm:pb-24 md:p-6 md:pb-8">
     <div className="mx-auto w-full max-w-5xl space-y-2.5 sm:space-y-3">
-      <header className="flex shrink-0 items-end justify-between gap-3">
+      <header className="sticky top-0 z-20 flex shrink-0 flex-wrap items-end justify-between gap-3 rounded-2xl bg-[#f3f5f7] py-2">
         <div><p className="gold m-0 text-[9px] font-bold tracking-[.26em]">ทำตามลำดับ · เรียกแล้วทำคิวถัดไป</p><h1 className="mt-0.5 text-lg font-semibold sm:text-xl">คิวครัว</h1></div>
         <div className="flex items-center gap-2">{syncing&&<span className="text-[10px] text-slate-400">กำลังซิงก์…</span>}<span className="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-[10px] font-semibold text-slate-600">{orders.length} คิว</span></div>
+        {canSell&&<div className="flex w-full gap-2"><button onClick={()=>router.push("/pos")} className="min-h-11 flex-1 rounded-xl bg-[#d4af37] px-3 text-sm font-bold">รับออเดอร์ใหม่</button><button onClick={()=>router.push("/orders")} className="min-h-11 rounded-xl border border-slate-300 bg-white px-4 text-sm font-semibold">ดูบิล / ย้อนรายการ</button></div>}
       </header>
 
       {msg&&<div className="shrink-0 rounded-2xl border border-red-300 bg-red-50 px-3 py-2 text-xs text-red-800">{msg}</div>}
@@ -327,6 +330,7 @@ function QueueView({session}:{session:Session}){
     {detailOrder&&<div className="fixed left-3 right-3 top-[max(4.75rem,env(safe-area-inset-top))] z-[105] mx-auto max-w-xl rounded-[22px] border-2 border-[#d4af37]/70 bg-white p-3 shadow-2xl">
       <div className="flex items-start justify-between gap-3"><div><p className="gold text-[9px] font-bold tracking-[.18em]">รายการในคิว</p><p className="mt-1 text-2xl font-black">บัตร {detailOrder.pagerNo}</p><h3 className="mt-1 text-sm font-black">คิว {detailOrder.queueNo} · {detailOrder.items.reduce((sum,item)=>sum+n(item.qty),0)} แก้ว · {buildCategoryFlow(detailOrder).length} หมวด</h3></div><button onClick={()=>setDetailOrderId(null)} className="grid h-8 w-8 shrink-0 place-items-center rounded-full border border-slate-200"><X size={15}/></button></div>
       <div className="mt-2 flex flex-wrap gap-1.5">{buildCategoryFlow(detailOrder).map((category,index)=><span key={category.id} className={"rounded-full border px-2 py-1 text-[9px] font-bold "+(category.pendingQty<=0?"border-emerald-200 bg-emerald-50 text-emerald-700":category.id===activeCategoryId?"border-[#d4af37] bg-[#fff3bf] text-[#765b08]":"border-slate-200 bg-slate-50 text-slate-600")}>{index+1}. {category.label} · {category.qty} แก้ว</span>)}</div>
+      {canSell&&<button onClick={()=>router.push("/orders?queue="+encodeURIComponent(detailOrder.queueNo))} className="mt-2 min-h-11 w-full rounded-xl border border-slate-300 text-sm font-semibold">ดูบิล / แก้ไขออเดอร์นี้</button>}
       <div className="soft-scroll mt-2 max-h-[46vh] space-y-1.5 overflow-y-auto">{(detailOrder.items||[]).map((item,index)=>{
         const done=itemDone(item),called=itemCalled(item),canCallEarly=done&&!called&&!orderReady(detailOrder)&&detailOrder.id===first?.id;
         return <div key={item.id+"|"+item.variant+"|"+index} className={"rounded-xl border px-2.5 py-2 "+(done?"border-emerald-200 bg-emerald-50":"border-slate-200 bg-slate-50")}><div className="flex items-center justify-between gap-2"><div className="min-w-0"><b className="block truncate text-[11px]">{item.name}</b><span className="text-[9px] text-slate-500">{item.variant} · ×{item.qty}{item.price==null?" · ราคาไม่พบ":" · ฿"+(item.price*n(item.qty)).toFixed(0)}</span></div><span className="shrink-0 text-[9px] font-bold text-slate-500">{done?"ครบ":"รอ "+Math.max(0,n(item.qty)-n(item.readyQty))}</span></div>{canCallEarly&&<button disabled={busy!==""} onClick={()=>{setDetailOrderId(null);callReadyItem(detailOrder,item,index)}} className="mt-1.5 rounded-full border border-[#d4af37] bg-white px-2 py-1 text-[9px] font-bold text-[#765b08]"><BellRing size={10} className="mr-1 inline"/>รับเมนูนี้ก่อน</button>}</div>;
