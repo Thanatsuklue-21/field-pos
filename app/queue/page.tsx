@@ -3,7 +3,8 @@
 // FIELD pager-first production flow: pager → items/base → complete → call → handoff.
 
 import {useEffect,useMemo,useRef,useState} from "react";
-import {BellRing,CheckCircle2,RotateCcw,X} from "lucide-react";
+import Link from "next/link";
+import {ArrowLeft,BellRing,CheckCircle2,RotateCcw,X} from "lucide-react";
 import AuthGate from "@/components/auth-gate";
 import {api,type RevisionUnchanged,type Session} from "@/lib/api-client";
 import {readQueueSnapshotCache,writeQueueSnapshotCache} from "@/lib/queue-cache";
@@ -34,8 +35,8 @@ function nextTask(orders:QOrder[]){
   return null;
 }
 
-type FlowMenu={key:string;id:string;name:string;variant:string;qty:number;pendingQty:number};
-type FlowCategory={id:string;label:string;qty:number;pendingQty:number;menus:FlowMenu[];items:QItem[]};
+type FlowMenu={key:string;id:string;name:string;variant:string;qty:number;pendingQty:number;calledQty:number};
+type FlowCategory={id:string;label:string;qty:number;pendingQty:number;calledQty:number;menus:FlowMenu[];items:QItem[]};
 
 function categoryName(id:string,label?:string){
   const clean=String(id||label||"OTHER").replaceAll("_"," ").trim();
@@ -53,13 +54,15 @@ function buildCategoryFlow(order:QOrder):FlowCategory[]{
     for(const item of items){
       const variant=String(item.variant||"Standard"),menuKey=String(item.id)+"|"+variant;
       let menu=menus.get(menuKey);
-      if(!menu){menu={key:menuKey,id:String(item.id),name:String(item.name||item.id),variant,qty:0,pendingQty:0};menus.set(menuKey,menu)}
+      if(!menu){menu={key:menuKey,id:String(item.id),name:String(item.name||item.id),variant,qty:0,pendingQty:0,calledQty:0};menus.set(menuKey,menu)}
       menu.qty+=n(item.qty);
       menu.pendingQty+=Math.max(0,n(item.qty)-n(item.readyQty));
+      menu.calledQty+=Math.min(n(item.qty),n(item.calledQty));
     }
     const qty=items.reduce((sum,item)=>sum+n(item.qty),0);
     const pendingQty=items.reduce((sum,item)=>sum+Math.max(0,n(item.qty)-n(item.readyQty)),0);
-    return {id,label:categoryName(id,labels.get(id)),qty,pendingQty,menus:[...menus.values()],items};
+    const calledQty=items.reduce((sum,item)=>sum+Math.min(n(item.qty),n(item.calledQty)),0);
+    return {id,label:categoryName(id,labels.get(id)),qty,pendingQty,calledQty,menus:[...menus.values()],items};
   });
 }
 
@@ -183,6 +186,25 @@ function QueueView({session}:{session:Session}){
     }catch(e:any){if(snapshot)setData(snapshot);setMsg(errorText(e.message));await load().catch(()=>{})}finally{busyRef.current=false;setBusy("")}
   }
 
+  async function callCategory(order:QOrder,category:FlowCategory){
+    if(busyRef.current)return;
+    const targets=category.items.map(item=>({item,index:order.items.indexOf(item)}))
+      .filter(x=>x.index>=0&&itemDone(x.item)&&!itemCalled(x.item));
+    if(!targets.length){pulse("หมวด "+category.label+" ถูกเรียกแล้ว");return}
+    const snapshot=data,key="call-category:"+order.id+":"+category.id;busyRef.current=true;setBusy(key);setMsg("");setToast("");
+    optimistic(list=>list.map(o=>o.id!==order.id?o:{...o,items:o.items.map(x=>String(x.prepGroup?.id||"OTHER")===category.id&&itemDone(x)?{...x,calledQty:x.qty,prepSelected:false}:x)}));
+    try{
+      let latest:any=null;
+      for(const target of targets){
+        latest=await api<any>("/api/pos/queue",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({requestKey:crypto.randomUUID(),orderId:order.id,itemIndex:target.index,action:"call_item"})});
+        applyState(latest);
+      }
+      setNotice("เรียกลูกค้าแล้ว · "+category.label+" "+category.qty+" แก้ว");
+      pulse("✓ เรียก "+category.label+" แล้ว");
+      if(latest&&!applyState(latest))load().catch(()=>{});
+    }catch(e:any){if(snapshot)setData(snapshot);setMsg(errorText(e.message));pulse("เรียกหมวดไม่สำเร็จ · ระบบคืนสถานะแล้ว");await load().catch(()=>{})}finally{busyRef.current=false;setBusy("")}
+  }
+
   async function deliver(orderId:string){
     if(busyRef.current)return;
     const snapshot=data,order=orders.find(x=>x.id===orderId),key="return:"+orderId;busyRef.current=true;setBusy(key);setMsg("");
@@ -213,8 +235,8 @@ function QueueView({session}:{session:Session}){
   return <section className="soft-scroll h-full overflow-y-auto overscroll-contain p-2.5 pb-28 sm:p-4 sm:pb-24 md:p-6 md:pb-8">
     <div className="mx-auto w-full max-w-4xl space-y-3">
       <header className="sticky top-0 z-20 flex items-center justify-between gap-3 rounded-2xl bg-[#f3f5f7] py-2">
-        <div><p className="gold m-0 text-[9px] font-bold tracking-[.26em]">PRODUCTION RUN</p><h1 className="mt-0.5 text-lg font-semibold sm:text-xl">ทำออเดอร์ / รันบัตร</h1></div>
-        <div className="flex items-center gap-2">{syncing&&<span className="text-[10px] text-slate-400">กำลังซิงก์…</span>}<span className="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-[10px] font-semibold text-slate-600">กำลังทำ {orders.filter(o=>!orderCalled(o)).length}</span></div>
+        <div className="flex min-w-0 items-center gap-2"><Link href="/pos" className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-slate-300 bg-white text-slate-700 shadow-sm" aria-label="กลับหน้าเมนู"><ArrowLeft size={17}/></Link><div className="min-w-0"><p className="gold m-0 text-[9px] font-bold tracking-[.26em]">PRODUCTION RUN</p><h1 className="mt-0.5 truncate text-lg font-semibold sm:text-xl">ทำออเดอร์ / รันบัตร</h1></div></div>
+        <div className="flex items-center gap-2">{syncing&&<span className="hidden text-[10px] text-slate-400 sm:inline">กำลังซิงก์…</span>}<span className="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-[10px] font-semibold text-slate-600">กำลังทำ {orders.filter(o=>!orderCalled(o)).length}</span></div>
       </header>
 
       {msg&&<div className="rounded-2xl border border-red-300 bg-red-50 px-3 py-2 text-xs text-red-800">{msg}</div>}
@@ -248,13 +270,14 @@ function QueueView({session}:{session:Session}){
 
         {categoryFlow.length>0&&<div className="mt-3 border-t border-slate-200 pt-3">
           <div className="flex items-center justify-between gap-2"><div><p className="text-[10px] font-bold tracking-[.14em] text-slate-500">สรุปตามหมวดเมนู</p><p className="mt-0.5 text-[10px] text-slate-400">รวมเมนูชื่อเดียวกันและ Variant เดียวกัน พร้อมจำนวนในบัตรนี้</p></div><span className="text-[10px] font-semibold text-slate-500">{categoryFlow.length} หมวด</span></div>
-          <div className="mt-2 space-y-2">{categoryFlow.map((category,categoryIndex)=><div key={category.id} className={"rounded-2xl border p-2.5 "+(category.id===activeCategoryId?"border-[#d4af37] bg-[#fffaf0]":category.pendingQty<=0?"border-emerald-200 bg-emerald-50":"border-slate-200 bg-slate-50")}>
-            <div className="flex items-center justify-between gap-2"><b className="text-[11px]">{categoryIndex+1}. {category.label} · {category.qty} แก้ว</b><span className="text-[9px] font-bold text-slate-500">{category.pendingQty>0?"เหลือ "+category.pendingQty:"ครบแล้ว"}</span></div>
-            <div className="mt-2 grid gap-1.5 sm:grid-cols-2">{category.menus.map(menu=><div key={menu.key} className={"rounded-xl border bg-white px-2.5 py-2 "+(activeMenu?.key===menu.key&&category.id===activeCategoryId?"border-[#d4af37]":"border-slate-200")}>
+          <div className="mt-2 space-y-2">{categoryFlow.map((category,categoryIndex)=>{const called=category.calledQty>=category.qty&&category.qty>0,ready=category.pendingQty<=0;return <div key={category.id} className={"rounded-2xl border p-2.5 "+(called?"border-sky-200 bg-sky-50":category.id===activeCategoryId?"border-[#d4af37] bg-[#fffaf0]":ready?"border-emerald-200 bg-emerald-50":"border-slate-200 bg-slate-50")}>
+            <div className="flex items-center justify-between gap-2"><b className="text-[11px]">{categoryIndex+1}. {category.label} · {category.qty} แก้ว</b><span className={"text-[9px] font-bold "+(called?"text-sky-700":ready?"text-emerald-700":"text-slate-500")}>{called?"เรียกแล้ว ✓":ready?"ครบแล้ว":"เหลือ "+category.pendingQty}</span></div>
+            <div className="mt-2 grid gap-1.5 sm:grid-cols-2">{category.menus.map(menu=>{const menuCalled=menu.calledQty>=menu.qty&&menu.qty>0;return <div key={menu.key} className={"rounded-xl border bg-white px-2.5 py-2 "+(activeMenu?.key===menu.key&&category.id===activeCategoryId?"border-[#d4af37]":"border-slate-200")}>
               <div className="flex items-center justify-between gap-2"><div className="min-w-0"><b className="block truncate text-[11px] text-slate-700">{menu.name}</b>{menu.variant&&menu.variant!=="Standard"&&<span className="text-[9px] text-slate-500">{menu.variant}</span>}</div><b className="shrink-0 text-[11px] text-[#765b08]">×{menu.qty}</b></div>
-              <div className="mt-1 text-right text-[9px] text-slate-400">{menu.pendingQty>0?"เหลือทำ "+menu.pendingQty+" แก้ว":"ครบแล้ว"}</div>
-            </div>)}</div>
-          </div>)}</div>
+              <div className={"mt-1 text-right text-[9px] "+(menuCalled?"font-bold text-sky-700":"text-slate-400")}>{menuCalled?"เรียกแล้ว":menu.pendingQty>0?"เหลือทำ "+menu.pendingQty+" แก้ว":"พร้อมเรียก"}</div>
+            </div>})}</div>
+            <button type="button" disabled={busy!==""||!ready||called} onClick={()=>callCategory(first,category)} className={"mt-2 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl px-3 text-xs font-black disabled:opacity-45 "+(called?"border border-sky-200 bg-sky-100 text-sky-700":"border border-[#d4af37] bg-white text-[#765b08]")}><BellRing size={14}/>{called?"เรียกลูกค้าหมวดนี้แล้ว":ready?"เรียกลูกค้ารับหมวดนี้":"ทำหมวดนี้ให้ครบก่อน"}</button>
+          </div>})}</div>
         </div>}
 
         {task&&activeCategory&&<div className="mt-3 rounded-[20px] border-2 border-[#d4af37] bg-[#fffaf0] p-3">
