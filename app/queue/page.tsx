@@ -11,7 +11,7 @@ import {readQueueSnapshotCache,writeQueueSnapshotCache} from "@/lib/queue-cache"
 
 type PrepUsage={id:string;name:string;qty:number;unit:string};
 type BatchMode="NONE"|"SEQUENTIAL"|"COMBINED";
-type PrepGroup={id:string;compatibilityKeys:string[];label:string;batchMode:BatchMode;qty:number;pendingQty?:number;items:{id:string;name:string;variant:string;qty:number;pendingQty?:number;compatibilityKey:string;baseUsage:{id:string;name:string;perCup:number;qty:number;pendingQty?:number;unit:string}[]}[];baseUsage:(PrepUsage&{pendingQty?:number})[]};
+type PrepGroup={id:string;compatibilityKeys:string[];label:string;batchMode:BatchMode;qty:number;pendingQty?:number;items:{id:string;name:string;variant:string;qty:number;pendingQty?:number;compatibilityKey:string;baseUsage:{id:string;name:string;perCup:number;qty:number;pendingQty?:number;unit:string}[];recipeUsage:{id:string;name:string;perCup:number;unit:string}[]}[];baseUsage:(PrepUsage&{pendingQty?:number})[]};
 type QItem={id:string;name:string;variant:string;qty:number;price:number|null;readyQty?:number;calledQty?:number;prepSelected?:boolean;wasteCount?:number;prepGroup?:{id:string;compatibilityKey:string;label:string;batchMode:BatchMode};saleIds?:string[]};
 type QOrder={id:string;queueNo:string;pagerNo:number;status:string;time:number;total:number;billNo?:string|null;saleId?:string|null;saleIds?:string[];items:QItem[];prepGroups?:PrepGroup[]};
 type QueueSnapshot={revision:number;unchanged?:false;orders:QOrder[]};
@@ -230,12 +230,12 @@ function QueueView({session}:{session:Session}){
 
           <div className={"mt-3 rounded-[18px] border p-3 "+(selectedTask?"border-emerald-300 bg-emerald-50":recommendedTask?"border-[#d4af37] bg-[#fffaf0]":"border-slate-200 bg-slate-50")}>
             {selectedTask&&<div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-center">
-              <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><span className="rounded-full bg-emerald-600 px-2.5 py-1 text-[10px] font-black text-white">กำลังทำ · ทำก่อน</span>{selectedTask.item.prepGroup&&<span className="rounded-full bg-white px-2 py-1 text-[10px] font-bold text-[#765b08]">{selectedTask.item.prepGroup.label}</span>}</div><div className="mt-2 truncate text-lg font-black">{selectedTask.item.name}</div><div className="mt-0.5 text-xs text-slate-600">{selectedTask.item.variant} · {selectedTask.item.qty} แก้ว · เสร็จ {n(selectedTask.item.readyQty)}/{n(selectedTask.item.qty)}</div></div>
+              <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><span className="rounded-full bg-emerald-600 px-2.5 py-1 text-[10px] font-black text-white">กำลังทำ · ทำก่อน</span></div><div className="mt-2 truncate text-lg font-black">{selectedTask.item.name}</div><div className="mt-0.5 text-xs text-slate-600">{selectedTask.item.variant} · {selectedTask.item.qty} แก้ว · เสร็จ {n(selectedTask.item.readyQty)}/{n(selectedTask.item.qty)}</div></div>
               <button disabled={busy!==""} onClick={()=>completeNext(selectedTask.order,selectedTask.item,selectedTask.index)} className="min-h-12 rounded-2xl bg-[#d4af37] px-5 text-sm font-black text-black disabled:opacity-40">ทำเสร็จ {Math.max(0,n(selectedTask.item.qty)-n(selectedTask.item.readyQty))} แก้ว</button>
             </div>}
 
             {!selectedTask&&recommendedTask&&<div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-center">
-              <div className="min-w-0"><div className="mb-1 text-[9px] font-bold tracking-[.18em] text-slate-400">ลำดับงานแนะนำ</div><div className="flex flex-wrap items-center gap-2"><span className="rounded-full bg-[#d4af37] px-2.5 py-1 text-[10px] font-black text-black"><Sparkles size={11} className="mr-1 inline"/>แนะนำให้ทำก่อน</span>{recommendedTask.item.prepGroup&&<span className="rounded-full bg-white px-2 py-1 text-[10px] font-bold text-[#765b08]">{recommendedTask.item.prepGroup.label}</span>}</div><div className="mt-2 truncate text-lg font-black">{recommendedTask.item.name}</div><div className="mt-0.5 text-xs text-slate-600">{recommendedTask.item.variant} · เหลือ {Math.max(0,n(recommendedTask.item.qty)-n(recommendedTask.item.readyQty))}/{n(recommendedTask.item.qty)} แก้ว</div></div>
+              <div className="min-w-0"><div className="mb-1 text-[9px] font-bold tracking-[.18em] text-slate-400">ลำดับงานแนะนำ</div><div className="flex flex-wrap items-center gap-2"><span className="rounded-full bg-[#d4af37] px-2.5 py-1 text-[10px] font-black text-black"><Sparkles size={11} className="mr-1 inline"/>แนะนำให้ทำก่อน</span></div><div className="mt-2 truncate text-lg font-black">{recommendedTask.item.name}</div><div className="mt-0.5 text-xs text-slate-600">{recommendedTask.item.variant} · เหลือ {Math.max(0,n(recommendedTask.item.qty)-n(recommendedTask.item.readyQty))}/{n(recommendedTask.item.qty)} แก้ว</div></div>
               <button disabled={busy!==""} onClick={()=>selectTask(recommendedTask.order.id,recommendedTask.index)} className="min-h-12 rounded-2xl bg-[#d4af37] px-5 text-sm font-black text-black disabled:opacity-40">{busy==="select:"+recommendedTask.order.id+":"+recommendedTask.index?"กำลังบันทึก...":"รับทำเมนูนี้"}</button>
             </div>}
 
@@ -245,17 +245,16 @@ function QueueView({session}:{session:Session}){
         </div>
 
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[22px] border border-slate-300 bg-white p-3 sm:p-4">
-          <div className="shrink-0"><b className="text-sm">ภาพรวมคิวนี้</b><p className="mt-0.5 text-[10px] text-slate-500">คิวปัจจุบัน + แผนเบส + รายการเครื่องดื่ม อยู่ในหน้าจอเดียวสำหรับคนชง</p></div>
+          <div className="flex shrink-0 items-center justify-between gap-2"><div><b className="text-sm">คิวนี้</b><p className="mt-0.5 text-[10px] text-slate-500">สรุปเบสที่ทำร่วมกัน + รายการเครื่องดื่ม</p></div>{(first.prepGroups||[]).length>0&&<button onClick={()=>setPrepPlanOpen(true)} className="flex min-h-9 shrink-0 items-center gap-1 rounded-full border border-[#eadb9b] bg-white px-2.5 text-[9px] font-bold text-[#765b08]"><Maximize2 size={12}/>สูตรเต็มจอ</button>}</div>
 
-          {(first.prepGroups||[]).length>0&&<div className="soft-scroll mt-2 max-h-[180px] shrink-0 overflow-y-auto rounded-[18px] border border-[#eadb9b] bg-[#fffaf0] p-2.5">
-            <div className="flex items-center justify-between gap-2"><div><b className="text-[11px] text-[#765b08]">แผนเตรียมเบสของคิวนี้</b><p className="mt-0.5 text-[9px] text-slate-500">เตรียมเฉพาะคิว {first.queueNo} · ไม่ข้ามคิว</p></div><button onClick={()=>setPrepPlanOpen(true)} className="flex min-h-9 shrink-0 items-center gap-1 rounded-full border border-[#eadb9b] bg-white px-2.5 text-[9px] font-bold text-[#765b08]"><Maximize2 size={12}/>เปิดเต็มจอ</button></div>
-            <div className="mt-2 space-y-1.5">{(first.prepGroups||[]).map(group=><div key={group.id} className="rounded-xl border border-[#f0e3ad] bg-white px-2.5 py-2">
-              <div className="flex items-center justify-between gap-2"><b className="text-[11px] text-[#765b08]">{group.label}</b><span className="shrink-0 text-[9px] font-bold text-slate-500">{n(group.pendingQty)>0?"กำลังเตรียม":"ครบแล้ว"}</span></div>
-              <div className="mt-1 space-y-1">{group.items.map(x=><div key={x.id+"|"+x.variant} className="text-[10px] leading-4 text-slate-700"><b>{x.name}</b> <span className="text-slate-500">· {x.variant} ×{x.qty}</span>{x.baseUsage?.length>0&&<div className="text-[#765b08]">{x.baseUsage.map(u=>u.name+" "+Number(u.perCup.toFixed(2)).toLocaleString()+" "+u.unit+(x.qty>1?" / แก้ว":"")).join(" · ")}</div>}</div>)}</div>
+          {(first.prepGroups||[]).length>0&&<div className="soft-scroll mt-2 max-h-[132px] shrink-0 overflow-y-auto rounded-[18px] border border-[#eadb9b] bg-[#fffaf0] p-2.5">
+            <div className="space-y-1.5">{(first.prepGroups||[]).map(group=><div key={group.id} className="rounded-xl border border-[#f0e3ad] bg-white px-2.5 py-2">
+              <div className="flex items-center justify-between gap-2"><b className="text-[11px] text-[#765b08]">เบสเดียวกัน {n(group.qty)} แก้ว</b><span className="shrink-0 text-[9px] font-bold text-slate-500">{n(group.pendingQty)>0?"เหลือ "+n(group.pendingQty)+" แก้ว":"ครบแล้ว"}</span></div>
+              <div className="mt-1 text-[10px] leading-4 text-slate-700"><span className="text-slate-500">ใช้กับ: </span>{group.items.map(x=>x.name+" ×"+x.qty+(x.variant&&x.variant!=="Standard"?" ("+x.variant+")":"")).join(" · ")}</div>
             </div>)}</div>
           </div>}
 
-          <div className="soft-scroll mt-2 min-h-0 flex-1 overflow-y-auto pr-1">
+          <div className="soft-scroll mt-2 min-h-0 flex-1 overflow-y-auto pb-3 pr-1">
             <div className={"grid gap-1.5 "+((first.items||[]).length>4?"grid-cols-2":"grid-cols-1 sm:grid-cols-2")}>
             {(first.items||[]).map((item,index)=>{
               const done=itemDone(item),called=itemCalled(item);
@@ -280,14 +279,14 @@ function QueueView({session}:{session:Session}){
     {prepPlanOpen&&first&&(first.prepGroups||[]).length>0&&<div className="fixed inset-0 z-[110] bg-[#f3f5f7]">
       <div className="flex h-[100dvh] min-h-0 flex-col">
         <div className="shrink-0 border-b border-slate-200 bg-white px-4 pb-3 pt-[max(1rem,env(safe-area-inset-top))] shadow-sm">
-          <div className="flex items-start justify-between gap-3"><div><p className="gold m-0 text-[10px] font-bold tracking-[.22em]">BASE PREP PLAN</p><h2 className="mt-1 text-xl font-black">แผนเตรียมเบส · คิว {first.queueNo}</h2><p className="mt-1 text-xs text-slate-500">แสดงแยกตามเมนู · ไม่รวมกรัมข้ามเมนู · ไม่ข้ามคิว</p></div><button onClick={()=>setPrepPlanOpen(false)} className="grid h-11 w-11 shrink-0 place-items-center rounded-full border border-slate-300 bg-white"><X size={20}/></button></div>
+          <div className="flex items-start justify-between gap-3"><div><p className="gold m-0 text-[10px] font-bold tracking-[.22em]">RECIPE REMINDER</p><h2 className="mt-1 text-xl font-black">สูตรกันลืม · คิว {first.queueNo}</h2><p className="mt-1 text-xs text-slate-500">ดูสูตรต่อ 1 แก้วแยกตามเมนู · ใช้ตอนชงจริงโดยไม่ข้ามคิว</p></div><button onClick={()=>setPrepPlanOpen(false)} className="grid h-11 w-11 shrink-0 place-items-center rounded-full border border-slate-300 bg-white"><X size={20}/></button></div>
         </div>
         <div className="soft-scroll min-h-0 flex-1 overflow-y-auto px-3 py-3 pb-[max(1rem,env(safe-area-inset-bottom))] sm:px-5">
           <div className="mx-auto max-w-2xl space-y-3">{(first.prepGroups||[]).map(group=><section key={group.id} className="rounded-[22px] border border-[#eadb9b] bg-[#fffaf0] p-3.5 shadow-sm">
-            <div className="flex items-center justify-between gap-3"><b className="text-sm text-[#765b08]">{group.label}</b><span className={"rounded-full px-2.5 py-1 text-[10px] font-bold "+(n(group.pendingQty)>0?"bg-amber-100 text-amber-700":"bg-emerald-100 text-emerald-700")}>{n(group.pendingQty)>0?"กำลังเตรียม":"ครบแล้ว"}</span></div>
+            <div className="flex items-center justify-between gap-3"><div><b className="text-sm text-[#765b08]">เบสเดียวกัน {n(group.qty)} แก้ว</b><p className="mt-0.5 text-[10px] text-slate-500">{group.label}</p></div><span className={"rounded-full px-2.5 py-1 text-[10px] font-bold "+(n(group.pendingQty)>0?"bg-amber-100 text-amber-700":"bg-emerald-100 text-emerald-700")}>{n(group.pendingQty)>0?"เหลือ "+n(group.pendingQty)+" แก้ว":"ครบแล้ว"}</span></div>
             <div className="mt-3 space-y-2">{group.items.map(x=><div key={x.id+"|"+x.variant} className="rounded-2xl border border-[#f0e3ad] bg-white p-3">
               <div className="flex items-start justify-between gap-3"><div className="min-w-0"><b className="block text-sm">{x.name}</b><span className="mt-0.5 block text-xs text-slate-500">{x.variant} · ×{x.qty}</span></div></div>
-              {x.baseUsage?.length>0&&<div className="mt-2 flex flex-wrap gap-1.5">{x.baseUsage.map(u=><span key={u.id} className="rounded-full bg-[#fff3bf] px-2.5 py-1 text-xs font-bold text-[#765b08]">{u.name} {Number(u.perCup.toFixed(2)).toLocaleString()} {u.unit}{x.qty>1?" / แก้ว":""}</span>)}</div>}
+              <div className="mt-3 rounded-xl bg-slate-50 p-2.5"><div className="text-[10px] font-bold tracking-[.12em] text-slate-500">สูตรต่อ 1 แก้ว</div>{x.recipeUsage?.length>0?<div className="mt-2 flex flex-wrap gap-1.5">{x.recipeUsage.map(u=><span key={u.id} className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700">{u.name} {Number(u.perCup.toFixed(2)).toLocaleString()} {u.unit}</span>)}</div>:<p className="mt-1 text-xs text-slate-400">ไม่พบรายละเอียดสูตรที่บันทึกกับบิลนี้</p>}</div>
             </div>)}</div>
           </section>)}</div>
         </div>
