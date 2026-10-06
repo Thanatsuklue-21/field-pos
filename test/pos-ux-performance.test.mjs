@@ -505,3 +505,14 @@ test('queue category call status derives from persisted calledQty rather than lo
   assert.match(queue,/menu\.calledQty>=menu\.qty/);
   assert.doesNotMatch(queue,/categoryCalledIds/);
 });
+
+
+test('variant modal reflects cart-aware remaining stock instead of raw availability only',async()=>{
+  const pos=await read('app/pos/page.tsx');
+  assert.match(pos,/additionalServingsAvailable\(\{cart:cart\.items/);
+  assert.match(pos,/const canAdd=!!v\.available&&remaining>0/);
+  assert.match(pos,/disabled=\{!canAdd\}/);
+  assert.match(pos,/เพิ่มได้อีกประมาณ \{remaining\} แก้ว/);
+  assert.match(pos,/เพิ่มไม่ได้ · ตะกร้าใช้สต๊อกที่เหลือแล้ว/);
+  assert.match(pos,/ลดจำนวนรายการในตะกร้า หรืออัปเดต Stock ก่อนเพิ่มเมนูนี้/);
+});
