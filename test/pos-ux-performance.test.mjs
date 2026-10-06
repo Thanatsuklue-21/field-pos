@@ -75,14 +75,15 @@ test('payment success makes the physical pager card visually dominant',async()=>
   assert.match(pos,/บัตร \{lastSale\.pager/);
 });
 
-test('queue shows pager number, guided active work, and Bluetooth reminder',async()=>{
+test('queue shows pager number and one guided production action',async()=>{
   const queue=await read('app/queue/page.tsx');
   assert.match(queue,/บัตรเรียกคิว/);
-  assert.match(queue,/"ทำ "\+recommendedTask\.item\.name\+" เสร็จแล้ว"/);
-  assert.match(queue,/กำลังทำ/);
-  assert.match(queue,/ทำ .* ครบ/);
-  assert.doesNotMatch(queue,/setCallPrompt|ปิดแจ้งเตือนเรียกคิว/);
-  assert.match(queue,/text-2xl font-black/);
+  assert.match(queue,/บัตรผลิตปัจจุบัน/);
+  assert.match(queue,/ทำ \{task\.item\.name\} ครบ/);
+  assert.match(queue,/ทำตอนนี้/);
+  assert.match(queue,/text-4xl font-black/);
+  assert.doesNotMatch(queue,/recommendedTask/);
+  assert.doesNotMatch(queue,/selectedTask/);
 });
 
 test('cold-start schema checks are batched instead of one Turso request per DDL statement',async()=>{
@@ -274,7 +275,7 @@ test('split-person flow retains one group queue between payments',async()=>{
 });
 
 
-test('queue groups duplicate lines and exposes prep base plan without changing FIFO handoff',async()=>{
+test('queue groups duplicate lines and exposes grouped bases without recipe detail',async()=>{
   const queue=await read('app/queue/page.tsx'),api=await read('lib/pos-api.mjs');
   assert.match(api,/function normalizeQueueItems/);
   assert.match(api,/function prepGroupsView/);
@@ -283,25 +284,17 @@ test('queue groups duplicate lines and exposes prep base plan without changing F
   assert.match(api,/compatibilityKey/);
   assert.match(queue,/compatibilityKey/);
   assert.match(queue,/baseTitle/);
-  assert.match(queue,/activeBase\.items\.map/);
+  assert.match(queue,/หมวดงาน \/ Base เดียวกัน/);
+  assert.match(queue,/category\.baseGroups\.map/);
   assert.match(api,/for\(const o of activeOrders\(doc\)\)/);
   assert.match(api,/target\.items=normalizeQueueItems/);
-  assert.match(api,/const queueLookup=buildQueueLookup\(doc\)/);assert.match(api,/order\.items=normalizeQueueItems\(doc,order,queueLookup\)/);
-  assert.match(queue,/ดูสูตร \/ Base/);
-  assert.match(queue,/baseTitle/);
-  assert.match(queue,/activeBase\.items\.map/);
-  assert.match(queue,/BASE ปัจจุบัน · แสดงครั้งเดียว/);
-  assert.doesNotMatch(queue,/ลำดับหมวดและ Base ของคิวนี้/);
-  assert.doesNotMatch(queue,/รวมสำหรับคิวนี้:/);
-  assert.match(queue,/สูตรต่อ 1 แก้ว/);
-  assert.match(queue,/recipeUsage/);
-  assert.match(queue,/h-\[100dvh\]/);
-  assert.doesNotMatch(queue,/\+" = "\+Number\(u\.qty/);
-  assert.match(api,/baseUsage:menuBaseUsage/);
+  assert.match(api,/const queueLookup=buildQueueLookup\(doc\)/);
+  assert.match(api,/order\.items=normalizeQueueItems\(doc,order,queueLookup\)/);
+  assert.doesNotMatch(queue,/สูตรต่อ 1 แก้ว/);
+  assert.doesNotMatch(queue,/recipeUsage/);
   assert.match(api,/recipeUsage:recipeUsageView/);
   assert.match(api,/fifo_violation/);
 });
-
 
 test('CRM redemption makes the payment UI use net payable for cash and PromptPay',async()=>{
   const pos=await read('app/pos/page.tsx');
@@ -407,11 +400,11 @@ test('queue mobile page uses a single primary scroll surface so bottom content r
   const queue=await read('app/queue/page.tsx');
   assert.match(queue,/soft-scroll h-full overflow-y-auto overscroll-contain/);
   assert.match(queue,/pb-28/);
-  const main=queue.slice(queue.indexOf('return <section'),queue.indexOf('{prepPlanOpen&&first'));
+  const main=queue.slice(queue.indexOf('return <section'));
   assert.doesNotMatch(main,/min-h-0 flex-1 overflow-y-auto/);
   assert.doesNotMatch(main,/max-h-\[132px\].*overflow-y-auto/);
+  assert.doesNotMatch(main,/h-\[100dvh\]/);
 });
-
 
 test('queue production card advances past called orders while pickup cards remain visible',async()=>{
   const queue=await read('app/queue/page.tsx');
