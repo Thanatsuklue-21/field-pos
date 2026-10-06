@@ -115,28 +115,27 @@ test('cash checkout skips the redundant replay read while PromptPay still replay
 });
 
 
-test('queue production flow is one guided base at a time with optional early pickup',async()=>{
+test('queue production flow is one guided base at a time without early-pickup branching',async()=>{
   const queue=await read('app/queue/page.tsx');
-  assert.match(queue,/BASE ปัจจุบัน · แสดงครั้งเดียว/);
-  assert.match(queue,/activeBase\.items\.map/);
-  assert.match(queue,/"ทำ "\+recommendedTask\.item\.name\+" เสร็จแล้ว"/);
-  assert.match(queue,/ทำ \{selectedTask\.item\.name\} ครบ/);
-  assert.match(queue,/action:"call_item"/);
-  assert.match(queue,/รับเมนูนี้ก่อน/);
-  assert.match(queue,/เรียกคิว \{first\.queueNo\}/);
+  assert.match(queue,/หมวดงาน \/ Base เดียวกัน/);
+  assert.match(queue,/activeBase/);
+  assert.match(queue,/ทำ \{task\.item\.name\} ครบ/);
+  assert.doesNotMatch(queue,/action:"call_item"/);
+  assert.doesNotMatch(queue,/รับเมนูนี้ก่อน/);
+  assert.match(queue,/เรียกบัตร \{first\.pagerNo\}/);
   assert.match(queue,/ลูกค้ารับแล้ว/);
 });
 
-test('queue reads a compact snapshot and renders priced order details',async()=>{
+test('queue reads a compact snapshot and renders order production details',async()=>{
   const queue=await read('app/queue/page.tsx'),api=await read('lib/api.mjs'),posApi=await read('lib/pos-api.mjs');
   assert.match(queue,/api<QueueSnapshot\|RevisionUnchanged>\("\/api\/pos\/queue"/);
   assert.doesNotMatch(queue,/api<Bootstrap>\("\/api\/pos\/bootstrap"\)/);
   assert.match(api,/path==='\/api\/pos\/queue'&&method==='GET'/);
   assert.match(api,/getQueueSnapshot/);
   assert.match(posApi,/price:x\.price/);
-  assert.match(posApi,/normalizeQueueItems\(doc,o,lookup\)/);
-  assert.match(queue,/ยอดรวม ฿/);
-  assert.match(queue,/ดูรายการ \/ แก้ไขออเดอร์/);
+  assert.match(queue,/รายการรวมในบัตรนี้/);
+  assert.match(queue,/หมวดงาน \/ Base เดียวกัน/);
+  assert.doesNotMatch(queue,/ยอดรวม ฿/);
 });
 
 test('POS and Queue polls short-circuit unchanged state by revision',async()=>{
@@ -318,34 +317,31 @@ test('CRM redemption makes the payment UI use net payable for cash and PromptPay
 });
 
 
-test('queue control room keeps one active base and opens overview only on request',async()=>{
+test('queue production view centers one pager card with order summary and grouped bases',async()=>{
   const queue=await read('app/queue/page.tsx');
-  assert.match(queue,/คิวครัว/);
-  assert.match(queue,/BASE ปัจจุบัน · แสดงครั้งเดียว/);
-  assert.match(queue,/รายการในคิว/);
-  assert.doesNotMatch(queue,/showOrderOverview\(2800\)/);
-  assert.match(queue,/showOrderOverview\(first\.id\)/);
-  assert.doesNotMatch(queue,/ลำดับหมวดและ Base ของคิวนี้/);
-  assert.match(queue,/activeCategory\.label/);
+  assert.match(queue,/ทำออเดอร์ \/ รันบัตร/);
+  assert.match(queue,/บัตรผลิตปัจจุบัน/);
+  assert.match(queue,/รายการรวมในบัตรนี้/);
+  assert.match(queue,/หมวดงาน \/ Base เดียวกัน/);
+  assert.match(queue,/ขั้นตอนปัจจุบัน/);
+  assert.match(queue,/บัตรถัดไป/);
+  assert.match(queue,/รอลูกค้ารับ/);
+  assert.match(queue,/activeBase/);
   assert.match(queue,/baseTitle/);
-  assert.match(queue,/คิวถัดไป/);
-  assert.match(queue,/const upcoming=orders\.filter/);
-  assert.match(queue,/h-full overflow-y-auto overscroll-contain/);
-  assert.doesNotMatch(queue,/orders\.map\(\(order,orderIndex\)=>/);
-  assert.match(queue,/ดูสูตร \/ Base/);
-  assert.doesNotMatch(queue,/min-h-0 flex-1 overflow-y-auto pb-3/);
-  assert.match(queue,/pb-28/);
-  assert.match(queue,/สูตรกันลืม/);
-  assert.match(queue,/prepPlanOpen&&first&&categoryFlow\.length>0/);
+  assert.doesNotMatch(queue,/ดูสูตร \/ Base/);
+  assert.doesNotMatch(queue,/สูตรกันลืม/);
+  assert.doesNotMatch(queue,/ดูบิล \/ ย้อนรายการ/);
+  assert.doesNotMatch(queue,/ดูภาพรวม/);
+  assert.doesNotMatch(queue,/ดูรายการ \/ แก้ไขออเดอร์/);
 });
 
-
-test('queue mobile header keeps metadata readable and moves edit action out of the squeeze path',async()=>{
+test('queue mobile card keeps pager identity and production metadata readable',async()=>{
   const queue=await read('app/queue/page.tsx');
-  assert.match(queue,/grid min-w-0 grid-cols-\[auto_1fr\]/);
-  assert.match(queue,/whitespace-nowrap font-bold/);
-  assert.match(queue,/w-full items-center justify-center/);
-  assert.match(queue,/sm:w-auto sm:shrink-0/);
+  assert.match(queue,/บัตรเรียกคิว/);
+  assert.match(queue,/text-4xl font-black/);
+  assert.match(queue,/ลำดับ \{first\.queueNo\}/);
+  assert.match(queue,/firstCupCount/);
+  assert.match(queue,/firstRemaining/);
 });
 
 test('queue hydrates from a short-lived snapshot cache before background sync',async()=>{
@@ -369,46 +365,42 @@ test('payment success prioritizes queue prefetch before noncritical refreshes',a
 });
 
 
-test('solo operator daily flow keeps primary mobile actions short and connected',async()=>{
+test('solo operator daily flow keeps sales and production as separate focused screens',async()=>{
   const shell=await read('components/app-shell.tsx'),pos=await read('app/pos/page.tsx'),queue=await read('app/queue/page.tsx'),close=await read('app/close/page.tsx');
   assert.match(shell,/\["\/pos","\/queue","\/stock","\/expenses","\/close","\/orders","\/settings"\]/);
-  assert.doesNotMatch(shell,/\["\/dashboard","\/pos","\/queue","\/stock","\/orders","\/backup","\/settings"\]/);
   assert.match(pos,/ไปทำคิว \{lastSale\.queueNo\}/);
   assert.match(pos,/รับลูกค้าคนถัดไป/);
-  assert.match(queue,/ทำตามลำดับ · เรียกแล้วทำคิวถัดไป/);
-  assert.match(queue,/กลับไปรับออเดอร์/);
-  assert.match(queue,/router\.push\("\/pos"\)/);
+  assert.match(queue,/PRODUCTION RUN/);
+  assert.match(queue,/ทำออเดอร์ \/ รันบัตร/);
+  assert.doesNotMatch(queue,/router\.push\("\/orders/);
+  assert.doesNotMatch(queue,/router\.push\("\/pos/);
   assert.match(close,/OPEN \/ CLOSE DAY/);
   assert.match(close,/เปิดร้านวันนี้/);
   assert.match(close,/ปิดร้านวันนี้/);
-  assert.match(close,/ไม่มีเงินทอน · ฿0/);
-  assert.match(close,/setOpeningCash\("0"\)/);
 });
 
-
-test('queue prep plan remains visible after completion and cache schema invalidates old snapshots',async()=>{
+test('queue grouped base progress remains visible while cache schema protects snapshots',async()=>{
   const queue=await read('app/queue/page.tsx'),api=await read('lib/pos-api.mjs'),cache=await read('lib/queue-cache.ts');
   assert.match(queue,/category\.pendingQty/);
   assert.match(queue,/base\.pendingQty/);
   assert.match(queue,/ครบแล้ว/);
+  assert.match(queue,/หมวดงาน \/ Base เดียวกัน/);
   assert.match(api,/pendingQty:g\.pendingQty/);
   assert.match(api,/qty:total,pendingQty:pending/);
   assert.match(cache,/SCHEMA_VERSION=3/);
   assert.match(cache,/field-pos-queue-snapshot-v3/);
-  assert.match(cache,/schemaVersion:SCHEMA_VERSION/);
 });
 
-
-test('queue guides production category then one compatible base without duplicate plan cards',async()=>{
+test('queue guides one production category and compatible base inside the pager card',async()=>{
   const queue=await read('app/queue/page.tsx'),api=await read('lib/pos-api.mjs');
   assert.match(queue,/ขั้นตอนปัจจุบัน/);
-  assert.match(queue,/หมวด \{activeCategoryIndex\+1\}\/\{categoryFlow\.length\}/);
-  assert.match(queue,/BASE ปัจจุบัน · แสดงครั้งเดียว/);
-  assert.match(queue,/activeBase\.items\.map/);
-  assert.doesNotMatch(queue,/ลำดับหมวดและ Base ของคิวนี้/);
+  assert.match(queue,/หมวดงาน \/ Base เดียวกัน/);
+  assert.match(queue,/activeCategory/);
   assert.match(queue,/activeBase/);
+  assert.match(queue,/baseTitle/);
+  assert.doesNotMatch(queue,/RECIPE REMINDER/);
+  assert.doesNotMatch(queue,/สูตรต่อ 1 แก้ว/);
   assert.match(api,/a\.compatibilityKey\.localeCompare\(b\.compatibilityKey\)/);
-  assert.match(queue,/เสร็จแล้ว · ทำ \$\{nextRecommended\.item\.name\} ต่อ/);
 });
 
 test('queue mobile page uses a single primary scroll surface so bottom content remains reachable',async()=>{
@@ -421,35 +413,35 @@ test('queue mobile page uses a single primary scroll surface so bottom content r
 });
 
 
-test('queue production header advances past called orders without waiting for pickup',async()=>{
+test('queue production card advances past called orders while pickup cards remain visible',async()=>{
   const queue=await read('app/queue/page.tsx');
   const view=queue.slice(queue.indexOf('function QueueView'));
   assert.ok(view.includes('const first=orders.find(order=>!orderCalled(order));'));
   assert.ok(!view.includes('const first=orders[0]'));
-  assert.ok(view.includes('title:"รอทำ"'));
-  assert.ok(view.includes('title:"เสร็จแล้ว · รอลูกค้ารับ"'));
-  for(const name of ['callReadyItem','callOrder']){
-    const action=view.slice(view.indexOf('async function '+name),view.indexOf('}finally',view.indexOf('async function '+name)));
-    assert.ok(!action.includes('pulse('));
-    assert.ok(!action.includes('setCallPrompt'));
-  }
+  assert.ok(view.includes('const waitingPickup=orders.filter(orderCalled);'));
+  assert.ok(view.includes('รอลูกค้ารับ'));
+  assert.ok(view.includes('ลูกค้ารับแล้ว'));
 });
 
-test('each queue can reopen its own details without an automatic close timer',async()=>{
+test('queue removes secondary detail overlays and keeps all production details on the pager card',async()=>{
   const queue=await read('app/queue/page.tsx');
-  assert.ok(queue.includes('showOrderOverview(order.id)'));
-  assert.ok(queue.includes('orders.find(order=>order.id===detailOrderId)'));
-  assert.ok(queue.includes('(detailOrder.items||[]).map'));
-  assert.ok(!queue.includes('overviewTimerRef'));
+  assert.doesNotMatch(queue,/detailOrderId/);
+  assert.doesNotMatch(queue,/showOrderOverview/);
+  assert.doesNotMatch(queue,/prepPlanOpen/);
+  assert.doesNotMatch(queue,/RECIPE REMINDER/);
+  assert.match(queue,/รายการรวมในบัตรนี้/);
+  assert.match(queue,/หมวดงาน \/ Base เดียวกัน/);
 });
 
-
-test('solo operator can return to sales while pickup queues remain active',async()=>{
+test('queue screen contains only production and handoff actions',async()=>{
  const queue=await read('app/queue/page.tsx'),orders=await read('app/orders/page.tsx'),pos=await read('app/pos/page.tsx');
- const header=queue.slice(queue.indexOf('<header'),queue.indexOf('</header>'));
- assert.ok(header.includes('รับออเดอร์ใหม่'));
- assert.ok(header.includes('ดูบิล / ย้อนรายการ'));
- assert.ok(header.includes('canSell'));
+ assert.doesNotMatch(queue,/รับออเดอร์ใหม่/);
+ assert.doesNotMatch(queue,/ดูบิล \/ ย้อนรายการ/);
+ assert.doesNotMatch(queue,/ดูรายการ \/ แก้ไขออเดอร์/);
+ assert.match(queue,/ชงเสีย \/ ทำใหม่/);
+ assert.match(queue,/เรียกบัตร/);
+ assert.match(queue,/ลูกค้ารับแล้ว/);
  assert.ok(orders.includes('ไปคิวครัว'));
  assert.ok(!pos.includes('setTimeout(()=>setLastSale(null),8000)'));
 });
+
