@@ -1,5 +1,5 @@
-const VERSION="field-pwa-v3",SHELL_CACHE=VERSION+"-shell",RUNTIME_CACHE=VERSION+"-runtime",CACHE_PREFIX="field-pwa-";
-const PRECACHE=["/pos","/manifest.webmanifest","/field-icon-180.png","/field-icon-192.png","/field-icon-512.png"];
+const VERSION="field-pwa-v4",SHELL_CACHE=VERSION+"-shell",RUNTIME_CACHE=VERSION+"-runtime",CACHE_PREFIX="field-pwa-";
+const PRECACHE=["/pos","/settings","/manifest.webmanifest","/field-icon-180.png","/field-icon-192.png","/field-icon-512.png"];
 
 function nextStaticUrls(html){
   const urls=new Set();
