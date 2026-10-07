@@ -163,6 +163,14 @@ test('queue view reuses lookup maps instead of rescanning menus sales and prep b
   assert.match(api,/const lookup=buildQueueLookup\(doc\)/);
 });
 
+test('second device queue polling converges within two seconds while using revision short-circuit',async()=>{
+  const queue=await read('app/queue/page.tsx');
+  assert.match(queue,/window\.setInterval\(refresh,2000\)/);
+  assert.match(queue,/X-Field-Revision/);
+  assert.match(queue,/busyRef\.current/);
+  assert.match(queue,/document\.visibilityState===\"hidden\"/);
+});
+
 test('queue actions use optimistic feedback and delivery has a visible fixed toast',async()=>{
   const queue=await read('app/queue/page.tsx');
   assert.match(queue,/const optimistic=/);
