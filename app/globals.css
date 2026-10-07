@@ -91,3 +91,9 @@ button:disabled{cursor:not-allowed}
 button,a,[role="button"]{touch-action:manipulation;-webkit-tap-highlight-color:transparent}
 html{-webkit-text-size-adjust:100%}
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}
+
+html,body{overscroll-behavior:none}
+.field-app-root{padding-top:max(.375rem,env(safe-area-inset-top));padding-left:max(.375rem,env(safe-area-inset-left));padding-right:max(.375rem,env(safe-area-inset-right))}
+@media (max-width:767px){.field-app-root{padding-bottom:calc(70px + env(safe-area-inset-bottom))}}
+@media (min-width:768px){.field-app-root{padding-bottom:max(1rem,env(safe-area-inset-bottom))}}
+@media (display-mode:standalone){html,body{background:#F7F1E3}}

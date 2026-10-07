@@ -34,6 +34,12 @@ Use the full backup page for state plus stock, purchase, recipe, cost and durabl
 
 `public/index.html` and `public/online*.js` are legacy migration/reference fixtures, not the primary application. Their public entry routes are quarantined to `/pos` in production. Do not use their local state as the source of truth for current shared sales or assume that legacy JSON exports contain the full accounting ledgers. Obsolete standalone telemetry/insights/root-HTML assets were removed from the active repository.
 
+## PWA operating model
+
+The current app is installable as **FIELD POS** from supported browsers. The manifest launches at `/pos` in standalone mode, while the service worker caches only the app shell/static assets and same-origin images. Requests under `/api/` are deliberately never cached by the service worker; checkout, payment, stock, queue, refund, void, expenses and close-day semantics remain server-authoritative.
+
+PWA updates are staged. A waiting service worker does not force-reload the POS while the cart, payment recovery, split-payment state, queue action or offline sync is active. The operator can install or inspect PWA/device readiness from Settings. IndexedDB schema remains version 2; the PWA layer reuses the existing bootstrap cache and durable offline cash outbox rather than creating a second offline database.
+
 ## Deployment and practical limits
 
 Push a tested change to the connected GitHub repository and verify that Vercel Production is READY for the exact commit. Smoke-test `/api/health`, page routes and unauthenticated API denial. A successful page response alone does not verify logged-in checkout or the live payment provider.

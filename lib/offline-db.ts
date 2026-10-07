@@ -74,3 +74,5 @@ export async function offlineCashPatch(requestKey:string,patch:Partial<OfflineCa
   };
   await txDone(tx);db.close();
 }
+
+export async function clientStorageStatus(){const db=await openDb();if(!db)return {indexedDbReady:false,cacheReady:false,outboxPending:0,outboxNeedsReview:0,schemaVersion:VERSION};try{const tx=db.transaction([CACHE_STORE,OUTBOX_STORE],"readonly"),cacheReq=tx.objectStore(CACHE_STORE).get("/api/pos/bootstrap"),outboxReq=tx.objectStore(OUTBOX_STORE).getAll();const [cached,rows]=await Promise.all([new Promise<any>(resolve=>{cacheReq.onsuccess=()=>resolve(cacheReq.result);cacheReq.onerror=()=>resolve(null)}),new Promise<OfflineCashRecord[]>(resolve=>{outboxReq.onsuccess=()=>resolve(Array.isArray(outboxReq.result)?outboxReq.result:[]);outboxReq.onerror=()=>resolve([])})]);await txDone(tx);const pending=rows.filter(x=>x.status==="pending").length,review=rows.filter(x=>x.status==="needs_review").length;return {indexedDbReady:true,cacheReady:!!cached?.value,outboxPending:pending+review,outboxNeedsReview:review,schemaVersion:VERSION}}finally{db.close()}}
