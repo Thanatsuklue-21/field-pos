@@ -422,6 +422,60 @@ test('mixed cash and PromptPay split refund requires manual PromptPay confirmati
   assert.equal(state.ingredients.matcha.qty,1000);
 });
 
+test('multi-sale add-on order refunds atomically before production and restores all stock once',async()=>{
+  const db=fakeDb();
+  const first=await checkoutPos({db,user,now:6200,body:{requestKey:'multi-refund-first-001',cart,date,payment:'cash',received:100,customerId:'cus-1'}});
+  const second=await checkoutPos({db,user,now:6210,body:{requestKey:'multi-refund-addon-001',cart,date,payment:'cash',received:100,customerId:'cus-1',targetOrderId:first.orderId}});
+  let state=JSON.parse(db.storage.document);
+  assert.equal(state.sales.length,2);
+  assert.equal(state.orders.length,1);
+  assert.equal(state.orders[0].saleIds.length,2);
+  assert.equal(state.ingredients.matcha.qty,990);
+  assert.equal(state.customers[0].visits,2);
+  assert.equal(state.customers[0].totalSpend,110);
+
+  const body={requestKey:'multi-refund-order-001',saleId:first.saleIds[0],reason:'customer cancelled whole order'};
+  const refunded=await refundSale({db,user,now:6220,body});
+  assert.equal(refunded.refundAmount,110);
+  assert.equal(refunded.refundMethod,'multi_sale');
+  assert.equal(refunded.saleIds.length,2);
+  assert.equal(refunded.stockRestored,true);
+
+  state=JSON.parse(db.storage.document);
+  assert.ok(state.sales.every(s=>s.status==='refunded'));
+  assert.ok(state.sales.every(s=>s.refundGroupAmount===110&&s.refundGroupSaleIds.length===2));
+  assert.equal(state.orders[0].status,'void');
+  assert.equal(state.orders[0].refundAmount,110);
+  assert.equal(state.ingredients.matcha.qty,1000);
+  assert.equal(state.ingredients.milk.qty,30000);
+  assert.equal(state.ingredients.cup16.qty,500);
+  assert.equal(state.customers[0].visits,0);
+  assert.equal(state.customers[0].totalSpend,0);
+  assert.equal(state.customers[0].points,0);
+  assert.equal(state.expenses?.filter(e=>e.sourceType==='STOCK_REFUND_LOSS').length||0,0);
+  assert.equal(db.storage.stockTx.filter(args=>args[2]==='REFUND_REVERSAL').length,6);
+
+  const replay=await refundSale({db,user,now:6230,body});
+  assert.equal(replay.replayed,true);
+  assert.equal(replay.refundAmount,110);
+  assert.equal(db.storage.stockTx.filter(args=>args[2]==='REFUND_REVERSAL').length,6);
+});
+
+test('multi-sale refund requires external confirmation when any add-on used bank transfer',async()=>{
+  const db=fakeDb();
+  const first=await checkoutPos({db,user,now:6240,body:{requestKey:'multi-ext-first-001',cart,date,payment:'cash',received:100}});
+  await checkoutPos({db,user,now:6250,body:{requestKey:'multi-ext-addon-001',cart,date,payment:'bank',paymentReference:'bank-sale-1',targetOrderId:first.orderId}});
+  const saleId=JSON.parse(db.storage.document).sales[0].id;
+  await assert.rejects(()=>refundSale({db,user,now:6260,body:{requestKey:'multi-ext-refund-no-confirm',saleId,reason:'cancelled'}}),/external_manual_refund_required/);
+  const refunded=await refundSale({db,user,now:6270,body:{requestKey:'multi-ext-refund-confirm',saleId,reason:'cancelled',manualConfirmed:true,manualReference:'bank-refund-1'}});
+  assert.equal(refunded.refundAmount,110);
+  assert.equal(refunded.stockRestored,true);
+  const state=JSON.parse(db.storage.document);
+  assert.ok(state.sales.every(s=>s.status==='refunded'));
+  assert.equal(state.sales.find(s=>s.payment==='bank').refundReference,'bank-refund-1');
+  assert.equal(state.ingredients.matcha.qty,1000);
+});
+
 test('PromptPay refund requires explicit external manual confirmation and reference',async()=>{
   const db=fakeDb();
   await checkoutPos({db,user,now:5300,body:{requestKey:'refund-pp-checkout-001',cart,date,payment:'promptpay',paymentVerified:'chrg_test_paid',paymentProviderAmount:55,paymentReference:'chrg_test_paid'}});
