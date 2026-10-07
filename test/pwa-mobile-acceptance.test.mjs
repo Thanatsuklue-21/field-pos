@@ -27,3 +27,10 @@ test("forced-width operator tables collapse into labeled phone cards",async()=>{
   assert.ok(css.includes('td:nth-child(7)::before{content:"สถานะ / จัดการ"}'));
   assert.ok(css.includes('td:nth-child(4)::before{content:"เวลา"}'));
 });
+
+
+test("payment review rows may wrap instead of overlapping at narrow phone widths",async()=>{
+  const pos=await read("app/pos/page.tsx");
+  assert.ok(pos.includes('mt-3 flex flex-wrap items-center justify-between gap-3'));
+  assert.ok(pos.includes('field-payment-sheet'));
+});
