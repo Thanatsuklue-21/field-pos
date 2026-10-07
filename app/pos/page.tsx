@@ -75,6 +75,7 @@ function PosView({session}:{session:Session}){
   const [customerId,setCustomerId]=useState("");
   const [loyalty,setLoyalty]=useState({pointsSpend:0,pointsRedeemValue:0});
   const [pointsRedeemed,setPointsRedeemed]=useState(0);
+  const [editCustomerRecovery,setEditCustomerRecovery]=useState<{customerId:string;pointsRedeemed:number}|null>(null);
   const [splitBill,setSplitBill]=useState(false);
   const [splitSelection,setSplitSelection]=useState<Record<string,number>>({});
   const [splitGroup,setSplitGroup]=useState<SplitGroup|null>(null);
