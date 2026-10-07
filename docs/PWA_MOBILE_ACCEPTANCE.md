@@ -76,3 +76,14 @@ Do not mark PR #112 ready for merge until this gate and Vercel exact-commit prev
 ## Vercel note
 
 The repository currently suppresses non-main Git deployments with `vercel.json > ignoreCommand`. Keep that suppression while Hobby deployment quota is constrained. When the release candidate is otherwise frozen, intentionally allow the PWA release branch once, verify a Preview for the exact candidate SHA, then restore the desired long-term deployment policy before production merge.
+
+
+## Exact-commit Preview smoke check
+
+After Vercel creates the one intentional Preview for the frozen candidate, verify the deployed build before Android UAT:
+
+```bash
+BASE_URL=https://<preview>.vercel.app EXPECTED_SHA=<40-char-git-sha> npm run pwa:smoke
+```
+
+The smoke checker is read-only. It verifies the install manifest, Service Worker API bypass/cache headers, safe offline shells, Turso health and that the deployed Vercel build SHA exactly matches the approved candidate.
