@@ -11,6 +11,8 @@ test("PWA manifest is installable and uses FIELD non-black splash colors",async(
   assert.ok(manifest.includes('orientation:"portrait-primary"'));
   assert.ok(manifest.includes("192x192"));
   assert.ok(manifest.includes("512x512"));
+  assert.ok(manifest.includes('purpose:"any"'));
+  assert.ok(manifest.includes('purpose:"maskable"'));
   assert.ok(manifest.includes("#F7F1E3"));
   assert.ok(manifest.includes("#1F4D3A"));
   await stat(new URL("../public/field-icon-192.png",import.meta.url));
