@@ -179,7 +179,11 @@ test('cash order can be safely voided and loaded back into POS before production
   assert.match(orders,/แก้ไข \/ ลด \/ เปลี่ยนเมนู/);
   assert.match(orders,/cart\.replaceItems/);
   assert.match(orders,/field-pos-edit-cash-v1/);
-  assert.match(orders,/heldCash:s\.total/);
+  assert.match(orders,/heldCash:total/);
+  assert.match(orders,/แก้ไขทั้งออเดอร์ \/ รวมทุกบิล/);
+  assert.match(orders,/VOID CASH ORDER \+ RESTORE STOCK \/ ยกเลิกทั้งออเดอร์/);
+  assert.match(orders,/paidOrderGroup/);
+  assert.match(orders,/saleCount:group\.length/);
   assert.match(pos,/field-pos-edit-cash-v1/);
   assert.match(pos,/ยอดเงินสดจากบิลเดิม/);
 });
