@@ -108,7 +108,7 @@ function QueueView({session}:{session:Session}){
       finally{inFlight=false;if(!disposed)setSyncing(false)}
     };
     refresh();
-    const timer=window.setInterval(refresh,5000);
+    const timer=window.setInterval(refresh,2000);
     window.addEventListener("focus",refresh);
     document.addEventListener("visibilitychange",refresh);
     return()=>{disposed=true;window.clearInterval(timer);window.removeEventListener("focus",refresh);document.removeEventListener("visibilitychange",refresh)};
