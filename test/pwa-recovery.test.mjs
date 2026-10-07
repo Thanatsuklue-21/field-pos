@@ -66,3 +66,12 @@ test("offline operator session revalidates on network recovery focus and visibil
   assert.ok(gate.includes('document.addEventListener("visibilitychange",visible)'));
   assert.ok(gate.includes("getSessionCached(true).then(publish)"));
 });
+
+
+test("session revalidation is single-flight so online telemetry cannot recurse auth checks",async()=>{
+  const gate=await read("components/auth-gate.tsx");
+  assert.ok(gate.includes("revalidating=false"));
+  assert.ok(gate.includes("if(!navigator.onLine||revalidating)return"));
+  assert.ok(gate.includes("revalidating=true"));
+  assert.ok(gate.includes(".finally(()=>{revalidating=false})"));
+});
