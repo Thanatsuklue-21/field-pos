@@ -1,4 +1,5 @@
 const DB_NAME="field-pos-client",CACHE_STORE="cache",OUTBOX_STORE="cash-outbox",VERSION=2;
+export const BOOTSTRAP_OFFLINE_MAX_AGE_MS=36*60*60*1000;
 type Cached<T>={value:T,savedAt:number};
 export type OfflineCashStatus="pending"|"needs_review";
 export type OfflineCashRecord={
@@ -32,7 +33,7 @@ export async function cachePut<T>(key:string,value:T){
   tx.objectStore(CACHE_STORE).put({value,savedAt:Date.now()},key);
   await txDone(tx);db.close();
 }
-export async function cacheGet<T>(key:string,maxAgeMs=24*60*60*1000):Promise<T|null>{
+export async function cacheGet<T>(key:string,maxAgeMs=BOOTSTRAP_OFFLINE_MAX_AGE_MS):Promise<T|null>{
   const db=await openDb();if(!db)return null;
   const row=await new Promise<Cached<T>|undefined>(resolve=>{
     const r=db.transaction(CACHE_STORE,"readonly").objectStore(CACHE_STORE).get(key);
@@ -75,4 +76,21 @@ export async function offlineCashPatch(requestKey:string,patch:Partial<OfflineCa
   await txDone(tx);db.close();
 }
 
-export async function clientStorageStatus(){const db=await openDb();if(!db)return {indexedDbReady:false,cacheReady:false,outboxPending:0,outboxNeedsReview:0,schemaVersion:VERSION};try{const tx=db.transaction([CACHE_STORE,OUTBOX_STORE],"readonly"),cacheReq=tx.objectStore(CACHE_STORE).get("/api/pos/bootstrap"),outboxReq=tx.objectStore(OUTBOX_STORE).getAll();const [cached,rows]=await Promise.all([new Promise<any>(resolve=>{cacheReq.onsuccess=()=>resolve(cacheReq.result);cacheReq.onerror=()=>resolve(null)}),new Promise<OfflineCashRecord[]>(resolve=>{outboxReq.onsuccess=()=>resolve(Array.isArray(outboxReq.result)?outboxReq.result:[]);outboxReq.onerror=()=>resolve([])})]);await txDone(tx);const pending=rows.filter(x=>x.status==="pending").length,review=rows.filter(x=>x.status==="needs_review").length;return {indexedDbReady:true,cacheReady:!!cached?.value,outboxPending:pending+review,outboxNeedsReview:review,schemaVersion:VERSION}}finally{db.close()}}
+export async function clientStorageStatus(){
+  const db=await openDb();
+  if(!db)return {indexedDbReady:false,cacheReady:false,outboxPending:0,outboxNeedsReview:0,schemaVersion:VERSION};
+  try{
+    const tx=db.transaction([CACHE_STORE,OUTBOX_STORE],"readonly"),
+      cacheReq=tx.objectStore(CACHE_STORE).get("/api/pos/bootstrap"),
+      outboxReq=tx.objectStore(OUTBOX_STORE).getAll();
+    const [cached,rows]=await Promise.all([
+      new Promise<any>(resolve=>{cacheReq.onsuccess=()=>resolve(cacheReq.result);cacheReq.onerror=()=>resolve(null)}),
+      new Promise<OfflineCashRecord[]>(resolve=>{outboxReq.onsuccess=()=>resolve(Array.isArray(outboxReq.result)?outboxReq.result:[]);outboxReq.onerror=()=>resolve([])})
+    ]);
+    await txDone(tx);
+    const pending=rows.filter(x=>x.status==="pending").length,review=rows.filter(x=>x.status==="needs_review").length;
+    const savedAt=Number(cached?.savedAt||0),cacheAgeMs=savedAt>0?Math.max(0,Date.now()-savedAt):null;
+    const cacheReady=!!cached?.value&&cacheAgeMs!==null&&cacheAgeMs<=BOOTSTRAP_OFFLINE_MAX_AGE_MS;
+    return {indexedDbReady:true,cacheReady,outboxPending:pending+review,outboxNeedsReview:review,schemaVersion:VERSION};
+  }finally{db.close()}
+}
