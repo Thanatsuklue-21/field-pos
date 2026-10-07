@@ -79,7 +79,7 @@ function QueueView({session}:{session:Session}){
   const busyRef=useRef(false);
   const revisionRef=useRef<number|null>(null);
   busyRef.current=busy!=="";
-  useEffect(()=>{window.dispatchEvent(new CustomEvent("field:transaction-busy",{detail:{busy:busy!=="" ,source:"queue"}}));return()=>window.dispatchEvent(new CustomEvent("field:transaction-busy",{detail:{busy:false,source:"queue"}}))},[busy]);
+  useEffect(()=>{window.dispatchEvent(new CustomEvent("field:transaction-busy",{detail:{busy:busy!=="" ,source:"queue"}}));return()=>{window.dispatchEvent(new CustomEvent("field:transaction-busy",{detail:{busy:false,source:"queue"}}));}},[busy]);
   useEffect(()=>{if(!toast)return;const timer=window.setTimeout(()=>setToast(""),2600);return()=>window.clearTimeout(timer)},[toast]);
   const pulse=(message:string)=>{setToast(message);try{navigator.vibrate?.(35)}catch{}};
   const optimistic=(mutate:(orders:QOrder[])=>QOrder[])=>setData(prev=>prev?{...prev,orders:mutate(prev.orders)}:prev);
