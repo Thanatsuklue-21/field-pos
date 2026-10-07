@@ -1,6 +1,7 @@
 "use client";
 import {useEffect,useState} from "react";
-import {Download} from "lucide-react";
+import Link from "next/link";
+import {Download,Landmark} from "lucide-react";
 import AuthGate from "@/components/auth-gate";
 import {api} from "@/lib/api-client";
 import {ResponsiveContainer,BarChart,Bar,XAxis,YAxis,Tooltip} from "recharts";
@@ -34,7 +35,7 @@ function ReportsView(){
     }catch(e:any){setMsg(e.message||"export_failed")}finally{setBusy(false)}
   }
   return <section className="soft-scroll h-full overflow-auto p-3 sm:p-5 md:p-7">
-    <div className="flex flex-wrap items-end justify-between gap-3"><div><p className="gold m-0 text-[10px] font-bold tracking-[.3em]">PERFORMANCE</p><h1 className="mt-1 text-xl font-semibold sm:text-2xl">REPORTS</h1><p className="mt-1 text-xs text-slate-500">ยอดขาย · กำไร · มูลค่าสต็อก · Export สำหรับบัญชี</p></div><div className="flex flex-wrap gap-2">{(["sales","expenses","stock"] as const).map(x=><button key={x} disabled={busy} onClick={()=>exportKind(x)} className="flex min-h-10 items-center gap-1.5 rounded-full border border-slate-300 bg-white px-3 text-xs font-semibold disabled:opacity-40"><Download size={14}/>{x==="sales"?"Sales CSV":x==="expenses"?"Expenses CSV":"Stock CSV"}</button>)}</div></div>
+    <div className="flex flex-wrap items-end justify-between gap-3"><div><p className="gold m-0 text-[10px] font-bold tracking-[.3em]">PERFORMANCE</p><h1 className="mt-1 text-xl font-semibold sm:text-2xl">REPORTS</h1><p className="mt-1 text-xs text-slate-500">ยอดขาย · กำไร · มูลค่าสต็อก · Export สำหรับบัญชี</p></div><div className="flex flex-wrap gap-2"><Link href="/settlements" className="flex min-h-10 items-center gap-1.5 rounded-full bg-[#d4af37] px-3 text-xs font-bold text-black"><Landmark size={14}/>Settlement</Link>{(["sales","expenses","stock"] as const).map(x=><button key={x} disabled={busy} onClick={()=>exportKind(x)} className="flex min-h-10 items-center gap-1.5 rounded-full border border-slate-300 bg-white px-3 text-xs font-semibold disabled:opacity-40"><Download size={14}/>{x==="sales"?"Sales CSV":x==="expenses"?"Expenses CSV":"Stock CSV"}</button>)}</div></div>
     {msg&&<p className="mt-3 rounded-xl bg-white px-3 py-2 text-sm">{msg}</p>}
     {d?.profitEstimated&&<div className="mt-4 rounded-2xl border border-amber-400/25 bg-amber-50 p-4 text-sm text-amber-800"><b>ESTIMATED PROFIT</b><p className="mt-1 text-xs">กำไรและ Margin มีรายการต้นทุนที่ยังไม่ยืนยัน ({d.costQuality.status})</p></div>}
     {d?.inventoryValueEstimated&&<div className="mt-3 rounded-2xl border border-amber-300 bg-amber-50 p-3 text-xs text-amber-800">มูลค่า Stock ยังเป็นค่าประมาณ เพราะมีวัตถุดิบบางรายการที่ต้นทุนยังไม่ยืนยัน</div>}
