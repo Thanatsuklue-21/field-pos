@@ -7,7 +7,8 @@ test("cold-start offline operator fallback stores no password or csrf and is sta
   const offline=await read("lib/offline-operator.ts"),auth=await read("components/auth-gate.tsx");
   assert.ok(offline.includes("MAX_AGE_MS=7*24*60*60*1000"));
   assert.ok(offline.includes('role:"staff"'));
-  assert.ok(offline.includes('permissions:{order:true}'));\n  assert.ok(!offline.includes('queue:true'));
+  assert.ok(offline.includes('permissions:{order:true}'));
+  assert.ok(!offline.includes('queue:true'));
   assert.ok(offline.includes('csrf:""'));
   assert.ok(!offline.includes("password"));
   assert.ok(auth.includes("getOfflineOperatorIfReady"));
