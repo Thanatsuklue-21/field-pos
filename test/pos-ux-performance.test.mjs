@@ -179,7 +179,12 @@ test('cash order can be safely voided and loaded back into POS before production
   assert.match(orders,/แก้ไข \/ ลด \/ เปลี่ยนเมนู/);
   assert.match(orders,/cart\.replaceItems/);
   assert.match(orders,/field-pos-edit-cash-v1/);
-  assert.match(orders,/heldCash:total/);\n  assert.match(orders,/แก้ไขทั้งออเดอร์ \/ รวมทุกบิล/);\n  assert.match(orders,/VOID CASH ORDER \+ RESTORE STOCK \/ ยกเลิกทั้งออเดอร์/);\n  assert.match(orders,/paidOrderGroup/);\n  assert.match(orders,/saleCount:group\.length/);\n  assert.match(orders,/writeRecovery\("field-pos-edit-cash-v1"/);
+  assert.match(orders,/heldCash:total/);
+  assert.match(orders,/แก้ไขทั้งออเดอร์ \/ รวมทุกบิล/);
+  assert.match(orders,/VOID CASH ORDER \+ RESTORE STOCK \/ ยกเลิกทั้งออเดอร์/);
+  assert.match(orders,/paidOrderGroup/);
+  assert.match(orders,/saleCount:group\.length/);
+  assert.match(orders,/writeRecovery\("field-pos-edit-cash-v1"/);
   assert.match(pos,/field-pos-edit-cash-v1/);
   assert.match(pos,/ยอดเงินสดจากบิลเดิม/);
 });
@@ -196,7 +201,9 @@ test('order items preserve sale-time price while production queue hides commerci
 
 test('mobile operational pages use compact density while preserving touch actions',async()=>{
   const shell=await read('components/app-shell.tsx'),pos=await read('app/pos/page.tsx'),queue=await read('app/queue/page.tsx'),stock=await read('app/stock/page.tsx'),orders=await read('app/orders/page.tsx');
-  assert.match(shell,/const primaryMobile=\["\/pos","\/queue","\/orders","\/stock"\]/);\n  assert.match(shell,/MoreHorizontal/);\n  assert.doesNotMatch(shell,/overflow-x-auto rounded-\[20px\] p-1 md:hidden/);
+  assert.match(shell,/const primaryMobile=\["\/pos","\/queue","\/orders","\/stock"\]/);
+  assert.match(shell,/MoreHorizontal/);
+  assert.doesNotMatch(shell,/overflow-x-auto rounded-\[20px\] p-1 md:hidden/);
   assert.match(pos,/min-h-\[154px\]/);
   assert.match(pos,/bottom-\[70px\]/);
   assert.match(queue,/h-full overflow-y-auto overscroll-contain p-2\.5 pb-28/);
