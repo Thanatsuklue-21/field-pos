@@ -105,6 +105,14 @@ html,body{overscroll-behavior:none}
 /* FIELD phone acceptance: 44px controls and readable stacked operational tables. */
 @media (max-width:767px){
   .field-app-root button{min-inline-size:44px;min-block-size:44px}
+  .field-app-root input,
+  .field-app-root select,
+  .field-app-root textarea{min-inline-size:0;max-inline-size:100%}
+  .field-app-root .fixed.inset-0>.card{
+    max-height:calc(var(--field-visual-viewport-height,100dvh) - 1rem)!important;
+    overflow:auto;
+    overscroll-behavior:contain;
+  }
 }
 @media (max-width:639px){
   table[class~="min-w-[680px]"],
