@@ -46,7 +46,7 @@ test("layout exposes standalone metadata apple icon and safe viewport",async()=>
 
 test("PWA readiness shows local cache outbox version and server readiness",async()=>{
   const ui=await read("components/pwa-readiness.tsx"),settings=await read("app/settings/page.tsx");
-  for(const token of ["Service Worker","IndexedDB","Offline Outbox","Server Revision","PromptPay"])assert.ok(ui.includes(token),token);
+  for(const token of ["PWA Installable","Service Worker","App Update","IndexedDB","Offline Outbox","Recovery","Build SHA","Server Revision","PromptPay"])assert.ok(ui.includes(token),token);
   assert.ok(settings.includes("PwaReadiness"));
 });
 
