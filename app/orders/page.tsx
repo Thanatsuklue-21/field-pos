@@ -44,7 +44,8 @@ function OrdersView({session}:{session:Session}){
   }
 
   useEffect(()=>{load(true).catch(()=>{})},[]);
-  const rows=useMemo(()=>sales.filter(x=>(x.billNo+" "+x.queueNo).toLowerCase().includes(q.toLowerCase())),[sales,q]);\n  const paidOrderGroup=(s:Sale)=>{const group=s.orderId?sales.filter(x=>x.orderId===s.orderId&&x.status==="paid"):[s];return group.length?group:[s]};
+  const rows=useMemo(()=>sales.filter(x=>(x.billNo+" "+x.queueNo).toLowerCase().includes(q.toLowerCase())),[sales,q]);
+  const paidOrderGroup=(s:Sale)=>{const group=s.orderId?sales.filter(x=>x.orderId===s.orderId&&x.status==="paid"):[s];return group.length?group:[s]};
 
   async function refundSaleUi(s:Sale){
     const group=s.orderId?sales.filter(x=>x.orderId===s.orderId&&x.status==="paid"):[s];
