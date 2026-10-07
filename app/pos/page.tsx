@@ -150,10 +150,24 @@ function PosView({session}:{session:Session}){
       if(Number.isFinite(heldCash)&&heldCash>0){
         setMethod("cash");
         setReceived(String(heldCash));
+        if(edit?.customerId)setEditCustomerRecovery({customerId:String(edit.customerId),pointsRedeemed:Math.max(0,Math.trunc(Number(edit.pointsRedeemed)||0))});
         setNotice("กำลังแก้ไข "+String(edit?.fromQueue||edit?.fromBill||"บิลเดิม")+" · ยอดเงินสดจากบิลเดิม ฿"+heldCash.toFixed(0)+" ถูกกรอกไว้แล้ว เพิ่ม/ลด/เปลี่ยนเมนูแล้วกด CHECKOUT ใหม่");
       }
     }catch{}
   },[]);
+
+  useEffect(()=>{
+    if(!editCustomerRecovery||!customers.length)return;
+    const found=customers.some(x=>x.id===editCustomerRecovery.customerId);
+    if(found){
+      setCustomerId(editCustomerRecovery.customerId);
+      setPointsRedeemed(editCustomerRecovery.pointsRedeemed);
+      setNotice(prev=>(prev?prev+" · ":"")+"เรียกคืนลูกค้าและแต้มจากบิลเดิมแล้ว กรุณาตรวจสอบก่อนชำระ");
+    }else{
+      setNotice(prev=>(prev?prev+" · ":"")+"ไม่พบลูกค้าเดิมในระบบ กรุณาเลือกลูกค้าใหม่ก่อนชำระ");
+    }
+    setEditCustomerRecovery(null);
+  },[customers,editCustomerRecovery]);
 
   useEffect(()=>{
     const refresh=()=>load().catch(()=>{});
