@@ -450,3 +450,54 @@ test('real libSQL: offline cash sync refuses stale price and unsafe payment mode
   assert.equal(after.sales.length,0);
   assert.equal(after.orders.length,0);
 });
+
+
+test('real libSQL: bank and card are first-class non-cash channels and do not inflate cash drawer',async t=>{
+  const db=await setup(t);
+  const bank=await sell(db,'bank-checkout',{payment:'bank',paymentReference:'bank-ref-001'});
+  const card=await sell(db,'card-checkout',{payment:'card',paymentReference:'terminal-ref-001'});
+  let doc=await state(db);
+  assert.equal(doc.sales.length,2);
+  assert.equal(doc.sales[0].payment,'bank');
+  assert.equal(doc.sales[0].paymentReference,'bank-ref-001');
+  assert.equal(doc.sales[0].payments[0].paymentVerified,'manual');
+  assert.equal(doc.sales[1].payment,'card');
+  assert.equal(doc.sales[1].paymentReference,'terminal-ref-001');
+  assert.equal(doc.sales[1].payments[0].paymentVerified,'manual');
+  for(const orderId of [bank.orderId,card.orderId]){
+    await act(db,orderId,'complete_item',{itemIndex:0,expectedReadyQty:0});
+    await act(db,orderId,'call');
+    await act(db,orderId,'return');
+  }
+  const token='payment-map-token';
+  await db.execute({sql:'INSERT INTO field_sessions VALUES(?,?,?,?)',args:[digest(token),user.id,'csrf',Date.now()+60000]});
+  const handler=createApi({db,origin:'https://field.test'});
+  const res={writeHead(status){this.status=status},end(body){this.body=JSON.parse(body)}};
+  await handler({method:'POST',query:{route:'close-day'},headers:{origin:'https://field.test',cookie:'field_session='+token,'x-csrf-token':'csrf'},body:{openingCash:100,countedCash:100}},res);
+  assert.equal(res.status,201);
+  assert.equal(res.body.close.cash,0);
+  assert.equal(res.body.close.bank,110);
+  assert.equal(res.body.close.card,110);
+  assert.equal(res.body.close.expectedCash,100);
+  assert.equal(res.body.close.cashVariance,0);
+});
+
+test('real libSQL: pre-production bank and card refunds require external reference and restore stock',async t=>{
+  for(const method of ['bank','card']){
+    const db=await setup(t);
+    await sell(db,method+'-refund-checkout',{payment:method,paymentReference:method+'-sale-ref'});
+    const before=await state(db),sale=before.sales[0];
+    await assert.rejects(
+      refundSale({db,user,body:{requestKey:method+'-refund-no-confirm',saleId:sale.id}}),
+      /external_manual_refund_required/
+    );
+    const refunded=await refundSale({db,user,body:{requestKey:method+'-refund-ok',saleId:sale.id,manualConfirmed:true,manualReference:method+'-refund-ref',reason:'customer refund'}});
+    assert.equal(refunded.stockRestored,true);
+    const after=await state(db);
+    assert.equal(after.sales[0].status,'refunded');
+    assert.equal(after.sales[0].refundMethod,method==='bank'?'manual_bank':'manual_card');
+    assert.equal(after.sales[0].refundReference,method+'-refund-ref');
+    assert.equal(after.ingredients.matcha.qty,1000);
+    assert.equal(after.ingredients.milk.qty,30000);
+  }
+});
