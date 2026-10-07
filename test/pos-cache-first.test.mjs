@@ -9,7 +9,9 @@ test('POS bootstrap is cache-first and still revalidates against the server',asy
   assert.match(pos,/cacheGet<Bootstrap>\("\/api\/pos\/bootstrap",BOOTSTRAP_CACHE_MAX_AGE_MS\)/);
   assert.match(pos,/load\(true\)\.catch/);
   assert.match(pos,/acceptBootstrap\(cached\)/);
-  assert.match(pos,/36\*60\*60\*1000/);
+  const db=await read('lib/offline-db.ts');
+  assert.match(pos,/BOOTSTRAP_CACHE_MAX_AGE_MS=BOOTSTRAP_OFFLINE_MAX_AGE_MS/);
+  assert.match(db,/BOOTSTRAP_OFFLINE_MAX_AGE_MS=36\*60\*60\*1000/);
   const effectStart=pos.indexOf('// Render the last known sellable catalog immediately');
   const cache=pos.indexOf('cacheGet<Bootstrap>',effectStart);
   const network=pos.indexOf('load(true).catch',effectStart);
