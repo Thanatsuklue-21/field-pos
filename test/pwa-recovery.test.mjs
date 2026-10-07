@@ -48,3 +48,21 @@ test("PWA update guard recognizes durable split and edit recovery",async()=>{
   assert.ok(runtime.includes('hasRecovery("field-pos-split-group-v1")'));
   assert.ok(runtime.includes('hasRecovery("field-pos-edit-cash-v1")'));
 });
+
+
+test("online-but-unreachable server can use restricted cached operator while 401 cannot",async()=>{
+  const offline=await read("lib/offline-operator.ts"),gate=await read("components/auth-gate.tsx");
+  assert.ok(offline.includes("allowNetworkUncertain"));
+  assert.ok(offline.includes("navigator.onLine&&!options.allowNetworkUncertain"));
+  assert.ok(gate.includes("if(e?.status===0)"));
+  assert.ok(gate.includes("getOfflineOperatorIfReady({allowNetworkUncertain:true})"));
+  assert.ok(!gate.includes("if(e?.status===401){const offline"));
+});
+
+test("offline operator session revalidates on network recovery focus and visibility",async()=>{
+  const gate=await read("components/auth-gate.tsx");
+  assert.ok(gate.includes('window.addEventListener("field:network",networkSignal)'));
+  assert.ok(gate.includes('window.addEventListener("focus",focus)'));
+  assert.ok(gate.includes('document.addEventListener("visibilitychange",visible)'));
+  assert.ok(gate.includes("getSessionCached(true).then(publish)"));
+});
