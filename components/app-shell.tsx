@@ -1,7 +1,7 @@
 "use client";
 import {useEffect,useMemo,useState} from "react";
 import Link from "next/link";
-import {usePathname} from "next/navigation";
+import {usePathname,useRouter} from "next/navigation";
 import {BarChart3,ClipboardList,ListOrdered,Package2,Settings,ShoppingBag,Sparkles,Boxes,LayoutDashboard,ReceiptText,Users,BookOpenCheck,CalendarCheck2,DatabaseBackup,UserCog,ScrollText,Calculator,MoreHorizontal,X} from "lucide-react";
 import {useAppStore} from "@/stores/app-store";
 import {dict} from "@/lib/i18n";
@@ -15,6 +15,7 @@ const overflowMobile=["/expenses","/close","/settings"];
 
 export default function AppShell({children}:{children:React.ReactNode}){
   const path=usePathname(),lang=useAppStore(s=>s.language),t=dict[lang],[session,setSession]=useState<Session|null>(null),[moreOpen,setMoreOpen]=useState(false);
+  const router=useRouter(),offlineRouteAllowed=!session?.offline||["/pos","/settings"].includes(path);
 
   useEffect(()=>{
     const logged=(e:Event)=>setSession((e as CustomEvent).detail||null),expired=()=>{clearSessionCache();setSession(null)};
@@ -24,6 +25,7 @@ export default function AppShell({children}:{children:React.ReactNode}){
     return()=>{window.removeEventListener("field:session",logged);window.removeEventListener("field:auth-expired",expired)}
   },[]);
   useEffect(()=>setMoreOpen(false),[path]);
+  useEffect(()=>{if(session?.offline&&!offlineRouteAllowed)router.replace("/pos")},[session?.offline,offlineRouteAllowed,router]);
 
   const allowed=useMemo(()=>items.filter(([href, , ,access])=>session&&(session.offline?["/pos","/settings"].includes(href):(access==="any"||session.user.role==="admin"||session.user.permissions?.[access]===true))),[session]);
   const mobilePrimary=allowed.filter(([href])=>primaryMobile.includes(href)).sort((a,b)=>primaryMobile.indexOf(a[0])-primaryMobile.indexOf(b[0]));
@@ -37,7 +39,7 @@ export default function AppShell({children}:{children:React.ReactNode}){
         <div className="mb-6 flex items-center gap-3"><div className="grid h-11 w-11 place-items-center rounded-full border border-[#d4af37]/45 bg-[#d4af37]/10"><Sparkles size={19} className="gold"/></div><div className="hidden xl:block"><b className="tracking-[.3em]">FIELD</b><small className="block text-[10px] text-slate-500">CAFE POS</small></div></div>
         <nav className="soft-scroll w-full space-y-1 overflow-y-auto px-3">{allowed.map(([href,key,Icon])=><Link key={href} href={href} className={"flex items-center gap-3 rounded-full px-4 py-3 text-sm transition "+(path===href?"bg-[#d4af37]/16 text-[#6f5510] shadow-sm":"text-slate-600 hover:bg-slate-100 hover:text-slate-950")}><Icon size={18}/><span className="hidden xl:block">{t[key]}</span></Link>)}</nav>
       </aside>
-      <main className="min-w-0 flex-1 overflow-hidden rounded-[20px] border border-slate-300/80 bg-[#f3f5f7] shadow-[0_10px_30px_rgba(15,23,42,.08)] sm:rounded-[24px] md:rounded-[32px]">{children}</main>
+      <main className="min-w-0 flex-1 overflow-hidden rounded-[20px] border border-slate-300/80 bg-[#f3f5f7] shadow-[0_10px_30px_rgba(15,23,42,.08)] sm:rounded-[24px] md:rounded-[32px]">{offlineRouteAllowed?children:<div className="grid h-full place-items-center p-6 text-center text-sm text-amber-800"><div><b>OFFLINE MODE · CASH ONLY</b><p className="mt-2 text-xs text-slate-500">กำลังกลับหน้า POS เพื่อป้องกันการใช้ข้อมูลคิวหรือรายการจาก Server ที่อาจไม่อัปเดต</p></div></div>}</main>
     </div>
 
     {mobileMore.length>0&&moreOpen&&<div className="fixed inset-0 z-[48] bg-black/20 md:hidden" onClick={()=>setMoreOpen(false)}>
