@@ -75,3 +75,13 @@ test("session revalidation is single-flight so online telemetry cannot recurse a
   assert.ok(gate.includes("revalidating=true"));
   assert.ok(gate.includes(".finally(()=>{revalidating=false})"));
 });
+
+
+test("auth session probe fails fast without shortening ordinary GET or financial write semantics",async()=>{
+  const client=await read("lib/api-client.ts");
+  assert.ok(client.includes("AUTH_SESSION_TIMEOUT_MS=2_500"));
+  assert.ok(client.includes("GET_TIMEOUT_MS=8_000"));
+  assert.ok(client.includes('path==="/api/auth/session"?AUTH_SESSION_TIMEOUT_MS:GET_TIMEOUT_MS'));
+  assert.ok(client.includes('"field_auth_session_timeout"'));
+  assert.ok(client.includes('method==="GET"&&!init.signal'));
+});
