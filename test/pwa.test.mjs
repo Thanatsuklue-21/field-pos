@@ -59,7 +59,7 @@ test("POS menu images are lazy and PWA shell prioritizes core operator routes",a
   const pos=await read("app/pos/page.tsx"),shell=await read("components/app-shell.tsx");
   assert.ok(pos.includes('loading="lazy"'));
   assert.ok(pos.includes('decoding="async"'));
-  assert.ok(shell.includes('mobileOrder=["/pos","/queue","/orders","/stock"'));
+  assert.ok(shell.includes('primaryMobile=["/pos","/queue","/orders","/stock"]'));\n  assert.ok(shell.includes('overflowMobile=["/expenses","/close","/settings"]'));
 });
 
 test("service worker and manifest bypass deployment cache staleness",async()=>{
