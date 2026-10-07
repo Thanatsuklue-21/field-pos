@@ -1,4 +1,5 @@
 import {cacheGet,cachePut} from "@/lib/offline-db";
+import {captureClientTelemetry,clientNow,elapsedMs} from "@/lib/client-telemetry";
 
 export type Session={user:{id:string;username:string;role:"admin"|"staff";permissions:Record<string,boolean>};csrf:string;offline?:boolean};
 export type MenuVariant={label:string;available:boolean;maxServings:number;lowStock:boolean;recipeItems:Record<string,number>;missingIngredients:{id:string;name:string}[];reason:string|null};
@@ -58,8 +59,12 @@ export async function getSessionCached(force=false){
 }
 
 async function executeApi<T>(path:string,init:RequestInit,method:string){
+  const started=clientNow();
+  let httpStatus=0;
+  const metric=method==="POST"&&path==="/api/pos/checkout"?"checkout_latency":method==="POST"&&path==="/api/pos/queue"?"queue_action_latency":"";
   try{
     const res=await fetchWithPolicy(path,init,method);
+    httpStatus=res.status;
     const data=await res.json().catch(()=>({}));
     if(res.status===401){
       clearSessionCache();
@@ -81,6 +86,8 @@ async function executeApi<T>(path:string,init:RequestInit,method:string){
       throw Object.assign(new Error("network_unavailable"),{status:0,cause:error});
     }
     throw error;
+  }finally{
+    if(metric)captureClientTelemetry(metric,{duration_ms:elapsedMs(started),http_status:httpStatus,success:httpStatus>=200&&httpStatus<300});
   }
 }
 
