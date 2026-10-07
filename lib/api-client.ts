@@ -10,6 +10,7 @@ export type RevisionUnchanged={revision:number;unchanged:true};
 const SAFE_GET_CACHE=new Set(["/api/pos/bootstrap"]);
 const SESSION_TTL_MS=30_000;
 const GET_TIMEOUT_MS=8_000;
+const AUTH_SESSION_TIMEOUT_MS=2_500;
 let sessionCache:{value:Session;at:number}|null=null;
 let sessionInFlight:Promise<Session>|null=null;
 const getInFlight=new Map<string,Promise<unknown>>();
@@ -26,7 +27,8 @@ function getRequestKey(path:string,init:RequestInit){
 
 async function fetchWithPolicy(path:string,init:RequestInit,method:string){
   const controller=method==="GET"&&!init.signal?new AbortController():null;
-  const timer=controller?setTimeout(()=>controller.abort("field_get_timeout"),GET_TIMEOUT_MS):null;
+  const timeoutMs=path==="/api/auth/session"?AUTH_SESSION_TIMEOUT_MS:GET_TIMEOUT_MS;
+  const timer=controller?setTimeout(()=>controller.abort(path==="/api/auth/session"?"field_auth_session_timeout":"field_get_timeout"),timeoutMs):null;
   try{
     return await fetch(path,{
       ...init,
