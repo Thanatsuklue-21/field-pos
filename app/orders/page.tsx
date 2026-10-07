@@ -47,23 +47,23 @@ function OrdersView({session}:{session:Session}){
   const rows=useMemo(()=>sales.filter(x=>(x.billNo+" "+x.queueNo).toLowerCase().includes(q.toLowerCase())),[sales,q]);
 
   async function refundSaleUi(s:Sale){
-    const methods=s.payment==="split"?(s.paymentMethods||[]):[s.payment],hasPromptPay=methods.includes("promptpay");
+    const methods=s.payment==="split"?(s.paymentMethods||[]):[s.payment],external=methods.filter(m=>["promptpay","bank","card"].includes(m));
     let manualReference="";
-    if(hasPromptPay){
-      if(!window.confirm("บิลนี้มี PromptPay โปรดยืนยันว่าคุณได้คืนเงินจริงส่วน PromptPay ให้ลูกค้าผ่านช่องทางภายนอกแล้ว"))return;
-      manualReference=window.prompt("เลขอ้างอิงการคืนเงิน PromptPay / หมายเหตุ")||"";
+    if(external.length){
+      if(!window.confirm((external.includes("promptpay")?"บิลนี้มี PromptPay":"บิลนี้มีช่องทางรับเงินภายนอก")+" ("+external.join(", ")+") โปรดยืนยันว่าคุณได้คืนเงินจริงให้ลูกค้าภายนอกระบบแล้ว"))return;
+      manualReference=window.prompt("เลขอ้างอิงการคืนเงิน / หมายเหตุ")||"";
       if(!manualReference.trim())return;
     }
     const reason=window.prompt("เหตุผลในการ Refund เต็มจำนวน")||"";
     if(!window.confirm("ยืนยัน Refund เต็มจำนวน ฿"+s.total.toFixed(0)+" ? ระบบจะตัดสินการคืนสต็อกจากสถานะการผลิต"))return;
     setBusy(true);setMsg("");
     try{
-      const r=await api<any>("/api/pos/refund",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({requestKey:crypto.randomUUID(),saleId:s.id,reason,manualConfirmed:hasPromptPay,manualReference})});
+      const r=await api<any>("/api/pos/refund",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({requestKey:crypto.randomUUID(),saleId:s.id,reason,manualConfirmed:external.length>0,manualReference})});
       setDetail(null);
       setMsg("Refund ถูกบันทึกแล้ว · "+(r.stockRestored?"คืนสต็อกแล้วเพราะยังไม่เริ่มผลิต":"ไม่คืนสต็อกเพราะวัตถุดิบถูกใช้/ออเดอร์ดำเนินการแล้ว"));
       await load();
     }catch(e:any){
-      setMsg(e.message==="refund_closed_day"?"วันนี้ถูก Close Day แล้ว ไม่อนุญาตให้แก้ย้อนหลัง":e.message==="promptpay_manual_refund_required"?"ต้องคืนเงินจริงส่วน PromptPay ภายนอกระบบก่อนยืนยัน":e.message==="manual_refund_reference_required"?"ต้องกรอกเลขอ้างอิงการคืนเงิน PromptPay":e.message==="refund_multi_sale_order_not_supported"?"ออเดอร์นี้มีหลาย sale ยังไม่รองรับ Refund อัตโนมัติ":e.message==="refund_payment_not_supported"?"ช่องทางชำระเงินของบิลนี้ยังไม่รองรับ Refund":e.message==="use_void_before_production"?"บิลเงินสดยังไม่เริ่มผลิต ให้ใช้ VOID เพื่อคืนสต็อกอัตโนมัติ":e.message);
+      setMsg(e.message==="refund_closed_day"?"วันนี้ถูก Close Day แล้ว ไม่อนุญาตให้แก้ย้อนหลัง":e.message==="promptpay_manual_refund_required"?"ต้องคืนเงินจริงส่วน PromptPay ภายนอกระบบก่อนยืนยัน":e.message==="external_manual_refund_required"?"ต้องคืนเงินจริงผ่านช่องทางภายนอกก่อนยืนยัน":e.message==="manual_refund_reference_required"?"ต้องกรอกเลขอ้างอิงการคืนเงิน":e.message==="refund_multi_sale_order_not_supported"?"ออเดอร์นี้มีหลาย sale ยังไม่รองรับ Refund อัตโนมัติ":e.message==="refund_payment_not_supported"?"ช่องทางชำระเงินของบิลนี้ยังไม่รองรับ Refund":e.message==="use_void_before_production"?"บิลเงินสดยังไม่เริ่มผลิต ให้ใช้ VOID เพื่อคืนสต็อกอัตโนมัติ":e.message);
     }finally{setBusy(false)}
   }
 
@@ -129,7 +129,7 @@ function OrdersView({session}:{session:Session}){
 
         {session.user.role==="admin"&&detail.payment==="cash"&&detail.status==="paid"&&!detail.productionStarted&&<button disabled={busy} onClick={()=>editCashOrder(detail)} className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl bg-[#d4af37] py-3 text-sm font-black text-black disabled:opacity-50"><Pencil size={16}/>{busy?"กำลังบันทึก...":"แก้ไข / ลด / เปลี่ยนเมนู"}</button>}
         {session.user.role==="admin"&&detail.payment==="cash"&&detail.status==="paid"&&<button disabled={busy} onClick={()=>voidCash(detail)} className="mt-2 flex w-full items-center justify-center gap-2 rounded-2xl border border-red-400/30 py-3 text-sm font-semibold text-red-600 disabled:opacity-40"><Ban size={16}/>VOID CASH SALE + RESTORE STOCK / ยกเลิกบิลเงินสด</button>}
-        {session.user.role==="admin"&&["cash","promptpay","split"].includes(detail.payment)&&detail.status==="paid"&&<button disabled={busy} onClick={()=>refundSaleUi(detail)} className="mt-2 flex w-full items-center justify-center gap-2 rounded-2xl border border-amber-400/30 py-3 text-sm font-semibold text-amber-800 disabled:opacity-40"><RotateCcw size={16}/>FULL REFUND / คืนเงินเต็มจำนวน</button>}
+        {session.user.role==="admin"&&["cash","promptpay","bank","card","split"].includes(detail.payment)&&detail.status==="paid"&&<button disabled={busy} onClick={()=>refundSaleUi(detail)} className="mt-2 flex w-full items-center justify-center gap-2 rounded-2xl border border-amber-400/30 py-3 text-sm font-semibold text-amber-800 disabled:opacity-40"><RotateCcw size={16}/>FULL REFUND / คืนเงินเต็มจำนวน</button>}
         <button onClick={()=>window.print()} className="mt-2 flex w-full items-center justify-center gap-2 rounded-2xl border border-slate-300 py-3 text-sm font-semibold"><Printer size={16}/>พิมพ์ใบเสร็จ</button>
       </div>
     </div>}
