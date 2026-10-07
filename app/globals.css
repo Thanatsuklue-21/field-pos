@@ -100,3 +100,92 @@ html,body{overscroll-behavior:none}
 
 .field-payment-sheet{max-height:calc(var(--field-visual-viewport-height,100dvh) - 1rem);scroll-padding-bottom:max(5rem,env(safe-area-inset-bottom))}
 @media (min-width:640px){.field-payment-sheet{max-height:94vh}}
+
+
+/* FIELD phone acceptance: 44px controls and readable stacked operational tables. */
+@media (max-width:767px){
+  .field-app-root button{min-inline-size:44px;min-block-size:44px}
+}
+@media (max-width:639px){
+  table[class~="min-w-[680px]"],
+  table[class~="min-w-[720px]"],
+  table[class~="min-w-[780px]"],
+  table[class~="min-w-[560px]"]{
+    display:block;
+    width:100%;
+    min-width:0!important;
+  }
+  table[class~="min-w-[680px]"] thead,
+  table[class~="min-w-[720px]"] thead,
+  table[class~="min-w-[780px]"] thead,
+  table[class~="min-w-[560px]"] thead{display:none}
+  table[class~="min-w-[680px]"] tbody,
+  table[class~="min-w-[720px]"] tbody,
+  table[class~="min-w-[780px]"] tbody,
+  table[class~="min-w-[560px]"] tbody{display:grid;gap:.5rem}
+  table[class~="min-w-[680px]"] tr,
+  table[class~="min-w-[720px]"] tr,
+  table[class~="min-w-[780px]"] tr,
+  table[class~="min-w-[560px]"] tr{
+    display:grid;
+    grid-template-columns:minmax(0,1fr) minmax(0,1fr);
+    gap:.35rem .75rem;
+    border:1px solid var(--separator);
+    border-radius:16px;
+    background:#fff;
+    padding:.75rem;
+  }
+  table[class~="min-w-[680px]"] td,
+  table[class~="min-w-[720px]"] td,
+  table[class~="min-w-[780px]"] td,
+  table[class~="min-w-[560px]"] td{
+    min-width:0;
+    padding:.15rem 0!important;
+    overflow-wrap:anywhere;
+  }
+  table[class~="min-w-[680px]"] td::before,
+  table[class~="min-w-[720px]"] td::before,
+  table[class~="min-w-[780px]"] td::before,
+  table[class~="min-w-[560px]"] td::before{
+    display:block;
+    margin-bottom:.15rem;
+    font-size:9px;
+    font-weight:700;
+    letter-spacing:.08em;
+    color:var(--text-tertiary);
+    text-transform:uppercase;
+  }
+
+  table[class~="min-w-[680px]"] td:nth-child(1){grid-column:1/-1}
+  table[class~="min-w-[680px]"] td:nth-child(1)::before{content:"ORDER"}
+  table[class~="min-w-[680px]"] td:nth-child(2)::before{content:"DATE"}
+  table[class~="min-w-[680px]"] td:nth-child(3)::before{content:"ITEMS"}
+  table[class~="min-w-[680px]"] td:nth-child(4)::before{content:"TOTAL"}
+  table[class~="min-w-[680px]"] td:nth-child(5)::before{content:"PAYMENT"}
+  table[class~="min-w-[680px]"] td:nth-child(6)::before{content:"STATUS"}
+  table[class~="min-w-[680px]"] td:nth-child(7){grid-column:1/-1;display:flex;justify-content:flex-end}
+
+  table[class~="min-w-[720px]"] td:nth-child(1)::before{content:"DATE"}
+  table[class~="min-w-[720px]"] td:nth-child(2)::before{content:"CATEGORY"}
+  table[class~="min-w-[720px]"] td:nth-child(3){grid-column:1/-1}
+  table[class~="min-w-[720px]"] td:nth-child(3)::before{content:"DESCRIPTION"}
+  table[class~="min-w-[720px]"] td:nth-child(4)::before{content:"PAYMENT"}
+  table[class~="min-w-[720px]"] td:nth-child(5)::before{content:"AMOUNT"}
+  table[class~="min-w-[720px]"] td:nth-child(6){display:flex;justify-content:flex-end}
+
+  table[class~="min-w-[780px]"] td:nth-child(1){grid-column:1/-1}
+  table[class~="min-w-[780px]"] td:nth-child(1)::before{content:"รายการ"}
+  table[class~="min-w-[780px]"] td:nth-child(2)::before{content:"วันที่"}
+  table[class~="min-w-[780px]"] td:nth-child(3)::before{content:"แหล่งซื้อ"}
+  table[class~="min-w-[780px]"] td:nth-child(4)::before{content:"จำนวนรับ"}
+  table[class~="min-w-[780px]"] td:nth-child(5)::before{content:"ราคา"}
+  table[class~="min-w-[780px]"] td:nth-child(6)::before{content:"แพ็ก"}
+  table[class~="min-w-[780px]"] td:nth-child(7){grid-column:1/-1}
+  table[class~="min-w-[780px]"] td:nth-child(7)::before{content:"สถานะ / จัดการ"}
+
+  table[class~="min-w-[560px]"] td:nth-child(1){grid-column:1/-1}
+  table[class~="min-w-[560px]"] td:nth-child(1)::before{content:"รายการ"}
+  table[class~="min-w-[560px]"] td:nth-child(2)::before{content:"ประเภท"}
+  table[class~="min-w-[560px]"] td:nth-child(3)::before{content:"จำนวน"}
+  table[class~="min-w-[560px]"] td:nth-child(4)::before{content:"เวลา"}
+}
