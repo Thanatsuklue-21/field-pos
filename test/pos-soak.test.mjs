@@ -310,6 +310,53 @@ test('void reverses CRM once and restores previous last visit',async()=>{
   assert.equal(sale.customerEffectsReversed,true);
 });
 
+test('multi-sale cash order voids atomically before production and restores all stock once',async()=>{
+  const db=fakeDb();
+  const first=await checkoutPos({db,user,now:2800,body:{requestKey:'multi-void-first-001',cart,date,payment:'cash',received:100,customerId:'cus-1'}});
+  await checkoutPos({db,user,now:2810,body:{requestKey:'multi-void-addon-001',cart,date,payment:'cash',received:100,customerId:'cus-1',targetOrderId:first.orderId}});
+  let state=JSON.parse(db.storage.document);
+  assert.equal(state.sales.length,2);
+  assert.equal(state.orders.length,1);
+  assert.equal(state.ingredients.matcha.qty,990);
+  assert.equal(state.customers[0].visits,2);
+  assert.equal(state.customers[0].totalSpend,110);
+
+  const body={requestKey:'multi-void-order-001',saleId:first.saleIds[0],reason:'edit whole order'};
+  const result=await voidSale({db,user,now:2820,body});
+  assert.equal(result.voidAmount,110);
+  assert.equal(result.saleIds.length,2);
+
+  state=JSON.parse(db.storage.document);
+  assert.ok(state.sales.every(s=>s.status==='void'));
+  assert.ok(state.sales.every(s=>s.voidGroupAmount===110&&s.voidGroupSaleIds.length===2));
+  assert.equal(state.orders[0].status,'void');
+  assert.equal(state.orders[0].voidAmount,110);
+  assert.equal(state.ingredients.matcha.qty,1000);
+  assert.equal(state.ingredients.milk.qty,30000);
+  assert.equal(state.ingredients.cup16.qty,500);
+  assert.equal(state.customers[0].visits,0);
+  assert.equal(state.customers[0].totalSpend,0);
+  assert.equal(state.customers[0].points,0);
+  assert.equal(db.storage.stockTx.filter(args=>args[2]==='VOID_REVERSAL').length,6);
+
+  const replay=await voidSale({db,user,now:2830,body});
+  assert.equal(replay.replayed,true);
+  assert.equal(replay.voidAmount,110);
+  assert.equal(db.storage.stockTx.filter(args=>args[2]==='VOID_REVERSAL').length,6);
+});
+
+test('multi-sale cash void fails closed when any add-on used a non-cash payment',async()=>{
+  const db=fakeDb();
+  const first=await checkoutPos({db,user,now:2840,body:{requestKey:'multi-void-mixed-first',cart,date,payment:'cash',received:100}});
+  await checkoutPos({db,user,now:2850,body:{requestKey:'multi-void-mixed-addon',cart,date,payment:'bank',paymentReference:'bank-void-test',targetOrderId:first.orderId}});
+  await assert.rejects(()=>voidSale({db,user,now:2860,body:{requestKey:'multi-void-mixed-action',saleId:first.saleIds[0],reason:'should fail'}}),/non_cash_void_requires_refund/);
+  const state=JSON.parse(db.storage.document);
+  assert.ok(state.sales.every(s=>s.status==='paid'));
+  assert.equal(state.orders[0].status,'assigned');
+  assert.equal(state.ingredients.matcha.qty,990);
+  assert.equal(db.storage.stockTx.filter(args=>args[2]==='VOID_REVERSAL').length,0);
+});
+
 test('cash sale cannot auto-void after production starts',async()=>{
   const db=fakeDb();
   const checkout=await checkoutPos({db,user,now:3000,body:{requestKey:'void-start-checkout-001',cart,date,payment:'cash',received:100}});
