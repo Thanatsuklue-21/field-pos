@@ -24,7 +24,7 @@ Checkout and queue operations have durable request keys stored in `field_pos_req
 
 ## Solo-operator order entry
 
-The POS keeps cart interactions local and immediate. An unpaid cart can be parked with **Hold Bill** and restored on the same device without creating a sale, deducting stock, or entering the production queue. Restoring a held cart re-reads current menu names, prices, variants and availability before checkout. A held bill cannot be created while a payment result is ambiguous or while the cart is the unpaid remainder of an existing split-payment queue.
+The POS keeps cart interactions local and immediate. An unpaid cart can be parked with **Hold Bill** and restored on the same device without creating a sale, deducting stock, or entering the production queue. Restoring a held cart re-reads current menu names, prices, variants and availability before checkout. A held bill cannot be created while a payment result is ambiguous or while the cart is the unpaid remainder of an existing split-payment queue. A paid cash order may be edited before production by voiding the prior sale, restoring its recipe stock and reopening the cart; when add-ons share the same queue, all paid cash sales in that order are voided/restored atomically and all items are reopened together.
 
 ## Data and recovery
 
