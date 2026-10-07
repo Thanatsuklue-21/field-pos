@@ -26,7 +26,7 @@ export function readOfflineOperatorSession():Session|null{
     if(!row?.id||!row?.username||!Number.isFinite(Number(row.savedAt)))return null;
     if(Date.now()-Number(row.savedAt)>MAX_AGE_MS){localStorage.removeItem(KEY);return null}
     return {
-      user:{id:row.id,username:row.username,role:"staff",permissions:{order:true,queue:true}},
+      user:{id:row.id,username:row.username,role:"staff",permissions:{order:true}},
       csrf:"",
       offline:true
     };
