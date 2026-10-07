@@ -15,8 +15,8 @@ test('purchase payment method is schema-migrated and persisted through stock flo
 test('cash reconciliation subtracts only explicitly cash-paid expenses',async()=>{
   const api=await read('lib/api.mjs'),close=await read('app/close/page.tsx'),expenses=await read('app/expenses/page.tsx');
   assert.match(api,/cashPaidOut=cashExpenseTotal\(expenses\)/);
-  assert.match(api,/reconcileCash\(\{openingCash,cashSales:cash,cashPaidOut,countedCash\}\)/);
-  assert.match(close,/Expected Cash = เงินตั้งต้น \+ ยอดขายเงินสด − ค่าใช้จ่ายที่จ่ายสดจากลิ้นชัก/);
+  assert.match(api,/reconcileCash\(\{openingCash,cashSales:cash,cashIn,cashPaidOut,cashOut,countedCash\}\)/);
+  assert.match(close,/Expected Cash = เงินตั้งต้น \+ ยอดขายเงินสด \+ เงินเติมเข้า − ค่าใช้จ่ายเงินสด − เงินนำออก/);
   assert.match(close,/Cash Paid Out/);
   assert.match(expenses,/เงินสดจากลิ้นชัก/);
   assert.match(expenses,/paymentMethod/);
@@ -45,6 +45,22 @@ test('reports expose inventory valuation and CSV exports for accountant',async()
   assert.match(reports,/Sales CSV/);
   assert.match(reports,/Expenses CSV/);
   assert.match(reports,/Stock CSV/);
+  assert.match(reports,/Cash Drawer CSV/);
+  assert.match(api,/cashMovements/);
   assert.match(reports,/มูลค่า Stock คงเหลือ/);
   assert.match(reports,/text\/csv/);
+});
+
+
+test('cash drawer movements are audited and guarded by an open shift',async()=>{
+  const api=await read('lib/api.mjs'),close=await read('app/close/page.tsx');
+  assert.match(api,/\/api\/cash-shift\/movements/);
+  assert.match(api,/cash_shift_not_open/);
+  assert.match(api,/drawer_cash_shortage/);
+  assert.match(api,/cash_drawer_movement/);
+  assert.match(api,/type==='CASH_IN'/);
+  assert.match(api,/type==='CASH_OUT'/);
+  assert.match(close,/เงินสดเข้า\/ออกลิ้นชักระหว่างวัน/);
+  assert.match(close,/เติมเงินเข้า/);
+  assert.match(close,/นำเงินออก/);
 });
