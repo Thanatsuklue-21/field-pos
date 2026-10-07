@@ -5,7 +5,7 @@ import {useRouter} from "next/navigation";
 import {ArrowRight,CheckCircle2,Clock3,Minus,Plus,Search,Trash2,WalletCards,X} from "lucide-react";
 import AuthGate from "@/components/auth-gate";
 import {api,type Bootstrap,type MenuItem,type RevisionUnchanged,type Session} from "@/lib/api-client";
-import {cacheGet,cachePut} from "@/lib/offline-db";
+import {BOOTSTRAP_OFFLINE_MAX_AGE_MS,cacheGet,cachePut} from "@/lib/offline-db";
 import {applyOfflineCashToBootstrap,getOfflineCashSummary,queueOfflineCashSale,syncOfflineCashSales,type OfflineCashSummary} from "@/lib/offline-sales";
 import {additionalServingsAvailable,cartAvailability} from "@/lib/domain/availability.mjs";
 import {useCartStore} from "@/stores/cart-store";
@@ -21,7 +21,7 @@ function localTime(ts:number){
   return new Intl.DateTimeFormat("th-TH",{timeZone:"Asia/Bangkok",hour:"2-digit",minute:"2-digit"}).format(new Date(ts));
 }
 
-const BOOTSTRAP_CACHE_MAX_AGE_MS=36*60*60*1000;
+const BOOTSTRAP_CACHE_MAX_AGE_MS=BOOTSTRAP_OFFLINE_MAX_AGE_MS;
 const PENDING_KEY="field-pos-pending-promptpay-v1";
 type PendingPrompt={requestKey:string;payRequestKey?:string;sessionId?:string;date:string;cart:{id:string;variant:string;qty:number}[];paymentReference:string;total:number;customerId:string|null;pointsRedeemed?:number;createdAt:number;checkoutMode?:"full"|"split_bill";targetOrderId?:string|null};
 const pendingRead=():PendingPrompt|null=>{try{return JSON.parse(localStorage.getItem(PENDING_KEY)||"null")}catch{return null}};
