@@ -273,7 +273,7 @@ function PosView({session}:{session:Session}){
     refreshOfflineStats().catch(()=>{});
   }
 
-  function finishSale(r:any,opts:{payment:"cash"|"promptpay"|"delivery";total:number;received:number;recovered?:boolean;splitBill?:boolean;paidCart?:{id:string;variant:string;qty:number}[]}){
+  function finishSale(r:any,opts:{payment:"cash"|"promptpay"|"bank"|"card"|"delivery";total:number;received:number;recovered?:boolean;splitBill?:boolean;paidCart?:{id:string;variant:string;qty:number}[]}){
     applyServerState(r);
     const serverTotal=Number(r?.total??opts.total);
     const serverReceived=Number(r?.received??opts.received);
