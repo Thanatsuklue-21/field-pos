@@ -13,8 +13,10 @@ test("offline operator requires a fresh usable bootstrap cache",async()=>{
 
 test("service worker warms Next static chunks during install without caching APIs",async()=>{
   const sw=await read("public/sw.js");
-  assert.ok(sw.includes('VERSION="field-pwa-v4"'));
+  assert.ok(sw.includes('VERSION="field-pwa-v5"'));
   assert.ok(sw.includes('"/manifest.webmanifest"'));
+  assert.ok(sw.includes('SAFE_OFFLINE_ROUTES=["/pos","/settings"]'));
+  assert.ok(sw.includes('for(const asset of nextStaticUrls'));
   assert.ok(sw.includes('"/settings"'));
   assert.ok(sw.includes("nextStaticUrls"));
   assert.ok(sw.includes('url.pathname.startsWith("/_next/static/")'));
