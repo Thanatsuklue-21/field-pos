@@ -516,3 +516,21 @@ test('variant modal reflects cart-aware remaining stock instead of raw availabil
   assert.match(pos,/เพิ่มไม่ได้ · ตะกร้าใช้สต๊อกที่เหลือแล้ว/);
   assert.match(pos,/ลดจำนวนรายการในตะกร้า หรืออัปเดต Stock ก่อนเพิ่มเมนูนี้/);
 });
+
+
+test('payment mapping v2 exposes bank and card as first-class channels',async()=>{
+  const pos=await read('app/pos/page.tsx'),api=await read('lib/api.mjs'),core=await read('lib/pos-api.mjs'),close=await read('app/close/page.tsx'),reports=await read('app/reports/page.tsx');
+  assert.match(pos,/setMethod\("bank"\)/);
+  assert.match(pos,/setMethod\("card"\)/);
+  assert.match(pos,/โอนธนาคาร/);
+  assert.match(pos,/เลขอ้างอิงบัตร \/ Terminal/);
+  assert.match(core,/\['cash','promptpay','bank','card','other'\]/);
+  assert.match(core,/manual_bank/);
+  assert.match(core,/manual_card/);
+  assert.match(api,/paymentSummary=\{cash:0,promptpay:0,bank:0,card:0,other:0\}/);
+  assert.match(api,/bankAmount:/);
+  assert.match(api,/cardAmount:/);
+  assert.match(close,/x\.bank/);
+  assert.match(close,/x\.card/);
+  assert.match(reports,/PAYMENT CHANNELS/);
+});
