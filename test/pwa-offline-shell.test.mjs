@@ -20,7 +20,7 @@ test("service worker warms Next static chunks during install without caching API
   assert.ok(sw.includes('"/settings"'));
   assert.ok(sw.includes("nextStaticUrls"));
   assert.ok(sw.includes('url.pathname.startsWith("/_next/static/")'));
-  assert.ok(sw.includes("Promise.allSettled(assets.map"));
+  assert.ok(sw.includes("Promise.allSettled([...assets].map"));
   assert.ok(sw.includes('url.pathname.startsWith("/api/")'));
   const install=sw.slice(sw.indexOf('self.addEventListener("install"'),sw.indexOf('self.addEventListener("activate"'));
   assert.ok(install.includes("warmShell()"));
