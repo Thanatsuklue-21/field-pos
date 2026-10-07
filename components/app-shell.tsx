@@ -25,7 +25,7 @@ export default function AppShell({children}:{children:React.ReactNode}){
   },[]);
   useEffect(()=>setMoreOpen(false),[path]);
 
-  const allowed=useMemo(()=>items.filter(([, , ,access])=>session&&(access==="any"||session.user.role==="admin"||session.user.permissions?.[access]===true)),[session]);
+  const allowed=useMemo(()=>items.filter(([href, , ,access])=>session&&(session.offline?["/pos","/settings"].includes(href):(access==="any"||session.user.role==="admin"||session.user.permissions?.[access]===true))),[session]);
   const mobilePrimary=allowed.filter(([href])=>primaryMobile.includes(href)).sort((a,b)=>primaryMobile.indexOf(a[0])-primaryMobile.indexOf(b[0]));
   const mobileMore=allowed.filter(([href])=>overflowMobile.includes(href)).sort((a,b)=>overflowMobile.indexOf(a[0])-overflowMobile.indexOf(b[0]));
   const moreActive=mobileMore.some(([href])=>path===href);
