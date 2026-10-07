@@ -26,6 +26,15 @@ export default function PwaReadiness({serverRevision,promptPayReady}:{serverRevi
   },[refresh]);
 
   const shortSha=build.buildSha?build.buildSha.slice(0,10):"—";
+  const recoveryParts=[
+    Number(state?.recoveryCartItems||0)>0?"Cart "+state?.recoveryCartItems:null,
+    Number(state?.recoveryHeldBills||0)>0?"Held "+state?.recoveryHeldBills:null,
+    state?.recoveryPromptPay?"PromptPay":null,
+    state?.recoveryCash?"Cash":null,
+    state?.recoverySplit?"Split":null,
+    state?.recoveryEditCash?"Edit":null
+  ].filter(Boolean);
+  const recoveryLabel=recoveryParts.length?recoveryParts.join(" · "):"CLEAR";
   return <div className="glass card p-4 sm:p-6">
     <div className="flex items-start justify-between gap-3">
       <div><h2 className="text-sm tracking-widest">PWA / DEVICE READINESS</h2><p className="mt-1 text-xs text-slate-500">สถานะเครื่องหน้าร้าน · App Shell / Offline / Update</p></div>
@@ -38,6 +47,7 @@ export default function PwaReadiness({serverRevision,promptPayReady}:{serverRevi
       ["App Cache",state?.cacheReady?"READY":"EMPTY",state?.cacheReady===true],
       ["IndexedDB",state?.indexedDbReady?"READY":"UNAVAILABLE",state?.indexedDbReady===true],
       ["Offline Outbox",(state?.outboxPending||0)+" pending"+(Number(state?.outboxNeedsReview||0)>0?" · "+state?.outboxNeedsReview+" review":""),Number(state?.outboxPending||0)===0],
+      ["Recovery",recoveryLabel,recoveryParts.length===0],
       ["Storage",state?.storagePersisted===true?"PERSISTENT":state?.storagePersistenceSupported?"BEST EFFORT":"UNSUPPORTED",state?.storagePersisted===true],
       ["App Version",state?.appVersion||"—",true],
       ["Build SHA",shortSha,Boolean(build.buildSha)],
