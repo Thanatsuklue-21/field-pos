@@ -33,8 +33,9 @@ export function readOfflineOperatorSession():Session|null{
   }catch{return null}
 }
 
-export async function getOfflineOperatorIfReady(){
-  if(typeof navigator==="undefined"||navigator.onLine)return null;
+export async function getOfflineOperatorIfReady(options:{allowNetworkUncertain?:boolean}={}){
+  if(typeof navigator==="undefined")return null;
+  if(navigator.onLine&&!options.allowNetworkUncertain)return null;
   const storage=await clientStorageStatus().catch(()=>null);
   if(!storage?.cacheReady)return null;
   return readOfflineOperatorSession();
