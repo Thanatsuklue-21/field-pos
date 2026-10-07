@@ -133,3 +133,43 @@ test('renaming stock master does not send unchanged unit and shows unit errors i
   assert.match(ui,/setMasterMsg\(map\[e\.message\]\|\|e\.message\)/);
   assert.match(ui,/แต่การเปลี่ยนชื่อทำได้โดยไม่ต้องเปลี่ยนหน่วย/);
 });
+
+
+test('full trial reset clears sales stock balances and operational stock costing while preserving master data',async()=>{
+  const api=await read('lib/api.mjs'),settings=await read('app/settings/page.tsx');
+  const start=api.indexOf("if(path==='/api/admin/test-data/full-reset'&&method==='POST')");
+  const end=api.indexOf("if(path==='/api/admin/backup/export'",start);
+  assert.ok(start>0&&end>start);
+  const seg=api.slice(start,end);
+  assert.match(seg,/RESET ALL TEST DATA/);
+  assert.match(seg,/before_full_test_reset/);
+  assert.match(seg,/ingredient\.qty=0/);
+  assert.match(seg,/ingredient\.unitCost=0/);
+  assert.match(seg,/ingredient\.costStatus='MISSING'/);
+  assert.match(seg,/ingredient\.purchaseProfile=null/);
+  assert.match(seg,/doc\.sales=\[\];doc\.orders=\[\]/);
+  assert.match(seg,/doc\.cashShifts=\[\]/);
+  assert.match(seg,/doc\.cycleCounts=\[\]/);
+  assert.match(seg,/doc\.testStockResetAt=resetAt/);
+  assert.match(seg,/sourceType\|\|''\)\.startsWith\('STOCK_'\)/);
+  assert.doesNotMatch(seg,/doc\.menu=\[\]/);
+  assert.match(settings,/FULL TEST RESET/);
+  assert.match(settings,/ล้างยอดขาย \+ Stock \+ ต้นทุนทดลองทั้งหมด/);
+  assert.match(settings,/RESET ALL TEST DATA/);
+});
+
+test('stock and cost views respect the full trial reset boundary',async()=>{
+  const api=await read('lib/api.mjs');
+  assert.match(api,/field_stock_transactions WHERE created_at>=\?/);
+  assert.match(api,/field_purchase_records WHERE created_at>=\? ORDER BY purchased_at/);
+  assert.match(api,/field_purchase_records WHERE ingredient_id=\? AND created_at>=\?/);
+  assert.match(api,/testStockResetAt/);
+});
+
+test('full trial reset preview exposes purchase spend inventory value and active purchase counts',async()=>{
+  const api=await read('lib/api.mjs');
+  assert.match(api,/purchaseRecords:Number\(purchaseCount\?\.n\|\|0\)/);
+  assert.match(api,/stockItemsWithBalance/);
+  assert.match(api,/inventoryValue/);
+  assert.match(api,/purchaseSpend/);
+});
