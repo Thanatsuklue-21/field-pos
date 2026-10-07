@@ -12,7 +12,7 @@ export default function PwaReadiness({serverRevision,promptPayReady}:{serverRevi
 
   const refresh=useCallback(()=>{
     window.dispatchEvent(new Event(PWA_REFRESH_EVENT));
-    fetch("/api/build",{credentials:"same-origin",cache:"no-store"})
+    fetch("/api/health",{credentials:"same-origin",cache:"no-store"})
       .then(async res=>res.ok?await res.json():null)
       .then(data=>{if(data)setBuild({buildSha:typeof data.buildSha==="string"?data.buildSha:null,environment:typeof data.environment==="string"?data.environment:null})})
       .catch(()=>{});
