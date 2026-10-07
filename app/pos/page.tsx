@@ -10,7 +10,7 @@ import {applyOfflineCashToBootstrap,getOfflineCashSummary,queueOfflineCashSale,s
 import {additionalServingsAvailable,cartAvailability} from "@/lib/domain/availability.mjs";
 import {useCartStore} from "@/stores/cart-store";
 import {useHeldCartStore} from "@/stores/held-cart-store";
-import {writeQueueSnapshotCache} from "@/lib/queue-cache";
+import {writeQueueSnapshotCache} from "@/lib/queue-cache"; import {clearRecovery,readRecovery,writeRecovery} from "@/lib/recovery-storage";
 
 export default function Pos(){return <AuthGate>{s=><PosView session={s}/>}</AuthGate>}
 
@@ -38,10 +38,10 @@ const sameCashPending=(p:PendingCash,total:number,cart:{id:string;variant:string
 
 type LastSale={queueNo:string;pager:number;billNo?:string;total:number;received:number;change:number;payment:"cash"|"promptpay"|"bank"|"card"|"delivery";recovered?:boolean;offline?:boolean};
 type SplitGroup={orderId:string;queueNo:string;pager:number;createdAt:number};
-const SPLIT_GROUP_KEY="field-pos-split-group-v1";
-const splitGroupRead=():SplitGroup|null=>{try{return JSON.parse(sessionStorage.getItem(SPLIT_GROUP_KEY)||"null")}catch{return null}};
-const splitGroupWrite=(g:SplitGroup)=>sessionStorage.setItem(SPLIT_GROUP_KEY,JSON.stringify(g));
-const splitGroupClear=()=>sessionStorage.removeItem(SPLIT_GROUP_KEY);
+const SPLIT_GROUP_KEY="field-pos-split-group-v1",EDIT_CASH_KEY="field-pos-edit-cash-v1";
+const splitGroupRead=():SplitGroup|null=>readRecovery<SplitGroup>(SPLIT_GROUP_KEY);
+const splitGroupWrite=(g:SplitGroup)=>writeRecovery(SPLIT_GROUP_KEY,g);
+const splitGroupClear=()=>clearRecovery(SPLIT_GROUP_KEY);
 
 const sellable=(x:MenuItem)=>!!x.enabled&&Number(x.price)>0&&Array.isArray(x.variants)&&x.variants.length>0;
 function orderOptionLabel(label:string){
@@ -119,13 +119,15 @@ function PosView({session}:{session:Session}){
       const next=typeof navigator==="undefined"||navigator.onLine;
       setOnline(next);
       refreshOfflineStats().catch(()=>{});
-      if(next)syncOfflineQueue().catch(()=>{});
+      if(next&&!session.offline)syncOfflineQueue().catch(()=>{});
     };
     networkChanged();
     window.addEventListener("online",networkChanged);
     window.addEventListener("offline",networkChanged);
     return()=>{window.removeEventListener("online",networkChanged);window.removeEventListener("offline",networkChanged)};
   },[]);
+
+  useEffect(()=>{if(!session.offline&&online)syncOfflineQueue().catch(()=>{})},[session.offline,session.csrf]);
 
   useEffect(()=>{
     if(online)return;
@@ -142,10 +144,9 @@ function PosView({session}:{session:Session}){
 
   useEffect(()=>{
     try{
-      const raw=sessionStorage.getItem("field-pos-edit-cash-v1");
-      if(!raw)return;
-      sessionStorage.removeItem("field-pos-edit-cash-v1");
-      const edit=JSON.parse(raw),heldCash=Number(edit?.heldCash);
+      const edit=readRecovery<any>(EDIT_CASH_KEY);
+      if(!edit)return;
+      const heldCash=Number(edit?.heldCash);
       if(Number.isFinite(heldCash)&&heldCash>0){
         setMethod("cash");
         setReceived(String(heldCash));
@@ -266,7 +267,7 @@ function PosView({session}:{session:Session}){
     setPointsRedeemed(0);
     setSplitSelection({});
     setSplitBill(false);
-    splitGroupClear();setSplitGroup(null);
+    splitGroupClear();setSplitGroup(null);clearRecovery(EDIT_CASH_KEY);
     setLastSale({queueNo:localNo,pager:0,total:opts.total,received:opts.received,change:Math.max(0,opts.received-opts.total),payment:"cash",offline:true});
     setNotice("บันทึกเงินสดแบบ Offline แล้ว · "+localNo+" · ระบบจะซิงก์ Cloud อัตโนมัติเมื่ออินเทอร์เน็ตกลับมา");
     refreshOfflineStats().catch(()=>{});
@@ -286,6 +287,7 @@ function PosView({session}:{session:Session}){
     setPointsRedeemed(0);
     setSplitSelection({});
     setSplitBill(false);
+    if(!remaining.length)clearRecovery(EDIT_CASH_KEY);
     if(remaining.length&&(opts.splitBill||splitGroup)){
       const orderId=String(r?.orderId||splitGroup?.orderId||"");
       const queueNo=String(r?.queueNo||splitGroup?.queueNo||"—");
@@ -539,6 +541,7 @@ function PosView({session}:{session:Session}){
       code==="offline_loyalty_not_supported"?"โหมด Offline งดสะสม/ใช้แต้มชั่วคราว เพื่อป้องกันแต้มซ้ำข้ามอุปกรณ์":
       code==="offline_storage_unavailable"?"เครื่องนี้ไม่สามารถเปิดพื้นที่เก็บ Offline ได้ กรุณาเชื่อมต่ออินเทอร์เน็ตก่อนขาย":
       code==="offline_catalog_unavailable"?"ไม่มีข้อมูลเมนู/สต็อกที่ cache ไว้ จึงยังขาย Offline ไม่ได้":
+      code==="offline_session_revalidation"?"อินเทอร์เน็ตกลับมาแล้ว · กำลังตรวจสิทธิ์ผู้ใช้กับ Server กรุณากดชำระอีกครั้ง":
       code==="offline_price_changed"?"ราคาบน Cloud เปลี่ยนจากตอนขาย Offline · เก็บบิลไว้ให้ตรวจสอบ ไม่ลงยอดผิด":
       code==="offline_write_blocked"?"ออฟไลน์อยู่ · ระบบรองรับเฉพาะเงินสดแบบ Offline":
       code==="network_unavailable"?"การเชื่อมต่อขาดหาย กรุณาตรวจอินเทอร์เน็ต ระบบจะไม่สร้างบิลซ้ำ":
@@ -563,6 +566,7 @@ function PosView({session}:{session:Session}){
       if(method==="cash"&&Number(received)<checkoutTotal)throw Object.assign(new Error("cash_insufficient"),{status:409});
 
       const offlineAtStart=typeof navigator!=="undefined"&&!navigator.onLine;
+      if(!offlineAtStart&&session.offline)throw Object.assign(new Error("offline_session_revalidation"),{status:409});
       if(offlineAtStart){
         if(method!=="cash")throw Object.assign(new Error("offline_cash_only"),{status:409});
         if(splitBill||splitGroup)throw Object.assign(new Error("offline_split_not_supported"),{status:409});
@@ -723,7 +727,7 @@ function PosView({session}:{session:Session}){
 
     {selected&&<div className="fixed inset-0 z-50 grid place-items-center bg-black/55 p-3 sm:p-4" onMouseDown={()=>setSelected(null)}><div className="card w-full max-w-md border border-slate-300 bg-white p-4 shadow-2xl sm:p-6" onMouseDown={e=>e.stopPropagation()}><div className="flex items-start justify-between"><div><p className="gold text-[10px] tracking-[.25em]">{selected.category||"DRINK"}</p><h3 className="mt-1 text-lg sm:text-xl">{selected.name}</h3></div><button onClick={()=>setSelected(null)}><X/></button></div><p className="mt-5 text-xs uppercase tracking-widest text-slate-500">Choose variant</p><div className="mt-3 grid gap-2">{selected.variants.map(v=>{const remaining=additionalServingsAvailable({cart:cart.items,menu:data?.menu||[],stock:data?.availabilityStock||{},menuId:selected.id,variantLabel:v.label});const canAdd=!!v.available&&remaining>0;return <button key={v.label} disabled={!canAdd} onClick={()=>addVariant(selected,v)} className="min-h-11 rounded-2xl border border-slate-300 bg-slate-50 px-3 py-2.5 text-left hover:border-[#c59b19] sm:px-4 sm:py-3 disabled:bg-slate-100 disabled:text-slate-400"><span>{v.label||"Standard"}{!v.available&&<small className="ml-2 text-red-600">หมดชั่วคราว</small>}{v.available&&remaining>0&&<small className="ml-2 text-amber-700">เพิ่มได้อีกประมาณ {remaining} แก้ว</small>}{v.available&&remaining<1&&<small className="ml-2 text-red-600">เพิ่มไม่ได้ · ตะกร้าใช้สต๊อกที่เหลือแล้ว</small>}</span><span className="float-right font-semibold text-[#765b08]">฿{selected.price.toFixed(0)}</span>{!v.available&&v.missingIngredients?.length>0&&<small className="mt-1 block text-xs text-red-500">ขาด: {v.missingIngredients.map(i=>i.name).join(", ")}</small>}{v.available&&remaining<1&&<small className="mt-1 block text-xs text-slate-500">ลดจำนวนรายการในตะกร้า หรืออัปเดต Stock ก่อนเพิ่มเมนูนี้</small>}</button>})}</div></div></div>}
 
-    {payOpen&&<div className="fixed inset-0 z-[90] grid place-items-center bg-black/55 p-2 sm:p-4"><div className="soft-scroll card max-h-[calc(100dvh-1rem)] w-full max-w-md overflow-auto border border-slate-300 bg-white p-4 shadow-2xl sm:max-h-[94vh] sm:p-6"><div className="flex justify-between gap-3"><div><p className="gold text-[10px] tracking-[.25em]">PAYMENT</p><h3 className="mt-1 text-2xl font-semibold">ยอดชำระ ฿{netPayable.toFixed(0)}</h3><p className="mt-1 text-xs text-slate-500">{splitBill?"บิลนี้ "+payableQty+" แก้ว · เหลือ "+remainingAfterBill+" แก้ว":payableQty+" แก้ว · "+cart.items.length+" เมนู"}</p></div><button disabled={busy} onClick={()=>setPayOpen(false)} className="disabled:cursor-not-allowed disabled:opacity-30"><X/></button></div>
+    {payOpen&&<div className="fixed inset-0 z-[90] grid place-items-center bg-black/55 p-2 sm:p-4"><div className="field-payment-sheet soft-scroll card w-full max-w-md overflow-auto border border-slate-300 bg-white p-4 shadow-2xl sm:max-h-[94vh] sm:p-6"><div className="flex justify-between gap-3"><div><p className="gold text-[10px] tracking-[.25em]">PAYMENT</p><h3 className="mt-1 text-2xl font-semibold">ยอดชำระ ฿{netPayable.toFixed(0)}</h3><p className="mt-1 text-xs text-slate-500">{splitBill?"บิลนี้ "+payableQty+" แก้ว · เหลือ "+remainingAfterBill+" แก้ว":payableQty+" แก้ว · "+cart.items.length+" เมนู"}</p></div><button disabled={busy} onClick={()=>setPayOpen(false)} className="disabled:cursor-not-allowed disabled:opacity-30"><X/></button></div>
 
       <button type="button" disabled={busy||!online||method==="delivery"||cart.items.reduce((s,i)=>s+i.qty,0)<2} onClick={()=>{setSplitBill(v=>!v);setSplitSelection({});setPointsRedeemed(0);setReceived("");setResult("")}} className={"mt-4 min-h-11 w-full rounded-2xl border px-4 text-sm font-semibold "+(splitBill?"border-[#d4af37] bg-[#fff8dc] text-[#765b08]":"border-slate-300 bg-white text-slate-700")+" disabled:opacity-40"}>{splitBill?"ยกเลิกแยกบิล":"แยกบิล / จ่ายแยกตามคน"}</button>
       {splitBill&&<div className="mt-2 rounded-2xl border border-[#d4af37]/40 bg-[#fffaf0] px-3 py-2 text-xs text-slate-700">เลือกจำนวนแก้วของ <b>คนที่กำลังจ่าย</b> · หลังชำระ รายการที่เหลือยังอยู่ในตะกร้าเพื่อรับเงินคนถัดไป</div>}

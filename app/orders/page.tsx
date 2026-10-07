@@ -6,7 +6,7 @@ import {Ban,Eye,Pencil,Printer,RotateCcw,Search,X} from "lucide-react";
 import AuthGate from "@/components/auth-gate";
 import SaleReceipt from "@/components/sale-receipt";
 import {api,type Session} from "@/lib/api-client";
-import {useCartStore} from "@/stores/cart-store";
+import {useCartStore} from "@/stores/cart-store"; import {writeRecovery} from "@/lib/recovery-storage";
 
 type SaleItem={id:string;name:string;variant:string;qty:number;price:number};
 type Sale={
@@ -104,7 +104,7 @@ function OrdersView({session}:{session:Session}){
     const ok=await voidCash(s,"ลูกค้าขอแก้ไขรายการก่อนเริ่มผลิต");
     if(!ok)return;
     cart.replaceItems(s.items.map(i=>({key:i.id+"::"+i.variant,id:i.id,name:i.name,variant:i.variant,price:i.price,qty:i.qty})));
-    try{sessionStorage.setItem("field-pos-edit-cash-v1",JSON.stringify({heldCash:s.total,fromBill:s.billNo,fromQueue:s.queueNo}))}catch{}
+    writeRecovery("field-pos-edit-cash-v1",{heldCash:s.total,fromBill:s.billNo,fromQueue:s.queueNo,createdAt:Date.now()})
     router.push("/pos");
   }
 

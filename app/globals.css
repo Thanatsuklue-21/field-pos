@@ -97,3 +97,6 @@ html,body{overscroll-behavior:none}
 @media (max-width:767px){.field-app-root{padding-bottom:calc(70px + env(safe-area-inset-bottom))}}
 @media (min-width:768px){.field-app-root{padding-bottom:max(1rem,env(safe-area-inset-bottom))}}
 @media (display-mode:standalone){html,body{background:#F7F1E3}}
+
+.field-payment-sheet{max-height:calc(var(--field-visual-viewport-height,100dvh) - 1rem);scroll-padding-bottom:max(5rem,env(safe-area-inset-bottom))}
+@media (min-width:640px){.field-payment-sheet{max-height:94vh}}

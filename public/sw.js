@@ -1,4 +1,4 @@
-const VERSION="field-pwa-v1",SHELL_CACHE=VERSION+"-shell",RUNTIME_CACHE=VERSION+"-runtime",CACHE_PREFIX="field-pwa-";
+const VERSION="field-pwa-v2",SHELL_CACHE=VERSION+"-shell",RUNTIME_CACHE=VERSION+"-runtime",CACHE_PREFIX="field-pwa-";
 const PRECACHE=["/pos","/field-icon-180.png","/field-icon-192.png","/field-icon-512.png"];
 self.addEventListener("install",event=>{event.waitUntil(caches.open(SHELL_CACHE).then(cache=>Promise.allSettled(PRECACHE.map(url=>cache.add(new Request(url,{cache:"reload"}))))));});
 self.addEventListener("activate",event=>{event.waitUntil((async()=>{const keys=await caches.keys();await Promise.all(keys.filter(key=>key.startsWith(CACHE_PREFIX)&&![SHELL_CACHE,RUNTIME_CACHE].includes(key)).map(key=>caches.delete(key)));await self.clients.claim();})());});
