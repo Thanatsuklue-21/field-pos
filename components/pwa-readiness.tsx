@@ -43,7 +43,9 @@ export default function PwaReadiness({serverRevision,promptPayReady}:{serverRevi
 
     <div className="mt-4 grid grid-cols-2 gap-2 text-sm sm:grid-cols-3">{[
       ["Mode",state?.installed?"INSTALLED / STANDALONE":"BROWSER",state?.installed===true],
+      ["PWA Installable",state?.installed?"INSTALLED":state?.installable?"READY":"NOT AVAILABLE",state?.installed===true||state?.installable===true],
       ["Service Worker",state?.serviceWorkerActive?"ACTIVE":"NOT ACTIVE",state?.serviceWorkerActive===true],
+      ["App Update",state?.updateAvailable?"AVAILABLE":"CURRENT",state?.updateAvailable!==true],
       ["App Cache",state?.cacheReady?"READY":"EMPTY",state?.cacheReady===true],
       ["IndexedDB",state?.indexedDbReady?"READY":"UNAVAILABLE",state?.indexedDbReady===true],
       ["Offline Outbox",(state?.outboxPending||0)+" pending"+(Number(state?.outboxNeedsReview||0)>0?" · "+state?.outboxNeedsReview+" review":""),Number(state?.outboxPending||0)===0],
