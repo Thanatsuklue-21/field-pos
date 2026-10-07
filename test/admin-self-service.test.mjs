@@ -78,7 +78,7 @@ test('settings exposes mobile admin center shortcuts',async()=>{
 test('trial sales reset preserves stock and is protected by confirmation payment gate and snapshot',async()=>{
   const api=await read('lib/api.mjs'),settings=await read('app/settings/page.tsx');
   const start=api.indexOf("if(path==='/api/admin/test-data/sales-reset'&&method==='POST')");
-  const end=api.indexOf("if(path==='/api/admin/backup/export'",start);
+  const end=api.indexOf("if(path==='/api/admin/test-data/full-reset'",start);
   assert.ok(start>0&&end>start);
   const seg=api.slice(start,end);
   assert.match(seg,/RESET TEST SALES/);
