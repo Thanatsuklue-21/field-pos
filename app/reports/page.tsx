@@ -6,7 +6,7 @@ import {api} from "@/lib/api-client";
 import {ResponsiveContainer,BarChart,Bar,XAxis,YAxis,Tooltip} from "recharts";
 
 type Summary={today:string;todayRevenue:number;totalRevenue:number;grossProfit:number;grossMargin:number;profitEstimated:boolean;costQuality:{status:string};cups:number;daily:{date:string;revenue:number}[];inventoryValue:number;inventoryItems:number;inventoryValueEstimated:boolean;delivery:{gross:number;gpFees:number;netSettlement:number;orders:number}};
-type ExportData={exportedAt:number;sales:Record<string,unknown>[];expenses:Record<string,unknown>[];stock:Record<string,unknown>[];inventorySummary:{value:number;items:number;isEstimated:boolean}};
+type ExportData={exportedAt:number;sales:Record<string,unknown>[];expenses:Record<string,unknown>[];stock:Record<string,unknown>[];cashMovements:Record<string,unknown>[];inventorySummary:{value:number;items:number;isEstimated:boolean}};
 
 export default function Reports(){return <AuthGate>{()=><ReportsView/>}</AuthGate>}
 
@@ -25,7 +25,7 @@ function ReportsView(){
   const [d,setD]=useState<Summary|null>(null),[busy,setBusy]=useState(false),[msg,setMsg]=useState("");
   useEffect(()=>{api<Summary>("/api/reports/summary").then(setD).catch(()=>{})},[]);
   const k=[["ยอดขายวันนี้",d?.todayRevenue||0,"฿"],["ยอดขายรวม",d?.totalRevenue||0,"฿"],["กำไรขั้นต้น",d?.grossProfit||0,"฿"],["Gross Margin",d?.grossMargin||0,"%"],["มูลค่า Stock คงเหลือ",d?.inventoryValue||0,"฿"]];
-  async function exportKind(kind:"sales"|"expenses"|"stock"){
+  async function exportKind(kind:"sales"|"expenses"|"stock"|"cashMovements"){
     setBusy(true);setMsg("");
     try{
       const x=await api<ExportData>("/api/reports/accounting-export");
@@ -34,7 +34,7 @@ function ReportsView(){
     }catch(e:any){setMsg(e.message||"export_failed")}finally{setBusy(false)}
   }
   return <section className="soft-scroll h-full overflow-auto p-3 sm:p-5 md:p-7">
-    <div className="flex flex-wrap items-end justify-between gap-3"><div><p className="gold m-0 text-[10px] font-bold tracking-[.3em]">PERFORMANCE</p><h1 className="mt-1 text-xl font-semibold sm:text-2xl">REPORTS</h1><p className="mt-1 text-xs text-slate-500">ยอดขาย · กำไร · มูลค่าสต็อก · Export สำหรับบัญชี</p></div><div className="flex flex-wrap gap-2">{(["sales","expenses","stock"] as const).map(x=><button key={x} disabled={busy} onClick={()=>exportKind(x)} className="flex min-h-10 items-center gap-1.5 rounded-full border border-slate-300 bg-white px-3 text-xs font-semibold disabled:opacity-40"><Download size={14}/>{x==="sales"?"Sales CSV":x==="expenses"?"Expenses CSV":"Stock CSV"}</button>)}</div></div>
+    <div className="flex flex-wrap items-end justify-between gap-3"><div><p className="gold m-0 text-[10px] font-bold tracking-[.3em]">PERFORMANCE</p><h1 className="mt-1 text-xl font-semibold sm:text-2xl">REPORTS</h1><p className="mt-1 text-xs text-slate-500">ยอดขาย · กำไร · มูลค่าสต็อก · Export สำหรับบัญชี</p></div><div className="flex flex-wrap gap-2">{(["sales","expenses","stock","cashMovements"] as const).map(x=><button key={x} disabled={busy} onClick={()=>exportKind(x)} className="flex min-h-10 items-center gap-1.5 rounded-full border border-slate-300 bg-white px-3 text-xs font-semibold disabled:opacity-40"><Download size={14}/>{x==="sales"?"Sales CSV":x==="expenses"?"Expenses CSV":x==="stock"?"Stock CSV":"Cash Drawer CSV"}</button>)}</div></div>
     {msg&&<p className="mt-3 rounded-xl bg-white px-3 py-2 text-sm">{msg}</p>}
     {d?.profitEstimated&&<div className="mt-4 rounded-2xl border border-amber-400/25 bg-amber-50 p-4 text-sm text-amber-800"><b>ESTIMATED PROFIT</b><p className="mt-1 text-xs">กำไรและ Margin มีรายการต้นทุนที่ยังไม่ยืนยัน ({d.costQuality.status})</p></div>}
     {d?.inventoryValueEstimated&&<div className="mt-3 rounded-2xl border border-amber-300 bg-amber-50 p-3 text-xs text-amber-800">มูลค่า Stock ยังเป็นค่าประมาณ เพราะมีวัตถุดิบบางรายการที่ต้นทุนยังไม่ยืนยัน</div>}
