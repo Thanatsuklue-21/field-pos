@@ -7,7 +7,7 @@ test("cold-start offline operator fallback stores no password or csrf and is sta
   const offline=await read("lib/offline-operator.ts"),auth=await read("components/auth-gate.tsx");
   assert.ok(offline.includes("MAX_AGE_MS=7*24*60*60*1000"));
   assert.ok(offline.includes('role:"staff"'));
-  assert.ok(offline.includes('permissions:{order:true,queue:true}'));
+  assert.ok(offline.includes('permissions:{order:true}'));\n  assert.ok(!offline.includes('queue:true'));
   assert.ok(offline.includes('csrf:""'));
   assert.ok(!offline.includes("password"));
   assert.ok(auth.includes("getOfflineOperatorIfReady"));
@@ -84,4 +84,12 @@ test("auth session probe fails fast without shortening ordinary GET or financial
   assert.ok(client.includes('path==="/api/auth/session"?AUTH_SESSION_TIMEOUT_MS:GET_TIMEOUT_MS'));
   assert.ok(client.includes('"field_auth_session_timeout"'));
   assert.ok(client.includes('method==="GET"&&!init.signal'));
+});
+
+
+test("cold-start offline navigation exposes only POS and readiness",async()=>{
+  const shell=await read("components/app-shell.tsx");
+  assert.ok(shell.includes('session.offline?["/pos","/settings"].includes(href)'));
+  assert.ok(shell.includes('primaryMobile=["/pos","/queue","/orders","/stock"]'));
+  assert.ok(shell.includes('overflowMobile=["/expenses","/close","/settings"]'));
 });
