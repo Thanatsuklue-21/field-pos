@@ -5,7 +5,7 @@ import {readFile} from 'node:fs/promises';
 const read=p=>readFile(new URL('../'+p,import.meta.url),'utf8');
 
 test('POS bootstrap is cache-first and still revalidates against the server',async()=>{
-  const pos=await read('app/pos/page.tsx');
+  const pos=await read('app/pos/page.tsx'),offlineDb=await read('lib/offline-db.ts');
   assert.match(pos,/cacheGet<Bootstrap>\("\/api\/pos\/bootstrap",BOOTSTRAP_CACHE_MAX_AGE_MS\)/);
   assert.match(pos,/load\(true\)\.catch/);
   assert.match(pos,/acceptBootstrap\(cached\)/);
