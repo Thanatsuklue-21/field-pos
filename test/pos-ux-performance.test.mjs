@@ -533,3 +533,13 @@ test('payment mapping v2 exposes bank and card as first-class channels',async()=
   assert.match(api,/paymentSummary=\{cash:0,promptpay:0,bank:0,card:0,other:0\}/);assert.match(api,/bankAmount:/);assert.match(api,/cardAmount:/);
   assert.match(close,/x\.bank/);assert.match(close,/x\.card/);assert.match(reports,/PAYMENT CHANNELS/);
 });
+
+
+test('cash operator actions choose VOID before production and Refund after production',async()=>{
+  const orders=await read('app/orders/page.tsx');
+  assert.match(orders,/const cashVoidEligible=/);
+  assert.match(orders,/group\.every\(x=>x\.payment==="cash"\)/);
+  assert.match(orders,/!group\.some\(x=>x\.productionStarted\)/);
+  assert.match(orders,/cashVoidEligible\(detail\).*voidCash\(detail\)/s);
+  assert.match(orders,/!cashVoidEligible\(detail\).*refundSaleUi\(detail\)/s);
+});
