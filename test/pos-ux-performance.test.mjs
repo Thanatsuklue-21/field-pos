@@ -551,3 +551,14 @@ test('cash operator actions choose VOID before production and Refund after produ
   assert.match(orders,/cashVoidEligible\(detail\).*voidCash\(detail\)/s);
   assert.match(orders,/!cashVoidEligible\(detail\).*refundSaleUi\(detail\)/s);
 });
+
+
+test('cash checkout exposes common tender shortcuts without bypassing confirmation',async()=>{
+  const pos=await read('app/pos/page.tsx');
+  assert.match(pos,/\[100,500,1000\]\.map\(amount/);
+  assert.match(pos,/setReceived\(String\(amount\)\)/);
+  assert.match(pos,/cashReceived===amount/);
+  assert.match(pos,/รับพอดี ฿\{netPayable\.toFixed\(0\)\}/);
+  assert.match(pos,/onClick=\{checkout\}/);
+  assert.doesNotMatch(pos,/setReceived\(String\(amount\)\).*checkout\(/s);
+});
