@@ -4,6 +4,7 @@ import {
   checkoutPos,queuePosAction,startSplitPayment,paySplitPayment,getSplitPaymentStatus,listSplitPaymentSessions,resolveSplitPayment,voidSale,refundSale
 } from '../lib/pos-api.mjs';
 import {buildPosAvailability} from '../lib/domain/availability.mjs';
+import {reconcileCash} from '../lib/domain/cash-reconciliation.mjs';
 
 function initialState(){
   return {
@@ -129,9 +130,20 @@ test('30-order POS soak keeps bills unique, stock exact and queues returnable',a
   assert.equal(state.ingredients.cup16.qty,500-30);
 
   assert.equal(state.billSeq[date],30);
+  assert.deepEqual(state.orders.map(o=>o.queueNo),Array.from({length:30},(_,i)=>'A'+String(i+1).padStart(3,'0')));
   assert.equal(db.storage.stockTx.length,90);
   assert.equal(db.storage.costSnapshots.length,30);
   assert.ok(db.storage.stockTx.every(args=>args[2]==='SALE'&&Number(args[3])<0));
+
+  const cashSales=state.sales.reduce((sum,s)=>sum+Number(s.total||0),0);
+  const tendered=state.sales.reduce((sum,s)=>sum+Number(s.received||0),0);
+  const change=state.sales.reduce((sum,s)=>sum+Number(s.change||0),0);
+  assert.equal(cashSales,30*55);
+  assert.equal(tendered-change,cashSales);
+  assert.deepEqual(
+    reconcileCash({openingCash:0,cashSales,countedCash:cashSales}),
+    {openingCash:0,cashSales,cashIn:0,cashPaidOut:0,cashOut:0,expectedCash:cashSales,countedCash:cashSales,cashVariance:0}
+  );
 });
 
 test('checkout request replay never duplicates sale, bill or stock deduction',async()=>{
