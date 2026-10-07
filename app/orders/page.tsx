@@ -10,7 +10,7 @@ import {useCartStore} from "@/stores/cart-store"; import {writeRecovery} from "@
 
 type SaleItem={id:string;name:string;variant:string;qty:number;price:number};
 type Sale={
-  id:string;billNo:string;date:string;time:number;subtotal?:number;discountTotal?:number;crmDiscount?:number;pointsRedeemed?:number;pointsAwarded?:number;total:number;payment:string;paymentMethods?:string[];
+  id:string;billNo:string;date:string;time:number;subtotal?:number;discountTotal?:number;crmDiscount?:number;pointsRedeemed?:number;pointsAwarded?:number;customerId?:string|null;total:number;payment:string;paymentMethods?:string[];
   status:string;queueNo:string;itemCount:number;received?:number;change?:number;orderId?:string|null;
   orderStatus?:string|null;productionStarted?:boolean;items:SaleItem[];
 };
@@ -107,7 +107,14 @@ function OrdersView({session}:{session:Session}){
       setMsg("ข้อมูลเมนูของออเดอร์นี้ไม่ครบ จึงไม่สามารถโหลดกลับไปแก้ไขอัตโนมัติได้");
       return;
     }
+    const customerKeys=[...new Set(group.map(x=>String(x.customerId||"")))];
+    if(customerKeys.length>1){
+      setMsg("ออเดอร์นี้มีหลายบิลที่ผูกลูกค้าต่างกัน ระบบจะไม่รวมแก้ไขอัตโนมัติเพื่อป้องกันแต้ม/ประวัติลูกค้าผิด");
+      return;
+    }
     const total=group.reduce((sum,x)=>sum+Number(x.total||0),0);
+    const originalPointsRedeemed=group.reduce((sum,x)=>sum+Number(x.pointsRedeemed||0),0);
+    const customerId=customerKeys[0]||null;
     if(!window.confirm("แก้ไข "+s.queueNo+" ?\n"+(group.length>1?"คิวนี้มี "+group.length+" บิล รวม ฿"+total.toFixed(0)+"\n":"")+"ระบบจะยกเลิกยอดเงินสดเดิมทั้งหมด คืน Stock และนำรายการทุกบิลกลับไปหน้า POS เพื่อให้เพิ่ม/ลด/เปลี่ยนเมนูแล้วคิดเงินใหม่"))return;
     const merged=new Map<string,SaleItem>();
     for(const item of allItems){
@@ -117,7 +124,7 @@ function OrdersView({session}:{session:Session}){
     const ok=await voidCash(s,"ลูกค้าขอแก้ไขรายการก่อนเริ่มผลิต");
     if(!ok)return;
     cart.replaceItems([...merged.values()].map(i=>({key:i.id+"::"+i.variant,id:i.id,name:i.name,variant:i.variant,price:i.price,qty:i.qty})));
-    writeRecovery("field-pos-edit-cash-v1",{heldCash:total,fromBill:group.map(x=>x.billNo).join(", "),fromQueue:s.queueNo,saleCount:group.length,createdAt:Date.now()});
+    writeRecovery("field-pos-edit-cash-v1",{heldCash:total,fromBill:group.map(x=>x.billNo).join(", "),fromQueue:s.queueNo,saleCount:group.length,customerId,pointsRedeemed:originalPointsRedeemed,createdAt:Date.now()});
     router.push("/pos");
   }
 
