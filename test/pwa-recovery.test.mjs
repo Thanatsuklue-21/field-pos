@@ -103,3 +103,20 @@ test("offline direct routes are redirected before server-dependent pages render"
   assert.ok(shell.includes('offlineRouteAllowed?children:'));
   assert.ok(shell.includes("OFFLINE MODE · CASH ONLY"));
 });
+
+
+test("stale pending cash always reconciles the original request key instead of timing out locally",async()=>{
+  const pos=await read("app/pos/page.tsx");
+  const start=pos.indexOf("async function recoverCashCheckout()");
+  const end=pos.indexOf("async function finalizePending",start);
+  const block=pos.slice(start,end);
+  assert.ok(start>=0&&end>start);
+  assert.ok(block.includes("ageMs>24*60*60*1000"));
+  assert.ok(block.includes('api<any>("/api/pos/checkout"'));
+  assert.ok(block.includes("body:JSON.stringify(p.body)"));
+  assert.ok(!block.includes('if(ageMs>24*60*60*1000){'));
+  assert.ok(block.includes('["business_date_changed","day_closed"].includes(e.message)'));
+  const guarded=block.slice(block.indexOf('["business_date_changed","day_closed"]'),block.indexOf('else if(!["network_unavailable"'));
+  assert.ok(!guarded.includes("cashPendingClear()"));
+  assert.ok(block.includes("ระบบยังเก็บ request เดิมไว้และจะไม่สร้างบิลซ้ำ"));
+});
