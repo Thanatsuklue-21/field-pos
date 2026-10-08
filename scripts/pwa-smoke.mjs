@@ -25,7 +25,8 @@ requireValue(String(manifest?.background_color||"").toLowerCase()!=="#000000","m
 const swResponse=await get("/sw.js"),sw=await swResponse.text();
 requireValue(sw.includes('url.pathname.startsWith("/api/")'),"sw_api_bypass");
 requireValue(sw.includes('SAFE_OFFLINE_ROUTES=["/pos","/settings"]'),"sw_safe_routes");
-requireValue(sw.includes('VERSION="field-pwa-v5"'),"sw_version");
+requireValue(sw.includes("if(response?.ok&&safe)"),"unsafe_shell_not_cached");
+requireValue(sw.includes('VERSION="field-pwa-v6"'),"sw_version");
 const swCache=String(swResponse.headers.get("cache-control")||"");
 requireValue(swCache.includes("no-cache")||swCache.includes("no-store"),"sw_cache_header");
 
@@ -42,6 +43,6 @@ console.log(JSON.stringify({
   buildSha:health.buildSha,
   environment:health.environment,
   manifest:{name:manifest.name,start_url:manifest.start_url,display:manifest.display},
-  serviceWorker:{version:"field-pwa-v5",safeRoutes:["/pos","/settings"]},
+  serviceWorker:{version:"field-pwa-v6",safeRoutes:["/pos","/settings"]},
   shells:["/pos","/settings"]
 },null,2));
