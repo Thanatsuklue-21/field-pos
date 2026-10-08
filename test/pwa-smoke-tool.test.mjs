@@ -10,6 +10,11 @@ test("PWA smoke tool checks exact deployment identity and install surface withou
   assert.ok(script.includes('method')===false||!script.includes('method:"POST"'));
   assert.ok(!script.includes("/api/pos/checkout"));
   assert.ok(!script.includes("/api/pos/queue"));
+  assert.ok(script.includes("VERCEL_AUTOMATION_BYPASS_SECRET"));
+  assert.ok(script.includes('x-vercel-protection-bypass'));
+  assert.ok(script.includes('redirect:"manual"'));
+  assert.ok(script.includes("_cross_origin_redirect"));
+  assert.ok(!script.includes("console.log(bypassSecret)"));
 });
 
 test("package exposes the release smoke command",async()=>{
