@@ -77,15 +77,16 @@ test("service worker and manifest bypass deployment cache staleness",async()=>{
 test("safe offline settings route is precached with a bumped PWA cache version",async()=>{
   const sw=await read("public/sw.js"),meta=await read("lib/pwa-meta.ts");
   assert.ok(sw.includes('VERSION="field-pwa-v6"'));
-  assert.ok(sw.includes('"/settings"'));
+  assert.ok(sw.includes('SAFE_OFFLINE_ROUTES=["/pos","/settings"]'));
   assert.ok(meta.includes('FIELD_APP_VERSION="8.0.0-pwa.5"'));
 });
 
 test("safe offline route chunks are warmed for both POS and Settings",async()=>{
   const sw=await read("public/sw.js");
   assert.ok(sw.includes('SAFE_OFFLINE_ROUTES=["/pos","/settings"]'));
-  assert.ok(sw.includes('SAFE_OFFLINE_ROUTES.includes(url)'));
-  assert.ok(sw.includes('for(const asset of nextStaticUrls'));
+  assert.ok(sw.includes("SAFE_OFFLINE_ROUTES.map"));
+  assert.ok(sw.includes("for(const asset of nextStaticUrls"));
+  assert.ok(sw.includes("await Promise.all([...assets].map"));
 });
 
 test("service worker refuses a new version when required offline shell assets cannot be warmed",async()=>{

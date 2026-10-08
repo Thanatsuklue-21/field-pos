@@ -11,16 +11,15 @@ test("offline operator requires a fresh usable bootstrap cache",async()=>{
   assert.ok(pos.includes("BOOTSTRAP_CACHE_MAX_AGE_MS=BOOTSTRAP_OFFLINE_MAX_AGE_MS"));
 });
 
-test("service worker warms Next static chunks during install without caching APIs",async()=>{
+test("service worker warms required Next static chunks and never caches APIs",async()=>{
   const sw=await read("public/sw.js");
-  assert.ok(sw.includes('VERSION="field-pwa-v5"'));
-  assert.ok(sw.includes('"/manifest.webmanifest"'));
+  assert.ok(sw.includes('VERSION="field-pwa-v6"'));
+  assert.ok(sw.includes('OPTIONAL_PRECACHE=["/manifest.webmanifest"'));
   assert.ok(sw.includes('SAFE_OFFLINE_ROUTES=["/pos","/settings"]'));
-  assert.ok(sw.includes('for(const asset of nextStaticUrls'));
-  assert.ok(sw.includes('"/settings"'));
   assert.ok(sw.includes("nextStaticUrls"));
   assert.ok(sw.includes('url.pathname.startsWith("/_next/static/")'));
-  assert.ok(sw.includes("Promise.allSettled([...assets].map"));
+  assert.ok(sw.includes("await Promise.all(SAFE_OFFLINE_ROUTES.map"));
+  assert.ok(sw.includes("await Promise.all([...assets].map"));
   assert.ok(sw.includes('url.pathname.startsWith("/api/")'));
   const install=sw.slice(sw.indexOf('self.addEventListener("install"'),sw.indexOf('self.addEventListener("activate"'));
   assert.ok(install.includes("warmShell()"));
