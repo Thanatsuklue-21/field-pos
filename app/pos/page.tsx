@@ -419,17 +419,16 @@ function PosView({session}:{session:Session}){
   async function recoverCashCheckout(){
     const p=cashPendingRead();
     if(!p)return;
-    if(Date.now()-Number(p.createdAt||0)>24*60*60*1000){
-      setNotice("พบรายการเงินสดค้างเกิน 24 ชม. กรุณาตรวจ Orders ก่อนดำเนินการต่อ");
-      return;
-    }
+    const ageMs=Math.max(0,Date.now()-Number(p.createdAt||0));
+    if(ageMs>24*60*60*1000)setNotice("พบรายการเงินสดค้างเกิน 24 ชม. · กำลังตรวจ request เดิมกับ Server ก่อน เพื่อป้องกันบิลซ้ำ");
     try{
       const r=await api<any>("/api/pos/checkout",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify(p.body)});
       cashPendingClear();
       finishSale(r,{payment:"cash",total:Number(p.body?.total)||0,received:Number(p.body?.received)||0,recovered:true,splitBill:p.body?.checkoutMode==="split_bill",paidCart:Array.isArray(p.body?.cart)?p.body.cart:undefined});
     }catch(e:any){
-      if(e.message==="business_date_changed")setNotice("รายการเงินสดค้างข้ามวัน · กรุณาตรวจ Orders ก่อน หากไม่พบบิลให้บันทึกปรับปรุงด้วย Admin");
-      else if(!["network_unavailable","offline_write_blocked"].includes(e.message)){
+      if(["business_date_changed","day_closed"].includes(e.message)){
+        setNotice("รายการเงินสดค้างข้ามวันและ Server ไม่พบ replay ที่ยืนยันได้ · กรุณาตรวจ Orders ก่อน ระบบยังเก็บ request เดิมไว้และจะไม่สร้างบิลซ้ำ");
+      }else if(!["network_unavailable","offline_write_blocked"].includes(e.message)){
         cashPendingClear();
         setNotice("ตรวจรายการเงินสดค้างไม่สำเร็จ · "+errorText(e.message));
       }
