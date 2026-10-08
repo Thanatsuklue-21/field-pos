@@ -786,3 +786,51 @@ test('PromptPay full reservation freezes CRM discount and provider amount at net
   const state=JSON.parse(db.storage.document),sale=state.sales[0],customer=state.customers[0];
   assert.equal(sale.total,45);assert.equal(sale.pointsRedeemed,5);assert.equal(customer.points,15);assert.equal(customer.totalSpend,45);
 });
+
+
+test('stale cash request replays before business-date validation without duplicate sale or stock deduction',async()=>{
+  const db=fakeDb();
+  const requestKey='stale-cash-replay-001';
+  const original={requestKey,cart,date,payment:'cash',received:100,serverDate:date};
+  const first=await checkoutPos({db,user,now:1000,body:original});
+  const stateAfterFirst=JSON.parse(db.storage.document);
+  const stockAfterFirst={
+    matcha:stateAfterFirst.ingredients.matcha.qty,
+    milk:stateAfterFirst.ingredients.milk.qty,
+    cup16:stateAfterFirst.ingredients.cup16.qty
+  };
+  assert.equal(stateAfterFirst.sales.length,1);
+
+  const replay=await checkoutPos({
+    db,user,now:1000+48*60*60*1000,
+    body:{...original,serverDate:'2026-10-03'}
+  });
+  assert.equal(replay.replayed,true);
+  assert.equal(replay.orderId,first.orderId);
+  assert.deepEqual(replay.saleIds,first.saleIds);
+
+  const stateAfterReplay=JSON.parse(db.storage.document);
+  assert.equal(stateAfterReplay.sales.length,1);
+  assert.equal(stateAfterReplay.orders.length,1);
+  assert.equal(stateAfterReplay.ingredients.matcha.qty,stockAfterFirst.matcha);
+  assert.equal(stateAfterReplay.ingredients.milk.qty,stockAfterFirst.milk);
+  assert.equal(stateAfterReplay.ingredients.cup16.qty,stockAfterFirst.cup16);
+  assert.equal(db.storage.stockTx.filter(args=>args[5]==='sale').length,3);
+});
+
+test('unseen stale cash request is rejected on changed business date instead of creating a backdated sale',async()=>{
+  const db=fakeDb();
+  await assert.rejects(
+    ()=>checkoutPos({
+      db,user,now:1000+48*60*60*1000,
+      body:{requestKey:'stale-cash-new-001',cart,date,payment:'cash',received:100,serverDate:'2026-10-03'}
+    }),
+    e=>e?.status===409&&e?.message==='business_date_changed'
+  );
+  const state=JSON.parse(db.storage.document);
+  assert.equal(state.sales.length,0);
+  assert.equal(state.orders.length,0);
+  assert.equal(state.ingredients.matcha.qty,1000);
+  assert.equal(state.ingredients.milk.qty,30000);
+  assert.equal(state.ingredients.cup16.qty,500);
+});
