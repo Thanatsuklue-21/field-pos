@@ -46,18 +46,22 @@ requireValue(sw.includes('VERSION="field-pwa-v6"'),"sw_version");
 const swCache=String(swResponse.headers.get("cache-control")||"");
 requireValue(swCache.includes("no-cache")||swCache.includes("no-store"),"sw_cache_header");
 
-const [posResponse,settingsResponse,health]=await Promise.all([get("/pos"),get("/settings"),json("/api/health")]);
+const [posResponse,settingsResponse,build]=await Promise.all([get("/pos"),get("/settings"),json("/api/build")]);
 requireValue(posResponse.ok&&settingsResponse.ok,"safe_shell_routes");
+requireValue(typeof build?.buildSha==="string"&&build.buildSha.length>=7,"build_sha");
+requireValue(typeof build?.environment==="string"&&build.environment.length>0,"build_environment");
+if(expectedSha)requireValue(build.buildSha===expectedSha,"build_sha_mismatch:"+build.buildSha);
+
+let health;
+try{health=await json("/api/health")}
+catch(error){throw new Error("server_health_gate_failed:"+(error?.message||"unknown"))}
 requireValue(health?.ok===true&&health?.storage==="turso","health_storage");
-requireValue(typeof health?.buildSha==="string"&&health.buildSha.length>=7,"health_build_sha");
-requireValue(typeof health?.environment==="string"&&health.environment.length>0,"health_environment");
-if(expectedSha)requireValue(health.buildSha===expectedSha,"build_sha_mismatch:"+health.buildSha);
 
 console.log(JSON.stringify({
   ok:true,
   origin:base.origin,
-  buildSha:health.buildSha,
-  environment:health.environment,
+  buildSha:build.buildSha,
+  environment:build.environment,
   protectionBypassUsed:Boolean(bypassSecret),
   manifest:{name:manifest.name,start_url:manifest.start_url,display:manifest.display},
   serviceWorker:{version:"field-pwa-v6",safeRoutes:["/pos","/settings"]},
