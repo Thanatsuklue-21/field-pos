@@ -1,6 +1,6 @@
-const VERSION="field-pwa-v5",SHELL_CACHE=VERSION+"-shell",RUNTIME_CACHE=VERSION+"-runtime",CACHE_PREFIX="field-pwa-";
+const VERSION="field-pwa-v6",SHELL_CACHE=VERSION+"-shell",RUNTIME_CACHE=VERSION+"-runtime",CACHE_PREFIX="field-pwa-";
 const SAFE_OFFLINE_ROUTES=["/pos","/settings"];
-const PRECACHE=[...SAFE_OFFLINE_ROUTES,"/manifest.webmanifest","/field-icon-180.png","/field-icon-192.png","/field-icon-512.png"];
+const OPTIONAL_PRECACHE=["/manifest.webmanifest","/field-icon-180.png","/field-icon-192.png","/field-icon-512.png"];
 
 function nextStaticUrls(html){
   const urls=new Set();
@@ -14,19 +14,32 @@ function nextStaticUrls(html){
   return [...urls];
 }
 
+async function fetchRequired(request){
+  const response=await fetch(request);
+  if(!response?.ok)throw new Error("pwa_shell_fetch_failed:"+new URL(request.url).pathname);
+  return response;
+}
+
 async function warmShell(){
   const shell=await caches.open(SHELL_CACHE),runtime=await caches.open(RUNTIME_CACHE),assets=new Set();
-  await Promise.allSettled(PRECACHE.map(async url=>{
-    const request=new Request(url,{cache:"reload"}),response=await fetch(request);
-    if(!response?.ok)return;
+
+  // Required offline routes must be fully available before this worker may install.
+  await Promise.all(SAFE_OFFLINE_ROUTES.map(async url=>{
+    const request=new Request(url,{cache:"reload"}),response=await fetchRequired(request);
     await shell.put(request,response.clone());
-    if(SAFE_OFFLINE_ROUTES.includes(url)){
-      for(const asset of nextStaticUrls(await response.clone().text()))assets.add(asset);
-    }
+    for(const asset of nextStaticUrls(await response.clone().text()))assets.add(asset);
   }));
-  await Promise.allSettled([...assets].map(async url=>{
+
+  // Route-specific Next.js CSS/JS is also required for a usable cold-start, not just cached HTML.
+  await Promise.all([...assets].map(async url=>{
+    const request=new Request(url,{cache:"reload"}),response=await fetchRequired(request);
+    await runtime.put(request,response.clone());
+  }));
+
+  // Manifest/icons are useful for install UX but must not prevent an already-installed POS update.
+  await Promise.allSettled(OPTIONAL_PRECACHE.map(async url=>{
     const request=new Request(url,{cache:"reload"}),response=await fetch(request);
-    if(response?.ok)await runtime.put(request,response.clone());
+    if(response?.ok)await shell.put(request,response.clone());
   }));
 }
 
