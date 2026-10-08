@@ -1,4 +1,4 @@
-const VERSION="field-pwa-v6",SHELL_CACHE=VERSION+"-shell",RUNTIME_CACHE=VERSION+"-runtime",CACHE_PREFIX="field-pwa-";
+const VERSION="field-pwa-v7",SHELL_CACHE=VERSION+"-shell",RUNTIME_CACHE=VERSION+"-runtime",CACHE_PREFIX="field-pwa-";
 const SAFE_OFFLINE_ROUTES=["/pos","/settings"];
 const OPTIONAL_PRECACHE=["/manifest.webmanifest","/field-icon-180.png","/field-icon-192.png","/field-icon-512.png"];
 

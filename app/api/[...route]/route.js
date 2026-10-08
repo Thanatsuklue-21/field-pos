@@ -21,6 +21,17 @@ async function handle(request,{params}){
     const environment=String(process.env.VERCEL_ENV||process.env.NODE_ENV||"unknown").slice(0,24);
     return Response.json({buildSha:buildSha||null,environment},{status:200,headers:{"Cache-Control":"no-store"}});
   }
+  if(routePath==="/api/health"&&request.method==="GET"){
+    if(!process.env.TURSO_DATABASE_URL||!process.env.TURSO_AUTH_TOKEN){
+      return Response.json({ok:false,storage:"turso",error:"turso_not_configured"},{status:503,headers:{"Cache-Control":"no-store"}});
+    }
+    try{
+      await getDb().execute("SELECT 1 AS ok");
+      return Response.json({ok:true,storage:"turso"},{status:200,headers:{"Cache-Control":"no-store"}});
+    }catch{
+      return Response.json({ok:false,storage:"turso",error:"turso_unavailable"},{status:503,headers:{"Cache-Control":"no-store"}});
+    }
+  }
   const req={method:request.method,headers,query:{route},body,rawBody};
   let status=200,responseHeaders={},chunks=[];
   const res={

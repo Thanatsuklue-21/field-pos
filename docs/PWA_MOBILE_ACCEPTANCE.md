@@ -90,3 +90,14 @@ The smoke checker is read-only. It verifies the install manifest, Service Worker
 
 
 The smoke tool never prints the bypass secret and refuses to forward the bypass header across origins during redirects.
+
+
+## Preview backend safety gate
+
+Before transaction UAT on a Vercel Preview:
+
+- **Do not attach the Production Turso credentials to Preview.**
+- Settings → PWA / Device Readiness must show **Backend / Turso = READY**.
+- If it shows **UAT BLOCKED**, provision a separate Preview/UAT Turso database and Preview-scoped credentials first.
+- A Preview with no Turso must return a controlled 503 readiness response, not a runtime exception.
+- Build identity must match the exact approved Preview commit before starting payment, stock, queue, refund, void or close-day UAT.

@@ -5,10 +5,12 @@ import {PWA_INSTALL_REQUEST_EVENT,PWA_PERSIST_STORAGE_REQUEST_EVENT,PWA_REFRESH_
 
 const badge=(ok:boolean)=>ok?"text-emerald-700":"text-amber-700";
 type BuildInfo={buildSha:string|null;environment:string|null};
+type BackendInfo={ready:boolean|null;status:number|null;error:string|null};
 
 export default function PwaReadiness({serverRevision,promptPayReady}:{serverRevision?:number;promptPayReady?:boolean}){
   const [state,setState]=useState<PwaSnapshot|null>(null);
   const [build,setBuild]=useState<BuildInfo>({buildSha:null,environment:null});
+  const [backend,setBackend]=useState<BackendInfo>({ready:null,status:null,error:null});
 
   const refresh=useCallback(()=>{
     window.dispatchEvent(new Event(PWA_REFRESH_EVENT));
@@ -16,6 +18,12 @@ export default function PwaReadiness({serverRevision,promptPayReady}:{serverRevi
       .then(async res=>res.ok?await res.json():null)
       .then(data=>{if(data)setBuild({buildSha:typeof data.buildSha==="string"?data.buildSha:null,environment:typeof data.environment==="string"?data.environment:null})})
       .catch(()=>{});
+    fetch("/api/health",{credentials:"same-origin",cache:"no-store"})
+      .then(async res=>{
+        const data=await res.json().catch(()=>null);
+        setBackend({ready:res.ok&&data?.ok===true,status:res.status,error:typeof data?.error==="string"?data.error:null});
+      })
+      .catch(()=>setBackend({ready:false,status:0,error:"network_unavailable"}));
   },[]);
 
   useEffect(()=>{
@@ -54,6 +62,7 @@ export default function PwaReadiness({serverRevision,promptPayReady}:{serverRevi
       ["App Version",state?.appVersion||"—",true],
       ["Build SHA",shortSha,Boolean(build.buildSha)],
       ["Environment",build.environment||"—",Boolean(build.environment)],
+      ["Backend / Turso",backend.ready===true?"READY":backend.ready===false?(build.environment==="preview"?"UAT BLOCKED":"NOT READY"):"CHECKING",backend.ready===true],
       ["Server Revision",String(serverRevision||0),true],
       ["PromptPay",promptPayReady?"READY":"NOT READY",promptPayReady===true]
     ].map(([label,value,ok])=><div key={String(label)} className="rounded-2xl bg-slate-50 p-3" title={label==="Build SHA"&&build.buildSha?build.buildSha:undefined}><small className="text-slate-500">{label}</small><div className={"mt-1 break-all font-semibold "+badge(Boolean(ok))}>{value}</div></div>)}
@@ -66,6 +75,7 @@ export default function PwaReadiness({serverRevision,promptPayReady}:{serverRevi
       {state?.storagePersistenceSupported&&state?.storagePersisted===false&&<button onClick={()=>window.dispatchEvent(new Event(PWA_PERSIST_STORAGE_REQUEST_EVENT))} className="flex min-h-11 items-center gap-2 rounded-full border border-amber-300 bg-amber-50 px-4 text-xs font-bold text-amber-800"><HardDrive size={15}/>ขอเก็บข้อมูล Offline แบบถาวร</button>}
       {state?.updateAvailable&&<button onClick={()=>window.dispatchEvent(new Event(PWA_UPDATE_REQUEST_EVENT))} className="min-h-11 rounded-full border border-amber-300 bg-amber-50 px-4 text-xs font-bold text-amber-800">อัปเดตเวอร์ชันเมื่อปลอดภัย</button>}
     </div>
+    {backend.ready===false&&<p className="mt-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-800">{build.environment==="preview"&&backend.error==="turso_not_configured"?"Preview ยังไม่มี Turso UAT แยก · ห้ามใช้ Production DB กับ Preview · Transaction UAT ต้องรอ Preview/UAT database":backend.status===0?"ติดต่อ Backend ไม่ได้ · ตรวจ Network ก่อนทดสอบ Transaction":"Backend ยังไม่พร้อม · "+String(backend.error||("HTTP "+backend.status))}</p>}
     {state?.storageQuota&&<p className="mt-2 text-[11px] text-slate-500">Browser storage ใช้ประมาณ {(Number(state.storageUsage||0)/1048576).toFixed(1)} MB จาก quota {(Number(state.storageQuota)/1048576).toFixed(0)} MB · Persistent ช่วยลดความเสี่ยงที่ข้อมูล Offline ถูกล้างอัตโนมัติเมื่อพื้นที่เครื่องตึง</p>}
   </div>
 }

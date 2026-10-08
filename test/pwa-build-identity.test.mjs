@@ -30,3 +30,20 @@ test("PWA readiness fetches uncached build metadata and shows exact build identi
   assert.ok(ui.includes('"Environment"'));
   assert.ok(ui.includes("build.buildSha.slice(0,10)"));
 });
+
+test("route-level health reports missing preview Turso without throwing runtime errors",async()=>{
+  const route=await read("app/api/[...route]/route.js");
+  assert.ok(route.includes('routePath==="/api/health"'));
+  assert.ok(route.includes("!process.env.TURSO_DATABASE_URL||!process.env.TURSO_AUTH_TOKEN"));
+  assert.ok(route.includes('error:"turso_not_configured"'));
+  assert.ok(route.includes("status:503"));
+  assert.ok(route.includes('getDb().execute("SELECT 1 AS ok")'));
+});
+
+test("PWA readiness exposes backend UAT readiness without reusing production secrets",async()=>{
+  const ui=await read("components/pwa-readiness.tsx");
+  assert.ok(ui.includes('fetch("/api/health"'));
+  assert.ok(ui.includes('"Backend / Turso"'));
+  assert.ok(ui.includes('"UAT BLOCKED"'));
+  assert.ok(ui.includes("ห้ามใช้ Production DB กับ Preview"));
+});
