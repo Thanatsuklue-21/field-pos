@@ -8,7 +8,7 @@ on:
         required: true
         type: string
       expected_sha:
-        description: Exact 40-character Git commit SHA expected from /api/health
+        description: Exact 40-character Git commit SHA expected from /api/build
         required: true
         type: string
 
