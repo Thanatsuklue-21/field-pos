@@ -146,3 +146,20 @@ test("deterministic stale-cash errors open review while network ambiguity never 
   const networkBranch=block.slice(block.indexOf('else if(!["network_unavailable"'));
   assert.ok(networkBranch.includes("cashPendingClear()"));
 });
+
+
+test("unresolved stale cash review blocks new payment before any new checkout request",async()=>{
+  const pos=await read("app/pos/page.tsx");
+  const checkoutStart=pos.indexOf("async function checkout()");
+  const checkoutEnd=pos.indexOf("function openPayment()",checkoutStart);
+  const checkoutBlock=pos.slice(checkoutStart,checkoutEnd);
+  assert.ok(checkoutBlock.includes("if(cashRecoveryReview)"));
+  assert.ok(checkoutBlock.includes("ต้องตรวจรายการเงินสดค้างก่อนรับชำระบิลใหม่"));
+  assert.ok(checkoutBlock.indexOf("if(cashRecoveryReview)")<checkoutBlock.indexOf('api<any>("/api/pos/checkout"'));
+
+  const openStart=pos.indexOf("function openPayment()");
+  const openEnd=pos.indexOf("return <section",openStart);
+  const openBlock=pos.slice(openStart,openEnd);
+  assert.ok(openBlock.includes("if(cashRecoveryReview)"));
+  assert.ok(openBlock.includes("ต้องตรวจรายการเงินสดค้างก่อนเปิดชำระบิลใหม่"));
+});
