@@ -120,3 +120,29 @@ test("stale pending cash always reconciles the original request key instead of t
   assert.ok(!guarded.includes("cashPendingClear()"));
   assert.ok(block.includes("ระบบยังเก็บ request เดิมไว้และจะไม่สร้างบิลซ้ำ"));
 });
+
+
+test("stale cash resolution is explicit admin-only and only clears the matching local request",async()=>{
+  const pos=await read("app/pos/page.tsx");
+  assert.ok(pos.includes("type CashRecoveryReview="));
+  assert.ok(pos.includes('session.user.role!=="admin"||!cashRecoveryReview'));
+  assert.ok(pos.includes('String(pending.body?.requestKey||"")!==cashRecoveryReview.requestKey'));
+  assert.ok(pos.includes("window.confirm("));
+  assert.ok(pos.includes("ล้างเฉพาะ pending ในเครื่อง ไม่สร้างยอดขายและไม่เปลี่ยน Stock"));
+  assert.ok(pos.includes('session.user.role==="admin"&&<button onClick={clearReviewedCashPending}'));
+  assert.ok(pos.includes('router.push("/orders")'));
+});
+
+test("deterministic stale-cash errors open review while network ambiguity never exposes local clear action",async()=>{
+  const pos=await read("app/pos/page.tsx");
+  const start=pos.indexOf("async function recoverCashCheckout()");
+  const end=pos.indexOf("async function finalizePending",start);
+  const block=pos.slice(start,end);
+  assert.ok(block.includes('["business_date_changed","day_closed"].includes(e.message)'));
+  assert.ok(block.includes("setCashRecoveryReview({"));
+  const deterministic=block.slice(block.indexOf('["business_date_changed","day_closed"]'),block.indexOf('else if(!["network_unavailable"'));
+  assert.ok(deterministic.includes("setCashRecoveryReview"));
+  assert.ok(!deterministic.includes("cashPendingClear()"));
+  const networkBranch=block.slice(block.indexOf('else if(!["network_unavailable"'));
+  assert.ok(networkBranch.includes("cashPendingClear()"));
+});
