@@ -1,17 +1,33 @@
 const baseRaw=String(process.env.BASE_URL||"").trim();
 const expectedSha=String(process.env.EXPECTED_SHA||"").trim();
+const bypassSecret=String(process.env.VERCEL_AUTOMATION_BYPASS_SECRET||"").trim();
 if(!baseRaw)throw new Error("BASE_URL_required");
 const base=new URL(baseRaw);
 if(!["https:","http:"].includes(base.protocol))throw new Error("BASE_URL_invalid_protocol");
 
+function requestHeaders(){
+  const headers={"Cache-Control":"no-cache"};
+  if(bypassSecret)headers["x-vercel-protection-bypass"]=bypassSecret;
+  return headers;
+}
+
 async function get(path){
-  const url=new URL(path,base);
-  const response=await fetch(url,{redirect:"follow",cache:"no-store",headers:{"Cache-Control":"no-cache"}});
-  if(!response.ok)throw new Error(path+"_http_"+response.status);
-  return response;
+  let url=new URL(path,base);
+  for(let hop=0;hop<5;hop++){
+    if(url.origin!==base.origin)throw new Error(path+"_cross_origin_redirect");
+    const response=await fetch(url,{redirect:"manual",cache:"no-store",headers:requestHeaders()});
+    if(response.status>=300&&response.status<400){
+      const location=response.headers.get("location");
+      if(!location)throw new Error(path+"_redirect_without_location");
+      url=new URL(location,url);
+      continue;
+    }
+    if(!response.ok)throw new Error(path+"_http_"+response.status);
+    return response;
+  }
+  throw new Error(path+"_too_many_redirects");
 }
 async function json(path){return await (await get(path)).json()}
-async function text(path){return await (await get(path)).text()}
 function requireValue(ok,message){if(!ok)throw new Error(message)}
 
 const manifest=await json("/manifest.webmanifest");
@@ -42,6 +58,7 @@ console.log(JSON.stringify({
   origin:base.origin,
   buildSha:health.buildSha,
   environment:health.environment,
+  protectionBypassUsed:Boolean(bypassSecret),
   manifest:{name:manifest.name,start_url:manifest.start_url,display:manifest.display},
   serviceWorker:{version:"field-pwa-v6",safeRoutes:["/pos","/settings"]},
   shells:["/pos","/settings"]
