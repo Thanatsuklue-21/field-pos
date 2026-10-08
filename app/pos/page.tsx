@@ -31,6 +31,7 @@ const samePending=(p:PendingPrompt,total:number,cart:{id:string;variant:string;q
 
 const CASH_PENDING_KEY="field-pos-pending-cash-v1";
 type PendingCash={body:any;createdAt:number};
+type CashRecoveryReview={requestKey:string;date:string;total:number;received:number;createdAt:number;reason:"business_date_changed"|"day_closed"};
 const cashPendingRead=():PendingCash|null=>{try{return JSON.parse(localStorage.getItem(CASH_PENDING_KEY)||"null")}catch{return null}};
 const cashPendingWrite=(p:PendingCash)=>localStorage.setItem(CASH_PENDING_KEY,JSON.stringify(p));
 const cashPendingClear=()=>localStorage.removeItem(CASH_PENDING_KEY);
@@ -68,6 +69,7 @@ function PosView({session}:{session:Session}){
   const [busy,setBusy]=useState(false);
   const [result,setResult]=useState("");
   const [notice,setNotice]=useState("");
+  const [cashRecoveryReview,setCashRecoveryReview]=useState<CashRecoveryReview|null>(null);
   const [lastSale,setLastSale]=useState<LastSale|null>(null);
   const [prompt,setPrompt]=useState<any|null>(null);
   const [promptConfig,setPromptConfig]=useState<any|null>(null);
@@ -424,15 +426,45 @@ function PosView({session}:{session:Session}){
     try{
       const r=await api<any>("/api/pos/checkout",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify(p.body)});
       cashPendingClear();
+      setCashRecoveryReview(null);
       finishSale(r,{payment:"cash",total:Number(p.body?.total)||0,received:Number(p.body?.received)||0,recovered:true,splitBill:p.body?.checkoutMode==="split_bill",paidCart:Array.isArray(p.body?.cart)?p.body.cart:undefined});
     }catch(e:any){
       if(["business_date_changed","day_closed"].includes(e.message)){
+        setCashRecoveryReview({
+          requestKey:String(p.body?.requestKey||""),
+          date:String(p.body?.date||""),
+          total:Number(p.body?.total)||0,
+          received:Number(p.body?.received)||0,
+          createdAt:Number(p.createdAt)||0,
+          reason:e.message
+        });
         setNotice("รายการเงินสดค้างข้ามวันและ Server ไม่พบ replay ที่ยืนยันได้ · กรุณาตรวจ Orders ก่อน ระบบยังเก็บ request เดิมไว้และจะไม่สร้างบิลซ้ำ");
       }else if(!["network_unavailable","offline_write_blocked"].includes(e.message)){
         cashPendingClear();
+        setCashRecoveryReview(null);
         setNotice("ตรวจรายการเงินสดค้างไม่สำเร็จ · "+errorText(e.message));
       }
     }
+  }
+
+  function clearReviewedCashPending(){
+    if(session.user.role!=="admin"||!cashRecoveryReview)return;
+    const pending=cashPendingRead();
+    if(!pending||String(pending.body?.requestKey||"")!==cashRecoveryReview.requestKey){
+      setCashRecoveryReview(null);
+      setNotice("รายการเงินสดค้างในเครื่องเปลี่ยนไปแล้ว · กรุณารีเฟรชและตรวจใหม่");
+      return;
+    }
+    const ok=window.confirm(
+      "ยืนยันว่าตรวจ Orders แล้วและไม่พบบิลจาก request นี้?\n"+
+      "วันที่เดิม: "+cashRecoveryReview.date+" · ยอด ฿"+cashRecoveryReview.total.toFixed(0)+"\n"+
+      "การทำรายการนี้จะล้างเฉพาะ pending ในเครื่อง ไม่สร้างยอดขายและไม่เปลี่ยน Stock"
+    );
+    if(!ok)return;
+    cashPendingClear();
+    setCashRecoveryReview(null);
+    setPayOpen(false);
+    setNotice("ล้าง pending เงินสดในเครื่องแล้ว · หากรับเงินจริงไปแล้ว ต้องบันทึก/ปรับปรุงยอดตามหลักฐานด้วย Admin ก่อนปิดวัน");
   }
 
   async function finalizePending(p:PendingPrompt,verified:string){
@@ -714,6 +746,16 @@ function PosView({session}:{session:Session}){
       </div>
 
       {notice&&<div className="mb-3 flex items-start justify-between gap-3 rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900"><span>{notice}</span><button onClick={()=>setNotice("")} className="shrink-0"><X size={16}/></button></div>}
+      {cashRecoveryReview&&<div className="mb-3 rounded-2xl border border-red-300 bg-red-50 p-3 text-sm text-red-900">
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div><b>ต้องตรวจรายการเงินสดค้างก่อนรับบิลใหม่</b><p className="mt-1 text-xs">วันที่ {cashRecoveryReview.date||"—"} · ยอด ฿{cashRecoveryReview.total.toFixed(0)} · รับ ฿{cashRecoveryReview.received.toFixed(0)} · Request …{cashRecoveryReview.requestKey.slice(-8)}</p></div>
+          <span className="rounded-full bg-red-100 px-2 py-1 text-[10px] font-bold uppercase">{cashRecoveryReview.reason}</span>
+        </div>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <button onClick={()=>router.push("/orders")} className="min-h-11 rounded-xl border border-red-300 bg-white px-4 text-xs font-bold">เปิด Orders เพื่อตรวจ</button>
+          {session.user.role==="admin"&&<button onClick={clearReviewedCashPending} className="min-h-11 rounded-xl bg-red-700 px-4 text-xs font-bold text-white">ตรวจแล้ว · ล้าง pending ในเครื่อง</button>}
+        </div>
+      </div>}
       {allUnavailable&&<div className="mb-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-900"><b>เมนูทั้งหมดถูกพักขายชั่วคราว</b><p className="mt-1 text-xs">ต้องบันทึกยอดวัตถุดิบจริงก่อนรับออเดอร์{unavailableNames.length?" · ขาด: "+unavailableNames.join(", "):""}</p><button onClick={()=>router.push("/stock")} className="mt-3 rounded-full bg-red-700 px-4 py-2 text-xs font-bold text-white">ตั้งยอดเริ่มต้น Stock</button></div>}
 
       <div className="glass mb-2.5 flex items-center gap-2.5 rounded-2xl px-3 py-2.5 sm:mb-3 sm:gap-3 sm:px-4 sm:py-3"><Search size={17} className="text-slate-500"/><input value={q} onChange={e=>setQ(e.target.value)} placeholder="ค้นหาเมนู" className="w-full bg-transparent outline-none"/></div>
