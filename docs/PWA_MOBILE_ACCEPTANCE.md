@@ -83,7 +83,10 @@ The repository currently suppresses non-main Git deployments with `vercel.json >
 After Vercel creates the one intentional Preview for the frozen candidate, verify the deployed build before Android UAT:
 
 ```bash
-BASE_URL=https://<preview>.vercel.app EXPECTED_SHA=<40-char-git-sha> npm run pwa:smoke
+BASE_URL=https://<preview>.vercel.app EXPECTED_SHA=<40-char-git-sha> npm run pwa:smoke\n\n# Protected Preview (optional; keep the secret in CI / Vercel secrets)\nBASE_URL=https://<preview>.vercel.app EXPECTED_SHA=<40-char-git-sha> VERCEL_AUTOMATION_BYPASS_SECRET=<secret> npm run pwa:smoke
 ```
 
 The smoke checker is read-only. It verifies the install manifest, Service Worker API bypass/cache headers, safe offline shells, Turso health and that the deployed Vercel build SHA exactly matches the approved candidate.
+
+
+The smoke tool never prints the bypass secret and refuses to forward the bypass header across origins during redirects.
