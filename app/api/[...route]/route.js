@@ -15,6 +15,12 @@ async function handle(request,{params}){
       try{body=JSON.parse(raw)}catch{return Response.json({error:"invalid_json"},{status:400})}
     }
   }
+  const routePath="/api/"+route.join("/");
+  if(routePath==="/api/build"&&request.method==="GET"){
+    const buildSha=String(process.env.VERCEL_GIT_COMMIT_SHA||process.env.GIT_COMMIT_SHA||"").slice(0,40);
+    const environment=String(process.env.VERCEL_ENV||process.env.NODE_ENV||"unknown").slice(0,24);
+    return Response.json({buildSha:buildSha||null,environment},{status:200,headers:{"Cache-Control":"no-store"}});
+  }
   const req={method:request.method,headers,query:{route},body,rawBody};
   let status=200,responseHeaders={},chunks=[];
   const res={
