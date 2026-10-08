@@ -17,9 +17,12 @@ test("Vercel ignore gate always builds main",()=>{
   assert.equal(run("main").status,1);
 });
 
-test("Vercel ignore gate skips ordinary feature commits",()=>{
-  assert.equal(run("feat/pwa-app-shell").status,0);
-  assert.equal(run("feat/other-work").status,0);
+test("Vercel ignore gate skips ordinary feature commits",async()=>{
+  const dir=await mkdtemp(join(tmpdir(),"field-vercel-skip-"));
+  try{
+    assert.equal(run("feat/pwa-app-shell",dir).status,0);
+    assert.equal(run("feat/other-work",dir).status,0);
+  }finally{await rm(dir,{recursive:true,force:true})}
 });
 
 test("Vercel ignore gate allows the frozen PWA branch only with release marker",async()=>{
