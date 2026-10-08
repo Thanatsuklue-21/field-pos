@@ -88,16 +88,24 @@ test('30-order POS soak keeps bills unique, stock exact and queues returnable',a
   const db=fakeDb();
 
   for(let i=1;i<=30;i++){
+    const checkoutBody={
+      requestKey:'checkout-soak-'+String(i).padStart(3,'0'),
+      cart,date,payment:'cash',received:100
+    };
     const checkout=await checkoutPos({
       db,user,now:1_000_000+i*10,
-      body:{
-        requestKey:'checkout-soak-'+String(i).padStart(3,'0'),
-        cart,date,payment:'cash',received:100
-      }
+      body:checkoutBody
+    });
+    const replay=await checkoutPos({
+      db,user,now:1_000_000+i*10+1,
+      body:checkoutBody
     });
 
     assert.ok(checkout.orderId);
     assert.match(checkout.queueNo,/^A\d{3}$/);
+    assert.equal(replay.replayed,true);
+    assert.equal(replay.orderId,checkout.orderId);
+    assert.deepEqual(replay.saleIds,checkout.saleIds);
 
     const stateAfterPay=JSON.parse(db.storage.document);
     const order=stateAfterPay.orders.find(o=>o.id===checkout.orderId);
@@ -128,6 +136,7 @@ test('30-order POS soak keeps bills unique, stock exact and queues returnable',a
   assert.equal(state.ingredients.matcha.qty,1000-(30*5));
   assert.equal(state.ingredients.milk.qty,30000-(30*110));
   assert.equal(state.ingredients.cup16.qty,500-30);
+  assert.ok(Object.values(state.ingredients).every(ingredient=>Number(ingredient.qty)>=0));
 
   assert.equal(state.billSeq[date],30);
   assert.deepEqual(state.orders.map(o=>o.queueNo),Array.from({length:30},(_,i)=>'A'+String(i+1).padStart(3,'0')));
