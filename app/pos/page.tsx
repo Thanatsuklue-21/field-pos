@@ -602,6 +602,10 @@ function PosView({session}:{session:Session}){
 
   async function checkout(){
     if(!cart.items.length||busy||!payableItems.length)return;
+    if(cashRecoveryReview){
+      setResult("ต้องตรวจรายการเงินสดค้างก่อนรับชำระบิลใหม่");
+      return;
+    }
     setBusy(true);
     setResult("");
     try{
@@ -714,6 +718,10 @@ function PosView({session}:{session:Session}){
 
   function openPayment(){
     if(!cart.items.length)return;
+    if(cashRecoveryReview){
+      setNotice("ต้องตรวจรายการเงินสดค้างก่อนเปิดชำระบิลใหม่ · เปิด Orders หรือให้ Admin ล้าง pending ที่ตรวจแล้ว");
+      return;
+    }
     const byId=new Map((data?.menu||[]).filter(sellable).map(x=>[x.id,x]));
     const blocked=cart.items.filter(item=>{
       const variant=byId.get(item.id)?.variants?.find(v=>v.label===item.variant);
