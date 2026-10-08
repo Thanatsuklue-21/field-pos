@@ -25,3 +25,12 @@ test("service worker warms required Next static chunks and never caches APIs",as
   assert.ok(install.includes("warmShell()"));
   assert.ok(!install.includes("skipWaiting("));
 });
+
+test("unsafe navigation shells are never cached or served offline",async()=>{
+  const sw=await read("public/sw.js");
+  assert.ok(sw.includes("safe=SAFE_OFFLINE_ROUTES.includes(url.pathname)"));
+  assert.ok(sw.includes("if(response?.ok&&safe)"));
+  assert.ok(sw.includes('cache.put(url.pathname,response.clone())'));
+  assert.ok(sw.includes('safe?(await cache.match(url.pathname'));
+  assert.ok(sw.includes('):(await cache.match("/pos")'));
+});
