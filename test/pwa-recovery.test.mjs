@@ -163,3 +163,17 @@ test("unresolved stale cash review blocks new payment before any new checkout re
   assert.ok(openBlock.includes("if(cashRecoveryReview)"));
   assert.ok(openBlock.includes("ต้องตรวจรายการเงินสดค้างก่อนเปิดชำระบิลใหม่"));
 });
+
+
+test("cached operator can render before the authoritative session probe finishes without gaining online write authority",async()=>{
+  const gate=await read("components/auth-gate.tsx"),pos=await read("app/pos/page.tsx");
+  assert.ok(gate.includes("const sessionProbe=getSessionCached()"));
+  assert.ok(gate.includes("provisional=await getOfflineOperatorIfReady({allowNetworkUncertain:true})"));
+  assert.ok(gate.includes("publish(provisional)"));
+  assert.ok(gate.includes("setLoading(false)"));
+  assert.ok(gate.includes("LIMITED MODE · SERVER NOT VERIFIED"));
+  assert.ok(gate.includes("if(e?.status===401)"));
+  assert.ok(gate.includes("clearOfflineOperatorSession()"));
+  assert.ok(pos.includes("if(!offlineAtStart&&session.offline)"));
+  assert.ok(pos.includes("offline_session_revalidation"));
+});
