@@ -1,4 +1,5 @@
 "use client";
+import {formatMoney} from "@/lib/money-format.mjs";
 import {useEffect,useMemo,useState} from "react";
 import {CheckCircle2,RefreshCw,RotateCcw,TriangleAlert,X} from "lucide-react";
 import AuthGate from "@/components/auth-gate";
@@ -9,7 +10,7 @@ type Rec={id:string;saleDate:string;platform:string;orders:number;gross:number;g
 type Data={revision:number;pending:Pending[];history:Rec[];summary:{records:number;matched:number;variance:number;expected:number;received:number;netVariance:number}};
 const today=()=>new Date().toLocaleDateString("en-CA",{timeZone:"Asia/Bangkok"});
 const platformLabel=(v:string)=>v==="grab"?"Grab":v==="lineman"?"LINE MAN":"Delivery อื่น";
-const money=(v:number)=>Number(v||0).toLocaleString("th-TH",{minimumFractionDigits:0,maximumFractionDigits:2});
+const money=formatMoney;
 
 export default function Settlements(){return <AuthGate>{s=><View session={s}/>}</AuthGate>}
 function View({session}:{session:Session}){

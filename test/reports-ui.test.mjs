@@ -7,6 +7,7 @@ import {renderToStaticMarkup} from 'react-dom/server';
 import * as jsx from 'react/jsx-runtime';
 import ts from 'typescript';
 import * as csv from '../lib/report-csv.mjs';
+import * as money from '../lib/money-format.mjs';
 const source=ts.transpileModule(await readFile(new URL('../app/reports/page.tsx',import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX}}).outputText;
 function render(data){
   const exports={};runInNewContext(source,{exports,require(path){
@@ -16,6 +17,7 @@ function render(data){
     if(path==='@/components/auth-gate')return {default:({children})=>children({})};
     if(path==='@/lib/api-client')return {};
     if(path==='@/lib/report-csv.mjs')return csv;
+    if(path==='@/lib/money-format.mjs')return money;
     if(path==='recharts'||path==='lucide-react')return new Proxy({},{get:()=>()=>null});
     throw Error(path);
   }});
@@ -33,4 +35,9 @@ test('frontend does not reveal drawer result before independent close-day counti
 });
 test('frontend loading state does not display fake zero-valued financial reports',()=>{
   const html=render(null);assert.ok(html.includes('กำลังโหลดรายงาน'));assert.ok(!html.includes('฿0'));assert.ok(!html.includes('Sales CSV'));
+});
+
+test('financial report displays comma thousands and preserves satang on actual rendered amounts',()=>{
+  const html=render({...data,todaySummary:{...data.todaySummary,revenue:2000,operatingProfit:25000.5}});
+  assert.ok(html.includes('฿2,000'));assert.ok(html.includes('฿25,000.50'));
 });

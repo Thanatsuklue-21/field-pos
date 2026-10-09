@@ -1,4 +1,5 @@
 "use client";
+import {formatMoney} from "@/lib/money-format.mjs";
 
 // FIELD pager-first production flow: pager → items/base → complete → call → handoff.
 
@@ -171,7 +172,7 @@ function QueueView({session}:{session:Session}){
     try{
       const r=await api<any>("/api/pos/queue",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({requestKey:crypto.randomUUID(),orderId:order.id,itemIndex,action:"waste_remake",reason:"ชงเสีย / ทำใหม่"})});
       if(!applyState(r))load().catch(()=>{});
-      setNotice("บันทึก WASTE "+item.name+" 1 แก้วแล้ว · หัก Stock เพิ่มตามสูตร"+(Number(r?.wasteCost)>0?" · ต้นทุนของเสีย ฿"+Number(r.wasteCost).toFixed(2):"")+" · ทำใหม่ต่อในคิวเดิม");
+      setNotice("บันทึก WASTE "+item.name+" 1 แก้วแล้ว · หัก Stock เพิ่มตามสูตร"+(Number(r?.wasteCost)>0?" · ต้นทุนของเสีย ฿"+formatMoney(Number(r.wasteCost)):"")+" · ทำใหม่ต่อในคิวเดิม");
     }catch(e:any){if(snapshot)setData(snapshot);setMsg(errorText(e.message));await load().catch(()=>{})}finally{busyRef.current=false;setBusy("")}
   }
 

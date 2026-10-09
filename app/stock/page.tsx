@@ -1,4 +1,5 @@
 "use client";
+import {formatMoney} from "@/lib/money-format.mjs";
 import {useEffect,useMemo,useState} from "react";
 import {AlertTriangle,Archive,ArrowDownCircle,ArrowUpCircle,Edit3,Plus,RotateCcw,Search,Trash2,X} from "lucide-react";
 import AuthGate from "@/components/auth-gate";
@@ -35,7 +36,7 @@ function previewReceived(packageQty:string,packSize:string,fromUnit:string,toUni
   if(each===undefined)return {qty:0,label:"หน่วยไม่เข้ากัน",approximate:false};
   const qty=packs*each;return {qty,label:qty.toLocaleString()+" "+toUnit,approximate};
 }
-function compactMoney(v:number){return Number(v||0).toLocaleString("th-TH",{minimumFractionDigits:0,maximumFractionDigits:2})}
+const compactMoney=formatMoney;
 function latestPurchase(x:Ingredient){return x.recentPurchases?.find(p=>!p.cancelled)||null}
 
 function StockView({session}:{session:Session}){
