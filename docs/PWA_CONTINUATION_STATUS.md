@@ -106,3 +106,12 @@ Live-local release smoke reproduced a separate cache-header gap: direct Next hos
 Validation: 16 added executable cases; full suite **505 PASS / 0 FAIL**; Next production build and TypeScript PASS; `git diff --check` PASS. The real `pwa:smoke` command then passed against the rebuilt local server and isolated QA database (SW v12, icons, shells, build identity and Turso health). The local build identity was supplied through `GIT_COMMIT_SHA`; this verifies checker behavior and does not establish a remote exact-SHA Preview. No Production database write, deploy, merge, payment or message was performed.
 
 Remaining rollout gates: separate Preview/UAT Turso credentials, an intentionally frozen exact-head READY Preview, physical Android installation/keyboard/offline recovery checks and post-merge Production verification. PR remains Draft until those gates pass.
+# Continuation — confirmed Offline receipt before deletion (2026-10-09)
+
+Resumed from clean `feat/pwa-app-shell` head `910ee2a8ddff0d3a9eb10b100dcd5db9b690695b`, matching Draft PR #112. Found that HTTP success alone could delete an Offline bill even when the API returned an empty/malformed receipt. Twelve new failure cases reproduced this before the fix.
+
+Sync now requires the established checkout acknowledgement: `ok:true`, nonempty order/sale identities, a finite nonnegative total matching the saved bill, and `offlineFulfilled:true` for fulfilled Offline sales. Otherwise `offline_sync_unconfirmed` preserves the original pending body/request key for idempotent retry. Server replay receipts remain accepted; confirmed business rejection handling is unchanged.
+
+Added 15 executable regressions, including actual `api-client.ts` + sync execution with HTTP 200 HTML/malformed JSON followed by a valid replay; both sends have the exact same body. Full suite **520 PASS / 0 FAIL**, production build/TypeScript and diff check PASS. Read-only live-local release smoke passes for rebuilt v13 assets/shells/backend using the isolated QA database. Local SHA is environment-supplied test identity, not remote Preview proof.
+
+PWA versions: `field-pwa-v13` / `8.0.0-pwa.12`. No schema, server transaction business rule, Production credentials or deployment gate changed. Preview/UAT database and physical Android acceptance remain required before release.

@@ -80,4 +80,10 @@ Production smoke ยืนยันการตอบสนองและกา
 
 ผลล่าสุด: **505 tests ผ่าน / 0 ล้มเหลว**, build/TypeScript และ diff check ผ่าน. Real read-only smoke ผ่านกับ Next production server และฐานข้อมูล QA แยกในเครื่อง; SHA ใน local server เป็นค่าที่ป้อนผ่าน environment เพื่อทดสอบ checker ไม่ใช่หลักฐาน remote Preview. เวอร์ชัน PWA ยังคง v12 / `8.0.0-pwa.11` เพราะรอบนี้แก้เครื่องมือตรวจและ header โดยไม่เปลี่ยน shell หรือธุรกรรม
 
+## ยืนยันการขายก่อนลบบิล Offline
+
+รอบต่อจาก head `910ee2a`: sync ไม่ถือ HTTP สำเร็จอย่างเดียวเป็นหลักฐานว่าขายสำเร็จ ต้องได้ `ok:true`, order/sale IDs, ยอดเงินตรงกับบิล และการยืนยัน fulfilled Offline ตาม contract เดิมของเซิร์ฟเวอร์ หากคำตอบไม่ครบ ระบบเก็บ pending/request key เดิมและรายงาน `offline_sync_unconfirmed` เพื่อส่งซ้ำได้โดยไม่สร้าง request ใหม่
+
+เพิ่ม 15 executable regressions; 12 failure cases ล้มเหลวก่อนแก้. รวมการรัน API client จริงกับคำตอบ HTTP 200 ที่เป็น HTML/JSON เสีย ตามด้วย replay ที่ยืนยันบิลเดิม. ผลล่าสุด **520 tests ผ่าน / 0 ล้มเหลว**, build/TypeScript และ diff check ผ่าน; read-only local smoke ผ่าน. PWA versions ล่าสุด v13 / `8.0.0-pwa.12`. ไม่มีการเปลี่ยน schema, business rules ฝั่ง server หรือข้อมูล Production
+
 สถานะสุดท้าย: **code candidate ผ่าน QA ที่ทำได้ใน session นี้; rollout และการยอมรับบนอุปกรณ์จริงยังรอ gate ข้างต้น**

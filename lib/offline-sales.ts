@@ -75,11 +75,20 @@ export async function syncOfflineCashSales(session:Session):Promise<OfflineCashS
     if(typeof navigator!=="undefined"&&!navigator.onLine)throw new Error("offline_write_blocked");
     await offlineCashPatch(row.requestKey,{attempts:Number(row.attempts||0)+1,lastAttemptAt:Date.now(),lastError:undefined});
     try{
-      await api<any>("/api/pos/checkout",{
+      const receipt=await api<any>("/api/pos/checkout",{
         method:"POST",
         headers:{"X-CSRF-Token":session.csrf},
         body:JSON.stringify(row.body)
       });
+      // HTTP success alone can be an empty/proxy response. Retain the original
+      // idempotent bill unless the checkout contract confirms a committed sale.
+      const hasIdentity=(value:unknown)=>typeof value==="string"&&value.trim().length>0;
+      const expectedTotal=Number(row.body.total);
+      if(receipt?.ok!==true||!hasIdentity(receipt.orderId)
+        ||!Array.isArray(receipt.saleIds)||!receipt.saleIds.length||!receipt.saleIds.every(hasIdentity)
+        ||!Number.isFinite(receipt.total)||receipt.total<0
+        ||!Number.isFinite(expectedTotal)||Math.abs(receipt.total-expectedTotal)>0.001
+        ||(row.body.offlineFulfilled===true&&receipt.offlineFulfilled!==true))throw new Error("offline_sync_unconfirmed");
       await offlineCashDelete(row.requestKey);
       synced++;
     }catch(error:any){
