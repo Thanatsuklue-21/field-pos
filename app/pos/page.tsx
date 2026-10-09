@@ -83,6 +83,7 @@ function PosView({session}:{session:Session}){
   const [splitGroup,setSplitGroup]=useState<SplitGroup|null>(null);
   const [online,setOnline]=useState(true);
   const [offlineStats,setOfflineStats]=useState<OfflineCashSummary>({pending:0,needsReview:0,total:0});
+  const [offlineSyncing,setOfflineSyncing]=useState(false);
   const revisionRef=useRef<number|null>(null);
   const offlineSyncRef=useRef(false);
   const cart=useCartStore();
@@ -256,8 +257,9 @@ function PosView({session}:{session:Session}){
   }
 
   async function syncOfflineQueue(){
-    if(offlineSyncRef.current||typeof navigator!=="undefined"&&!navigator.onLine)return;
+    if(session.offline||offlineSyncRef.current||typeof navigator!=="undefined"&&!navigator.onLine)return;
     offlineSyncRef.current=true;
+    setOfflineSyncing(true);
     window.dispatchEvent(new CustomEvent("field:sync",{detail:{status:"syncing"}}));
     try{
       const sync=await syncOfflineCashSales(session);
@@ -265,8 +267,15 @@ function PosView({session}:{session:Session}){
       if(sync.synced>0){setNotice("ซิงก์ยอดเงินสด Offline สำเร็จ "+sync.synced+" บิล · Cloud/Stock อัปเดตแล้ว");await load(true).catch(()=>{});await loadCustomers().catch(()=>{})}
       if(sync.needsReview>0){setNotice("มีบิล Offline "+sync.needsReview+" รายการที่ต้องตรวจสอบก่อนลง Cloud · ระบบเก็บรายการไว้และไม่ลบทิ้ง");window.dispatchEvent(new CustomEvent("field:sync",{detail:{status:"sync_error"}}))}
       else window.dispatchEvent(new CustomEvent("field:sync",{detail:{status:"online"}}));
-    }catch(error){window.dispatchEvent(new CustomEvent("field:sync",{detail:{status:"sync_error"}}));throw error}
-    finally{offlineSyncRef.current=false}
+    }catch(error:any){
+      window.dispatchEvent(new CustomEvent("field:sync",{detail:{status:"sync_error"}}));
+      setNotice(error?.status===401||error?.status===403||error?.message==="offline_session_revalidation"
+        ?"ยังส่งบิล Offline ไม่ได้ · กรุณาตรวจการเข้าสู่ระบบและสิทธิ์ผู้ใช้ บิลยังเก็บอยู่ในเครื่อง"
+        :"ยังส่งบิล Offline ไม่ครบ · บิลที่ค้างยังเก็บอยู่ในเครื่อง ตรวจอินเทอร์เน็ตแล้วกดส่งบิลที่ค้างอีกครั้ง");
+      refreshOfflineStats().catch(()=>{});
+      throw error;
+    }
+    finally{offlineSyncRef.current=false;setOfflineSyncing(false)}
   }
 
   function finishOfflineSale(localNo:string,opts:{total:number;received:number;bootstrap:Bootstrap}){
@@ -751,6 +760,10 @@ function PosView({session}:{session:Session}){
         </div>
       </div>
 
+      {offlineStats.total>0&&<div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
+        <span>บิล Offline รอส่ง {offlineStats.pending} · ต้องตรวจสอบ {offlineStats.needsReview}</span>
+        <button disabled={!online||session.offline||offlineSyncing||offlineStats.pending===0} onClick={()=>syncOfflineQueue().catch(()=>{})} className="min-h-11 rounded-xl bg-[#1F4D3A] px-4 font-bold text-white disabled:opacity-45">{offlineSyncing?"กำลังส่งบิล…":"ส่งบิลที่ค้าง"}</button>
+      </div>}
       {notice&&<div className="mb-3 flex items-start justify-between gap-3 rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900"><span>{notice}</span><button onClick={()=>setNotice("")} className="shrink-0"><X size={16}/></button></div>}
       {cashRecoveryReview&&<div className="mb-3 rounded-2xl border border-red-300 bg-red-50 p-3 text-sm text-red-900">
         <div className="flex flex-wrap items-start justify-between gap-2">

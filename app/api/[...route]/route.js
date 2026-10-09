@@ -40,7 +40,13 @@ async function handle(request,{params}){
     status(code){status=code;return this;},
     json(value){responseHeaders["Content-Type"]="application/json; charset=utf-8";chunks=[JSON.stringify(value)];return this;}
   };
-  await ensureDbSchema();
+  if(!process.env.TURSO_DATABASE_URL||!process.env.TURSO_AUTH_TOKEN){
+    return Response.json({error:"turso_not_configured"},{status:503,headers:{"Cache-Control":"no-store"}});
+  }
+  try{await ensureDbSchema()}
+  catch{
+    return Response.json({error:"turso_unavailable"},{status:503,headers:{"Cache-Control":"no-store"}});
+  }
   const origin=process.env.PUBLIC_ORIGIN;
   if(!origin||!origin.startsWith("https://"))return Response.json({error:"origin_not_configured"},{status:503});
   await createApi({db:getDb(),origin})(req,res);

@@ -85,3 +85,13 @@ Verified clean starting head `aa9e6554b488c22ee2c379160e6279ff3fff993a`. Previou
 - No IndexedDB schema/version migration or Cloud transaction behavior changed. Cache/readiness versions are `field-pwa-v11` / `8.0.0-pwa.10`.
 
 Validation: **465 tests passed, 0 failed**, production build, TypeScript and `git diff --check` passed. Seven executable tests cover cold module relaunch with both records present, rollback on cache-write failure, consecutive stock deductions and overselling rejection, expired/missing catalog, missing variant and duplicate request rejection. These controlled IndexedDB transaction tests do not replace physical Android process-kill or isolated database UAT. Existing release blockers remain.
+
+## Comprehensive readiness continuation
+
+See [RELEASE_READINESS_2026-10-09.md](./RELEASE_READINESS_2026-10-09.md) for the full module/evidence matrix and operator preparation steps.
+
+Started from verified clean `b4873720c23606a8129fc6c9e8654a3e96aeb55d`. Fixed retryable sync errors being quarantined or reported as success, sync-status indicators being overwritten by ordinary network success, Cloud cache reads resetting unresolved local stock, and unstructured Next backend initialization failures. Added mobile-visible pending/review counts and an explicit guarded retry action.
+
+Final regression: **489 passed, 0 failed**; production build/TypeScript, 20 local shell/asset probes, 3 controlled missing-backend probes and configured login/protected reads passed. Live-local isolated Next/libSQL transaction UAT covered cash/replay/VOID/stock/fulfilled Offline sync/close day with zero variance. No Production transaction was performed.
+
+Read-only Production smoke verified the public alias POS/Settings and JSON DB-health contract. Latest READY Production deployment remains main at `cced39ceb23bd7f12c116b0d323e3df56345175f`, not this candidate. Final candidate still needs exact Preview/UAT and physical Android acceptance before release. Cache/app versions `field-pwa-v12` / `8.0.0-pwa.11`.

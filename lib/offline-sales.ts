@@ -67,11 +67,12 @@ export function applyOfflineCashToBootstrap(data:Bootstrap|null,cart:CartLine[])
 }
 
 export async function syncOfflineCashSales(session:Session):Promise<OfflineCashSyncResult>{
+  if(session.offline||!session.csrf)throw new Error("offline_session_revalidation");
   const rows=await offlineCashList();
   let synced=0;
   for(const row of rows){
     if(row.status!=="pending")continue;
-    if(typeof navigator!=="undefined"&&!navigator.onLine)break;
+    if(typeof navigator!=="undefined"&&!navigator.onLine)throw new Error("offline_write_blocked");
     await offlineCashPatch(row.requestKey,{attempts:Number(row.attempts||0)+1,lastAttemptAt:Date.now(),lastError:undefined});
     try{
       await api<any>("/api/pos/checkout",{
@@ -83,13 +84,15 @@ export async function syncOfflineCashSales(session:Session):Promise<OfflineCashS
       synced++;
     }catch(error:any){
       const code=String(error?.message||"sync_failed");
-      if(["network_unavailable","offline_write_blocked"].includes(code)||!error?.status)break;
-      if(Number(error.status)>=400&&Number(error.status)<500){
+      const status=Number(error?.status)||0;
+      if(status>=400&&status<500&&![401,403,408,425,429].includes(status)){
         await offlineCashPatch(row.requestKey,{status:"needs_review",lastError:code,lastAttemptAt:Date.now()});
         continue;
       }
       await offlineCashPatch(row.requestKey,{lastError:code,lastAttemptAt:Date.now()});
-      break;
+      // Authentication, throttling, network and local-delete failures remain retryable.
+      // Do not let the caller publish a successful sync for an incomplete attempt.
+      throw error;
     }
   }
   const summary=await getOfflineCashSummary();

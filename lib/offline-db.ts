@@ -45,8 +45,14 @@ function committedTransaction<T>(db:IDBDatabase,stores:string|string[],mode:IDBT
 
 export async function cachePut<T>(key:string,value:T){
   const db=await openDb();if(!db)return;
-  await committedTransaction(db,CACHE_STORE,"readwrite",tx=>{
-    tx.objectStore(CACHE_STORE).put({value,savedAt:Date.now()},key);
+  await committedTransaction(db,key==="/api/pos/bootstrap"?[CACHE_STORE,OUTBOX_STORE]:CACHE_STORE,"readwrite",tx=>{
+    const write=()=>tx.objectStore(CACHE_STORE).put({value,savedAt:Date.now()},key);
+    if(key==="/api/pos/bootstrap"){
+      const pending=tx.objectStore(OUTBOX_STORE).getAll();
+      // A reconnect read may arrive before outbox sync. Keep locally consumed stock
+      // until every stored Offline bill is resolved rather than resetting it to Cloud stock.
+      pending.onsuccess=()=>{try{if(!pending.result.length)write()}catch{tx.abort()}};
+    }else write();
     return ()=>undefined;
   });
 }

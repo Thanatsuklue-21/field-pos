@@ -23,7 +23,7 @@ function device({failure=false,expired=false,missing=false}={}){
       const tx={error:null,abort(){aborted=true;queueMicrotask(()=>tx.onabort?.())},objectStore(name){
         assert.ok(scope.includes(name));const rows=staged[name];
         return {get(key){const r={result:rows.get(key)};queueMicrotask(()=>r.onsuccess?.());return r},
-          getAll(){return {result:[...rows.values()]}},
+          getAll(){const r={result:[...rows.values()]};queueMicrotask(()=>r.onsuccess?.());return r},
           put(value,key){if(failure&&name==="cache")throw Error("disk full");rows.set(key??value.requestKey,value)},
           add(value){if(rows.has(value.requestKey))throw Error("ConstraintError");rows.set(value.requestKey,value)},
         };
@@ -86,4 +86,17 @@ test("duplicate request cannot overwrite its bill or deduct stock a second time"
   await sales.queueOfflineCashSale(b,{projectStock:true});
   await assert.rejects(sales.queueOfflineCashSale(b,{projectStock:true}),/offline_storage_failed/);
   assert.equal(d.outbox.size,1);assert.equal(d.cache.get("/api/pos/bootstrap").value.availabilityStock.milk.qty,4);
+});
+
+test("reconnect cache refresh cannot erase stock consumed by unresolved Offline bills",async()=>{
+  const d=device(),{sales,db}=d.modules();
+  await sales.queueOfflineCashSale(body("pending-cache-key"),{projectStock:true});
+  await db.cachePut("/api/pos/bootstrap",stock());
+  assert.equal(d.cache.get("/api/pos/bootstrap").value.availabilityStock.milk.qty,4);
+  assert.equal(d.cache.get("/api/pos/bootstrap").savedAt,d.savedAt);
+});
+test("resolved outbox allows a fresh Cloud catalog to replace local cache",async()=>{
+  const d=device(),{db}=d.modules(),fresh=stock();fresh.availabilityStock.milk.qty=20;
+  await db.cachePut("/api/pos/bootstrap",fresh);
+  assert.equal(d.cache.get("/api/pos/bootstrap").value.availabilityStock.milk.qty,20);
 });
