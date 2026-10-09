@@ -92,4 +92,10 @@ Production smoke ยืนยันการตอบสนองและกา
 
 Browser ในเครื่องเข้าถึง login จริงแต่ติด HTTPS origin guard (`origin_not_configured`) บน local HTTP; จึงยังไม่อ้างว่า authenticated mobile UI, screen reader หรือ Android ผ่านแล้ว. ดูการวิเคราะห์ architecture/flow และลำดับงานต่อใน `FIELD_POS_PRODUCT_REVIEW_2026-10-09.md`
 
+## ตรวจ Flow ขาย 10 แก้ว / รายงานล่าสุด
+
+Full suite ล่าสุด **536 ผ่าน / 0 ล้มเหลว**, build/TypeScript ผ่าน; Next HTTP scenario จริง 77 requests บนฐาน QA แยก. 10 แก้ว/10 บิล: รายรับ 550, COGS 196, รายจ่ายดำเนินงาน 80, กำไรหลังรายจ่าย 274, เงินสดคาดหวัง/นับจริง 900, variance 0. CSV ที่ออกจริงถูกอ่านกลับยืนยันตัวเลขและจำนวนแถว
+
+เพิ่ม daily summary/CSV, itemized CSV, stock zero/negative visibility และ Thai export-date filenames; PWA v15 / app `8.0.0-pwa.14`. รายละเอียดสมมุติฐาน/flow/format/ขอบเขตใน `TEN_CUP_FLOW_AUDIT_2026-10-09.md`. ไม่ใช่การขายจริงของร้าน; physical Android และ isolated HTTPS Preview ยังรอ gate เดิม
+
 สถานะสุดท้าย: **code candidate ผ่าน QA ที่ทำได้ใน session นี้; rollout และการยอมรับบนอุปกรณ์จริงยังรอ gate ข้างต้น**
