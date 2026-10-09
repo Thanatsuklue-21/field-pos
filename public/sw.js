@@ -1,4 +1,5 @@
-const VERSION="field-pwa-v7",SHELL_CACHE=VERSION+"-shell",RUNTIME_CACHE=VERSION+"-runtime",CACHE_PREFIX="field-pwa-";
+const VERSION="field-pwa-v8",SHELL_CACHE=VERSION+"-shell",RUNTIME_CACHE=VERSION+"-runtime",CACHE_PREFIX="field-pwa-";
+const NAVIGATION_CACHE_WAIT_MS=3000;
 const SAFE_OFFLINE_ROUTES=["/pos","/settings"];
 const OPTIONAL_PRECACHE=["/manifest.webmanifest","/field-icon-180.png","/field-icon-192.png","/field-icon-512.png"];
 
@@ -47,13 +48,30 @@ self.addEventListener("install",event=>{event.waitUntil(warmShell());});
 self.addEventListener("activate",event=>{event.waitUntil((async()=>{const keys=await caches.keys();await Promise.all(keys.filter(key=>key.startsWith(CACHE_PREFIX)&&![SHELL_CACHE,RUNTIME_CACHE].includes(key)).map(key=>caches.delete(key)));await self.clients.claim();})());});
 self.addEventListener("message",event=>{if(event.data?.type==="SKIP_WAITING")self.skipWaiting();});
 
-async function networkFirstNavigation(request){const cache=await caches.open(SHELL_CACHE),url=new URL(request.url),safe=SAFE_OFFLINE_ROUTES.includes(url.pathname);try{const response=await fetch(request);if(response?.ok&&safe)await cache.put(url.pathname,response.clone());return response}catch{return safe?(await cache.match(url.pathname,{ignoreSearch:true})||await cache.match("/pos")||Response.error()):(await cache.match("/pos")||Response.error())}}
+async function networkFirstNavigation(request,event){
+  const cache=await caches.open(SHELL_CACHE),url=new URL(request.url),safe=SAFE_OFFLINE_ROUTES.includes(url.pathname);
+  const fallback=safe?(await cache.match(url.pathname,{ignoreSearch:true})||await cache.match("/pos")):(await cache.match("/pos"));
+  const network=(async()=>{
+    try{
+      const response=await fetch(request);
+      if(response?.ok&&safe)await cache.put(url.pathname,response.clone());
+      return response;
+    }catch{return fallback||Response.error()}
+  })();
+  // Keep the late refresh alive after returning the restricted cached shell.
+  // API requests and authoritative session validation retain their network-only path.
+  event?.waitUntil(network.then(()=>{}));
+  if(!fallback)return network;
+  let timer;
+  try{return await Promise.race([network,new Promise(resolve=>{timer=setTimeout(()=>resolve(fallback),NAVIGATION_CACHE_WAIT_MS)})])}
+  finally{clearTimeout(timer)}
+}
 async function cacheFirstAsset(request){const cache=await caches.open(RUNTIME_CACHE),hit=await cache.match(request);if(hit)return hit;const response=await fetch(request);if(response?.ok)await cache.put(request,response.clone());return response}
 async function staleWhileRevalidateImage(request){const cache=await caches.open(RUNTIME_CACHE),cached=await cache.match(request);const network=fetch(request).then(async response=>{if(response?.ok)await cache.put(request,response.clone());return response}).catch(()=>null);return cached||(await network)||Response.error()}
 
 self.addEventListener("fetch",event=>{const request=event.request;if(request.method!=="GET")return;const url=new URL(request.url);if(url.origin!==self.location.origin)return;
   if(url.pathname.startsWith("/api/"))return;
-  if(request.mode==="navigate"){event.respondWith(networkFirstNavigation(request));return}
+  if(request.mode==="navigate"){event.respondWith(networkFirstNavigation(request,event));return}
   if(url.pathname.startsWith("/_next/static/")||["script","style","font"].includes(request.destination)){event.respondWith(cacheFirstAsset(request));return}
   if(request.destination==="image")event.respondWith(staleWhileRevalidateImage(request));
 });
