@@ -95,7 +95,7 @@ test("cold-start offline navigation exposes only POS and readiness",async()=>{
   const shell=await read("components/app-shell.tsx");
   assert.ok(shell.includes('session.offline?["/pos","/settings"].includes(href)'));
   assert.ok(shell.includes('primaryMobile=["/pos","/queue","/orders","/stock"]'));
-  assert.ok(shell.includes('overflowMobile=["/expenses","/close","/settings"]'));
+  assert.ok(shell.includes('mobileOverflow(allowed)'));
 });
 
 

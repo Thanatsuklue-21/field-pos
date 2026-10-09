@@ -1,4 +1,4 @@
-export const FIELD_APP_VERSION="8.0.0-pwa.12";
+export const FIELD_APP_VERSION="8.0.0-pwa.13";
 export const FIELD_SW_URL="/sw.js";
 export const PWA_STATUS_EVENT="field:pwa-status";
 export const PWA_REFRESH_EVENT="field:pwa-refresh";

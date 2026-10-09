@@ -86,4 +86,10 @@ Production smoke ยืนยันการตอบสนองและกา
 
 เพิ่ม 15 executable regressions; 12 failure cases ล้มเหลวก่อนแก้. รวมการรัน API client จริงกับคำตอบ HTTP 200 ที่เป็น HTML/JSON เสีย ตามด้วย replay ที่ยืนยันบิลเดิม. ผลล่าสุด **520 tests ผ่าน / 0 ล้มเหลว**, build/TypeScript และ diff check ผ่าน; read-only local smoke ผ่าน. PWA versions ล่าสุด v13 / `8.0.0-pwa.12`. ไม่มีการเปลี่ยน schema, business rules ฝั่ง server หรือข้อมูล Production
 
+## Mobile navigation / product review ล่าสุด
+
+รอบต่อจาก `efbd1d5`: เมนูมือถือเข้าถึงทุกหน้าที่มีสิทธิ์แล้ว โดยรักษาปุ่มหลักสี่หน้าและลำดับงานหน้าร้าน เพิ่ม bounded/scrollable overflow, ชื่อปุ่มไอคอน, หน้าปัจจุบัน, keyboard focus และ status semantics. ผลล่าสุด **526 tests ผ่าน / 0 ล้มเหลว**, build/TypeScript/diff check และ local read-only release smoke ผ่าน. PWA v14 / app `8.0.0-pwa.13`
+
+Browser ในเครื่องเข้าถึง login จริงแต่ติด HTTPS origin guard (`origin_not_configured`) บน local HTTP; จึงยังไม่อ้างว่า authenticated mobile UI, screen reader หรือ Android ผ่านแล้ว. ดูการวิเคราะห์ architecture/flow และลำดับงานต่อใน `FIELD_POS_PRODUCT_REVIEW_2026-10-09.md`
+
 สถานะสุดท้าย: **code candidate ผ่าน QA ที่ทำได้ใน session นี้; rollout และการยอมรับบนอุปกรณ์จริงยังรอ gate ข้างต้น**

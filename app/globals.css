@@ -197,3 +197,5 @@ html,body{overscroll-behavior:none}
   table[class~="min-w-[560px]"] td:nth-child(3)::before{content:"จำนวน"}
   table[class~="min-w-[560px]"] td:nth-child(4)::before{content:"เวลา"}
 }
+
+.field-app-root :is(a,button,input,select,textarea):focus-visible{outline:3px solid #1F4D3A;outline-offset:3px}

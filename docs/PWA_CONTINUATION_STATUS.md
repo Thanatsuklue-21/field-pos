@@ -115,3 +115,8 @@ Sync now requires the established checkout acknowledgement: `ok:true`, nonempty 
 Added 15 executable regressions, including actual `api-client.ts` + sync execution with HTTP 200 HTML/malformed JSON followed by a valid replay; both sends have the exact same body. Full suite **520 PASS / 0 FAIL**, production build/TypeScript and diff check PASS. Read-only live-local release smoke passes for rebuilt v13 assets/shells/backend using the isolated QA database. Local SHA is environment-supplied test identity, not remote Preview proof.
 
 PWA versions: `field-pwa-v13` / `8.0.0-pwa.12`. No schema, server transaction business rule, Production credentials or deployment gate changed. Preview/UAT database and physical Android acceptance remain required before release.
+# Continuation — product flow and mobile navigation (2026-10-09)
+
+Started from clean `efbd1d5`, matching Draft PR #112. Broader code/flow review and primary-source PWA/accessibility research found missing permitted admin destinations on phones. Mobile overflow now exposes all allowed non-primary routes, preserving operational priority and staff/Offline restrictions; it is bounded and scrollable. Added names/current-page semantics, keyboard focus, Escape dismissal and POS/status announcements. PWA v14 / app `8.0.0-pwa.13`.
+
+Validation: six new executable permission/navigation cases; **526 PASS / 0 FAIL**, build/TypeScript PASS. Actual local browser login reached the HTTPS origin guard and could not access authenticated UI over HTTP; no physical/visual/mobile browser acceptance is claimed. Full findings, sources and staged priorities are in `docs/FIELD_POS_PRODUCT_REVIEW_2026-10-09.md`. Existing release gates and Production protections remain intact.
