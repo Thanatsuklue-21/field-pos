@@ -41,3 +41,21 @@ Keep PR #112 Draft. Do not open the Preview marker or change the ignored-build p
 4. Perform transaction UAT on the isolated database, then exact merged-SHA Production deployment and post-deploy checks.
 
 Previously completed manifest/install metadata, mobile layout, recovery, atomic cash VOID/edit and transaction integrity features were not reimplemented. Node engine pinning and legacy Vercel `builds` cleanup remain separate deployment-config backlog items requiring their own Preview validation.
+
+## Second continuation — durable Offline cash commits
+
+Started from verified clean head `199c868bb9d046a2db1fe5821ee22a33dcfac740`; its exact GitHub Actions run `37882879341` passed. PR #112 remained Draft and Vercel was canceled by the ignored-build step.
+
+The IndexedDB transaction completion helper previously resolved on both error and abort. This allowed `queueOfflineCashSale` to return a receipt before a failed outbox transaction was safely persisted; the POS success path could then clear the cart. Outbox reads also returned an empty queue on unavailable storage, and failed deletion/patch operations could be mistaken for success.
+
+- Only `IDBTransaction.oncomplete` now acknowledges successful work. Error, abort and synchronous storage failures reject with `offline_storage_failed`.
+- Outbox list/delete/patch reject unavailable storage instead of reporting an empty/successful queue.
+- Connections close on success and failure. Readiness waits for a completed read transaction and never reports READY on abort.
+- Cache reads remain best-effort; unsuccessful cache writes reject so callers can handle them explicitly.
+- POS displays a Thai storage-failure message and retains the existing cart because the success path runs only after the committed outbox result.
+- Synchronous database-open failures are reported as unavailable storage.
+- Cache/readiness versions advanced to `field-pwa-v9` / `8.0.0-pwa.8` so the revised offline client is warmed through the existing safe-update flow.
+
+Validation: **436 tests passed, 0 failed**, including 20 new executable storage/checkout tests, full payment/stock/30-order regression coverage, Next.js production build, strict TypeScript and `git diff --check`. The baseline failed 10 of the first 11 storage cases before the fix. Tests run the actual transpiled TypeScript modules against controlled IndexedDB transaction events; browser storage quota and process-kill acceptance still require real-device testing.
+
+No lint script/config was added. No database schema, Production credentials, Vercel gate or previously completed payment/stock business behavior was changed. The release blockers listed above remain in force.

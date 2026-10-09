@@ -586,6 +586,7 @@ function PosView({session}:{session:Session}){
       code==="offline_split_not_supported"?"โหมด Offline ยังไม่รองรับแยกบิล/เพิ่มเข้าคิวเดิม กรุณารับเป็นบิลปกติ":
       code==="offline_loyalty_not_supported"?"โหมด Offline งดสะสม/ใช้แต้มชั่วคราว เพื่อป้องกันแต้มซ้ำข้ามอุปกรณ์":
       code==="offline_storage_unavailable"?"เครื่องนี้ไม่สามารถเปิดพื้นที่เก็บ Offline ได้ กรุณาเชื่อมต่ออินเทอร์เน็ตก่อนขาย":
+      code==="offline_storage_failed"?"บันทึกบิล Offline ไม่สำเร็จ · ตะกร้ายังอยู่ กรุณาตรวจพื้นที่เก็บข้อมูลหรือเชื่อมต่ออินเทอร์เน็ตก่อนลองอีกครั้ง":
       code==="offline_catalog_unavailable"?"ไม่มีข้อมูลเมนู/สต็อกที่ cache ไว้ จึงยังขาย Offline ไม่ได้":
       code==="offline_session_revalidation"?"อินเทอร์เน็ตกลับมาแล้ว · กำลังตรวจสิทธิ์ผู้ใช้กับ Server กรุณากดชำระอีกครั้ง":
       code==="offline_price_changed"?"ราคาบน Cloud เปลี่ยนจากตอนขาย Offline · เก็บบิลไว้ให้ตรวจสอบ ไม่ลงยอดผิด":
