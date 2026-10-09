@@ -77,9 +77,9 @@ test("service worker and manifest bypass deployment cache staleness",async()=>{
 
 test("safe offline settings route is precached with a bumped PWA cache version",async()=>{
   const sw=await read("public/sw.js"),meta=await read("lib/pwa-meta.ts");
-  assert.ok(sw.includes('VERSION="field-pwa-v10"'));
+  assert.ok(sw.includes('VERSION="field-pwa-v11"'));
   assert.ok(sw.includes('SAFE_OFFLINE_ROUTES=["/pos","/settings"]'));
-  assert.ok(meta.includes('FIELD_APP_VERSION="8.0.0-pwa.9"'));
+  assert.ok(meta.includes('FIELD_APP_VERSION="8.0.0-pwa.10"'));
 });
 
 test("safe offline route chunks are warmed for both POS and Settings",async()=>{

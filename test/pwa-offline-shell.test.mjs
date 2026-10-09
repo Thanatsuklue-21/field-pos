@@ -13,7 +13,7 @@ test("offline operator requires a fresh usable bootstrap cache",async()=>{
 
 test("service worker warms required Next static chunks and never caches APIs",async()=>{
   const sw=await read("public/sw.js");
-  assert.ok(sw.includes('VERSION="field-pwa-v10"'));
+  assert.ok(sw.includes('VERSION="field-pwa-v11"'));
   assert.ok(sw.includes('OPTIONAL_PRECACHE=["/manifest.webmanifest"'));
   assert.ok(sw.includes('SAFE_OFFLINE_ROUTES=["/pos","/settings"]'));
   assert.ok(sw.includes("nextStaticUrls"));

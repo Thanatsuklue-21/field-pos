@@ -1,11 +1,12 @@
 import {api,type Bootstrap,type Session} from "@/lib/api-client";
 import {offlineCashDelete,offlineCashList,offlineCashPatch,offlineCashPut,type OfflineCashRecord} from "@/lib/offline-db";
+import {cartAvailability} from "@/lib/domain/availability.mjs";
 
 type CartLine={id:string;variant:string;qty:number};
 export type OfflineCashSummary={pending:number;needsReview:number;total:number};
 export type OfflineCashSyncResult=OfflineCashSummary&{synced:number};
 
-export async function queueOfflineCashSale(body:Record<string,any>){
+export async function queueOfflineCashSale(body:Record<string,any>,options:{projectStock?:boolean}={}){
   const createdAt=Number(body.offlineCreatedAt)||Date.now();
   const requestKey=String(body.requestKey||"");
   if(requestKey.length<8)throw new Error("invalid_request_key");
@@ -17,8 +18,11 @@ export async function queueOfflineCashSale(body:Record<string,any>){
     status:"pending",
     attempts:0
   };
-  await offlineCashPut(record);
-  return record;
+  const bootstrap=await offlineCashPut(record,options.projectStock?(current:Bootstrap)=>{
+    if(!Array.isArray(body.cart)||!body.cart.length||!cartAvailability({cart:body.cart,menu:current.menu,stock:current.availabilityStock}).available)throw new Error("stock_shortage");
+    return applyOfflineCashToBootstrap(current,body.cart);
+  }:undefined) as Bootstrap|undefined;
+  return {...record,bootstrap};
 }
 
 export async function getOfflineCashSummary():Promise<OfflineCashSummary>{

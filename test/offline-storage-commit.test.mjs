@@ -93,6 +93,7 @@ for(const mode of ["complete","abort","throw"]){
     runInNewContext(salesSource,{exports,Date,Error,require(path){
       if(path==="@/lib/offline-db")return store.api;
       if(path==="@/lib/api-client")return {};
+      if(path==="@/lib/domain/availability.mjs")return {};
       throw Error("unexpected import: "+path);
     }});
     const checkout=exports.queueOfflineCashSale({requestKey:store.record.requestKey});

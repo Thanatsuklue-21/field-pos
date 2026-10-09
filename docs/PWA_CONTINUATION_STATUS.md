@@ -72,3 +72,16 @@ Verified clean starting head `1214906f9864011037f740f7c809e33587af0fc3`, with ex
 - Cache/readiness versions: `field-pwa-v10` / `8.0.0-pwa.9`.
 
 Validation: **458 tests passed, 0 failed**, including 22 new policy/runtime cases, full storage/payment/stock regression coverage, production build, TypeScript and `git diff --check`. The three runtime cases failed before the integration fix and passed afterward. No deployment policy or transaction business logic was changed. Exact Preview, isolated transaction UAT and real Android acceptance remain required.
+
+## Fourth continuation — atomic Offline bill and stock persistence
+
+Verified clean starting head `aa9e6554b488c22ee2c379160e6279ff3fff993a`. Previously, receipt acknowledgement and cart clearing followed the outbox commit, while projected stock was persisted separately without awaiting success. Process termination or a cache-write failure between these operations could leave a durable bill with the old cached stock.
+
+- POS now commits a new outbox bill and its local stock projection in a single IndexedDB transaction spanning the existing outbox/cache stores.
+- Projection reads the latest committed cached bootstrap inside that transaction and checks current cart availability before deduction. Missing/expired catalogs, unavailable variants and insufficient stock abort the entire operation.
+- Stock-write failures roll back the outbox insertion. A duplicate request key is rejected instead of replacing its bill and deducting stock again.
+- Receipt UI receives the committed bootstrap and no longer performs a separate fire-and-forget cache write.
+- Original cache `savedAt` is retained: Offline selling does not extend the Cloud data freshness deadline.
+- No IndexedDB schema/version migration or Cloud transaction behavior changed. Cache/readiness versions are `field-pwa-v11` / `8.0.0-pwa.10`.
+
+Validation: **465 tests passed, 0 failed**, production build, TypeScript and `git diff --check` passed. Seven executable tests cover cold module relaunch with both records present, rollback on cache-write failure, consecutive stock deductions and overselling rejection, expired/missing catalog, missing variant and duplicate request rejection. These controlled IndexedDB transaction tests do not replace physical Android process-kill or isolated database UAT. Existing release blockers remain.

@@ -60,12 +60,28 @@ export async function cacheGet<T>(key:string,maxAgeMs=BOOTSTRAP_OFFLINE_MAX_AGE_
   return row.value;
 }
 
-export async function offlineCashPut(record:OfflineCashRecord){
+export async function offlineCashPut(record:OfflineCashRecord,projectBootstrap?:(value:any)=>any){
   const db=await openDb();if(!db)throw new Error("offline_storage_unavailable");
-  await committedTransaction(db,OUTBOX_STORE,"readwrite",tx=>{
-    tx.objectStore(OUTBOX_STORE).put(record);
+  let projected:any;
+  await committedTransaction(db,projectBootstrap?[OUTBOX_STORE,CACHE_STORE]:OUTBOX_STORE,"readwrite",tx=>{
+    const outbox=tx.objectStore(OUTBOX_STORE);
+    // New Offline checkouts must not replace an existing request and deduct stock twice.
+    if(projectBootstrap)outbox.add(record);else outbox.put(record);
+    if(projectBootstrap){
+      const store=tx.objectStore(CACHE_STORE),request=store.get("/api/pos/bootstrap");
+      request.onsuccess=()=>{
+        try{
+          const cached=request.result as Cached<any>|undefined;
+          if(!cached?.value||!cached.savedAt||Date.now()-cached.savedAt>BOOTSTRAP_OFFLINE_MAX_AGE_MS)throw new Error("offline_catalog_unavailable");
+          projected=projectBootstrap(cached.value);
+          // Keep the original freshness deadline; an Offline sale is not a Cloud revalidation.
+          store.put({...cached,value:projected},"/api/pos/bootstrap");
+        }catch{tx.abort()}
+      };
+    }
     return ()=>undefined;
   });
+  return projected;
 }
 export async function offlineCashList():Promise<OfflineCashRecord[]>{
   const db=await openDb();if(!db)throw new Error("offline_storage_unavailable");

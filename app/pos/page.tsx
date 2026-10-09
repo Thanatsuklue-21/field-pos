@@ -5,8 +5,8 @@ import {useRouter} from "next/navigation";
 import {ArrowRight,CheckCircle2,Clock3,Minus,Plus,Search,Trash2,WalletCards,X} from "lucide-react";
 import AuthGate from "@/components/auth-gate";
 import {api,type Bootstrap,type MenuItem,type RevisionUnchanged,type Session} from "@/lib/api-client";
-import {BOOTSTRAP_OFFLINE_MAX_AGE_MS,cacheGet,cachePut} from "@/lib/offline-db";
-import {applyOfflineCashToBootstrap,getOfflineCashSummary,queueOfflineCashSale,syncOfflineCashSales,type OfflineCashSummary} from "@/lib/offline-sales";
+import {BOOTSTRAP_OFFLINE_MAX_AGE_MS,cacheGet} from "@/lib/offline-db";
+import {getOfflineCashSummary,queueOfflineCashSale,syncOfflineCashSales,type OfflineCashSummary} from "@/lib/offline-sales";
 import {additionalServingsAvailable,cartAvailability} from "@/lib/domain/availability.mjs";
 import {useCartStore} from "@/stores/cart-store";
 import {useHeldCartStore} from "@/stores/held-cart-store";
@@ -269,12 +269,8 @@ function PosView({session}:{session:Session}){
     finally{offlineSyncRef.current=false}
   }
 
-  function finishOfflineSale(localNo:string,opts:{total:number;received:number;paidCart:{id:string;variant:string;qty:number}[]}){
-    const projected=applyOfflineCashToBootstrap(data,opts.paidCart);
-    if(projected){
-      setData(projected);
-      cachePut("/api/pos/bootstrap",projected).catch(()=>{});
-    }
+  function finishOfflineSale(localNo:string,opts:{total:number;received:number;bootstrap:Bootstrap}){
+    setData(opts.bootstrap);
     setPayOpen(false);
     setResult("");
     setPrompt(null);
@@ -629,8 +625,9 @@ function PosView({session}:{session:Session}){
           customerId:null,pointsRedeemed:0,total:checkoutTotal,checkoutMode:"full",
           offlineFulfilled:true,offlineCreatedAt,offlineMenuRevision:data.revision
         };
-        const queued=await queueOfflineCashSale(body);
-        finishOfflineSale(queued.localNo,{total:checkoutTotal,received:Number(received),paidCart:cartPayload});
+        const queued=await queueOfflineCashSale(body,{projectStock:true});
+        if(!queued.bootstrap)throw new Error("offline_storage_failed");
+        finishOfflineSale(queued.localNo,{total:checkoutTotal,received:Number(received),bootstrap:queued.bootstrap});
         return;
       }
 
