@@ -59,3 +59,16 @@ The IndexedDB transaction completion helper previously resolved on both error an
 Validation: **436 tests passed, 0 failed**, including 20 new executable storage/checkout tests, full payment/stock/30-order regression coverage, Next.js production build, strict TypeScript and `git diff --check`. The baseline failed 10 of the first 11 storage cases before the fix. Tests run the actual transpiled TypeScript modules against controlled IndexedDB transaction events; browser storage quota and process-kill acceptance still require real-device testing.
 
 No lint script/config was added. No database schema, Production credentials, Vercel gate or previously completed payment/stock business behavior was changed. The release blockers listed above remain in force.
+
+## Third continuation — safe update races and recovery uncertainty
+
+Verified clean starting head `1214906f9864011037f740f7c809e33587af0fc3`, with exact-head GitHub CI passing. Three executable runtime regressions reproduced unsafe activation: inaccessible recovery storage, a new cart during registration lookup, and a cart updated before React effects copied its count.
+
+- The update guard reads the current cart directly from the store.
+- Both local and legacy session recovery records block updates, including empty or malformed records. Storage access errors block activation with an operator-facing reason instead of permitting an update.
+- Safety is checked again after asynchronous registration lookup, immediately before sending `SKIP_WAITING`.
+- Failed registration lookup does not activate; failed activation messaging resets the initiated flag so later controller changes cannot trigger a mistaken reload.
+- The same guard remains in use for deferred reload and controller-change safety.
+- Cache/readiness versions: `field-pwa-v10` / `8.0.0-pwa.9`.
+
+Validation: **458 tests passed, 0 failed**, including 22 new policy/runtime cases, full storage/payment/stock regression coverage, production build, TypeScript and `git diff --check`. The three runtime cases failed before the integration fix and passed afterward. No deployment policy or transaction business logic was changed. Exact Preview, isolated transaction UAT and real Android acceptance remain required.

@@ -31,8 +31,9 @@ test("service worker never caches API and only updates after explicit safe reque
 
 test("PWA runtime blocks reload while transaction recovery state is active",async()=>{
   const runtime=await read("components/pwa-runtime.tsx");
+  const safety=await read("lib/pwa-update-safety.ts");
   for(const token of ["field-pos-pending-promptpay-v1","field-pos-pending-cash-v1","field-pos-split-group-v1","field:transaction-busy","field:sync","pendingReloadRef","beforeinstallprompt"]){
-    assert.ok(runtime.includes(token),token);
+    assert.ok((runtime+safety).includes(token),token);
   }
 });
 
@@ -76,9 +77,9 @@ test("service worker and manifest bypass deployment cache staleness",async()=>{
 
 test("safe offline settings route is precached with a bumped PWA cache version",async()=>{
   const sw=await read("public/sw.js"),meta=await read("lib/pwa-meta.ts");
-  assert.ok(sw.includes('VERSION="field-pwa-v9"'));
+  assert.ok(sw.includes('VERSION="field-pwa-v10"'));
   assert.ok(sw.includes('SAFE_OFFLINE_ROUTES=["/pos","/settings"]'));
-  assert.ok(meta.includes('FIELD_APP_VERSION="8.0.0-pwa.8"'));
+  assert.ok(meta.includes('FIELD_APP_VERSION="8.0.0-pwa.9"'));
 });
 
 test("safe offline route chunks are warmed for both POS and Settings",async()=>{

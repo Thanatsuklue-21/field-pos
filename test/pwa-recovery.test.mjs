@@ -46,8 +46,10 @@ test("mobile payment sheet follows visual viewport so Android keyboard cannot co
 
 test("PWA update guard recognizes durable split and edit recovery",async()=>{
   const runtime=await read("components/pwa-runtime.tsx");
-  assert.ok(runtime.includes('hasRecovery("field-pos-split-group-v1")'));
-  assert.ok(runtime.includes('hasRecovery("field-pos-edit-cash-v1")'));
+  const safety=await read("lib/pwa-update-safety.ts");
+  assert.ok(runtime.includes("getPwaUpdateBlockReason"));
+  assert.ok(safety.includes('"field-pos-split-group-v1"'));
+  assert.ok(safety.includes('"field-pos-edit-cash-v1"'));
 });
 
 
