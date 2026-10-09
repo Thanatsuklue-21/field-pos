@@ -30,5 +30,7 @@ jobs:
           persist-credentials: false
       - name: Verify Node supports native fetch
         run: node -e "const major=Number(process.versions.node.split('.')[0]); if(major<18){console.error('Node 18+ required'); process.exit(1)}"
+      - name: Verify checkout matches frozen candidate
+        run: node -e "const sha=require('node:child_process').execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim(); if(sha!==process.env.EXPECTED_SHA){console.error('Select the workflow ref for the exact frozen candidate'); process.exit(1)}"
       - name: Run read-only exact-preview PWA smoke
         run: node scripts/pwa-smoke.mjs

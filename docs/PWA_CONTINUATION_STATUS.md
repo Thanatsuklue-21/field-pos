@@ -95,3 +95,14 @@ Started from verified clean `b4873720c23606a8129fc6c9e8654a3e96aeb55d`. Fixed re
 Final regression: **489 passed, 0 failed**; production build/TypeScript, 20 local shell/asset probes, 3 controlled missing-backend probes and configured login/protected reads passed. Live-local isolated Next/libSQL transaction UAT covered cash/replay/VOID/stock/fulfilled Offline sync/close day with zero variance. No Production transaction was performed.
 
 Read-only Production smoke verified the public alias POS/Settings and JSON DB-health contract. Latest READY Production deployment remains main at `cced39ceb23bd7f12c116b0d323e3df56345175f`, not this candidate. Final candidate still needs exact Preview/UAT and physical Android acceptance before release. Cache/app versions `field-pwa-v12` / `8.0.0-pwa.11`.
+# Continuation — release smoke readiness (2026-10-09)
+
+Resumed from verified clean `feat/pwa-app-shell` head `82c3ccb56efadb4782eb89a6e705c61ad5142be5`, matching open Draft PR #112. Its exact-head CI was already successful; no completed POS transaction work was repeated.
+
+The release checker still required Service Worker v6 although the candidate uses v12. It now reads the candidate worker version, requires the full deployment SHA, validates real PNG icon responses/dimensions and actual HTML shells, bounds requests and rejects login/cross-origin redirects without forwarding protection secrets. The manual workflow also refuses a checkout whose HEAD differs from the frozen SHA. Corrected acceptance commands that previously contained literal newline escapes.
+
+Live-local release smoke reproduced a separate cache-header gap: direct Next hosting did not inherit Vercel's SW no-store policy. `next.config.mjs` now supplies the same SW and manifest headers, preserving the existing Vercel release ignore gate.
+
+Validation: 16 added executable cases; full suite **505 PASS / 0 FAIL**; Next production build and TypeScript PASS; `git diff --check` PASS. The real `pwa:smoke` command then passed against the rebuilt local server and isolated QA database (SW v12, icons, shells, build identity and Turso health). The local build identity was supplied through `GIT_COMMIT_SHA`; this verifies checker behavior and does not establish a remote exact-SHA Preview. No Production database write, deploy, merge, payment or message was performed.
+
+Remaining rollout gates: separate Preview/UAT Turso credentials, an intentionally frozen exact-head READY Preview, physical Android installation/keyboard/offline recovery checks and post-merge Production verification. PR remains Draft until those gates pass.

@@ -74,4 +74,10 @@ Production smoke ยืนยันการตอบสนองและกา
 
 หากมีบิล Offline ค้าง ให้เชื่อมต่อและยืนยัน session แล้วกด **ส่งบิลที่ค้าง**; หากมีบิลต้องตรวจให้เจ้าของตรวจรายการก่อน ห้ามล้าง browser storage เพื่อแก้ปัญหา เพราะบิลที่ยังไม่ sync เก็บอยู่ในเครื่อง
 
+## ตรวจ release checker เพิ่มเติม
+
+รอบต่อจาก head `82c3ccb`: แก้ checker ที่ล็อก SW v6 ให้ตรวจรุ่นจาก candidate จริง, บังคับ full SHA, ตรวจไอคอน PNG/ขนาดและ HTML shell, ปฏิเสธ login/external redirects และกำหนด timeout. Workflow ตรวจ checkout HEAD ตรง SHA ก่อนเรียก Preview. เพิ่ม Next headers ให้ SW/manifest ใช้นโยบาย cache เดียวกับ Vercel เมื่อรันแอปโดยตรง
+
+ผลล่าสุด: **505 tests ผ่าน / 0 ล้มเหลว**, build/TypeScript และ diff check ผ่าน. Real read-only smoke ผ่านกับ Next production server และฐานข้อมูล QA แยกในเครื่อง; SHA ใน local server เป็นค่าที่ป้อนผ่าน environment เพื่อทดสอบ checker ไม่ใช่หลักฐาน remote Preview. เวอร์ชัน PWA ยังคง v12 / `8.0.0-pwa.11` เพราะรอบนี้แก้เครื่องมือตรวจและ header โดยไม่เปลี่ยน shell หรือธุรกรรม
+
 สถานะสุดท้าย: **code candidate ผ่าน QA ที่ทำได้ใน session นี้; rollout และการยอมรับบนอุปกรณ์จริงยังรอ gate ข้างต้น**
