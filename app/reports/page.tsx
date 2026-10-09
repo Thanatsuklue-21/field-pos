@@ -8,7 +8,7 @@ import {api} from "@/lib/api-client";
 import {ResponsiveContainer,BarChart,Bar,XAxis,YAxis,Tooltip} from "recharts";
 import {toCsv,reportFilename} from "@/lib/report-csv.mjs";
 
-type TodaySummary={date:string;orders:number;cups:number;revenue:number;cogs:number;operatingExpenses:number;purchaseSpend:number;grossProfit:number;operatingProfit:number;cashSales:number;profitEstimated:boolean;closed:boolean;expectedCash:number|null;countedCash:number|null;cashVariance:number|null};
+type TodaySummary={date:string;orders:number;cups:number;revenue:number;cogs:number;operatingExpenses:number;purchaseSpend:number;deliveryFees?:number;grossProfit:number;operatingProfit:number;cashSales:number;profitEstimated:boolean;closed:boolean;expectedCash:number|null;countedCash:number|null;cashVariance:number|null};
 type Summary={today:string;todaySummary:TodaySummary;todayRevenue:number;totalRevenue:number;grossProfit:number;grossMargin:number;profitEstimated:boolean;costQuality:{status:string};cups:number;daily:{date:string;revenue:number}[];inventoryValue:number;inventoryItems:number;inventoryValueEstimated:boolean;delivery:{gross:number;gpFees:number;netSettlement:number;orders:number};paymentSummary:{cash:number;promptpay:number;bank:number;card:number;other:number}};
 type ExportKind="sales"|"saleItems"|"expenses"|"stock"|"cashMovements"|"dailySummary";
 type ExportData={exportedAt:number;businessDate:string;sales:Record<string,unknown>[];saleItems:Record<string,unknown>[];dailySummary:Record<string,unknown>[];expenses:Record<string,unknown>[];stock:Record<string,unknown>[];cashMovements:Record<string,unknown>[];inventorySummary:{value:number;items:number;isEstimated:boolean}};
@@ -43,9 +43,9 @@ function ReportsView(){
       <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">{[
         ["รายรับจากยอดขาย",d.todaySummary.revenue],["ต้นทุนที่ใช้ขาย (COGS)",d.todaySummary.cogs],
         ["รายจ่ายดำเนินงาน",d.todaySummary.operatingExpenses],["ซื้อสต็อกเพิ่ม",d.todaySummary.purchaseSpend],
-        ["กำไรขั้นต้น",d.todaySummary.grossProfit],["กำไรหลังรายจ่ายดำเนินงาน",d.todaySummary.operatingProfit],
+        ["ค่า GP Delivery",d.todaySummary.deliveryFees||0],["กำไรขั้นต้น",d.todaySummary.grossProfit],["กำไร/ขาดทุนหลังรายจ่ายและ GP",d.todaySummary.operatingProfit],
       ].map(([label,value])=><div key={String(label)} className="rounded-xl bg-white p-3"><small className="text-slate-500">{label}</small><b className="mt-1 block">฿{formatMoney(Number(value))}</b></div>)}</div>
-      <p className="mt-3 text-xs text-slate-500">ซื้อสต็อกเพิ่มแยกจาก COGS เพื่อไม่หักต้นทุนซ้ำ · เงินเติมเข้า/นำออกลิ้นชักไม่ใช่รายรับ/รายจ่ายดำเนินงาน</p>
+      <p className="mt-3 text-xs text-slate-500">กำไร/ขาดทุน = ยอดขาย − COGS − รายจ่ายดำเนินงาน − GP · ซื้อสต็อกเพิ่มแยกจาก COGS เพื่อไม่หักต้นทุนซ้ำ · เงินเติมเข้า/นำออกลิ้นชักไม่ใช่รายรับ/รายจ่ายดำเนินงาน</p>
       {d.todaySummary.closed&&d.todaySummary.expectedCash!==null&&d.todaySummary.countedCash!==null&&d.todaySummary.cashVariance!==null&&<p className="mt-3 text-sm">เงินสดคาดหวัง ฿{formatMoney(Number(d.todaySummary.expectedCash))} · นับจริง ฿{formatMoney(Number(d.todaySummary.countedCash))} · ต่าง ฿{formatMoney(Number(d.todaySummary.cashVariance))}</p>}
     </div>}
     {d?.profitEstimated&&<div className="mt-4 rounded-2xl border border-amber-400/25 bg-amber-50 p-4 text-sm text-amber-800"><b>ESTIMATED PROFIT</b><p className="mt-1 text-xs">กำไรและ Margin มีรายการต้นทุนที่ยังไม่ยืนยัน ({d.costQuality.status})</p></div>}

@@ -41,3 +41,7 @@ test('financial report displays comma thousands and preserves satang on actual r
   const html=render({...data,todaySummary:{...data.todaySummary,revenue:2000,operatingProfit:25000.5}});
   assert.ok(html.includes('฿2,000'));assert.ok(html.includes('฿25,000.50'));
 });
+test('report shows delivery fees separately and explains profit after GP',()=>{
+  const html=render({...data,todaySummary:{...data.todaySummary,revenue:552.5,cogs:196,operatingExpenses:150.1,deliveryFees:33.16,operatingProfit:173.24}});
+  assert.ok(html.includes('ค่า GP Delivery'));assert.ok(html.includes('฿33.16'));assert.ok(html.includes('฿173.24'));assert.ok(html.includes('กำไร/ขาดทุนหลังรายจ่ายและ GP'));
+});
