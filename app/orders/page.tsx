@@ -19,7 +19,7 @@ type ProviderEvidence={chargeId:string;provider?:string;status:string;paid?:bool
 type ResolutionEvent={id:number;actorId?:string|null;actor:string;action:string;details:Record<string,unknown>;createdAt:number};
 type PaymentResolution={
   id:string;status:string;mode?:string;total:number;date:string;pager:number;items:SaleItem[];remainingQty:number[];
-  payments?:unknown[];providerManaged?:boolean;expiresAt?:number;targetOrderId?:string|null;providerCharge?:{chargeId:string;provider?:string;amount?:number;currency?:string;status?:string;expiresAt?:string|null;referenceId?:string};
+  payments?:unknown[];providerManaged?:boolean;providerAttempt?:{state:string;provider:string;attemptKey:string;startedAt:number;updatedAt:number}|null;expiresAt?:number;targetOrderId?:string|null;providerCharge?:{chargeId:string;provider?:string;amount?:number;currency?:string;status?:string;expiresAt?:string|null;referenceId?:string};
   providerEvidence?:ProviderEvidence|null;timeline?:ResolutionEvent[];
 };
 
@@ -77,14 +77,15 @@ function OrdersView({session}:{session:Session}){
   async function reconcileResolution(r:PaymentResolution){
     if(session.user.role!=="admin")return;
     const chargeId=String(r.providerCharge?.chargeId||r.providerEvidence?.chargeId||"");
-    if(!chargeId){
-      setMsg("รายการนี้ไม่มี provider charge จึงไม่สามารถ reconcile อัตโนมัติได้");
+    const recoverableAttempt=!chargeId&&r.providerAttempt?.state==="creating"&&r.providerAttempt?.provider==="beam";
+    if(!chargeId&&!recoverableAttempt){
+      setMsg("รายการนี้ไม่มี provider charge ที่กู้คืนอัตโนมัติได้ · ต้องตรวจ Provider ด้วยหลักฐานภายนอกก่อน");
       return;
     }
     if(!window.confirm(
       "ตรวจและแก้สถานะ PromptPay จาก Provider จริง?\n"+
       "Session: "+r.id+"\n"+
-      "Charge: "+chargeId+"\n"+
+      "Charge: "+(chargeId||"ยังไม่ bind · จะกู้ด้วย Beam idempotency เดิม")+"\n"+
       "ยอด: ฿"+formatMoney(r.total)+"\n\n"+
       "ระบบจะ Finalize เฉพาะเมื่อ Provider ยืนยันว่าจ่ายแล้ว หรือคืน Stock เฉพาะเมื่อ Provider ยืนยัน failed/expired/reversed"
     ))return;
@@ -106,6 +107,8 @@ function OrdersView({session}:{session:Session}){
       setMsg(e.message==="promptpay_amount_mismatch"?"ยอดจาก Provider ไม่ตรงกับ reservation · ระบบหยุดเพื่อป้องกันบัญชีผิด":
         e.message==="promptpay_reference_mismatch"?"Charge จาก Provider ไม่ตรงกับ session · ระบบหยุดเพื่อป้องกันรับเงินผิดรายการ":
         e.message==="split_resolution_unavailable"?"รายการนี้ถูกแก้สถานะจากอุปกรณ์อื่นแล้ว · กำลังรีเฟรชข้อมูล":
+        e.message==="promptpay_recovery_window_elapsed"?"attempt สร้าง QR ค้างเกินช่วง recovery อัตโนมัติ · ต้องตรวจ Provider ด้วยหลักฐานภายนอก":
+        e.message==="promptpay_provider_changed"?"Provider ปัจจุบันไม่ตรงกับ attempt เดิม · ระบบหยุดเพื่อป้องกันสร้าง QR ซ้ำ":
         "Reconcile ไม่สำเร็จ · "+String(e.message||"server_error"));
       await loadResolutions().catch(()=>{});
     }finally{setResolutionBusy(null)}
@@ -257,8 +260,9 @@ function OrdersView({session}:{session:Session}){
               <span className={"rounded-full px-2 py-1 text-[10px] font-black "+(ev?.paid?"bg-emerald-100 text-emerald-800":providerStatus==="provider_check_failed"?"bg-red-100 text-red-800":"bg-amber-100 text-amber-900")}>{providerStatus.toUpperCase()}</span>
             </div>
             <div className="mt-2 grid gap-1 text-slate-600 sm:grid-cols-2">
-              <div>Provider: <b>{ev?.provider||r.providerCharge?.provider||"—"}</b></div>
+              <div>Provider: <b>{ev?.provider||r.providerCharge?.provider||r.providerAttempt?.provider||"—"}</b></div>
               <div>Charge: <b className="break-all">{charge||"—"}</b></div>
+              {r.providerAttempt?.state==="creating"&&!charge&&<div className="sm:col-span-2 rounded bg-amber-50 p-2 font-semibold text-amber-800">พบ provider creation attempt ที่ยังไม่ bind charge · Admin reconcile จะกู้ด้วย idempotency key เดิมเฉพาะ Beam และช่วงเวลาที่ปลอดภัย</div>}
               <div>Provider amount: <b>{Number.isFinite(amount)?("฿"+formatMoney(amount)):"—"}</b></div>
               <div>Currency: <b>{ev?.currency||r.providerCharge?.currency||"—"}</b></div>
               <div>Reference: <b className="break-all">{ev?.referenceId||r.providerCharge?.referenceId||"—"}</b></div>
