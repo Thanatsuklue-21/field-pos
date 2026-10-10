@@ -13,6 +13,7 @@ import {useCartStore} from "@/stores/cart-store";
 import {useHeldCartStore} from "@/stores/held-cart-store";
 import {writeQueueSnapshotCache} from "@/lib/queue-cache"; import {clearRecovery,readRecovery,writeRecovery} from "@/lib/recovery-storage";
 import {shouldRetainCashPending} from "@/lib/cash-recovery-policy.mjs";
+import {inspectPaymentRecoveryRaw} from "@/lib/payment-recovery-integrity.mjs";
 
 export default function Pos(){return <AuthGate>{s=><PosView session={s}/>}</AuthGate>}
 
@@ -39,12 +40,19 @@ const cashPendingWrite=(p:PendingCash)=>localStorage.setItem(CASH_PENDING_KEY,JS
 const cashPendingClear=()=>localStorage.removeItem(CASH_PENDING_KEY);
 const sameCashPending=(p:PendingCash,total:number,cart:{id:string;variant:string;qty:number}[],customerId:string,received:number,pointsRedeemed:number,targetOrderId?:string|null)=>Number(p.body?.received)===received&&Number(p.body?.total??total)===total&&(p.body?.customerId||null)===(customerId||null)&&Number(p.body?.pointsRedeemed||0)===pointsRedeemed&&String(p.body?.targetOrderId||"")===String(targetOrderId||"")&&JSON.stringify(p.body?.cart||[])===JSON.stringify(cart);
 
+type RecoveryIntegrityIssue={kind:"promptpay"|"cash"|"storage";reason:string};
 type LastSale={queueNo:string;pager:number;billNo?:string;total:number;received:number;change:number;payment:"cash"|"promptpay"|"bank"|"card"|"delivery";recovered?:boolean;offline?:boolean};
 type SplitGroup={orderId:string;queueNo:string;pager:number;createdAt:number};
 const SPLIT_GROUP_KEY="field-pos-split-group-v1",EDIT_CASH_KEY="field-pos-edit-cash-v1";
 const splitGroupRead=():SplitGroup|null=>readRecovery<SplitGroup>(SPLIT_GROUP_KEY);
 const splitGroupWrite=(g:SplitGroup)=>writeRecovery(SPLIT_GROUP_KEY,g);
 const splitGroupClear=()=>clearRecovery(SPLIT_GROUP_KEY);
+const paymentRecoveryIntegrityIssue=():RecoveryIntegrityIssue|null=>{
+  try{
+    const result=inspectPaymentRecoveryRaw({promptRaw:localStorage.getItem(PENDING_KEY),cashRaw:localStorage.getItem(CASH_PENDING_KEY)});
+    return result?.ok===false?{kind:result.kind,reason:result.reason}:null;
+  }catch{return {kind:"storage",reason:"storage_unavailable"}}
+};
 
 const sellable=(x:MenuItem)=>!!x.enabled&&Number(x.price)>0&&Array.isArray(x.variants)&&x.variants.length>0;
 function orderOptionLabel(label:string){
@@ -72,6 +80,7 @@ function PosView({session}:{session:Session}){
   const [result,setResult]=useState("");
   const [notice,setNotice]=useState("");
   const [cashRecoveryReview,setCashRecoveryReview]=useState<CashRecoveryReview|null>(null);
+  const [recoveryIntegrityIssue,setRecoveryIntegrityIssue]=useState<RecoveryIntegrityIssue|null>(null);
   const [lastSale,setLastSale]=useState<LastSale|null>(null);
   const [prompt,setPrompt]=useState<any|null>(null);
   const [promptConfig,setPromptConfig]=useState<any|null>(null);
@@ -116,7 +125,11 @@ function PosView({session}:{session:Session}){
     // These calls are non-blocking secondary data; the menu can render from IndexedDB first.
     loadCustomers().catch(()=>{});
     api<any>("/api/payments/promptpay/config").then(setPromptConfig).catch(()=>setPromptConfig({ready:false,configured:false}));
-    recoverCashCheckout().then(()=>recoverPending()).catch(()=>{});
+    const integrity=paymentRecoveryIntegrityIssue();
+    if(integrity){
+      setRecoveryIntegrityIssue(integrity);
+      setNotice("ข้อมูล recovery การชำระในเครื่องอ่านไม่ได้ · ระบบหยุดรับชำระรายการใหม่เพื่อป้องกันยอดซ้ำ");
+    }else recoverCashCheckout().then(()=>recoverPending()).catch(()=>{});
     return()=>{active=false};
   },[]);
 
@@ -361,6 +374,12 @@ function PosView({session}:{session:Session}){
 
   function holdCurrentBill(){
     if(!cart.items.length)return;
+    const integrity=recoveryIntegrityIssue||paymentRecoveryIntegrityIssue();
+    if(integrity){
+      setRecoveryIntegrityIssue(integrity);
+      setNotice("ข้อมูล recovery การชำระในเครื่องผิดปกติ · ยังพัก/เปลี่ยนบิลไม่ได้จนกว่าจะตรวจรายการเดิม");
+      return;
+    }
     if(pendingRead()||cashPendingRead()){
       setNotice("ยังมีรายการชำระเงินเดิมที่รอตรวจสอบ · ยังพักบิลนี้ไม่ได้จนกว่าจะยืนยันสถานะเดิม");
       return;
@@ -460,6 +479,28 @@ function PosView({session}:{session:Session}){
         });
         setNotice("Server ปฏิเสธรายการเงินสดเดิม · ระบบยังไม่ล้าง pending อัตโนมัติ กรุณาตรวจ Orders ก่อน เพื่อยืนยันว่าไม่มีบิลจาก request เดิม");
       }
+    }
+  }
+
+  function clearCorruptRecovery(){
+    if(session.user.role!=="admin"||!recoveryIntegrityIssue)return;
+    const kind=recoveryIntegrityIssue.kind;
+    const ok=window.confirm(
+      kind==="promptpay"
+        ?"ยืนยันว่าตรวจ Orders และผู้ให้บริการ PromptPay แล้วว่าไม่มีรายการชำระที่ต้องรับรู้?\nการล้างข้อมูลนี้อาจทำให้ไม่สามารถติดตาม QR เดิมจากเครื่องนี้ได้"
+        :kind==="cash"
+          ?"ยืนยันว่าตรวจ Orders แล้วว่าไม่มีรายการเงินสดเดิมจากเครื่องนี้ที่ต้องรับรู้?\nการล้างข้อมูลนี้จะลบเฉพาะ recovery ในเครื่อง"
+          :"ยืนยันว่าตรวจ Orders/PromptPay แล้ว? ระบบจะพยายามล้าง recovery keys ในเครื่องเพื่อให้กลับมาใช้งานได้"
+    );
+    if(!ok)return;
+    try{
+      if(kind==="promptpay"||kind==="storage")localStorage.removeItem(PENDING_KEY);
+      if(kind==="cash"||kind==="storage")localStorage.removeItem(CASH_PENDING_KEY);
+      const next=paymentRecoveryIntegrityIssue();
+      setRecoveryIntegrityIssue(next);
+      setNotice(next?"ยังอ่าน recovery storage ไม่ได้ · กรุณาตรวจสิทธิ์/พื้นที่เก็บข้อมูลของเบราว์เซอร์":"ล้าง recovery ที่เสียหลังตรวจสอบแล้ว · กรุณารีเฟรชข้อมูลและตรวจตะกร้าก่อนขายต่อ");
+    }catch{
+      setNotice("ล้าง recovery storage ไม่สำเร็จ · ห้ามรับชำระต่อบนเครื่องนี้จนกว่าพื้นที่เก็บข้อมูลจะใช้งานได้");
     }
   }
 
@@ -619,6 +660,12 @@ function PosView({session}:{session:Session}){
 
   async function checkout(){
     if(!cart.items.length||busy||!payableItems.length)return;
+    const integrity=recoveryIntegrityIssue||paymentRecoveryIntegrityIssue();
+    if(integrity){
+      setRecoveryIntegrityIssue(integrity);
+      setResult("ข้อมูล recovery การชำระในเครื่องผิดปกติ · ห้ามรับชำระรายการใหม่จนกว่าจะตรวจรายการเดิม");
+      return;
+    }
     if(cashRecoveryReview){
       setResult("ต้องตรวจรายการเงินสดค้างก่อนรับชำระบิลใหม่");
       return;
@@ -741,6 +788,12 @@ function PosView({session}:{session:Session}){
 
   function openPayment(){
     if(!cart.items.length)return;
+    const integrity=recoveryIntegrityIssue||paymentRecoveryIntegrityIssue();
+    if(integrity){
+      setRecoveryIntegrityIssue(integrity);
+      setNotice("ข้อมูล recovery การชำระในเครื่องผิดปกติ · กรุณาตรวจรายการเดิมก่อนเปิดชำระ");
+      return;
+    }
     if(cashRecoveryReview){
       setNotice("ต้องตรวจรายการเงินสดค้างก่อนเปิดชำระบิลใหม่ · เปิด Orders หรือให้ Admin ล้าง pending ที่ตรวจแล้ว");
       return;
@@ -781,6 +834,16 @@ function PosView({session}:{session:Session}){
         <button disabled={!online||session.offline||offlineSyncing||offlineStats.pending===0} onClick={()=>syncOfflineQueue().catch(()=>{})} className="min-h-11 rounded-xl bg-[#1F4D3A] px-4 font-bold text-white disabled:opacity-45">{offlineSyncing?"กำลังส่งบิล…":"ส่งบิลที่ค้าง"}</button>
       </div>}
       {notice&&<div role="status" aria-live="polite" aria-atomic="true" className="mb-3 flex items-start justify-between gap-3 rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900"><span>{notice}</span><button aria-label="ปิดข้อความแจ้งเตือน" onClick={()=>setNotice("")} className="shrink-0"><X size={16}/></button></div>}
+      {recoveryIntegrityIssue&&<div className="mb-3 rounded-2xl border border-red-400 bg-red-50 p-3 text-sm text-red-950">
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div><b>CRITICAL · ข้อมูล recovery การชำระผิดปกติ</b><p className="mt-1 text-xs">ประเภท {recoveryIntegrityIssue.kind} · {recoveryIntegrityIssue.reason} · ระบบบล็อกการรับชำระใหม่เพื่อป้องกันยอด/เงินซ้ำ</p></div>
+          <span className="rounded-full bg-red-200 px-2 py-1 text-[10px] font-black">FAIL CLOSED</span>
+        </div>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <button onClick={()=>router.push("/orders")} className="min-h-11 rounded-xl border border-red-300 bg-white px-4 text-xs font-bold">เปิด Orders เพื่อตรวจ</button>
+          {session.user.role==="admin"&&<button onClick={clearCorruptRecovery} className="min-h-11 rounded-xl bg-red-800 px-4 text-xs font-bold text-white">ตรวจแล้ว · ล้าง recovery ที่เสีย</button>}
+        </div>
+      </div>}
       {cashRecoveryReview&&<div className="mb-3 rounded-2xl border border-red-300 bg-red-50 p-3 text-sm text-red-900">
         <div className="flex flex-wrap items-start justify-between gap-2">
           <div><b>ต้องตรวจรายการเงินสดค้างก่อนรับบิลใหม่</b><p className="mt-1 text-xs">วันที่ {cashRecoveryReview.date||"—"} · ยอด ฿{formatMoney(cashRecoveryReview.total)} · รับ ฿{formatMoney(cashRecoveryReview.received)} · Request …{cashRecoveryReview.requestKey.slice(-8)}</p></div>
