@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  checkoutPos,queuePosAction,startSplitPayment,paySplitPayment,getSplitPaymentStatus,getSplitPaymentProviderContext,attachSplitPaymentProviderCharge,listSplitPaymentSessions,resolveSplitPayment,voidSale,refundSale
+  checkoutPos,queuePosAction,startSplitPayment,paySplitPayment,getSplitPaymentStatus,getSplitPaymentProviderContext,beginSplitPaymentProviderCharge,attachSplitPaymentProviderCharge,listSplitPaymentSessions,resolveSplitPayment,voidSale,refundSale
 } from '../lib/pos-api.mjs';
 import {buildPosAvailability} from '../lib/domain/availability.mjs';
 import {reconcileCash} from '../lib/domain/cash-reconciliation.mjs';
@@ -926,4 +926,38 @@ test('requires-resolution session cannot be paid late with cash or with a differ
     requestKey:'late-wrong-qr-denied-001',sessionId,method:'promptpay',allocations:[{index:0,qty:1}],
     paymentReference:'ch_wrong_999',paymentVerified:'ch_wrong_999',paymentProviderAmount:55
   }}),/split_session_unavailable/);
+});
+
+
+test('Beam PromptPay charge creation lock allows only the same idempotent retry for a session',async()=>{
+  const db=fakeDb();
+  const started=await startSplitPayment({db,user,body:{requestKey:'pp-lock-start-beam-001',cart,date,mode:'promptpay_full'},now:10000});
+  const sessionId=started.session.id;
+  const first=await beginSplitPaymentProviderCharge({db,user,body:{sessionId,provider:'beam',attemptKey:'promptpay:'+sessionId},now:10010});
+  assert.equal(first.retryAllowed,true);
+  const retry=await beginSplitPaymentProviderCharge({db,user,body:{sessionId,provider:'beam',attemptKey:'promptpay:'+sessionId},now:10020});
+  assert.equal(retry.retryAllowed,true);
+  await assert.rejects(()=>beginSplitPaymentProviderCharge({db,user,body:{sessionId,provider:'beam',attemptKey:'other-attempt'},now:10030}),/promptpay_charge_creation_unknown/);
+});
+
+test('non-idempotent provider charge creation fails closed after an ambiguous first attempt',async()=>{
+  const db=fakeDb();
+  const started=await startSplitPayment({db,user,body:{requestKey:'pp-lock-start-opn-001',cart,date,mode:'promptpay_full'},now:10100});
+  const sessionId=started.session.id;
+  const first=await beginSplitPaymentProviderCharge({db,user,body:{sessionId,provider:'opn',attemptKey:'promptpay:'+sessionId},now:10110});
+  assert.equal(first.retryAllowed,false);
+  await assert.rejects(()=>beginSplitPaymentProviderCharge({db,user,body:{sessionId,provider:'opn',attemptKey:'promptpay:'+sessionId},now:10120}),/promptpay_charge_creation_unknown/);
+});
+
+test('attached PromptPay charge makes subsequent creation attempts return the existing session binding',async()=>{
+  const db=fakeDb();
+  const started=await startSplitPayment({db,user,body:{requestKey:'pp-lock-start-attached-001',cart,date,mode:'promptpay_full'},now:10200});
+  const sessionId=started.session.id;
+  await beginSplitPaymentProviderCharge({db,user,body:{sessionId,provider:'beam',attemptKey:'promptpay:'+sessionId},now:10210});
+  await attachSplitPaymentProviderCharge({db,user,body:{
+    sessionId,chargeId:'ch_lock_attached_001',provider:'beam',amount:55,currency:'THB',status:'pending',referenceId:sessionId
+  },now:10220});
+  const again=await beginSplitPaymentProviderCharge({db,user,body:{sessionId,provider:'beam',attemptKey:'promptpay:'+sessionId},now:10230});
+  assert.equal(again.attached,true);
+  assert.equal(again.session.providerCharge.chargeId,'ch_lock_attached_001');
 });
