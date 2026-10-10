@@ -43,7 +43,8 @@ test("Orders shows collecting blockers read-only and only allows reconcile for r
   const ui=await read("app/orders/page.tsx");
   assert.match(ui,/r\.status==="requires_resolution"/);
   assert.match(ui,/รายการยังอยู่สถานะ collecting/);
-  assert.match(ui,/ระบบจะไม่ให้ Admin force Paid\/Release/);
+  assert.match(ui,/แสดงหลักฐานแบบ read-only/);
+  assert.match(ui,/ผล Provider และ flow ฝั่ง Server/);
   const api=await read("lib/api.mjs");
   const start=api.indexOf("if(path==='/api/pos/payment-resolutions'&&method==='GET')");
   const end=api.indexOf("if(path==='/api/pos/payment-resolutions/reconcile'",start);
