@@ -16,10 +16,11 @@ type Sale={
   orderStatus?:string|null;productionStarted?:boolean;items:SaleItem[];
 };
 type ProviderEvidence={chargeId:string;provider?:string;status:string;paid?:boolean;amount?:number;currency?:string;referenceId?:string;expiresAt?:string|null;checkedAt?:number;failureCode?:string|null;failureMessage?:string|null;error?:string};
+type ResolutionEvent={id:number;actorId?:string|null;actor:string;action:string;details:Record<string,unknown>;createdAt:number};
 type PaymentResolution={
   id:string;status:string;total:number;date:string;pager:number;items:SaleItem[];remainingQty:number[];
   expiresAt?:number;targetOrderId?:string|null;providerCharge?:{chargeId:string;provider?:string;amount?:number;currency?:string;status?:string;expiresAt?:string|null;referenceId?:string};
-  providerEvidence?:ProviderEvidence|null;
+  providerEvidence?:ProviderEvidence|null;timeline?:ResolutionEvent[];
 };
 
 export default function Orders(){return <AuthGate>{s=><OrdersView session={s}/>}</AuthGate>}
@@ -233,6 +234,14 @@ function OrdersView({session}:{session:Session}){
               <div>ตรวจล่าสุด: <b>{ev?.checkedAt?new Date(ev.checkedAt).toLocaleTimeString("th-TH"):"—"}</b></div>
             </div>
             <div className="mt-2 text-slate-600">จองสินค้า: {r.items.map((i,n)=>i.name+" ×"+Number(r.remainingQty?.[n]??i.qty)).join(" · ")}</div>
+            {Array.isArray(r.timeline)&&r.timeline.length>0&&<details className="mt-2 rounded-lg border border-slate-200 bg-slate-50 p-2">
+              <summary className="cursor-pointer font-bold text-slate-700">Audit timeline · {r.timeline.length} เหตุการณ์ล่าสุด</summary>
+              <div className="mt-2 space-y-2">{r.timeline.map(event=><div key={event.id} className="rounded-lg bg-white p-2">
+                <div className="flex flex-wrap items-center justify-between gap-2"><b className="text-slate-800">{event.action}</b><span className="text-[10px] text-slate-500">{event.createdAt?new Date(event.createdAt).toLocaleString("th-TH"):"—"}</span></div>
+                <div className="mt-1 text-[10px] text-slate-500">โดย {event.actor||"system"}</div>
+                <pre className="mt-1 max-h-28 overflow-auto whitespace-pre-wrap break-words rounded bg-slate-100 p-2 text-[10px] text-slate-600">{JSON.stringify(event.details,null,2)}</pre>
+              </div>)}</div>
+            </details>}
             {(amountMismatch||refMismatch||ev?.error)&&<div className="mt-2 rounded-lg bg-red-50 p-2 font-semibold text-red-700">{amountMismatch?"ยอด Provider ไม่ตรงกับ Reservation · ":""}{refMismatch?"Reference ไม่ตรงกับ Session · ":""}{ev?.error?"ตรวจ Provider ไม่สำเร็จ: "+ev.error:""}</div>}
             <button disabled={resolutionBusy===r.id||amountMismatch||refMismatch||providerStatus==="provider_check_failed"} onClick={()=>reconcileResolution(r)} className="mt-3 min-h-11 w-full rounded-xl bg-slate-900 px-4 font-bold text-white disabled:opacity-35">{resolutionBusy===r.id?"กำลังตรวจและแก้สถานะ...":"ตรวจ Provider และ Reconcile อย่างปลอดภัย"}</button>
           </div>
