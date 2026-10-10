@@ -878,3 +878,52 @@ test('server charge binding rejects wrong amount or reference before persisting 
   const ctx=await getSplitPaymentProviderContext({db,sessionId});
   assert.equal(ctx.providerCharge,null);
 });
+
+
+test('expired PromptPay with an attached provider charge keeps stock reserved and can finalize after verified late payment',async()=>{
+  const db=fakeDb();
+  const now=8000;
+  const started=await startSplitPayment({db,user,body:{requestKey:'pp-expiry-start-001',cart,date,mode:'promptpay_full'},now});
+  const sessionId=started.session.id;
+  await attachSplitPaymentProviderCharge({db,user,body:{
+    sessionId,chargeId:'ch_late_paid_001',provider:'beam',amount:55,currency:'THB',status:'pending',referenceId:sessionId
+  },now:now+10});
+  const stockAfterReserve=JSON.parse(db.storage.document).ingredients.matcha.qty;
+  const expiredAt=now+(20*60*1000)+1;
+  const listed=await listSplitPaymentSessions({db,now:expiredAt});
+  assert.equal(listed.sessions[0].status,'requires_resolution');
+  assert.equal(JSON.parse(db.storage.document).ingredients.matcha.qty,stockAfterReserve);
+  const paid=await paySplitPayment({db,user,now:expiredAt+100,body:{
+    requestKey:'provider:beam:ch_late_paid_001',
+    sessionId,
+    method:'promptpay',
+    allocations:[{index:0,qty:1}],
+    paymentReference:'ch_late_paid_001',
+    paymentVerified:'ch_late_paid_001',
+    paymentProviderAmount:55,
+    label:'PromptPay'
+  }});
+  assert.equal(paid.completed,true);
+  const state=JSON.parse(db.storage.document);
+  assert.equal(state.sales.length,1);
+  assert.equal(state.sales[0].payment,'promptpay');
+  assert.equal(state.ingredients.matcha.qty,stockAfterReserve);
+});
+
+test('requires-resolution session cannot be paid late with cash or with a different PromptPay charge',async()=>{
+  const db=fakeDb();
+  const now=9000;
+  const started=await startSplitPayment({db,user,body:{requestKey:'pp-expiry-start-002',cart,date,mode:'promptpay_full'},now});
+  const sessionId=started.session.id;
+  await attachSplitPaymentProviderCharge({db,user,body:{
+    sessionId,chargeId:'ch_late_guard_001',provider:'beam',amount:55,currency:'THB',status:'pending',referenceId:sessionId
+  },now:now+10});
+  await listSplitPaymentSessions({db,now:now+(20*60*1000)+1});
+  await assert.rejects(()=>paySplitPayment({db,user,now:now+(20*60*1000)+2,body:{
+    requestKey:'late-cash-denied-001',sessionId,method:'cash',received:55,allocations:[{index:0,qty:1}]
+  }}),/split_session_unavailable/);
+  await assert.rejects(()=>paySplitPayment({db,user,now:now+(20*60*1000)+3,body:{
+    requestKey:'late-wrong-qr-denied-001',sessionId,method:'promptpay',allocations:[{index:0,qty:1}],
+    paymentReference:'ch_wrong_999',paymentVerified:'ch_wrong_999',paymentProviderAmount:55
+  }}),/split_session_unavailable/);
+});
