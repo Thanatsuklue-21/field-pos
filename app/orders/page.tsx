@@ -3,7 +3,7 @@ import {formatMoney} from "@/lib/money-format.mjs";
 
 import {useEffect,useMemo,useState} from "react";
 import {useRouter} from "next/navigation";
-import {Ban,Eye,Pencil,Printer,RotateCcw,Search,X} from "lucide-react";
+import {AlertTriangle,Ban,Eye,Pencil,Printer,RefreshCw,RotateCcw,Search,ShieldCheck,X} from "lucide-react";
 import AuthGate from "@/components/auth-gate";
 import SaleReceipt from "@/components/sale-receipt";
 import {api,type Session} from "@/lib/api-client";
@@ -14,6 +14,12 @@ type Sale={
   id:string;billNo:string;date:string;time:number;subtotal?:number;discountTotal?:number;crmDiscount?:number;pointsRedeemed?:number;pointsAwarded?:number;customerId?:string|null;total:number;payment:string;paymentMethods?:string[];
   status:string;queueNo:string;itemCount:number;received?:number;change?:number;orderId?:string|null;
   orderStatus?:string|null;productionStarted?:boolean;items:SaleItem[];
+};
+type ProviderEvidence={chargeId:string;provider?:string;status:string;paid?:boolean;amount?:number;currency?:string;referenceId?:string;expiresAt?:string|null;checkedAt?:number;failureCode?:string|null;failureMessage?:string|null;error?:string};
+type PaymentResolution={
+  id:string;status:string;total:number;date:string;pager:number;items:SaleItem[];remainingQty:number[];
+  expiresAt?:number;targetOrderId?:string|null;providerCharge?:{chargeId:string;provider?:string;amount?:number;currency?:string;status?:string;expiresAt?:string|null;referenceId?:string};
+  providerEvidence?:ProviderEvidence|null;
 };
 
 export default function Orders(){return <AuthGate>{s=><OrdersView session={s}/>}</AuthGate>}
@@ -26,10 +32,19 @@ function OrdersView({session}:{session:Session}){
   const [detail,setDetail]=useState<Sale|null>(null);
   const [msg,setMsg]=useState("");
   const [busy,setBusy]=useState(false);
+  const [resolutions,setResolutions]=useState<PaymentResolution[]>([]);
+  const [resolutionBusy,setResolutionBusy]=useState<string|null>(null);
+
+  async function loadResolutions(){
+    if(session.user.role!=="admin"){setResolutions([]);return}
+    const x=await api<{resolutions:PaymentResolution[]}>("/api/pos/payment-resolutions");
+    setResolutions(Array.isArray(x.resolutions)?x.resolutions:[]);
+  }
 
   async function load(openFromQuery=false){
     const x=await api<{sales:Sale[]}>("/api/pos/history");
     setSales(x.sales);
+    if(session.user.role==="admin")await loadResolutions();
     if(detail){
       const latest=x.sales.find(s=>s.id===detail.id);
       if(latest)setDetail(latest);
@@ -44,10 +59,56 @@ function OrdersView({session}:{session:Session}){
     }
   }
 
-  useEffect(()=>{load(true).catch(()=>{})},[]);
+  useEffect(()=>{load(true).catch(e=>setMsg(String(e?.message||"โหลดข้อมูลไม่สำเร็จ")))},[]);
   const rows=useMemo(()=>sales.filter(x=>(x.billNo+" "+x.queueNo).toLowerCase().includes(q.toLowerCase())),[sales,q]);
   const paidOrderGroup=(s:Sale)=>{const group=s.orderId?sales.filter(x=>x.orderId===s.orderId&&x.status==="paid"):[s];return group.length?group:[s]};
   const cashVoidEligible=(s:Sale)=>{const group=paidOrderGroup(s);return s.status==="paid"&&group.every(x=>x.payment==="cash")&&!group.some(x=>x.productionStarted)};
+
+  async function refreshResolutions(){
+    setBusy(true);setMsg("");
+    try{
+      await loadResolutions();
+      setMsg("ตรวจสถานะ Payment Resolution ล่าสุดแล้ว");
+    }catch(e:any){setMsg("ตรวจรายการ Payment Resolution ไม่สำเร็จ · "+String(e?.message||"server_error"))}
+    finally{setBusy(false)}
+  }
+
+  async function reconcileResolution(r:PaymentResolution){
+    if(session.user.role!=="admin")return;
+    const chargeId=String(r.providerCharge?.chargeId||r.providerEvidence?.chargeId||"");
+    if(!chargeId){
+      setMsg("รายการนี้ไม่มี provider charge จึงไม่สามารถ reconcile อัตโนมัติได้");
+      return;
+    }
+    if(!window.confirm(
+      "ตรวจและแก้สถานะ PromptPay จาก Provider จริง?\n"+
+      "Session: "+r.id+"\n"+
+      "Charge: "+chargeId+"\n"+
+      "ยอด: ฿"+formatMoney(r.total)+"\n\n"+
+      "ระบบจะ Finalize เฉพาะเมื่อ Provider ยืนยันว่าจ่ายแล้ว หรือคืน Stock เฉพาะเมื่อ Provider ยืนยัน failed/expired/reversed"
+    ))return;
+    setResolutionBusy(r.id);setMsg("");
+    try{
+      const x=await api<any>("/api/pos/payment-resolutions/reconcile",{
+        method:"POST",
+        headers:{"X-CSRF-Token":session.csrf},
+        body:JSON.stringify({sessionId:r.id})
+      });
+      const outcome=String(x.outcome||"");
+      setMsg(outcome==="finalized"
+        ?"ยืนยันเงินเข้าแล้ว · สร้างยอดขาย/คิวจาก charge เดิมสำเร็จ"
+        :outcome==="released"
+          ?"Provider ยืนยันรายการสิ้นสุดโดยไม่จ่าย · คืน Stock reservation แล้ว"
+          :"Provider ยังไม่ยืนยันผลสุดท้าย · ระบบยังคงจอง Stock และไม่รับช่องทางอื่น");
+      await load();
+    }catch(e:any){
+      setMsg(e.message==="promptpay_amount_mismatch"?"ยอดจาก Provider ไม่ตรงกับ reservation · ระบบหยุดเพื่อป้องกันบัญชีผิด":
+        e.message==="promptpay_reference_mismatch"?"Charge จาก Provider ไม่ตรงกับ session · ระบบหยุดเพื่อป้องกันรับเงินผิดรายการ":
+        e.message==="split_resolution_unavailable"?"รายการนี้ถูกแก้สถานะจากอุปกรณ์อื่นแล้ว · กำลังรีเฟรชข้อมูล":
+        "Reconcile ไม่สำเร็จ · "+String(e.message||"server_error"));
+      await loadResolutions().catch(()=>{});
+    }finally{setResolutionBusy(null)}
+  }
 
   async function refundSaleUi(s:Sale){
     const group=s.orderId?sales.filter(x=>x.orderId===s.orderId&&x.status==="paid"):[s];
@@ -134,6 +195,50 @@ function OrdersView({session}:{session:Session}){
   return <section className="flex h-full flex-col p-3 sm:p-5 md:p-7">
     <header className="mb-3 sm:mb-5"><p className="gold m-0 text-[10px] font-bold tracking-[.3em]">TRANSACTIONS</p><h1 className="mt-1 text-xl font-semibold sm:text-2xl">รายการออเดอร์</h1><div className="mt-2 flex gap-2"><button onClick={()=>router.push("/pos")} className="min-h-11 rounded-xl bg-[#d4af37] px-4 text-sm font-bold">รับออเดอร์ใหม่</button>{(session.user.role==="admin"||session.user.permissions?.queue===true)&&<button onClick={()=>router.push("/queue")} className="min-h-11 rounded-xl border border-slate-300 bg-white px-4 text-sm font-semibold">ไปคิวครัว</button>}</div></header>
     {msg&&<div className="mb-4 flex items-start justify-between gap-3 rounded-2xl border border-slate-300 bg-white p-3 text-sm"><span>{msg}</span><button onClick={()=>setMsg("")}><X size={16}/></button></div>}
+
+    {session.user.role==="admin"&&<div className="mb-4 rounded-2xl border border-amber-300 bg-amber-50 p-3 sm:p-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-start gap-2">
+          <AlertTriangle className="mt-0.5 shrink-0 text-amber-700" size={19}/>
+          <div>
+            <h2 className="m-0 text-sm font-black text-amber-950">Payment Resolution Console</h2>
+            <p className="mt-1 text-xs text-amber-800">รายการที่ผลการชำระยังต้องตรวจ Provider ก่อนสร้างยอดขายหรือคืน Stock · Admin เท่านั้น</p>
+          </div>
+        </div>
+        <button disabled={busy||!!resolutionBusy} onClick={refreshResolutions} className="flex min-h-11 items-center gap-2 rounded-xl border border-amber-300 bg-white px-3 text-xs font-bold text-amber-900 disabled:opacity-40"><RefreshCw size={15}/>ตรวจสถานะใหม่</button>
+      </div>
+      {resolutions.length===0
+        ?<div className="mt-3 flex items-center gap-2 rounded-xl bg-white/70 p-3 text-xs text-emerald-800"><ShieldCheck size={16}/>ไม่มีรายการ Payment ที่ต้อง Resolution</div>
+        :<div className="mt-3 space-y-2">{resolutions.map(r=>{
+          const ev=r.providerEvidence;
+          const charge=String(r.providerCharge?.chargeId||ev?.chargeId||"");
+          const providerStatus=String(ev?.status||r.providerCharge?.status||"unknown");
+          const amount=Number(ev?.amount??r.providerCharge?.amount??r.total);
+          const amountMismatch=Number.isFinite(amount)&&Math.abs(amount-Number(r.total))>0.009;
+          const refMismatch=!!ev?.referenceId&&ev.referenceId!==r.id;
+          return <div key={r.id} className="rounded-xl border border-amber-200 bg-white p-3 text-xs">
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div>
+                <b className="text-slate-900">{r.id}</b>
+                <div className="mt-1 text-slate-500">{r.date} · Pager {r.pager||"—"} · ฿{formatMoney(r.total)}</div>
+              </div>
+              <span className={"rounded-full px-2 py-1 text-[10px] font-black "+(ev?.paid?"bg-emerald-100 text-emerald-800":providerStatus==="provider_check_failed"?"bg-red-100 text-red-800":"bg-amber-100 text-amber-900")}>{providerStatus.toUpperCase()}</span>
+            </div>
+            <div className="mt-2 grid gap-1 text-slate-600 sm:grid-cols-2">
+              <div>Provider: <b>{ev?.provider||r.providerCharge?.provider||"—"}</b></div>
+              <div>Charge: <b className="break-all">{charge||"—"}</b></div>
+              <div>Provider amount: <b>{Number.isFinite(amount)?("฿"+formatMoney(amount)):"—"}</b></div>
+              <div>Currency: <b>{ev?.currency||r.providerCharge?.currency||"—"}</b></div>
+              <div>Reference: <b className="break-all">{ev?.referenceId||r.providerCharge?.referenceId||"—"}</b></div>
+              <div>ตรวจล่าสุด: <b>{ev?.checkedAt?new Date(ev.checkedAt).toLocaleTimeString("th-TH"):"—"}</b></div>
+            </div>
+            <div className="mt-2 text-slate-600">จองสินค้า: {r.items.map((i,n)=>i.name+" ×"+Number(r.remainingQty?.[n]??i.qty)).join(" · ")}</div>
+            {(amountMismatch||refMismatch||ev?.error)&&<div className="mt-2 rounded-lg bg-red-50 p-2 font-semibold text-red-700">{amountMismatch?"ยอด Provider ไม่ตรงกับ Reservation · ":""}{refMismatch?"Reference ไม่ตรงกับ Session · ":""}{ev?.error?"ตรวจ Provider ไม่สำเร็จ: "+ev.error:""}</div>}
+            <button disabled={resolutionBusy===r.id||amountMismatch||refMismatch||providerStatus==="provider_check_failed"} onClick={()=>reconcileResolution(r)} className="mt-3 min-h-11 w-full rounded-xl bg-slate-900 px-4 font-bold text-white disabled:opacity-35">{resolutionBusy===r.id?"กำลังตรวจและแก้สถานะ...":"ตรวจ Provider และ Reconcile อย่างปลอดภัย"}</button>
+          </div>
+        })}</div>}
+    </div>}
+
     <div className="glass mb-3 flex items-center gap-2.5 rounded-full px-3 py-2.5 sm:mb-4 sm:gap-3 sm:px-4 sm:py-3"><Search size={18} className="text-slate-500"/><input value={q} onChange={e=>setQ(e.target.value)} placeholder="ค้นหาเลขบิล / เลขคิว" className="w-full bg-transparent outline-none"/></div>
 
     <div className="glass card soft-scroll min-h-0 flex-1 overflow-auto p-2">
