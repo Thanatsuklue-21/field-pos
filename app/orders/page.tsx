@@ -245,7 +245,7 @@ function OrdersView({session}:{session:Session}){
             {(amountMismatch||refMismatch||ev?.error)&&<div className="mt-2 rounded-lg bg-red-50 p-2 font-semibold text-red-700">{amountMismatch?"ยอด Provider ไม่ตรงกับ Reservation · ":""}{refMismatch?"Reference ไม่ตรงกับ Session · ":""}{ev?.error?"ตรวจ Provider ไม่สำเร็จ: "+ev.error:""}</div>}
             {r.status==="requires_resolution"
               ?<button disabled={resolutionBusy===r.id||amountMismatch||refMismatch||providerStatus==="provider_check_failed"} onClick={()=>reconcileResolution(r)} className="mt-3 min-h-11 w-full rounded-xl bg-slate-900 px-4 font-bold text-white disabled:opacity-35">{resolutionBusy===r.id?"กำลังตรวจและแก้สถานะ...":"ตรวจ Provider และ Reconcile อย่างปลอดภัย"}</button>
-              :<div className="mt-3 rounded-xl bg-blue-50 p-3 font-semibold text-blue-800">รายการยังอยู่สถานะ collecting · แสดงเพื่อให้เห็น blocker เท่านั้น ระบบจะไม่ให้ Admin force Paid/Release จากหน้าจอนี้</div>}
+              :<div className="mt-3 rounded-xl bg-blue-50 p-3 font-semibold text-blue-800">รายการยังอยู่สถานะ collecting · แสดงหลักฐานแบบ read-only เท่านั้น การเปลี่ยนสถานะต้องมาจากผล Provider และ flow ฝั่ง Server</div>}
           </div>
         })}</div>}
     </div>}
