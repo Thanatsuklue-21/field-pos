@@ -38,3 +38,15 @@ test("vercel.json delegates ignored-build policy to the audited script",async()=
   const config=JSON.parse(await readFile(join(root,"vercel.json"),"utf8"));
   assert.equal(config.ignoreCommand,"bash scripts/vercel-ignore-build.sh");
 });
+
+test("deployment runtime is pinned to the CI-reviewed Node 24 major",async()=>{
+  const pkg=JSON.parse(await readFile(join(root,"package.json"),"utf8"));
+  const lock=JSON.parse(await readFile(join(root,"package-lock.json"),"utf8"));
+  assert.equal(pkg.engines?.node,"24.x");
+  assert.equal(lock.packages?.[""]?.engines?.node,"24.x");
+});
+
+test("vercel.json uses framework auto-detection instead of legacy builds override",async()=>{
+  const config=JSON.parse(await readFile(join(root,"vercel.json"),"utf8"));
+  assert.equal(Object.hasOwn(config,"builds"),false);
+});
