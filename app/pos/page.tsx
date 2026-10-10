@@ -12,6 +12,7 @@ import {additionalServingsAvailable,cartAvailability} from "@/lib/domain/availab
 import {useCartStore} from "@/stores/cart-store";
 import {useHeldCartStore} from "@/stores/held-cart-store";
 import {writeQueueSnapshotCache} from "@/lib/queue-cache"; import {clearRecovery,readRecovery,writeRecovery} from "@/lib/recovery-storage";
+import {shouldRetainCashPending} from "@/lib/cash-recovery-policy.mjs";
 
 export default function Pos(){return <AuthGate>{s=><PosView session={s}/>}</AuthGate>}
 
@@ -32,7 +33,7 @@ const samePending=(p:PendingPrompt,total:number,cart:{id:string;variant:string;q
 
 const CASH_PENDING_KEY="field-pos-pending-cash-v1";
 type PendingCash={body:any;createdAt:number};
-type CashRecoveryReview={requestKey:string;date:string;total:number;received:number;createdAt:number;reason:"business_date_changed"|"day_closed"};
+type CashRecoveryReview={requestKey:string;date:string;total:number;received:number;createdAt:number;reason:"business_date_changed"|"day_closed"|"server_rejected"};
 const cashPendingRead=():PendingCash|null=>{try{return JSON.parse(localStorage.getItem(CASH_PENDING_KEY)||"null")}catch{return null}};
 const cashPendingWrite=(p:PendingCash)=>localStorage.setItem(CASH_PENDING_KEY,JSON.stringify(p));
 const cashPendingClear=()=>localStorage.removeItem(CASH_PENDING_KEY);
@@ -445,10 +446,19 @@ function PosView({session}:{session:Session}){
           reason:e.message
         });
         setNotice("รายการเงินสดค้างข้ามวันและ Server ไม่พบ replay ที่ยืนยันได้ · กรุณาตรวจ Orders ก่อน ระบบยังเก็บ request เดิมไว้และจะไม่สร้างบิลซ้ำ");
-      }else if(!["network_unavailable","offline_write_blocked"].includes(e.message)){
-        cashPendingClear();
+      }else if(shouldRetainCashPending(e)){
         setCashRecoveryReview(null);
-        setNotice("ตรวจรายการเงินสดค้างไม่สำเร็จ · "+errorText(e.message));
+        setNotice("ยังยืนยันผลรายการเงินสดค้างไม่ได้ · ระบบเก็บ request เดิมไว้เพื่อป้องกันบิลซ้ำ กรุณาตรวจการเชื่อมต่อ/เข้าสู่ระบบแล้วลองอีกครั้ง");
+      }else{
+        setCashRecoveryReview({
+          requestKey:String(p.body?.requestKey||""),
+          date:String(p.body?.date||""),
+          total:Number(p.body?.total)||0,
+          received:Number(p.body?.received)||0,
+          createdAt:Number(p.createdAt)||0,
+          reason:"server_rejected"
+        });
+        setNotice("Server ปฏิเสธรายการเงินสดเดิม · ระบบยังไม่ล้าง pending อัตโนมัติ กรุณาตรวจ Orders ก่อน เพื่อยืนยันว่าไม่มีบิลจาก request เดิม");
       }
     }
   }
@@ -710,7 +720,7 @@ function PosView({session}:{session:Session}){
       if(method==="cash")cashPendingClear();
       finishSale(r,{payment:method,total:checkoutTotal,received:method==="cash"?Number(received):checkoutTotal,splitBill:checkoutMode==="split_bill",paidCart:cartPayload});
     }catch(e:any){
-      if(method==="cash"&&e?.status&&e.status<500)cashPendingClear();
+      if(method==="cash"&&!shouldRetainCashPending(e))cashPendingClear();
       const message=errorText(e.message);
       if(["menu_unavailable","variant_unavailable"].includes(e.message)||e.message==="stock_shortage"||e.message.startsWith("stock_shortage:")){
         setPayOpen(false);
