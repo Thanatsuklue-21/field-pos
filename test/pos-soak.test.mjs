@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  checkoutPos,queuePosAction,startSplitPayment,paySplitPayment,getSplitPaymentStatus,getSplitPaymentProviderContext,beginSplitPaymentProviderCharge,attachSplitPaymentProviderCharge,listSplitPaymentSessions,resolveSplitPayment,voidSale,refundSale
+  checkoutPos,queuePosAction,startSplitPayment,paySplitPayment,getSplitPaymentStatus,getSplitPaymentProviderContext,beginSplitPaymentProviderCharge,attachSplitPaymentProviderCharge,listSplitPaymentSessions,releaseSplitPaymentProviderSession,resolveSplitPayment,voidSale,refundSale
 } from '../lib/pos-api.mjs';
 import {buildPosAvailability} from '../lib/domain/availability.mjs';
 import {reconcileCash} from '../lib/domain/cash-reconciliation.mjs';
@@ -960,4 +960,49 @@ test('attached PromptPay charge makes subsequent creation attempts return the ex
   const again=await beginSplitPaymentProviderCharge({db,user,body:{sessionId,provider:'beam',attemptKey:'promptpay:'+sessionId},now:10230});
   assert.equal(again.attached,true);
   assert.equal(again.session.providerCharge.chargeId,'ch_lock_attached_001');
+});
+
+
+test('provider-final release restores reserved stock exactly once and clears requires-resolution session safely',async()=>{
+  const db=fakeDb();
+  const now=11000;
+  const started=await startSplitPayment({db,user,body:{requestKey:'pp-release-start-001',cart,date,mode:'promptpay_full'},now});
+  const sessionId=started.session.id;
+  await beginSplitPaymentProviderCharge({db,user,body:{sessionId,provider:'beam',attemptKey:'promptpay:'+sessionId},now:now+5});
+  await attachSplitPaymentProviderCharge({db,user,body:{
+    sessionId,chargeId:'ch_release_final_001',provider:'beam',amount:55,currency:'THB',status:'pending',referenceId:sessionId
+  },now:now+10});
+  const reservedStock=JSON.parse(db.storage.document).ingredients.matcha.qty;
+  await listSplitPaymentSessions({db,now:now+(20*60*1000)+1});
+  assert.equal(JSON.parse(db.storage.document).ingredients.matcha.qty,reservedStock);
+  const released=await releaseSplitPaymentProviderSession({db,user,body:{
+    requestKey:'pp-release-final-001',sessionId,paymentReference:'ch_release_final_001',providerStatus:'failed'
+  },now:now+(20*60*1000)+2});
+  assert.equal(released.released,true);
+  const state=JSON.parse(db.storage.document);
+  assert.equal(state.ingredients.matcha.qty,1000);
+  assert.equal(state.paymentSessions[0].status,'cancelled');
+  assert.equal(state.paymentSessions[0].providerFinalStatus,'failed');
+  const replay=await releaseSplitPaymentProviderSession({db,user,body:{
+    requestKey:'pp-release-final-001',sessionId,paymentReference:'ch_release_final_001',providerStatus:'failed'
+  },now:now+(20*60*1000)+3});
+  assert.equal(replay.replayed,true);
+  assert.equal(JSON.parse(db.storage.document).ingredients.matcha.qty,1000);
+});
+
+test('provider release rejects non-final status, wrong charge and sessions with recorded payments',async()=>{
+  const db=fakeDb();
+  const now=12000;
+  const started=await startSplitPayment({db,user,body:{requestKey:'pp-release-start-002',cart,date,mode:'promptpay_full'},now});
+  const sessionId=started.session.id;
+  await beginSplitPaymentProviderCharge({db,user,body:{sessionId,provider:'beam',attemptKey:'promptpay:'+sessionId},now:now+5});
+  await attachSplitPaymentProviderCharge({db,user,body:{
+    sessionId,chargeId:'ch_release_guard_001',provider:'beam',amount:55,currency:'THB',status:'pending',referenceId:sessionId
+  },now:now+10});
+  await assert.rejects(()=>releaseSplitPaymentProviderSession({db,user,body:{
+    requestKey:'pp-release-pending-denied',sessionId,paymentReference:'ch_release_guard_001',providerStatus:'pending'
+  },now:now+20}),/promptpay_provider_not_final/);
+  await assert.rejects(()=>releaseSplitPaymentProviderSession({db,user,body:{
+    requestKey:'pp-release-wrong-charge',sessionId,paymentReference:'ch_other_wrong',providerStatus:'failed'
+  },now:now+30}),/promptpay_reference_mismatch/);
 });
