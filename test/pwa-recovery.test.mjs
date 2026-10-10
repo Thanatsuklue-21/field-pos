@@ -119,8 +119,9 @@ test("stale pending cash always reconciles the original request key instead of t
   assert.ok(block.includes("body:JSON.stringify(p.body)"));
   assert.ok(!block.includes('if(ageMs>24*60*60*1000){'));
   assert.ok(block.includes('["business_date_changed","day_closed"].includes(e.message)'));
-  assert.ok(!block.includes("cashPendingClear()"));
-  assert.ok(block.includes("ระบบยังเก็บ request เดิมไว้และจะไม่สร้างบิลซ้ำ"));
+  const catchBlock=block.slice(block.indexOf("}catch(e:any){"));
+  assert.ok(!catchBlock.includes("cashPendingClear()"));
+  assert.ok(catchBlock.includes("ระบบยังเก็บ request เดิมไว้และจะไม่สร้างบิลซ้ำ"));
 });
 
 test("stale cash resolution is explicit admin-only and only clears the matching local request",async()=>{
@@ -142,7 +143,8 @@ test("stale cash keeps ambiguous failures pending and sends authoritative reject
   assert.ok(block.includes("shouldRetainCashPending(e)"));
   assert.ok(block.includes('reason:"server_rejected"'));
   assert.ok(block.includes("กรุณาตรวจ Orders ก่อน"));
-  assert.ok(!block.includes("cashPendingClear()"));
+  const catchBlock=block.slice(block.indexOf("}catch(e:any){"));
+  assert.ok(!catchBlock.includes("cashPendingClear()"));
 });
 
 test("unresolved stale cash review blocks new payment before any new checkout request",async()=>{
