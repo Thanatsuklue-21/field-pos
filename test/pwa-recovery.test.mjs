@@ -119,11 +119,9 @@ test("stale pending cash always reconciles the original request key instead of t
   assert.ok(block.includes("body:JSON.stringify(p.body)"));
   assert.ok(!block.includes('if(ageMs>24*60*60*1000){'));
   assert.ok(block.includes('["business_date_changed","day_closed"].includes(e.message)'));
-  const guarded=block.slice(block.indexOf('["business_date_changed","day_closed"]'),block.indexOf('else if(!["network_unavailable"'));
-  assert.ok(!guarded.includes("cashPendingClear()"));
+  assert.ok(!block.includes("cashPendingClear()"));
   assert.ok(block.includes("ระบบยังเก็บ request เดิมไว้และจะไม่สร้างบิลซ้ำ"));
 });
-
 
 test("stale cash resolution is explicit admin-only and only clears the matching local request",async()=>{
   const pos=await read("app/pos/page.tsx");
@@ -136,20 +134,16 @@ test("stale cash resolution is explicit admin-only and only clears the matching 
   assert.ok(pos.includes('router.push("/orders")'));
 });
 
-test("deterministic stale-cash errors open review while network ambiguity never exposes local clear action",async()=>{
+test("stale cash keeps ambiguous failures pending and sends authoritative rejection to explicit review",async()=>{
   const pos=await read("app/pos/page.tsx");
   const start=pos.indexOf("async function recoverCashCheckout()");
   const end=pos.indexOf("async function finalizePending",start);
   const block=pos.slice(start,end);
-  assert.ok(block.includes('["business_date_changed","day_closed"].includes(e.message)'));
-  assert.ok(block.includes("setCashRecoveryReview({"));
-  const deterministic=block.slice(block.indexOf('["business_date_changed","day_closed"]'),block.indexOf('else if(!["network_unavailable"'));
-  assert.ok(deterministic.includes("setCashRecoveryReview"));
-  assert.ok(!deterministic.includes("cashPendingClear()"));
-  const networkBranch=block.slice(block.indexOf('else if(!["network_unavailable"'));
-  assert.ok(networkBranch.includes("cashPendingClear()"));
+  assert.ok(block.includes("shouldRetainCashPending(e)"));
+  assert.ok(block.includes('reason:"server_rejected"'));
+  assert.ok(block.includes("กรุณาตรวจ Orders ก่อน"));
+  assert.ok(!block.includes("cashPendingClear()"));
 });
-
 
 test("unresolved stale cash review blocks new payment before any new checkout request",async()=>{
   const pos=await read("app/pos/page.tsx");
