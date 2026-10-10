@@ -111,7 +111,7 @@ test("offline direct routes are redirected before server-dependent pages render"
 test("stale pending cash always reconciles the original request key instead of timing out locally",async()=>{
   const pos=await read("app/pos/page.tsx");
   const start=pos.indexOf("async function recoverCashCheckout()");
-  const end=pos.indexOf("async function finalizePending",start);
+  const end=pos.indexOf("function clearReviewedCashPending",start);
   const block=pos.slice(start,end);
   assert.ok(start>=0&&end>start);
   assert.ok(block.includes("ageMs>24*60*60*1000"));
@@ -138,7 +138,7 @@ test("stale cash resolution is explicit admin-only and only clears the matching 
 test("stale cash keeps ambiguous failures pending and sends authoritative rejection to explicit review",async()=>{
   const pos=await read("app/pos/page.tsx");
   const start=pos.indexOf("async function recoverCashCheckout()");
-  const end=pos.indexOf("async function finalizePending",start);
+  const end=pos.indexOf("function clearReviewedCashPending",start);
   const block=pos.slice(start,end);
   assert.ok(block.includes("shouldRetainCashPending(e)"));
   assert.ok(block.includes('reason:"server_rejected"'));
