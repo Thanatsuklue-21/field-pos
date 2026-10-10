@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  checkoutPos,queuePosAction,startSplitPayment,paySplitPayment,getSplitPaymentStatus,listSplitPaymentSessions,resolveSplitPayment,voidSale,refundSale
+  checkoutPos,queuePosAction,startSplitPayment,paySplitPayment,getSplitPaymentStatus,getSplitPaymentProviderContext,attachSplitPaymentProviderCharge,listSplitPaymentSessions,resolveSplitPayment,voidSale,refundSale
 } from '../lib/pos-api.mjs';
 import {buildPosAvailability} from '../lib/domain/availability.mjs';
 import {reconcileCash} from '../lib/domain/cash-reconciliation.mjs';
@@ -842,4 +842,39 @@ test('unseen stale cash request is rejected on changed business date instead of 
   assert.equal(state.ingredients.matcha.qty,1000);
   assert.equal(state.ingredients.milk.qty,30000);
   assert.equal(state.ingredients.cup16.qty,500);
+});
+
+
+test('PromptPay charge identity is persisted on the server payment session and replays safely',async()=>{
+  const db=fakeDb();
+  const started=await startSplitPayment({db,user,body:{requestKey:'pp-durable-start-001',cart,date,mode:'promptpay_full'},now:7000});
+  const sessionId=started.session.id;
+  const attached=await attachSplitPaymentProviderCharge({db,user,body:{
+    sessionId,chargeId:'ch_durable_001',provider:'beam',amount:55,currency:'THB',status:'pending',expiresAt:'2026-10-01T12:00:00Z',referenceId:sessionId
+  },now:7010});
+  assert.equal(attached.session.providerCharge.chargeId,'ch_durable_001');
+  assert.equal(attached.session.providerCharge.amount,55);
+  const ctx=await getSplitPaymentProviderContext({db,sessionId});
+  assert.equal(ctx.providerCharge.chargeId,'ch_durable_001');
+  const replay=await attachSplitPaymentProviderCharge({db,user,body:{
+    sessionId,chargeId:'ch_durable_001',provider:'beam',amount:55,currency:'THB',status:'pending',referenceId:sessionId
+  },now:7020});
+  assert.equal(replay.replayed,true);
+  await assert.rejects(()=>attachSplitPaymentProviderCharge({db,user,body:{
+    sessionId,chargeId:'ch_other_002',provider:'beam',amount:55,currency:'THB',status:'pending',referenceId:sessionId
+  },now:7030}),/promptpay_charge_already_attached/);
+});
+
+test('server charge binding rejects wrong amount or reference before persisting provider identity',async()=>{
+  const db=fakeDb();
+  const started=await startSplitPayment({db,user,body:{requestKey:'pp-durable-start-002',cart,date,mode:'promptpay_full'},now:7100});
+  const sessionId=started.session.id;
+  await assert.rejects(()=>attachSplitPaymentProviderCharge({db,user,body:{
+    sessionId,chargeId:'ch_bad_amount',provider:'beam',amount:54,currency:'THB',status:'pending',referenceId:sessionId
+  },now:7110}),/promptpay_amount_mismatch/);
+  await assert.rejects(()=>attachSplitPaymentProviderCharge({db,user,body:{
+    sessionId,chargeId:'ch_bad_ref',provider:'beam',amount:55,currency:'THB',status:'pending',referenceId:'split-wrong'
+  },now:7120}),/promptpay_reference_mismatch/);
+  const ctx=await getSplitPaymentProviderContext({db,sessionId});
+  assert.equal(ctx.providerCharge,null);
 });
