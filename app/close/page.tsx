@@ -1,19 +1,22 @@
 "use client";
 import {formatMoney} from "@/lib/money-format.mjs";
 import {useEffect,useState} from "react";
+import {useRouter} from "next/navigation";
 import AuthGate from "@/components/auth-gate";
 import {api,type Session} from "@/lib/api-client";
 
 type Close={id:string;date:string;revenue:number;cogs:number;expenses:number;purchaseSpend?:number;totalCashOut?:number;grossProfit:number;operatingProfit:number;deliveryFees?:number;cash:number;promptpay:number;bank?:number;card?:number;other:number;openingCash?:number;cashIn?:number;cashPaidOut?:number;cashOut?:number;expectedCash?:number;countedCash?:number;cashVariance?:number;orders:number;cups:number;time:number};
 type Shift={id:string;date:string;status:"open"|"closed";openingCash:number;openedAt:number;openedBy:string;closedAt?:number;cashVariance?:number};
 type Movement={id:string;shiftId:string;date:string;type:"CASH_IN"|"CASH_OUT";amount:number;reason:string;time:number;createdBy:string};
-type CloseData={closes:Close[];shift:Shift|null;businessDate:string;cashMovements:Movement[]};
+type PaymentBlocker={id:string;status:"collecting"|"requires_resolution";mode:string;total:number;pager:number;createdAt:number;expiresAt:number;chargeId:string;provider:string;providerStatus:string;payments:number};
+type CloseData={closes:Close[];shift:Shift|null;businessDate:string;cashMovements:Movement[];paymentBlockers?:PaymentBlocker[];closeBlockedByPayments?:boolean};
 
 export default function CloseDay(){return <AuthGate>{s=><View session={s}/>}</AuthGate>}
 
 function View({session}:{session:Session}){
-  const [rows,setRows]=useState<Close[]>([]),[shift,setShift]=useState<Shift|null>(null),[businessDate,setBusinessDate]=useState(""),[movements,setMovements]=useState<Movement[]>([]),[msg,setMsg]=useState(""),[busy,setBusy]=useState(false),[openingCash,setOpeningCash]=useState("0"),[countedCash,setCountedCash]=useState(""),[movementType,setMovementType]=useState<"CASH_IN"|"CASH_OUT">("CASH_OUT"),[movementAmount,setMovementAmount]=useState(""),[movementReason,setMovementReason]=useState("");
-  const load=()=>api<CloseData>("/api/close-day").then(x=>{setRows(x.closes||[]);setShift(x.shift||null);setBusinessDate(x.businessDate||"");setMovements(x.cashMovements||[]) });
+  const router=useRouter();
+  const [rows,setRows]=useState<Close[]>([]),[shift,setShift]=useState<Shift|null>(null),[businessDate,setBusinessDate]=useState(""),[movements,setMovements]=useState<Movement[]>([]),[paymentBlockers,setPaymentBlockers]=useState<PaymentBlocker[]>([]),[msg,setMsg]=useState(""),[busy,setBusy]=useState(false),[openingCash,setOpeningCash]=useState("0"),[countedCash,setCountedCash]=useState(""),[movementType,setMovementType]=useState<"CASH_IN"|"CASH_OUT">("CASH_OUT"),[movementAmount,setMovementAmount]=useState(""),[movementReason,setMovementReason]=useState("");
+  const load=()=>api<CloseData>("/api/close-day").then(x=>{setRows(x.closes||[]);setShift(x.shift||null);setBusinessDate(x.businessDate||"");setMovements(x.cashMovements||[]);setPaymentBlockers(Array.isArray(x.paymentBlockers)?x.paymentBlockers:[]) });
   useEffect(()=>{load().catch(()=>{})},[]);
 
   async function openShift(){
@@ -42,6 +45,7 @@ function View({session}:{session:Session}){
   async function close(){
     const counted=Number(countedCash);
     if(!shift||shift.status!=="open"){setMsg("กรุณาเปิดร้านและล็อกเงินตั้งต้นก่อนปิดวัน");return}
+    if(paymentBlockers.length){setMsg("ยังมี Payment ที่ค้างอยู่ "+paymentBlockers.length+" รายการ · กรุณาตรวจและจัดการก่อนปิดวัน");return}
     if(!countedCash.trim()||!Number.isFinite(counted)||counted<0){setMsg("กรุณากรอกเงินสดที่นับได้จริง");return}
     if(!window.confirm("ยืนยันปิดวัน? ระบบจะใช้เงินตั้งต้นที่ล็อกไว้ ฿"+formatMoney(Number(shift.openingCash))+" และคำนวณเงินสดขาด/เกิน"))return;
     setBusy(true);setMsg("");
@@ -51,7 +55,19 @@ function View({session}:{session:Session}){
   }
 
   return <section className="soft-scroll h-full overflow-auto p-3 sm:p-5 md:p-7">
-    <header className="flex flex-wrap items-end justify-between gap-3"><div><p className="gold m-0 text-[10px] font-bold tracking-[.3em]">DAILY CONTROL</p><h1 className="mt-1 text-xl font-semibold sm:text-2xl">OPEN / CLOSE DAY</h1><p className="mt-1 text-xs text-slate-500">{businessDate||"วันนี้"} · เปิดร้านด้วยเงินทอนตั้งต้น แล้วนับเงินจริงก่อนปิดร้าน</p></div>{session.user.role==="admin"&&<button disabled={busy||!shift||shift.status!=="open"} onClick={close} className="min-h-11 rounded-full bg-[#d4af37] px-5 text-sm font-bold text-black disabled:opacity-40">{busy?"กำลังบันทึก...":"ปิดร้านวันนี้"}</button>}</header>
+    <header className="flex flex-wrap items-end justify-between gap-3"><div><p className="gold m-0 text-[10px] font-bold tracking-[.3em]">DAILY CONTROL</p><h1 className="mt-1 text-xl font-semibold sm:text-2xl">OPEN / CLOSE DAY</h1><p className="mt-1 text-xs text-slate-500">{businessDate||"วันนี้"} · เปิดร้านด้วยเงินทอนตั้งต้น แล้วนับเงินจริงก่อนปิดร้าน</p></div>{session.user.role==="admin"&&<button disabled={busy||!shift||shift.status!=="open"||paymentBlockers.length>0} onClick={close} className="min-h-11 rounded-full bg-[#d4af37] px-5 text-sm font-bold text-black disabled:opacity-40">{busy?"กำลังบันทึก...":paymentBlockers.length>0?"มี Payment ค้าง "+paymentBlockers.length+" รายการ":"ปิดร้านวันนี้"}</button>}</header>
+
+    {session.user.role==="admin"&&paymentBlockers.length>0&&<div className="mt-4 rounded-2xl border border-red-300 bg-red-50 p-4 sm:p-5">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div><b className="text-red-900">ปิดวันไม่ได้ · มี Payment ค้าง {paymentBlockers.length} รายการ</b><p className="mt-1 text-xs text-red-700">ต้องเคลียร์ collecting / requires_resolution ให้จบก่อน เพื่อไม่ให้ยอดขาย Stock และเงินรับชำระค้างข้ามวัน</p></div>
+        <button onClick={()=>router.push("/orders")} className="min-h-11 rounded-xl bg-red-800 px-4 text-xs font-bold text-white">ไป Orders / Payment Resolution</button>
+      </div>
+      <div className="mt-3 space-y-2">{paymentBlockers.map(p=><div key={p.id} className="rounded-xl border border-red-200 bg-white p-3 text-xs">
+        <div className="flex flex-wrap items-center justify-between gap-2"><b>{p.id}</b><span className={"rounded-full px-2 py-1 text-[10px] font-black "+(p.status==="requires_resolution"?"bg-red-100 text-red-800":"bg-amber-100 text-amber-800")}>{p.status}</span></div>
+        <div className="mt-1 text-slate-600">ยอด ฿{formatMoney(p.total)} · Pager {p.pager||"—"} · {p.mode}</div>
+        <div className="mt-1 text-slate-500">Provider {p.provider||"—"} · Charge {p.chargeId||"—"} · Status {p.providerStatus||"—"} · Payments {p.payments}</div>
+      </div>)}</div>
+    </div>}
 
     {session.user.role==="admin"&&<div className="glass card mt-4 p-4 sm:p-5">{!shift?<><div className="flex items-start justify-between gap-3"><div><b>1. เปิดร้าน / เงินทอนตั้งต้น</b><p className="mt-1 text-xs text-slate-500">ใส่เงินทอนตั้งต้นก่อนเริ่มขาย · ร้านทำงานคนเดียวจึงเปิดรอบเงินสดครั้งเดียวต่อวัน</p></div><span className="rounded-full bg-amber-100 px-3 py-1 text-[10px] font-bold text-amber-800">ยังไม่เปิดร้าน</span></div><div className="mt-4 grid gap-2 sm:grid-cols-[1fr_auto_auto]"><input inputMode="decimal" value={openingCash} onChange={e=>setOpeningCash(e.target.value)} className="min-h-12 rounded-2xl border border-slate-200 bg-slate-50 px-4" placeholder="เงินตั้งต้น เช่น 500"/><button type="button" disabled={busy} onClick={()=>setOpeningCash("0")} className="min-h-12 rounded-2xl border border-slate-300 bg-white px-4 text-xs font-semibold text-slate-700 disabled:opacity-40">ไม่มีเงินทอน · ฿0</button><button disabled={busy} onClick={openShift} className="min-h-12 rounded-2xl bg-[#d4af37] px-5 font-bold text-black disabled:opacity-40">เปิดร้านวันนี้</button></div></>:<><div className="flex flex-wrap items-start justify-between gap-3"><div><b>{shift.status==="open"?"ร้านเปิดอยู่":"วันนี้ปิดร้านแล้ว"}</b><p className="mt-1 text-xs text-slate-500">เปิดเมื่อ {new Date(shift.openedAt).toLocaleString("th-TH",{timeZone:"Asia/Bangkok"})}</p></div><div className="text-right"><small className="text-slate-500">เงินตั้งต้นที่ล็อก</small><div className="text-2xl font-semibold text-[#765b08]">฿{formatMoney(Number(shift.openingCash))}</div></div></div>{shift.status==="open"&&<div className="mt-4 border-t border-slate-200 pt-4"><label className="text-sm"><span className="text-slate-500">2. เงินสดที่นับได้จริงก่อนปิดวัน</span><input inputMode="decimal" value={countedCash} onChange={e=>setCountedCash(e.target.value)} className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3" placeholder="จำนวนเงินสดจริง"/></label><p className="mt-2 text-xs text-slate-500">ระบบไม่แสดง Expected Cash ก่อนกดยืนยัน เพื่อให้การนับเป็นอิสระจากยอดในระบบ · Expected Cash = เงินตั้งต้น + ยอดขายเงินสด + เงินเติมเข้า − ค่าใช้จ่ายเงินสด − เงินนำออก</p></div>}</>}</div>}
 
