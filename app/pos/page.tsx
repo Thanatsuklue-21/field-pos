@@ -97,6 +97,7 @@ function PosView({session}:{session:Session}){
   const [offlineSyncing,setOfflineSyncing]=useState(false);
   const revisionRef=useRef<number|null>(null);
   const offlineSyncRef=useRef(false);
+  const promptReconcileRef=useRef(false);
   const cart=useCartStore();
   const heldBills=useHeldCartStore();
 
@@ -147,6 +148,13 @@ function PosView({session}:{session:Session}){
   },[]);
 
   useEffect(()=>{if(!session.offline&&online)syncOfflineQueue().catch(()=>{})},[session.offline,session.csrf]);
+
+  useEffect(()=>{
+    if(!online||session.offline||method!=="promptpay"||!payOpen)return;
+    const tick=()=>{if(pendingRead())recoverPending().catch(()=>{})};
+    const timer=window.setInterval(tick,3000);
+    return()=>window.clearInterval(timer);
+  },[online,session.offline,method,payOpen,session.csrf]);
 
   useEffect(()=>{
     if(online)return;
@@ -581,8 +589,17 @@ function PosView({session}:{session:Session}){
       pendingWrite(next);
     }
     let st:any=null;
+    if(!next.paymentReference&&next.sessionId){
+      const serverSession=await api<any>("/api/pos/split/status",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({sessionId:next.sessionId})});
+      const serverCharge=serverSession?.session?.providerCharge;
+      if(serverCharge?.chargeId){
+        next={...next,paymentReference:String(serverCharge.chargeId),total:Number(serverSession.session.total)||next.total};
+        pendingWrite(next);
+        st=await api<any>("/api/payments/promptpay/status",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({chargeId:next.paymentReference})});
+      }
+    }
     if(!next.paymentReference){
-      st=await api<any>("/api/payments/promptpay/create",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({amount:next.total,reference:next.sessionId})});
+      st=await api<any>("/api/payments/promptpay/create",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({reference:next.sessionId})});
       if(!st?.chargeId)throw new Error("promptpay_qr_unavailable");
       next={...next,paymentReference:st.chargeId};
       pendingWrite(next);
@@ -591,6 +608,8 @@ function PosView({session}:{session:Session}){
   }
 
   async function recoverPending(){
+    if(promptReconcileRef.current)return;
+    promptReconcileRef.current=true;
     let p=pendingRead();
     if(!p)return;
     try{
@@ -620,6 +639,8 @@ function PosView({session}:{session:Session}){
       setMethod("promptpay");
       setPayOpen(true);
       setResult("ยังตรวจสอบ PromptPay รายการเดิมไม่ได้ ระบบเก็บรายการและ Stock reservation ไว้เพื่อป้องกันบิล/การรับเงินซ้ำ");
+    }finally{
+      promptReconcileRef.current=false;
     }
   }
 
@@ -733,21 +754,20 @@ function PosView({session}:{session:Session}){
           paymentReference=activePending.paymentReference;
         }
         setPrompt(st);
-        const deadline=Date.now()+15*60*1000;
-        while(!st.paid&&Date.now()<deadline){
-          if(["failed","expired","reversed"].includes(String(st.status||"").toLowerCase())){
-            if(activePending)await cancelPendingReservation(activePending);
-            pendingClear();
-            throw Object.assign(new Error("promptpay_failed"),{status:409});
-          }
-          await new Promise(resolve=>setTimeout(resolve,2500));
-          st=await api<any>("/api/payments/promptpay/status",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({chargeId:paymentReference})});
-          setPrompt(st);
+        if(["failed","expired","reversed"].includes(String(st.status||"").toLowerCase())){
+          if(activePending)await cancelPendingReservation(activePending);
+          pendingClear();
+          throw Object.assign(new Error("promptpay_failed"),{status:409});
         }
-        if(!st.paid)throw new Error("promptpay_timeout");
-        const p=activePending||pendingRead();
-        if(p?.sessionId){await finalizePending(p,st.chargeId||paymentReference);return}
-        paymentVerified=st.chargeId||paymentReference;
+        if(st.paid){
+          const p=activePending||pendingRead();
+          if(p?.sessionId){await finalizePending(p,st.chargeId||paymentReference);return}
+          paymentVerified=st.chargeId||paymentReference;
+        }else{
+          setPayOpen(true);
+          setResult("QR พร้อมชำระ · ระบบปลดล็อกหน้าจอแล้วและจะตรวจสถานะรายการเดิมอัตโนมัติ โดยไม่สร้าง QR ใหม่");
+          return;
+        }
       }
 
       if(["bank","card"].includes(method)){paymentReference=manualPaymentReference.trim()||null;paymentVerified="manual"}
