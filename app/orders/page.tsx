@@ -18,8 +18,8 @@ type Sale={
 type ProviderEvidence={chargeId:string;provider?:string;status:string;paid?:boolean;amount?:number;currency?:string;referenceId?:string;expiresAt?:string|null;checkedAt?:number;failureCode?:string|null;failureMessage?:string|null;error?:string};
 type ResolutionEvent={id:number;actorId?:string|null;actor:string;action:string;details:Record<string,unknown>;createdAt:number};
 type PaymentResolution={
-  id:string;status:string;total:number;date:string;pager:number;items:SaleItem[];remainingQty:number[];
-  expiresAt?:number;targetOrderId?:string|null;providerCharge?:{chargeId:string;provider?:string;amount?:number;currency?:string;status?:string;expiresAt?:string|null;referenceId?:string};
+  id:string;status:string;mode?:string;total:number;date:string;pager:number;items:SaleItem[];remainingQty:number[];
+  payments?:unknown[];providerManaged?:boolean;expiresAt?:number;targetOrderId?:string|null;providerCharge?:{chargeId:string;provider?:string;amount?:number;currency?:string;status?:string;expiresAt?:string|null;referenceId?:string};
   providerEvidence?:ProviderEvidence|null;timeline?:ResolutionEvent[];
 };
 
@@ -107,6 +107,37 @@ function OrdersView({session}:{session:Session}){
         e.message==="promptpay_reference_mismatch"?"Charge จาก Provider ไม่ตรงกับ session · ระบบหยุดเพื่อป้องกันรับเงินผิดรายการ":
         e.message==="split_resolution_unavailable"?"รายการนี้ถูกแก้สถานะจากอุปกรณ์อื่นแล้ว · กำลังรีเฟรชข้อมูล":
         "Reconcile ไม่สำเร็จ · "+String(e.message||"server_error"));
+      await loadResolutions().catch(()=>{});
+    }finally{setResolutionBusy(null)}
+  }
+
+  async function cancelAbandonedCollecting(r:PaymentResolution){
+    if(session.user.role!=="admin")return;
+    const safe=r.status==="collecting"&&r.providerManaged!==true&&r.mode!=="promptpay_full"&&(r.payments?.length||0)===0&&!r.providerCharge?.chargeId;
+    if(!safe){
+      setMsg("รายการนี้ไม่เข้าเงื่อนไขยกเลิกแบบคืน Stock อัตโนมัติ · ต้องใช้ flow ตามสถานะ Payment จริง");
+      return;
+    }
+    if(!window.confirm(
+      "ยกเลิก Split session ที่ยังไม่มีการรับเงิน?\n"+
+      "Session: "+r.id+"\nยอดที่จอง: ฿"+formatMoney(r.total)+"\n\n"+
+      "ระบบจะคืน Stock reservation จาก session นี้เพียงครั้งเดียว และจะไม่ใช้กับ PromptPay/provider-managed session"
+    ))return;
+    setResolutionBusy(r.id);setMsg("");
+    try{
+      await api<any>("/api/pos/split/cancel",{
+        method:"POST",
+        headers:{"X-CSRF-Token":session.csrf},
+        body:JSON.stringify({requestKey:crypto.randomUUID(),sessionId:r.id})
+      });
+      setMsg("ยกเลิก collecting split ที่ยังไม่มีการรับเงินแล้ว · คืน Stock reservation สำเร็จ");
+      await loadResolutions();
+    }catch(e:any){
+      setMsg(e.message==="split_session_provider_managed"
+        ?"รายการนี้ถูกผูกกับ Provider แล้ว · ห้ามยกเลิกด้วยวิธีคืน Stock ทั่วไป"
+        :e.message==="split_session_has_payments"
+          ?"รายการนี้มีการรับเงินบางส่วนแล้ว · ต้องใช้ขั้นตอน Resolution"
+          :"ยกเลิก session ไม่สำเร็จ · "+String(e.message||"server_error"));
       await loadResolutions().catch(()=>{});
     }finally{setResolutionBusy(null)}
   }
@@ -245,7 +276,9 @@ function OrdersView({session}:{session:Session}){
             {(amountMismatch||refMismatch||ev?.error)&&<div className="mt-2 rounded-lg bg-red-50 p-2 font-semibold text-red-700">{amountMismatch?"ยอด Provider ไม่ตรงกับ Reservation · ":""}{refMismatch?"Reference ไม่ตรงกับ Session · ":""}{ev?.error?"ตรวจ Provider ไม่สำเร็จ: "+ev.error:""}</div>}
             {r.status==="requires_resolution"
               ?<button disabled={resolutionBusy===r.id||amountMismatch||refMismatch||providerStatus==="provider_check_failed"} onClick={()=>reconcileResolution(r)} className="mt-3 min-h-11 w-full rounded-xl bg-slate-900 px-4 font-bold text-white disabled:opacity-35">{resolutionBusy===r.id?"กำลังตรวจและแก้สถานะ...":"ตรวจ Provider และ Reconcile อย่างปลอดภัย"}</button>
-              :<div className="mt-3 rounded-xl bg-blue-50 p-3 font-semibold text-blue-800">รายการยังอยู่สถานะ collecting · แสดงหลักฐานแบบ read-only เท่านั้น การเปลี่ยนสถานะต้องมาจากผล Provider และ flow ฝั่ง Server</div>}
+              :r.providerManaged!==true&&r.mode!=="promptpay_full"&&(r.payments?.length||0)===0&&!r.providerCharge?.chargeId
+                ?<button disabled={resolutionBusy===r.id} onClick={()=>cancelAbandonedCollecting(r)} className="mt-3 min-h-11 w-full rounded-xl border border-red-300 bg-red-50 px-4 font-bold text-red-800 disabled:opacity-35">{resolutionBusy===r.id?"กำลังยกเลิก...":"ยกเลิก Split ที่ยังไม่รับเงิน · คืน Stock"}</button>
+                :<div className="mt-3 rounded-xl bg-blue-50 p-3 font-semibold text-blue-800">รายการยังอยู่สถานะ collecting · แสดงหลักฐานแบบ read-only เท่านั้น การเปลี่ยนสถานะต้องมาจากผล Provider และ flow ฝั่ง Server</div>}
           </div>
         })}</div>}
     </div>}
