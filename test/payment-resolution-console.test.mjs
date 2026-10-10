@@ -56,3 +56,15 @@ test("resolution console is visible only to admin",async()=>{
   assert.match(ui,/session\.user\.role==="admin"&&<div[^>]*>/);
   assert.match(ui,/if\(session\.user\.role!=="admin"\)\{setResolutions\(\[\]\);return\}/);
 });
+
+
+test("Orders history does not await or fail closed on optional resolution diagnostics",async()=>{
+  const ui=await read("app/orders/page.tsx");
+  const start=ui.indexOf("async function load(openFromQuery=false)");
+  const end=ui.indexOf("useEffect(",start);
+  const block=ui.slice(start,end);
+  assert.match(block,/setSales\(x\.sales\)/);
+  assert.match(block,/loadResolutions\(\)\.catch/);
+  assert.doesNotMatch(block,/await loadResolutions\(\)/);
+  assert.match(block,/โหลด Orders สำเร็จ แต่ Payment Resolution/);
+});
