@@ -39,3 +39,14 @@ test("payment resolution timeline remains scoped to resolution sessions or their
   assert.match(block,/chargeId&&serialized\.includes\(chargeId\)/);
   assert.doesNotMatch(block,/return true/);
 });
+
+
+test("resolution provider checks run concurrently and keep per-session failures isolated",async()=>{
+  const api=await read("lib/api.mjs");
+  const start=api.indexOf("if(path==='/api/pos/payment-resolutions'&&method==='GET')");
+  const end=api.indexOf("if(path==='/api/pos/payment-resolutions/reconcile'",start);
+  const block=api.slice(start,end);
+  assert.match(block,/Promise\.all\(pendingSessions\.map\(async s=>/);
+  assert.match(block,/provider_check_failed/);
+  assert.doesNotMatch(block,/for\(const s of listed\.sessions/);
+});
