@@ -12,8 +12,8 @@ test("payment resolution timeline reuses sanitized field_audit evidence without 
   assert.match(block,/FROM field_audit a LEFT JOIN field_users/);
   assert.match(block,/safeAuditDetails/);
   assert.match(block,/JSON\.parse\(String\(x\.details\|\|'\{\}'\)\)/);
-  assert.match(block,/serialized\.includes\(s\.id\)/);
-  assert.match(block,/serialized\.includes\(chargeId\)/);
+  assert.match(block,/auditMentions\(event\.details,s\.id\)/);
+  assert.match(block,/auditMentions\(event\.details,chargeId\)/);
   assert.match(block,/slice\(0,20\)/);
   assert.doesNotMatch(block,/INSERT INTO field_audit/);
 });
@@ -35,8 +35,8 @@ test("payment resolution timeline remains scoped to resolution sessions or their
   const start=api.indexOf("const timeline=paymentAudit.filter");
   const end=api.indexOf("resolutions.push",start);
   const block=api.slice(start,end);
-  assert.match(block,/serialized\.includes\(s\.id\)/);
-  assert.match(block,/chargeId&&serialized\.includes\(chargeId\)/);
+  assert.match(block,/auditMentions\(event\.details,s\.id\)/);
+  assert.match(block,/chargeId&&auditMentions\(event\.details,chargeId\)/);
   assert.doesNotMatch(block,/return true/);
 });
 
