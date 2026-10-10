@@ -33,7 +33,7 @@ const samePending=(p:PendingPrompt,total:number,cart:{id:string;variant:string;q
 
 const CASH_PENDING_KEY="field-pos-pending-cash-v1";
 type PendingCash={body:any;createdAt:number};
-type CashRecoveryReview={requestKey:string;date:string;total:number;received:number;createdAt:number;reason:"business_date_changed"|"day_closed"};
+type CashRecoveryReview={requestKey:string;date:string;total:number;received:number;createdAt:number;reason:"business_date_changed"|"day_closed"|"server_rejected"};
 const cashPendingRead=():PendingCash|null=>{try{return JSON.parse(localStorage.getItem(CASH_PENDING_KEY)||"null")}catch{return null}};
 const cashPendingWrite=(p:PendingCash)=>localStorage.setItem(CASH_PENDING_KEY,JSON.stringify(p));
 const cashPendingClear=()=>localStorage.removeItem(CASH_PENDING_KEY);
@@ -450,9 +450,15 @@ function PosView({session}:{session:Session}){
         setCashRecoveryReview(null);
         setNotice("ยังยืนยันผลรายการเงินสดค้างไม่ได้ · ระบบเก็บ request เดิมไว้เพื่อป้องกันบิลซ้ำ กรุณาตรวจการเชื่อมต่อ/เข้าสู่ระบบแล้วลองอีกครั้ง");
       }else{
-        cashPendingClear();
-        setCashRecoveryReview(null);
-        setNotice("Server ปฏิเสธรายการเงินสดเดิมอย่างชัดเจน · ล้าง pending ในเครื่องแล้ว · "+errorText(e.message));
+        setCashRecoveryReview({
+          requestKey:String(p.body?.requestKey||""),
+          date:String(p.body?.date||""),
+          total:Number(p.body?.total)||0,
+          received:Number(p.body?.received)||0,
+          createdAt:Number(p.createdAt)||0,
+          reason:"server_rejected"
+        });
+        setNotice("Server ปฏิเสธรายการเงินสดเดิม · ระบบยังไม่ล้าง pending อัตโนมัติ กรุณาตรวจ Orders ก่อน เพื่อยืนยันว่าไม่มีบิลจาก request เดิม");
       }
     }
   }
