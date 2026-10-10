@@ -50,3 +50,16 @@ test("resolution provider checks run concurrently and keep per-session failures 
   assert.match(block,/provider_check_failed/);
   assert.doesNotMatch(block,/for\(const s of listed\.sessions/);
 });
+
+
+test("audit timeline uses exact recursive value matching rather than substring matching",async()=>{
+  const api=await read("lib/api.mjs");
+  const start=api.indexOf("const auditMentions=");
+  const end=api.indexOf("const pendingSessions=",start);
+  const helper=api.slice(start,end);
+  assert.match(helper,/if\(value===needle\)return true/);
+  assert.match(helper,/Array\.isArray\(value\)/);
+  assert.match(helper,/Object\.values\(value\)\.some/);
+  const route=api.slice(api.indexOf("if(path==='/api/pos/payment-resolutions'&&method==='GET')"),api.indexOf("if(path==='/api/pos/payment-resolutions/reconcile'"));
+  assert.doesNotMatch(route,/serialized\.includes/);
+});
