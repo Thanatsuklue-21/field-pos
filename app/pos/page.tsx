@@ -12,6 +12,7 @@ import {additionalServingsAvailable,cartAvailability} from "@/lib/domain/availab
 import {useCartStore} from "@/stores/cart-store";
 import {useHeldCartStore} from "@/stores/held-cart-store";
 import {writeQueueSnapshotCache} from "@/lib/queue-cache"; import {clearRecovery,readRecovery,writeRecovery} from "@/lib/recovery-storage";
+import {shouldRetainCashPending} from "@/lib/cash-recovery-policy.mjs";
 
 export default function Pos(){return <AuthGate>{s=><PosView session={s}/>}</AuthGate>}
 
@@ -445,10 +446,13 @@ function PosView({session}:{session:Session}){
           reason:e.message
         });
         setNotice("รายการเงินสดค้างข้ามวันและ Server ไม่พบ replay ที่ยืนยันได้ · กรุณาตรวจ Orders ก่อน ระบบยังเก็บ request เดิมไว้และจะไม่สร้างบิลซ้ำ");
-      }else if(!["network_unavailable","offline_write_blocked"].includes(e.message)){
+      }else if(shouldRetainCashPending(e)){
+        setCashRecoveryReview(null);
+        setNotice("ยังยืนยันผลรายการเงินสดค้างไม่ได้ · ระบบเก็บ request เดิมไว้เพื่อป้องกันบิลซ้ำ กรุณาตรวจการเชื่อมต่อ/เข้าสู่ระบบแล้วลองอีกครั้ง");
+      }else{
         cashPendingClear();
         setCashRecoveryReview(null);
-        setNotice("ตรวจรายการเงินสดค้างไม่สำเร็จ · "+errorText(e.message));
+        setNotice("Server ปฏิเสธรายการเงินสดเดิมอย่างชัดเจน · ล้าง pending ในเครื่องแล้ว · "+errorText(e.message));
       }
     }
   }
@@ -710,7 +714,7 @@ function PosView({session}:{session:Session}){
       if(method==="cash")cashPendingClear();
       finishSale(r,{payment:method,total:checkoutTotal,received:method==="cash"?Number(received):checkoutTotal,splitBill:checkoutMode==="split_bill",paidCart:cartPayload});
     }catch(e:any){
-      if(method==="cash"&&e?.status&&e.status<500)cashPendingClear();
+      if(method==="cash"&&!shouldRetainCashPending(e))cashPendingClear();
       const message=errorText(e.message);
       if(["menu_unavailable","variant_unavailable"].includes(e.message)||e.message==="stock_shortage"||e.message.startsWith("stock_shortage:")){
         setPayOpen(false);
