@@ -571,11 +571,17 @@ function PosView({session}:{session:Session}){
   }
 
   async function cancelPendingReservation(p:PendingPrompt){
-    if(!p.sessionId)return;
+    if(!p.sessionId)return false;
     try{
+      if(p.paymentReference){
+        await api<any>("/api/pos/split/provider-release",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({requestKey:crypto.randomUUID(),sessionId:p.sessionId})});
+        return true;
+      }
       await api<any>("/api/pos/split/cancel",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({requestKey:crypto.randomUUID(),sessionId:p.sessionId})});
+      return true;
     }catch(e:any){
-      if(!["split_session_unavailable","split_session_not_found"].includes(e.message))throw e;
+      if(["split_session_unavailable","split_session_not_found","promptpay_provider_not_final","promptpay_already_paid"].includes(e.message))return false;
+      throw e;
     }
   }
 
@@ -630,7 +636,14 @@ function PosView({session}:{session:Session}){
       }
       const st=await api<any>("/api/payments/promptpay/status",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({chargeId:p.paymentReference})});
       if(st.paid){await finalizePending(p,st.chargeId||p.paymentReference);return}
-      if(["failed","expired","reversed"].includes(String(st.status||"").toLowerCase())){await cancelPendingReservation(p);pendingClear();return}
+      if(["failed","expired","reversed"].includes(String(st.status||"").toLowerCase())){
+        const released=await cancelPendingReservation(p);
+        if(released){pendingClear();return}
+        setMethod("promptpay");
+        setPayOpen(true);
+        setResult("Provider แจ้งสถานะสิ้นสุดแล้ว แต่ Server ยังไม่ยืนยันการคืน Stock · ระบบเก็บ pending ไว้และห้ามรับเงินช่องทางอื่นจนกว่าจะ reconcile สำเร็จ");
+        return;
+      }
       setMethod("promptpay");
       setPrompt(st);
       setPayOpen(true);
@@ -658,6 +671,7 @@ function PosView({session}:{session:Session}){
       code==="promptpay_webhook_not_configured"?"ยังไม่ได้ตั้งค่า Beam Webhook HMAC Key":
       code==="promptpay_failed"?"PromptPay ไม่สำเร็จ กรุณาลองใหม่":
       code==="promptpay_charge_creation_unknown"?"ผลการสร้าง QR เดิมยังไม่ชัดเจน · ระบบหยุดสร้าง QR ใหม่เพื่อป้องกันเก็บเงินซ้ำ กรุณาตรวจผู้ให้บริการ/Orders ก่อน":
+      code==="promptpay_release_unconfirmed"?"Provider สิ้นสุดรายการแล้ว แต่ Server ยังไม่ยืนยันการคืน Stock · เก็บ pending ไว้และห้ามรับเงินใหม่จนกว่าจะตรวจสอบสำเร็จ":
       code==="pending_promptpay_exists"?"มี PromptPay รายการเดิมที่ยังไม่สิ้นสุด กรุณาชำระหรือรอผลรายการเดิม":
       code==="pending_cash_checkout_exists"?"มีออเดอร์เงินสดเดิมที่ยังไม่ทราบผล กรุณารอระบบตรวจรายการเดิมก่อนรับบิลใหม่":
       code==="business_date_changed"?"วันธุรกิจเปลี่ยนแล้ว กรุณาตรวจ Orders ก่อนทำรายการใหม่":
@@ -739,7 +753,11 @@ function PosView({session}:{session:Session}){
           }
           if(!current)current=await api<any>("/api/payments/promptpay/status",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({chargeId:resumed.paymentReference})});
           if(current.paid){await finalizePending(resumed,current.chargeId||resumed.paymentReference);return}
-          if(["failed","expired","reversed"].includes(String(current.status||"").toLowerCase())){await cancelPendingReservation(resumed);pendingClear()}
+          if(["failed","expired","reversed"].includes(String(current.status||"").toLowerCase())){
+            const released=await cancelPendingReservation(resumed);
+            if(released)pendingClear();
+            else throw Object.assign(new Error("promptpay_release_unconfirmed"),{status:409});
+          }
           else if(!samePending(resumed,checkoutTotal,cartPayload,customerId,redeemPoints,splitGroup?.orderId||null))throw Object.assign(new Error("pending_promptpay_exists"),{status:409});
           else{st=current;paymentReference=resumed.paymentReference;requestKey=resumed.requestKey;activePending=resumed;checkoutTotal=resumed.total}
         }
