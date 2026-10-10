@@ -611,7 +611,7 @@ function PosView({session}:{session:Session}){
     if(promptReconcileRef.current)return;
     promptReconcileRef.current=true;
     let p=pendingRead();
-    if(!p)return;
+    if(!p){promptReconcileRef.current=false;return}
     try{
       if(!p.sessionId||!p.paymentReference){
         const resumed=await ensurePendingPrompt(p);
