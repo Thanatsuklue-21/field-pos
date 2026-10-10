@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  checkoutPos,queuePosAction,startSplitPayment,paySplitPayment,getSplitPaymentStatus,getSplitPaymentProviderContext,beginSplitPaymentProviderCharge,attachSplitPaymentProviderCharge,listSplitPaymentSessions,releaseSplitPaymentProviderSession,resolveSplitPayment,voidSale,refundSale
+  checkoutPos,queuePosAction,startSplitPayment,paySplitPayment,getSplitPaymentStatus,getSplitPaymentProviderContext,beginSplitPaymentProviderCharge,attachSplitPaymentProviderCharge,listSplitPaymentSessions,releaseSplitPaymentProviderSession,cancelSplitPayment,resolveSplitPayment,voidSale,refundSale
 } from '../lib/pos-api.mjs';
 import {buildPosAvailability} from '../lib/domain/availability.mjs';
 import {reconcileCash} from '../lib/domain/cash-reconciliation.mjs';
@@ -1005,4 +1005,43 @@ test('provider release rejects non-final status, wrong charge and sessions with 
   await assert.rejects(()=>releaseSplitPaymentProviderSession({db,user,body:{
     requestKey:'pp-release-wrong-charge',sessionId,paymentReference:'ch_other_wrong',providerStatus:'failed'
   },now:now+30}),/promptpay_reference_mismatch/);
+});
+
+
+test('generic split cancel restores stock exactly once only for unpaid provider-free collecting session',async()=>{
+  const db=fakeDb();
+  const started=await startSplitPayment({db,user,body:{requestKey:'safe-cancel-start-001',cart,date,mode:'split'},now:13000});
+  const sessionId=started.session.id;
+  assert.equal(JSON.parse(db.storage.document).ingredients.matcha.qty,995);
+  const cancelled=await cancelSplitPayment({db,user,body:{requestKey:'safe-cancel-do-001',sessionId},now:13010});
+  assert.equal(cancelled.session.status,'cancelled');
+  assert.equal(JSON.parse(db.storage.document).ingredients.matcha.qty,1000);
+  const replay=await cancelSplitPayment({db,user,body:{requestKey:'safe-cancel-do-001',sessionId},now:13020});
+  assert.equal(replay.replayed,true);
+  assert.equal(JSON.parse(db.storage.document).ingredients.matcha.qty,1000);
+});
+
+test('generic split cancel cannot release PromptPay/provider-managed reservation',async()=>{
+  const db=fakeDb();
+  const started=await startSplitPayment({db,user,body:{requestKey:'safe-cancel-pp-start-001',cart,date,mode:'promptpay_full'},now:13100});
+  const sessionId=started.session.id;
+  await beginSplitPaymentProviderCharge({db,user,body:{sessionId,provider:'beam',attemptKey:'promptpay:'+sessionId},now:13105});
+  await attachSplitPaymentProviderCharge({db,user,body:{
+    sessionId,chargeId:'ch_safe_cancel_guard_001',provider:'beam',amount:55,currency:'THB',status:'pending',referenceId:sessionId
+  },now:13110});
+  const reserved=JSON.parse(db.storage.document).ingredients.matcha.qty;
+  await assert.rejects(()=>cancelSplitPayment({db,user,body:{requestKey:'unsafe-generic-cancel-001',sessionId},now:13120}),/split_session_provider_managed/);
+  const state=JSON.parse(db.storage.document);
+  assert.equal(state.ingredients.matcha.qty,reserved);
+  assert.equal(state.paymentSessions[0].status,'collecting');
+});
+
+test('generic split cancel also blocks ambiguous provider creation attempt before charge attachment',async()=>{
+  const db=fakeDb();
+  const started=await startSplitPayment({db,user,body:{requestKey:'safe-cancel-attempt-start-001',cart,date,mode:'promptpay_full'},now:13200});
+  const sessionId=started.session.id;
+  await beginSplitPaymentProviderCharge({db,user,body:{sessionId,provider:'beam',attemptKey:'promptpay:'+sessionId},now:13205});
+  const reserved=JSON.parse(db.storage.document).ingredients.matcha.qty;
+  await assert.rejects(()=>cancelSplitPayment({db,user,body:{requestKey:'unsafe-attempt-cancel-001',sessionId},now:13210}),/split_session_provider_managed/);
+  assert.equal(JSON.parse(db.storage.document).ingredients.matcha.qty,reserved);
 });
