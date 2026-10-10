@@ -44,7 +44,7 @@ function OrdersView({session}:{session:Session}){
   async function load(openFromQuery=false){
     const x=await api<{sales:Sale[]}>("/api/pos/history");
     setSales(x.sales);
-    if(session.user.role==="admin")await loadResolutions();
+    if(session.user.role==="admin")loadResolutions().catch(e=>setMsg("โหลด Orders สำเร็จ แต่ Payment Resolution ตรวจ Provider ไม่สำเร็จ · "+String(e?.message||"server_error")));
     if(detail){
       const latest=x.sales.find(s=>s.id===detail.id);
       if(latest)setDetail(latest);
