@@ -9,14 +9,15 @@ type Close={id:string;date:string;revenue:number;cogs:number;expenses:number;pur
 type Shift={id:string;date:string;status:"open"|"closed";openingCash:number;openedAt:number;openedBy:string;closedAt?:number;cashVariance?:number};
 type Movement={id:string;shiftId:string;date:string;type:"CASH_IN"|"CASH_OUT";amount:number;reason:string;time:number;createdBy:string};
 type PaymentBlocker={id:string;status:"collecting"|"requires_resolution";mode:string;total:number;pager:number;createdAt:number;expiresAt:number;chargeId:string;provider:string;providerStatus:string;payments:number};
-type CloseData={closes:Close[];shift:Shift|null;businessDate:string;cashMovements:Movement[];paymentBlockers?:PaymentBlocker[];closeBlockedByPayments?:boolean};
+type OrderBlocker={id:string;queueNo:string;pagerNo:number;status:string;time:number;cups:number;ready:number;called:number;remainingPrep:number;remainingHandoff:number;items:{name:string;qty:number;readyQty:number;calledQty:number}[]};
+type CloseData={closes:Close[];shift:Shift|null;businessDate:string;cashMovements:Movement[];paymentBlockers?:PaymentBlocker[];orderBlockers?:OrderBlocker[];closeBlockedByPayments?:boolean;closeBlockedByOrders?:boolean};
 
 export default function CloseDay(){return <AuthGate>{s=><View session={s}/>}</AuthGate>}
 
 function View({session}:{session:Session}){
   const router=useRouter();
-  const [rows,setRows]=useState<Close[]>([]),[shift,setShift]=useState<Shift|null>(null),[businessDate,setBusinessDate]=useState(""),[movements,setMovements]=useState<Movement[]>([]),[paymentBlockers,setPaymentBlockers]=useState<PaymentBlocker[]>([]),[msg,setMsg]=useState(""),[busy,setBusy]=useState(false),[openingCash,setOpeningCash]=useState("0"),[countedCash,setCountedCash]=useState(""),[movementType,setMovementType]=useState<"CASH_IN"|"CASH_OUT">("CASH_OUT"),[movementAmount,setMovementAmount]=useState(""),[movementReason,setMovementReason]=useState("");
-  const load=()=>api<CloseData>("/api/close-day").then(x=>{setRows(x.closes||[]);setShift(x.shift||null);setBusinessDate(x.businessDate||"");setMovements(x.cashMovements||[]);setPaymentBlockers(Array.isArray(x.paymentBlockers)?x.paymentBlockers:[]) });
+  const [rows,setRows]=useState<Close[]>([]),[shift,setShift]=useState<Shift|null>(null),[businessDate,setBusinessDate]=useState(""),[movements,setMovements]=useState<Movement[]>([]),[paymentBlockers,setPaymentBlockers]=useState<PaymentBlocker[]>([]),[orderBlockers,setOrderBlockers]=useState<OrderBlocker[]>([]),[msg,setMsg]=useState(""),[busy,setBusy]=useState(false),[openingCash,setOpeningCash]=useState("0"),[countedCash,setCountedCash]=useState(""),[movementType,setMovementType]=useState<"CASH_IN"|"CASH_OUT">("CASH_OUT"),[movementAmount,setMovementAmount]=useState(""),[movementReason,setMovementReason]=useState("");
+  const load=()=>api<CloseData>("/api/close-day").then(x=>{setRows(x.closes||[]);setShift(x.shift||null);setBusinessDate(x.businessDate||"");setMovements(x.cashMovements||[]);setPaymentBlockers(Array.isArray(x.paymentBlockers)?x.paymentBlockers:[]);setOrderBlockers(Array.isArray(x.orderBlockers)?x.orderBlockers:[]) });
   useEffect(()=>{load().catch(()=>{})},[]);
 
   async function openShift(){
@@ -46,6 +47,7 @@ function View({session}:{session:Session}){
     const counted=Number(countedCash);
     if(!shift||shift.status!=="open"){setMsg("กรุณาเปิดร้านและล็อกเงินตั้งต้นก่อนปิดวัน");return}
     if(paymentBlockers.length){setMsg("ยังมี Payment ที่ค้างอยู่ "+paymentBlockers.length+" รายการ · กรุณาตรวจและจัดการก่อนปิดวัน");return}
+    if(orderBlockers.length){setMsg("ยังมีออเดอร์ที่ยังไม่ส่งมอบ "+orderBlockers.length+" คิว · กรุณาทำ/เรียก/ส่งมอบให้ครบก่อนปิดวัน");return}
     if(!countedCash.trim()||!Number.isFinite(counted)||counted<0){setMsg("กรุณากรอกเงินสดที่นับได้จริง");return}
     if(!window.confirm("ยืนยันปิดวัน? ระบบจะใช้เงินตั้งต้นที่ล็อกไว้ ฿"+formatMoney(Number(shift.openingCash))+" และคำนวณเงินสดขาด/เกิน"))return;
     setBusy(true);setMsg("");
@@ -55,7 +57,7 @@ function View({session}:{session:Session}){
   }
 
   return <section className="soft-scroll h-full overflow-auto p-3 sm:p-5 md:p-7">
-    <header className="flex flex-wrap items-end justify-between gap-3"><div><p className="gold m-0 text-[10px] font-bold tracking-[.3em]">DAILY CONTROL</p><h1 className="mt-1 text-xl font-semibold sm:text-2xl">OPEN / CLOSE DAY</h1><p className="mt-1 text-xs text-slate-500">{businessDate||"วันนี้"} · เปิดร้านด้วยเงินทอนตั้งต้น แล้วนับเงินจริงก่อนปิดร้าน</p></div>{session.user.role==="admin"&&<button disabled={busy||!shift||shift.status!=="open"||paymentBlockers.length>0} onClick={close} className="min-h-11 rounded-full bg-[#d4af37] px-5 text-sm font-bold text-black disabled:opacity-40">{busy?"กำลังบันทึก...":paymentBlockers.length>0?"มี Payment ค้าง "+paymentBlockers.length+" รายการ":"ปิดร้านวันนี้"}</button>}</header>
+    <header className="flex flex-wrap items-end justify-between gap-3"><div><p className="gold m-0 text-[10px] font-bold tracking-[.3em]">DAILY CONTROL</p><h1 className="mt-1 text-xl font-semibold sm:text-2xl">OPEN / CLOSE DAY</h1><p className="mt-1 text-xs text-slate-500">{businessDate||"วันนี้"} · เปิดร้านด้วยเงินทอนตั้งต้น แล้วนับเงินจริงก่อนปิดร้าน</p></div>{session.user.role==="admin"&&<button disabled={busy||!shift||shift.status!=="open"||paymentBlockers.length>0||orderBlockers.length>0} onClick={close} className="min-h-11 rounded-full bg-[#d4af37] px-5 text-sm font-bold text-black disabled:opacity-40">{busy?"กำลังบันทึก...":paymentBlockers.length>0?"มี Payment ค้าง "+paymentBlockers.length+" รายการ":orderBlockers.length>0?"มีคิวค้าง "+orderBlockers.length+" คิว":"ปิดร้านวันนี้"}</button>}</header>
 
     {session.user.role==="admin"&&paymentBlockers.length>0&&<div className="mt-4 rounded-2xl border border-red-300 bg-red-50 p-4 sm:p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -66,6 +68,19 @@ function View({session}:{session:Session}){
         <div className="flex flex-wrap items-center justify-between gap-2"><b>{p.id}</b><span className={"rounded-full px-2 py-1 text-[10px] font-black "+(p.status==="requires_resolution"?"bg-red-100 text-red-800":"bg-amber-100 text-amber-800")}>{p.status}</span></div>
         <div className="mt-1 text-slate-600">ยอด ฿{formatMoney(p.total)} · Pager {p.pager||"—"} · {p.mode}</div>
         <div className="mt-1 text-slate-500">Provider {p.provider||"—"} · Charge {p.chargeId||"—"} · Status {p.providerStatus||"—"} · Payments {p.payments}</div>
+      </div>)}</div>
+    </div>}
+
+    {session.user.role==="admin"&&orderBlockers.length>0&&<div className="mt-4 rounded-2xl border border-amber-300 bg-amber-50 p-4 sm:p-5">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div><b className="text-amber-950">ปิดวันไม่ได้ · มีออเดอร์ค้าง {orderBlockers.length} คิว</b><p className="mt-1 text-xs text-amber-800">ทุกออเดอร์ของวันนี้ต้องทำเสร็จ เรียกลูกค้า และบันทึกส่งมอบก่อนปิดวัน</p></div>
+        <button onClick={()=>router.push("/queue")} className="min-h-11 rounded-xl bg-amber-800 px-4 text-xs font-bold text-white">ไปหน้าทำออเดอร์ / คิว</button>
+      </div>
+      <div className="mt-3 space-y-2">{orderBlockers.map(o=><div key={o.id} className="rounded-xl border border-amber-200 bg-white p-3 text-xs">
+        <div className="flex flex-wrap items-center justify-between gap-2"><b>คิว {o.queueNo||"—"} · Pager {o.pagerNo||"—"}</b><span className="rounded-full bg-amber-100 px-2 py-1 text-[10px] font-black text-amber-900">{o.status}</span></div>
+        <div className="mt-1 text-slate-600">{o.cups} แก้ว · พร้อม {o.ready}/{o.cups} · เรียกแล้ว {o.called}/{o.cups}</div>
+        <div className="mt-1 text-slate-500">{o.remainingPrep>0?"เหลือทำ "+o.remainingPrep+" แก้ว":o.remainingHandoff>0?"ทำครบแล้ว · เหลือเรียก/ส่งมอบ "+o.remainingHandoff+" แก้ว":"รอบันทึกส่งมอบ"}</div>
+        <div className="mt-1 text-slate-500">{o.items.map(i=>i.name+" ×"+i.qty).join(" · ")}</div>
       </div>)}</div>
     </div>}
 
