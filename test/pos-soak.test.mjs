@@ -1045,3 +1045,46 @@ test('generic split cancel also blocks ambiguous provider creation attempt befor
   await assert.rejects(()=>cancelSplitPayment({db,user,body:{requestKey:'unsafe-attempt-cancel-001',sessionId},now:13210}),/split_session_provider_managed/);
   assert.equal(JSON.parse(db.storage.document).ingredients.matcha.qty,reserved);
 });
+
+
+test('ambiguous provider creation attempt keeps stock reserved when PromptPay session expires',async()=>{
+  const db=fakeDb();
+  const now=14000;
+  const started=await startSplitPayment({db,user,body:{requestKey:'ambiguous-expiry-start-001',cart,date,mode:'promptpay_full'},now});
+  const sessionId=started.session.id;
+  await beginSplitPaymentProviderCharge({db,user,body:{sessionId,provider:'beam',attemptKey:'promptpay:'+sessionId},now:now+5});
+  const reserved=JSON.parse(db.storage.document).ingredients.matcha.qty;
+  const listed=await listSplitPaymentSessions({db,now:now+(20*60*1000)+1});
+  assert.equal(listed.sessions[0].status,'requires_resolution');
+  assert.equal(listed.sessions[0].providerAttempt.state,'creating');
+  assert.equal(listed.sessions[0].providerAttempt.provider,'beam');
+  assert.equal(JSON.parse(db.storage.document).ingredients.matcha.qty,reserved);
+});
+
+test('recent ambiguous Beam attempt can attach recovered charge while requires_resolution',async()=>{
+  const db=fakeDb();
+  const now=15000;
+  const started=await startSplitPayment({db,user,body:{requestKey:'ambiguous-attach-start-001',cart,date,mode:'promptpay_full'},now});
+  const sessionId=started.session.id;
+  await beginSplitPaymentProviderCharge({db,user,body:{sessionId,provider:'beam',attemptKey:'promptpay:'+sessionId},now:now+5});
+  await listSplitPaymentSessions({db,now:now+(20*60*1000)+1});
+  const attached=await attachSplitPaymentProviderCharge({db,user,body:{
+    sessionId,chargeId:'ch_recovered_ambiguous_001',provider:'beam',amount:55,currency:'THB',status:'pending',referenceId:sessionId
+  },now:now+(20*60*1000)+2});
+  assert.equal(attached.session.status,'requires_resolution');
+  assert.equal(attached.session.providerCharge.chargeId,'ch_recovered_ambiguous_001');
+  assert.equal(JSON.parse(db.storage.document).ingredients.matcha.qty,995);
+});
+
+test('requires-resolution ambiguous attempt cannot attach a different provider identity',async()=>{
+  const db=fakeDb();
+  const now=16000;
+  const started=await startSplitPayment({db,user,body:{requestKey:'ambiguous-provider-start-001',cart,date,mode:'promptpay_full'},now});
+  const sessionId=started.session.id;
+  await beginSplitPaymentProviderCharge({db,user,body:{sessionId,provider:'beam',attemptKey:'promptpay:'+sessionId},now:now+5});
+  await listSplitPaymentSessions({db,now:now+(20*60*1000)+1});
+  await assert.rejects(()=>attachSplitPaymentProviderCharge({db,user,body:{
+    sessionId,chargeId:'ch_wrong_provider_001',provider:'opn',amount:55,currency:'THB',status:'pending',referenceId:sessionId
+  },now:now+(20*60*1000)+2}),/promptpay_provider_changed/);
+  assert.equal(JSON.parse(db.storage.document).ingredients.matcha.qty,995);
+});
