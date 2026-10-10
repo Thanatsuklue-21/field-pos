@@ -623,6 +623,11 @@ function PosView({session}:{session:Session}){
       setResult("ต้องตรวจรายการเงินสดค้างก่อนรับชำระบิลใหม่");
       return;
     }
+    const unresolvedPrompt=pendingRead();
+    if(unresolvedPrompt&&method!=="promptpay"){
+      setResult("มี PromptPay รายการเดิมที่ยังไม่สิ้นสุด · ห้ามรับเงินช่องทางอื่นจนกว่าจะยืนยันว่า QR เดิมสำเร็จ/ล้มเหลว/หมดอายุ เพื่อป้องกันรับเงินซ้ำ");
+      return;
+    }
     setBusy(true);
     setResult("");
     try{
