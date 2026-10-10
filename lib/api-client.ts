@@ -1,6 +1,7 @@
 import {cacheGet,cachePut} from "@/lib/offline-db";
+import {captureClientTelemetry,clientNow,elapsedMs} from "@/lib/client-telemetry";
 
-export type Session={user:{id:string;username:string;role:"admin"|"staff";permissions:Record<string,boolean>};csrf:string};
+export type Session={user:{id:string;username:string;role:"admin"|"staff";permissions:Record<string,boolean>};csrf:string;offline?:boolean};
 export type MenuVariant={label:string;available:boolean;maxServings:number;lowStock:boolean;recipeItems:Record<string,number>;missingIngredients:{id:string;name:string}[];reason:string|null};
 export type MenuItem={id:string;name:string;category?:string;image?:string;price:number;enabled:boolean;available:boolean;maxServings:number;lowStock:boolean;variants:MenuVariant[]};
 export type Bootstrap={revision:number;unchanged?:false;menu:MenuItem[];availabilityStock:Record<string,{qty:number;name:string}>;settings:Record<string,any>};
@@ -9,6 +10,7 @@ export type RevisionUnchanged={revision:number;unchanged:true};
 const SAFE_GET_CACHE=new Set(["/api/pos/bootstrap"]);
 const SESSION_TTL_MS=30_000;
 const GET_TIMEOUT_MS=8_000;
+const AUTH_SESSION_TIMEOUT_MS=2_500;
 let sessionCache:{value:Session;at:number}|null=null;
 let sessionInFlight:Promise<Session>|null=null;
 const getInFlight=new Map<string,Promise<unknown>>();
@@ -25,7 +27,8 @@ function getRequestKey(path:string,init:RequestInit){
 
 async function fetchWithPolicy(path:string,init:RequestInit,method:string){
   const controller=method==="GET"&&!init.signal?new AbortController():null;
-  const timer=controller?setTimeout(()=>controller.abort("field_get_timeout"),GET_TIMEOUT_MS):null;
+  const timeoutMs=path==="/api/auth/session"?AUTH_SESSION_TIMEOUT_MS:GET_TIMEOUT_MS;
+  const timer=controller?setTimeout(()=>controller.abort(path==="/api/auth/session"?"field_auth_session_timeout":"field_get_timeout"),timeoutMs):null;
   try{
     return await fetch(path,{
       ...init,
@@ -58,8 +61,12 @@ export async function getSessionCached(force=false){
 }
 
 async function executeApi<T>(path:string,init:RequestInit,method:string){
+  const started=clientNow();
+  let httpStatus=0;
+  const metric=method==="POST"&&path==="/api/pos/checkout"?"checkout_latency":method==="POST"&&path==="/api/pos/queue"?"queue_action_latency":"";
   try{
     const res=await fetchWithPolicy(path,init,method);
+    httpStatus=res.status;
     const data=await res.json().catch(()=>({}));
     if(res.status===401){
       clearSessionCache();
@@ -81,6 +88,8 @@ async function executeApi<T>(path:string,init:RequestInit,method:string){
       throw Object.assign(new Error("network_unavailable"),{status:0,cause:error});
     }
     throw error;
+  }finally{
+    if(metric)captureClientTelemetry(metric,{duration_ms:elapsedMs(started),http_status:httpStatus,success:httpStatus>=200&&httpStatus<300});
   }
 }
 

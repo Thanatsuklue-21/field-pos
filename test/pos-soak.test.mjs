@@ -1,9 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  checkoutPos,queuePosAction,startSplitPayment,paySplitPayment,getSplitPaymentStatus,listSplitPaymentSessions,resolveSplitPayment,voidSale,refundSale
+  checkoutPos,queuePosAction,startSplitPayment,paySplitPayment,getSplitPaymentStatus,getSplitPaymentProviderContext,beginSplitPaymentProviderCharge,attachSplitPaymentProviderCharge,listSplitPaymentSessions,releaseSplitPaymentProviderSession,resolveSplitPayment,voidSale,refundSale
 } from '../lib/pos-api.mjs';
 import {buildPosAvailability} from '../lib/domain/availability.mjs';
+import {reconcileCash} from '../lib/domain/cash-reconciliation.mjs';
 
 function initialState(){
   return {
@@ -87,16 +88,24 @@ test('30-order POS soak keeps bills unique, stock exact and queues returnable',a
   const db=fakeDb();
 
   for(let i=1;i<=30;i++){
+    const checkoutBody={
+      requestKey:'checkout-soak-'+String(i).padStart(3,'0'),
+      cart,date,payment:'cash',received:100
+    };
     const checkout=await checkoutPos({
       db,user,now:1_000_000+i*10,
-      body:{
-        requestKey:'checkout-soak-'+String(i).padStart(3,'0'),
-        cart,date,payment:'cash',received:100
-      }
+      body:checkoutBody
+    });
+    const replay=await checkoutPos({
+      db,user,now:1_000_000+i*10+1,
+      body:checkoutBody
     });
 
     assert.ok(checkout.orderId);
     assert.match(checkout.queueNo,/^A\d{3}$/);
+    assert.equal(replay.replayed,true);
+    assert.equal(replay.orderId,checkout.orderId);
+    assert.deepEqual(replay.saleIds,checkout.saleIds);
 
     const stateAfterPay=JSON.parse(db.storage.document);
     const order=stateAfterPay.orders.find(o=>o.id===checkout.orderId);
@@ -127,11 +136,23 @@ test('30-order POS soak keeps bills unique, stock exact and queues returnable',a
   assert.equal(state.ingredients.matcha.qty,1000-(30*5));
   assert.equal(state.ingredients.milk.qty,30000-(30*110));
   assert.equal(state.ingredients.cup16.qty,500-30);
+  assert.ok(Object.values(state.ingredients).every(ingredient=>Number(ingredient.qty)>=0));
 
   assert.equal(state.billSeq[date],30);
+  assert.deepEqual(state.orders.map(o=>o.queueNo),Array.from({length:30},(_,i)=>'A'+String(i+1).padStart(3,'0')));
   assert.equal(db.storage.stockTx.length,90);
   assert.equal(db.storage.costSnapshots.length,30);
   assert.ok(db.storage.stockTx.every(args=>args[2]==='SALE'&&Number(args[3])<0));
+
+  const cashSales=state.sales.reduce((sum,s)=>sum+Number(s.total||0),0);
+  const tendered=state.sales.reduce((sum,s)=>sum+Number(s.received||0),0);
+  const change=state.sales.reduce((sum,s)=>sum+Number(s.change||0),0);
+  assert.equal(cashSales,30*55);
+  assert.equal(tendered-change,cashSales);
+  assert.deepEqual(
+    reconcileCash({openingCash:0,cashSales,countedCash:cashSales}),
+    {openingCash:0,cashSales,cashIn:0,cashPaidOut:0,cashOut:0,expectedCash:cashSales,countedCash:cashSales,cashVariance:0}
+  );
 });
 
 test('checkout request replay never duplicates sale, bill or stock deduction',async()=>{
@@ -308,6 +329,53 @@ test('void reverses CRM once and restores previous last visit',async()=>{
   assert.equal(firstVoid.replayed,false);assert.equal(replay.replayed,true);
   assert.equal(customer.visits,1);assert.equal(customer.totalSpend,55);assert.equal(customer.points,1);assert.equal(customer.lastVisit,1000);
   assert.equal(sale.customerEffectsReversed,true);
+});
+
+test('multi-sale cash order voids atomically before production and restores all stock once',async()=>{
+  const db=fakeDb();
+  const first=await checkoutPos({db,user,now:2800,body:{requestKey:'multi-void-first-001',cart,date,payment:'cash',received:100,customerId:'cus-1'}});
+  await checkoutPos({db,user,now:2810,body:{requestKey:'multi-void-addon-001',cart,date,payment:'cash',received:100,customerId:'cus-1',targetOrderId:first.orderId}});
+  let state=JSON.parse(db.storage.document);
+  assert.equal(state.sales.length,2);
+  assert.equal(state.orders.length,1);
+  assert.equal(state.ingredients.matcha.qty,990);
+  assert.equal(state.customers[0].visits,2);
+  assert.equal(state.customers[0].totalSpend,110);
+
+  const body={requestKey:'multi-void-order-001',saleId:first.saleIds[0],reason:'edit whole order'};
+  const result=await voidSale({db,user,now:2820,body});
+  assert.equal(result.voidAmount,110);
+  assert.equal(result.saleIds.length,2);
+
+  state=JSON.parse(db.storage.document);
+  assert.ok(state.sales.every(s=>s.status==='void'));
+  assert.ok(state.sales.every(s=>s.voidGroupAmount===110&&s.voidGroupSaleIds.length===2));
+  assert.equal(state.orders[0].status,'void');
+  assert.equal(state.orders[0].voidAmount,110);
+  assert.equal(state.ingredients.matcha.qty,1000);
+  assert.equal(state.ingredients.milk.qty,30000);
+  assert.equal(state.ingredients.cup16.qty,500);
+  assert.equal(state.customers[0].visits,0);
+  assert.equal(state.customers[0].totalSpend,0);
+  assert.equal(state.customers[0].points,0);
+  assert.equal(db.storage.stockTx.filter(args=>args[2]==='VOID_REVERSAL').length,6);
+
+  const replay=await voidSale({db,user,now:2830,body});
+  assert.equal(replay.replayed,true);
+  assert.equal(replay.voidAmount,110);
+  assert.equal(db.storage.stockTx.filter(args=>args[2]==='VOID_REVERSAL').length,6);
+});
+
+test('multi-sale cash void fails closed when any add-on used a non-cash payment',async()=>{
+  const db=fakeDb();
+  const first=await checkoutPos({db,user,now:2840,body:{requestKey:'multi-void-mixed-first',cart,date,payment:'cash',received:100}});
+  await checkoutPos({db,user,now:2850,body:{requestKey:'multi-void-mixed-addon',cart,date,payment:'bank',paymentReference:'bank-void-test',targetOrderId:first.orderId}});
+  await assert.rejects(()=>voidSale({db,user,now:2860,body:{requestKey:'multi-void-mixed-action',saleId:first.saleIds[0],reason:'should fail'}}),/non_cash_void_requires_refund/);
+  const state=JSON.parse(db.storage.document);
+  assert.ok(state.sales.every(s=>s.status==='paid'));
+  assert.equal(state.orders[0].status,'assigned');
+  assert.equal(state.ingredients.matcha.qty,990);
+  assert.equal(db.storage.stockTx.filter(args=>args[2]==='VOID_REVERSAL').length,0);
 });
 
 test('cash sale cannot auto-void after production starts',async()=>{
@@ -726,4 +794,215 @@ test('PromptPay full reservation freezes CRM discount and provider amount at net
   assert.equal(paid.completed,true);
   const state=JSON.parse(db.storage.document),sale=state.sales[0],customer=state.customers[0];
   assert.equal(sale.total,45);assert.equal(sale.pointsRedeemed,5);assert.equal(customer.points,15);assert.equal(customer.totalSpend,45);
+});
+
+
+test('stale cash request replays before business-date validation without duplicate sale or stock deduction',async()=>{
+  const db=fakeDb();
+  const requestKey='stale-cash-replay-001';
+  const original={requestKey,cart,date,payment:'cash',received:100,serverDate:date};
+  const first=await checkoutPos({db,user,now:1000,body:original});
+  const stateAfterFirst=JSON.parse(db.storage.document);
+  const stockAfterFirst={
+    matcha:stateAfterFirst.ingredients.matcha.qty,
+    milk:stateAfterFirst.ingredients.milk.qty,
+    cup16:stateAfterFirst.ingredients.cup16.qty
+  };
+  assert.equal(stateAfterFirst.sales.length,1);
+
+  const replay=await checkoutPos({
+    db,user,now:1000+48*60*60*1000,
+    body:{...original,serverDate:'2026-10-03'}
+  });
+  assert.equal(replay.replayed,true);
+  assert.equal(replay.orderId,first.orderId);
+  assert.deepEqual(replay.saleIds,first.saleIds);
+
+  const stateAfterReplay=JSON.parse(db.storage.document);
+  assert.equal(stateAfterReplay.sales.length,1);
+  assert.equal(stateAfterReplay.orders.length,1);
+  assert.equal(stateAfterReplay.ingredients.matcha.qty,stockAfterFirst.matcha);
+  assert.equal(stateAfterReplay.ingredients.milk.qty,stockAfterFirst.milk);
+  assert.equal(stateAfterReplay.ingredients.cup16.qty,stockAfterFirst.cup16);
+  assert.equal(db.storage.stockTx.filter(args=>args[5]==='sale').length,3);
+});
+
+test('unseen stale cash request is rejected on changed business date instead of creating a backdated sale',async()=>{
+  const db=fakeDb();
+  await assert.rejects(
+    ()=>checkoutPos({
+      db,user,now:1000+48*60*60*1000,
+      body:{requestKey:'stale-cash-new-001',cart,date,payment:'cash',received:100,serverDate:'2026-10-03'}
+    }),
+    e=>e?.status===409&&e?.message==='business_date_changed'
+  );
+  const state=JSON.parse(db.storage.document);
+  assert.equal(state.sales.length,0);
+  assert.equal(state.orders.length,0);
+  assert.equal(state.ingredients.matcha.qty,1000);
+  assert.equal(state.ingredients.milk.qty,30000);
+  assert.equal(state.ingredients.cup16.qty,500);
+});
+
+
+test('PromptPay charge identity is persisted on the server payment session and replays safely',async()=>{
+  const db=fakeDb();
+  const started=await startSplitPayment({db,user,body:{requestKey:'pp-durable-start-001',cart,date,mode:'promptpay_full'},now:7000});
+  const sessionId=started.session.id;
+  const attached=await attachSplitPaymentProviderCharge({db,user,body:{
+    sessionId,chargeId:'ch_durable_001',provider:'beam',amount:55,currency:'THB',status:'pending',expiresAt:'2026-10-01T12:00:00Z',referenceId:sessionId
+  },now:7010});
+  assert.equal(attached.session.providerCharge.chargeId,'ch_durable_001');
+  assert.equal(attached.session.providerCharge.amount,55);
+  const ctx=await getSplitPaymentProviderContext({db,sessionId});
+  assert.equal(ctx.providerCharge.chargeId,'ch_durable_001');
+  const replay=await attachSplitPaymentProviderCharge({db,user,body:{
+    sessionId,chargeId:'ch_durable_001',provider:'beam',amount:55,currency:'THB',status:'pending',referenceId:sessionId
+  },now:7020});
+  assert.equal(replay.replayed,true);
+  await assert.rejects(()=>attachSplitPaymentProviderCharge({db,user,body:{
+    sessionId,chargeId:'ch_other_002',provider:'beam',amount:55,currency:'THB',status:'pending',referenceId:sessionId
+  },now:7030}),/promptpay_charge_already_attached/);
+});
+
+test('server charge binding rejects wrong amount or reference before persisting provider identity',async()=>{
+  const db=fakeDb();
+  const started=await startSplitPayment({db,user,body:{requestKey:'pp-durable-start-002',cart,date,mode:'promptpay_full'},now:7100});
+  const sessionId=started.session.id;
+  await assert.rejects(()=>attachSplitPaymentProviderCharge({db,user,body:{
+    sessionId,chargeId:'ch_bad_amount',provider:'beam',amount:54,currency:'THB',status:'pending',referenceId:sessionId
+  },now:7110}),/promptpay_amount_mismatch/);
+  await assert.rejects(()=>attachSplitPaymentProviderCharge({db,user,body:{
+    sessionId,chargeId:'ch_bad_ref',provider:'beam',amount:55,currency:'THB',status:'pending',referenceId:'split-wrong'
+  },now:7120}),/promptpay_reference_mismatch/);
+  const ctx=await getSplitPaymentProviderContext({db,sessionId});
+  assert.equal(ctx.providerCharge,null);
+});
+
+
+test('expired PromptPay with an attached provider charge keeps stock reserved and can finalize after verified late payment',async()=>{
+  const db=fakeDb();
+  const now=8000;
+  const started=await startSplitPayment({db,user,body:{requestKey:'pp-expiry-start-001',cart,date,mode:'promptpay_full'},now});
+  const sessionId=started.session.id;
+  await attachSplitPaymentProviderCharge({db,user,body:{
+    sessionId,chargeId:'ch_late_paid_001',provider:'beam',amount:55,currency:'THB',status:'pending',referenceId:sessionId
+  },now:now+10});
+  const stockAfterReserve=JSON.parse(db.storage.document).ingredients.matcha.qty;
+  const expiredAt=now+(20*60*1000)+1;
+  const listed=await listSplitPaymentSessions({db,now:expiredAt});
+  assert.equal(listed.sessions[0].status,'requires_resolution');
+  assert.equal(JSON.parse(db.storage.document).ingredients.matcha.qty,stockAfterReserve);
+  const paid=await paySplitPayment({db,user,now:expiredAt+100,body:{
+    requestKey:'provider:beam:ch_late_paid_001',
+    sessionId,
+    method:'promptpay',
+    allocations:[{index:0,qty:1}],
+    paymentReference:'ch_late_paid_001',
+    paymentVerified:'ch_late_paid_001',
+    paymentProviderAmount:55,
+    label:'PromptPay'
+  }});
+  assert.equal(paid.completed,true);
+  const state=JSON.parse(db.storage.document);
+  assert.equal(state.sales.length,1);
+  assert.equal(state.sales[0].payment,'promptpay');
+  assert.equal(state.ingredients.matcha.qty,stockAfterReserve);
+});
+
+test('requires-resolution session cannot be paid late with cash or with a different PromptPay charge',async()=>{
+  const db=fakeDb();
+  const now=9000;
+  const started=await startSplitPayment({db,user,body:{requestKey:'pp-expiry-start-002',cart,date,mode:'promptpay_full'},now});
+  const sessionId=started.session.id;
+  await attachSplitPaymentProviderCharge({db,user,body:{
+    sessionId,chargeId:'ch_late_guard_001',provider:'beam',amount:55,currency:'THB',status:'pending',referenceId:sessionId
+  },now:now+10});
+  await listSplitPaymentSessions({db,now:now+(20*60*1000)+1});
+  await assert.rejects(()=>paySplitPayment({db,user,now:now+(20*60*1000)+2,body:{
+    requestKey:'late-cash-denied-001',sessionId,method:'cash',received:55,allocations:[{index:0,qty:1}]
+  }}),/split_session_unavailable/);
+  await assert.rejects(()=>paySplitPayment({db,user,now:now+(20*60*1000)+3,body:{
+    requestKey:'late-wrong-qr-denied-001',sessionId,method:'promptpay',allocations:[{index:0,qty:1}],
+    paymentReference:'ch_wrong_999',paymentVerified:'ch_wrong_999',paymentProviderAmount:55
+  }}),/split_session_unavailable/);
+});
+
+
+test('Beam PromptPay charge creation lock allows only the same idempotent retry for a session',async()=>{
+  const db=fakeDb();
+  const started=await startSplitPayment({db,user,body:{requestKey:'pp-lock-start-beam-001',cart,date,mode:'promptpay_full'},now:10000});
+  const sessionId=started.session.id;
+  const first=await beginSplitPaymentProviderCharge({db,user,body:{sessionId,provider:'beam',attemptKey:'promptpay:'+sessionId},now:10010});
+  assert.equal(first.retryAllowed,true);
+  const retry=await beginSplitPaymentProviderCharge({db,user,body:{sessionId,provider:'beam',attemptKey:'promptpay:'+sessionId},now:10020});
+  assert.equal(retry.retryAllowed,true);
+  await assert.rejects(()=>beginSplitPaymentProviderCharge({db,user,body:{sessionId,provider:'beam',attemptKey:'other-attempt'},now:10030}),/promptpay_charge_creation_unknown/);
+});
+
+test('non-idempotent provider charge creation fails closed after an ambiguous first attempt',async()=>{
+  const db=fakeDb();
+  const started=await startSplitPayment({db,user,body:{requestKey:'pp-lock-start-opn-001',cart,date,mode:'promptpay_full'},now:10100});
+  const sessionId=started.session.id;
+  const first=await beginSplitPaymentProviderCharge({db,user,body:{sessionId,provider:'opn',attemptKey:'promptpay:'+sessionId},now:10110});
+  assert.equal(first.retryAllowed,false);
+  await assert.rejects(()=>beginSplitPaymentProviderCharge({db,user,body:{sessionId,provider:'opn',attemptKey:'promptpay:'+sessionId},now:10120}),/promptpay_charge_creation_unknown/);
+});
+
+test('attached PromptPay charge makes subsequent creation attempts return the existing session binding',async()=>{
+  const db=fakeDb();
+  const started=await startSplitPayment({db,user,body:{requestKey:'pp-lock-start-attached-001',cart,date,mode:'promptpay_full'},now:10200});
+  const sessionId=started.session.id;
+  await beginSplitPaymentProviderCharge({db,user,body:{sessionId,provider:'beam',attemptKey:'promptpay:'+sessionId},now:10210});
+  await attachSplitPaymentProviderCharge({db,user,body:{
+    sessionId,chargeId:'ch_lock_attached_001',provider:'beam',amount:55,currency:'THB',status:'pending',referenceId:sessionId
+  },now:10220});
+  const again=await beginSplitPaymentProviderCharge({db,user,body:{sessionId,provider:'beam',attemptKey:'promptpay:'+sessionId},now:10230});
+  assert.equal(again.attached,true);
+  assert.equal(again.session.providerCharge.chargeId,'ch_lock_attached_001');
+});
+
+
+test('provider-final release restores reserved stock exactly once and clears requires-resolution session safely',async()=>{
+  const db=fakeDb();
+  const now=11000;
+  const started=await startSplitPayment({db,user,body:{requestKey:'pp-release-start-001',cart,date,mode:'promptpay_full'},now});
+  const sessionId=started.session.id;
+  await beginSplitPaymentProviderCharge({db,user,body:{sessionId,provider:'beam',attemptKey:'promptpay:'+sessionId},now:now+5});
+  await attachSplitPaymentProviderCharge({db,user,body:{
+    sessionId,chargeId:'ch_release_final_001',provider:'beam',amount:55,currency:'THB',status:'pending',referenceId:sessionId
+  },now:now+10});
+  const reservedStock=JSON.parse(db.storage.document).ingredients.matcha.qty;
+  await listSplitPaymentSessions({db,now:now+(20*60*1000)+1});
+  assert.equal(JSON.parse(db.storage.document).ingredients.matcha.qty,reservedStock);
+  const released=await releaseSplitPaymentProviderSession({db,user,body:{
+    requestKey:'pp-release-final-001',sessionId,paymentReference:'ch_release_final_001',providerStatus:'failed'
+  },now:now+(20*60*1000)+2});
+  assert.equal(released.released,true);
+  const state=JSON.parse(db.storage.document);
+  assert.equal(state.ingredients.matcha.qty,1000);
+  assert.equal(state.paymentSessions[0].status,'cancelled');
+  assert.equal(state.paymentSessions[0].providerFinalStatus,'failed');
+  const replay=await releaseSplitPaymentProviderSession({db,user,body:{
+    requestKey:'pp-release-final-001',sessionId,paymentReference:'ch_release_final_001',providerStatus:'failed'
+  },now:now+(20*60*1000)+3});
+  assert.equal(replay.replayed,true);
+  assert.equal(JSON.parse(db.storage.document).ingredients.matcha.qty,1000);
+});
+
+test('provider release rejects non-final status, wrong charge and sessions with recorded payments',async()=>{
+  const db=fakeDb();
+  const now=12000;
+  const started=await startSplitPayment({db,user,body:{requestKey:'pp-release-start-002',cart,date,mode:'promptpay_full'},now});
+  const sessionId=started.session.id;
+  await beginSplitPaymentProviderCharge({db,user,body:{sessionId,provider:'beam',attemptKey:'promptpay:'+sessionId},now:now+5});
+  await attachSplitPaymentProviderCharge({db,user,body:{
+    sessionId,chargeId:'ch_release_guard_001',provider:'beam',amount:55,currency:'THB',status:'pending',referenceId:sessionId
+  },now:now+10});
+  await assert.rejects(()=>releaseSplitPaymentProviderSession({db,user,body:{
+    requestKey:'pp-release-pending-denied',sessionId,paymentReference:'ch_release_guard_001',providerStatus:'pending'
+  },now:now+20}),/promptpay_provider_not_final/);
+  await assert.rejects(()=>releaseSplitPaymentProviderSession({db,user,body:{
+    requestKey:'pp-release-wrong-charge',sessionId,paymentReference:'ch_other_wrong',providerStatus:'failed'
+  },now:now+30}),/promptpay_reference_mismatch/);
 });

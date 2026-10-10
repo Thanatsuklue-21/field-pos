@@ -34,6 +34,12 @@ Use the full backup page for state plus stock, purchase, recipe, cost and durabl
 
 `public/index.html` and `public/online*.js` are legacy migration/reference fixtures, not the primary application. Their public entry routes are quarantined to `/pos` in production. Do not use their local state as the source of truth for current shared sales or assume that legacy JSON exports contain the full accounting ledgers. Obsolete standalone telemetry/insights/root-HTML assets were removed from the active repository.
 
+## PWA operating model
+
+The current app is installable as **FIELD POS** from supported browsers. The manifest launches at `/pos` in standalone mode, while the service worker caches only the app shell/static assets and same-origin images. Requests under `/api/` are deliberately never cached by the service worker; checkout, payment, stock, queue, refund, void, expenses and close-day semantics remain server-authoritative.
+
+PWA updates are staged. A waiting service worker does not force-reload the POS while the cart, payment recovery, split-payment state, queue action or offline sync is active. The operator can install or inspect PWA/device readiness from Settings. IndexedDB schema remains version 2; the PWA layer reuses the existing bootstrap cache and durable offline cash outbox rather than creating a second offline database. Split-payment continuation and edit-cash recovery metadata use durable local storage (with migration from older session storage). After a successful online sign-in, the device stores only a non-secret operator identity snapshot for up to seven days; if the app cold-starts offline and a safe cached catalog exists, it can enter a restricted staff session for offline cash only. Passwords, CSRF tokens and server secrets are never stored for offline unlock, and reconnecting requires server session revalidation before any online write or outbox sync. The current PWA release candidate is `8.0.0-pwa.2`; it also tracks Android `VisualViewport` height so the payment confirm area stays reachable when the on-screen keyboard opens.
+
 ## Deployment and practical limits
 
 Push a tested change to the connected GitHub repository and verify that Vercel Production is READY for the exact commit. Smoke-test `/api/health`, page routes and unauthenticated API denial. A successful page response alone does not verify logged-in checkout or the live payment provider.

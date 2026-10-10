@@ -2,13 +2,16 @@
   "name": "field-cafe-pos",
   "version": "8.0.0",
   "private": true,
-  "engines": {"node": ">=20"},
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
     "test": "node --test test/*.test.mjs",
-    "bootstrap": "node scripts/bootstrap.mjs"
+    "bootstrap": "node scripts/bootstrap.mjs",
+    "pwa:smoke": "node scripts/pwa-smoke.mjs"
   },
   "dependencies": {
     "@libsql/client": "^0.17.0",

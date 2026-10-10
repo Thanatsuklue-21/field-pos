@@ -1,4 +1,24 @@
 "use client";
-import {useEffect,useState} from "react"; import {Cloud,CloudOff,Database} from "lucide-react";
-type Status="online"|"offline"|"cached";
-export default function NetworkStatus(){const [status,setStatus]=useState<Status>("online");useEffect(()=>{const sync=()=>setStatus(navigator.onLine?"online":"offline");const custom=(e:Event)=>setStatus((e as CustomEvent).detail?.status||"online");sync();window.addEventListener("online",sync);window.addEventListener("offline",sync);window.addEventListener("field:network",custom);return()=>{window.removeEventListener("online",sync);window.removeEventListener("offline",sync);window.removeEventListener("field:network",custom)}},[]);if(status==="online")return <div className="fixed right-5 top-5 z-40 hidden items-center gap-2 rounded-full border border-emerald-400/15 bg-emerald-400/[.06] px-3 py-2 text-[10px] text-emerald-700 lg:flex"><Cloud size={13}/>ONLINE</div>;return <div className="fixed left-1/2 top-3 z-[70] flex -translate-x-1/2 items-center gap-2 rounded-full border border-amber-400/20 bg-amber-50/95 px-4 py-2 text-xs text-amber-800 shadow-[0_10px_28px_rgba(15,23,42,.10)] backdrop-blur"><span>{status==="cached"?<Database size={14}/>:<CloudOff size={14}/>}</span>{status==="cached"?"OFFLINE · VIEWING CACHED MENU":"OFFLINE · SALES WRITES PAUSED"}</div>}
+import {useEffect,useState} from "react";import {Cloud,CloudOff,Database,RefreshCw,TriangleAlert} from "lucide-react";
+type Status="online"|"offline"|"cached"|"syncing"|"sync_error";
+export default function NetworkStatus(){
+  const [status,setStatus]=useState<Status>("online");
+  useEffect(()=>{
+    let syncState:Status|null=null;
+    const sync=()=>setStatus(navigator.onLine?(syncState||"online"):"offline");
+    const network=(event:Event)=>{
+      const next=String((event as CustomEvent).detail?.status||"") as Status;
+      if(["online","offline","cached"].includes(next))setStatus(next==="offline"?next:(syncState||next));
+    };
+    const outbox=(event:Event)=>{
+      const next=String((event as CustomEvent).detail?.status||"") as Status;
+      if(!["online","syncing","sync_error"].includes(next))return;
+      syncState=next==="online"?null:next;
+      setStatus(navigator.onLine?next:"offline");
+    };
+    sync();window.addEventListener("online",sync);window.addEventListener("offline",sync);
+    window.addEventListener("field:network",network);window.addEventListener("field:sync",outbox);
+    return()=>{window.removeEventListener("online",sync);window.removeEventListener("offline",sync);window.removeEventListener("field:network",network);window.removeEventListener("field:sync",outbox)};
+  },[]);
+if(status==="online")return <div role="status" aria-live="polite" aria-atomic="true" className="fixed right-5 top-[max(1.25rem,env(safe-area-inset-top))] z-40 hidden items-center gap-2 rounded-full border border-emerald-400/15 bg-emerald-50/90 px-3 py-2 text-[10px] text-emerald-700 lg:flex"><Cloud size={13}/>ออนไลน์</div>;
+const cfg=status==="syncing"?{Icon:RefreshCw,label:"กำลังส่งบิลที่ค้าง",cls:"border-sky-300 bg-sky-50/95 text-sky-800"}:status==="sync_error"?{Icon:TriangleAlert,label:"ส่งบิลยังไม่สำเร็จ · บิลยังอยู่ในเครื่อง",cls:"border-red-300 bg-red-50/95 text-red-700"}:status==="cached"?{Icon:Database,label:"ใช้เมนูที่บันทึกไว้ · รับเงินสดเท่านั้น",cls:"border-amber-300 bg-amber-50/95 text-amber-800"}:{Icon:CloudOff,label:"ออฟไลน์ · รับเงินสดเท่านั้น",cls:"border-amber-300 bg-amber-50/95 text-amber-800"};const Icon=cfg.Icon;return <div role="status" aria-live="polite" aria-atomic="true" className={"fixed w-max max-w-[calc(100vw-1.5rem)] text-center left-1/2 top-[max(.6rem,env(safe-area-inset-top))] z-[70] flex -translate-x-1/2 items-center gap-2 rounded-full border px-4 py-2 text-xs shadow-[0_10px_28px_rgba(15,23,42,.10)] backdrop-blur "+cfg.cls}><Icon size={14} className={status==="syncing"?"animate-spin":""}/>{cfg.label}</div>}

@@ -1,11 +1,12 @@
 import {api,type Bootstrap,type Session} from "@/lib/api-client";
 import {offlineCashDelete,offlineCashList,offlineCashPatch,offlineCashPut,type OfflineCashRecord} from "@/lib/offline-db";
+import {cartAvailability} from "@/lib/domain/availability.mjs";
 
 type CartLine={id:string;variant:string;qty:number};
 export type OfflineCashSummary={pending:number;needsReview:number;total:number};
 export type OfflineCashSyncResult=OfflineCashSummary&{synced:number};
 
-export async function queueOfflineCashSale(body:Record<string,any>){
+export async function queueOfflineCashSale(body:Record<string,any>,options:{projectStock?:boolean}={}){
   const createdAt=Number(body.offlineCreatedAt)||Date.now();
   const requestKey=String(body.requestKey||"");
   if(requestKey.length<8)throw new Error("invalid_request_key");
@@ -17,8 +18,11 @@ export async function queueOfflineCashSale(body:Record<string,any>){
     status:"pending",
     attempts:0
   };
-  await offlineCashPut(record);
-  return record;
+  const bootstrap=await offlineCashPut(record,options.projectStock?(current:Bootstrap)=>{
+    if(!Array.isArray(body.cart)||!body.cart.length||!cartAvailability({cart:body.cart,menu:current.menu,stock:current.availabilityStock}).available)throw new Error("stock_shortage");
+    return applyOfflineCashToBootstrap(current,body.cart);
+  }:undefined) as Bootstrap|undefined;
+  return {...record,bootstrap};
 }
 
 export async function getOfflineCashSummary():Promise<OfflineCashSummary>{
@@ -63,29 +67,41 @@ export function applyOfflineCashToBootstrap(data:Bootstrap|null,cart:CartLine[])
 }
 
 export async function syncOfflineCashSales(session:Session):Promise<OfflineCashSyncResult>{
+  if(session.offline||!session.csrf)throw new Error("offline_session_revalidation");
   const rows=await offlineCashList();
   let synced=0;
   for(const row of rows){
     if(row.status!=="pending")continue;
-    if(typeof navigator!=="undefined"&&!navigator.onLine)break;
+    if(typeof navigator!=="undefined"&&!navigator.onLine)throw new Error("offline_write_blocked");
     await offlineCashPatch(row.requestKey,{attempts:Number(row.attempts||0)+1,lastAttemptAt:Date.now(),lastError:undefined});
     try{
-      await api<any>("/api/pos/checkout",{
+      const receipt=await api<any>("/api/pos/checkout",{
         method:"POST",
         headers:{"X-CSRF-Token":session.csrf},
         body:JSON.stringify(row.body)
       });
+      // HTTP success alone can be an empty/proxy response. Retain the original
+      // idempotent bill unless the checkout contract confirms a committed sale.
+      const hasIdentity=(value:unknown)=>typeof value==="string"&&value.trim().length>0;
+      const expectedTotal=Number(row.body.total);
+      if(receipt?.ok!==true||!hasIdentity(receipt.orderId)
+        ||!Array.isArray(receipt.saleIds)||!receipt.saleIds.length||!receipt.saleIds.every(hasIdentity)
+        ||!Number.isFinite(receipt.total)||receipt.total<0
+        ||!Number.isFinite(expectedTotal)||Math.abs(receipt.total-expectedTotal)>0.001
+        ||(row.body.offlineFulfilled===true&&receipt.offlineFulfilled!==true))throw new Error("offline_sync_unconfirmed");
       await offlineCashDelete(row.requestKey);
       synced++;
     }catch(error:any){
       const code=String(error?.message||"sync_failed");
-      if(["network_unavailable","offline_write_blocked"].includes(code)||!error?.status)break;
-      if(Number(error.status)>=400&&Number(error.status)<500){
+      const status=Number(error?.status)||0;
+      if(status>=400&&status<500&&![401,403,408,425,429].includes(status)){
         await offlineCashPatch(row.requestKey,{status:"needs_review",lastError:code,lastAttemptAt:Date.now()});
         continue;
       }
       await offlineCashPatch(row.requestKey,{lastError:code,lastAttemptAt:Date.now()});
-      break;
+      // Authentication, throttling, network and local-delete failures remain retryable.
+      // Do not let the caller publish a successful sync for an incomplete attempt.
+      throw error;
     }
   }
   const summary=await getOfflineCashSummary();

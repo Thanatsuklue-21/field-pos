@@ -163,6 +163,14 @@ test('queue view reuses lookup maps instead of rescanning menus sales and prep b
   assert.match(api,/const lookup=buildQueueLookup\(doc\)/);
 });
 
+test('second device queue polling converges within two seconds while using revision short-circuit',async()=>{
+  const queue=await read('app/queue/page.tsx');
+  assert.match(queue,/window\.setInterval\(refresh,2000\)/);
+  assert.match(queue,/X-Field-Revision/);
+  assert.match(queue,/busyRef\.current/);
+  assert.match(queue,/document\.visibilityState===\"hidden\"/);
+});
+
 test('queue actions use optimistic feedback and delivery has a visible fixed toast',async()=>{
   const queue=await read('app/queue/page.tsx');
   assert.match(queue,/const optimistic=/);
@@ -179,7 +187,12 @@ test('cash order can be safely voided and loaded back into POS before production
   assert.match(orders,/แก้ไข \/ ลด \/ เปลี่ยนเมนู/);
   assert.match(orders,/cart\.replaceItems/);
   assert.match(orders,/field-pos-edit-cash-v1/);
-  assert.match(orders,/heldCash:s\.total/);
+  assert.match(orders,/heldCash:total/);
+  assert.match(orders,/แก้ไขทั้งออเดอร์ \/ รวมทุกบิล/);
+  assert.match(orders,/VOID CASH ORDER \+ RESTORE STOCK \/ ยกเลิกทั้งออเดอร์/);
+  assert.match(orders,/paidOrderGroup/);
+  assert.match(orders,/saleCount:group\.length/);
+  assert.match(orders,/writeRecovery\("field-pos-edit-cash-v1"/);
   assert.match(pos,/field-pos-edit-cash-v1/);
   assert.match(pos,/ยอดเงินสดจากบิลเดิม/);
 });
@@ -196,7 +209,9 @@ test('order items preserve sale-time price while production queue hides commerci
 
 test('mobile operational pages use compact density while preserving touch actions',async()=>{
   const shell=await read('components/app-shell.tsx'),pos=await read('app/pos/page.tsx'),queue=await read('app/queue/page.tsx'),stock=await read('app/stock/page.tsx'),orders=await read('app/orders/page.tsx');
-  assert.match(shell,/min-w-\[54px\]/);
+  assert.match(shell,/const primaryMobile=\["\/pos","\/queue","\/orders","\/stock"\]/);
+  assert.match(shell,/MoreHorizontal/);
+  assert.doesNotMatch(shell,/overflow-x-auto rounded-\[20px\] p-1 md:hidden/);
   assert.match(pos,/min-h-\[154px\]/);
   assert.match(pos,/bottom-\[70px\]/);
   assert.match(queue,/h-full overflow-y-auto overscroll-contain p-2\.5 pb-28/);
@@ -213,7 +228,7 @@ test('payment modal reviews cart items prices quantities and sweetness before co
   assert.match(pos,/หวานปกติ \(100%\)/);
   assert.match(pos,/หวานน้อย \(50%\)/);
   assert.match(pos,/ไม่หวาน \(0%\)/);
-  assert.match(pos,/\{selectedQty\} × ฿\{i\.price\.toFixed\(0\)\}/);
+  assert.match(pos,/\{selectedQty\} × ฿\{formatMoney\(i\.price\)\}/);
   assert.match(pos,/cart\.removeItem\(i\.key\)/);
   assert.match(pos,/updateCartQuantity\(i\.key,i\.qty-1\)/);
   assert.match(pos,/updateCartQuantity\(i\.key,i\.qty\+1\)/);
@@ -225,9 +240,9 @@ test('payment modal reviews cart items prices quantities and sweetness before co
 test('payment modal stays above mobile navigation with sticky confirm and exact-cash shortcut',async()=>{
   const pos=await read('app/pos/page.tsx');
   assert.match(pos,/z-\[90\]/);
-  assert.match(pos,/max-h-\[calc\(100dvh-1rem\)\]/);
+  assert.match(pos,/field-payment-sheet/);
   assert.match(pos,/sticky bottom-0 z-10/);
-  assert.match(pos,/รับพอดี ฿\{netPayable\.toFixed\(0\)\}/);
+  assert.match(pos,/รับพอดี ฿\{formatMoney\(netPayable\)\}/);
   assert.match(pos,/setReceived\(String\(netPayable\)\)/);
   assert.match(pos,/รับเงินพอดียอด · กดยืนยันชำระได้เลย/);
 });
@@ -304,7 +319,7 @@ test('CRM redemption makes the payment UI use net payable for cash and PromptPay
   assert.match(pos,/crmDiscount/);
   assert.match(pos,/netPayable/);
   assert.match(pos,/pointsRedeemed:redeemPoints/);
-  assert.match(pos,/รับพอดี ฿\{netPayable\.toFixed\(0\)\}/);
+  assert.match(pos,/รับพอดี ฿\{formatMoney\(netPayable\)\}/);
   assert.match(pos,/cashReceived<netPayable/);
   assert.match(pos,/ส่วนลดสมาชิก/);
   assert.match(pos,/ใช้ได้สูงสุด/);
@@ -362,7 +377,8 @@ test('payment success prioritizes queue prefetch before noncritical refreshes',a
 
 test('solo operator daily flow keeps sales and production as separate focused screens',async()=>{
   const shell=await read('components/app-shell.tsx'),pos=await read('app/pos/page.tsx'),queue=await read('app/queue/page.tsx'),close=await read('app/close/page.tsx');
-  assert.match(shell,/\["\/pos","\/queue","\/stock","\/expenses","\/close","\/orders","\/settings"\]/);
+  assert.match(shell,/const primaryMobile=\["\/pos","\/queue","\/orders","\/stock"\]/);
+  assert.match(shell,/mobileOverflow\(allowed\)/);
   assert.match(pos,/ไปทำคิว \{lastSale\.queueNo\}/);
   assert.match(pos,/รับออเดอร์ถัดไป/);
   assert.match(queue,/PRODUCTION RUN/);
@@ -524,4 +540,25 @@ test('payment mapping v2 exposes bank and card as first-class channels',async()=
   assert.match(core,/\['cash','promptpay','bank','card','other'\]/);assert.match(core,/manual_bank/);assert.match(core,/manual_card/);
   assert.match(api,/paymentSummary=\{cash:0,promptpay:0,bank:0,card:0,other:0\}/);assert.match(api,/bankAmount:/);assert.match(api,/cardAmount:/);
   assert.match(close,/x\.bank/);assert.match(close,/x\.card/);assert.match(reports,/PAYMENT CHANNELS/);
+});
+
+
+test('cash operator actions choose VOID before production and Refund after production',async()=>{
+  const orders=await read('app/orders/page.tsx');
+  assert.match(orders,/const cashVoidEligible=/);
+  assert.match(orders,/group\.every\(x=>x\.payment==="cash"\)/);
+  assert.match(orders,/!group\.some\(x=>x\.productionStarted\)/);
+  assert.match(orders,/cashVoidEligible\(detail\).*voidCash\(detail\)/s);
+  assert.match(orders,/!cashVoidEligible\(detail\).*refundSaleUi\(detail\)/s);
+});
+
+
+test('cash checkout exposes common tender shortcuts without bypassing confirmation',async()=>{
+  const pos=await read('app/pos/page.tsx');
+  assert.match(pos,/\[100,500,1000\]\.map\(amount/);
+  assert.match(pos,/setReceived\(String\(amount\)\)/);
+  assert.match(pos,/cashReceived===amount/);
+  assert.match(pos,/รับพอดี ฿\{formatMoney\(netPayable\)\}/);
+  assert.match(pos,/onClick=\{checkout\}/);
+  assert.doesNotMatch(pos,/setReceived\(String\(amount\)\).*checkout\(/s);
 });
