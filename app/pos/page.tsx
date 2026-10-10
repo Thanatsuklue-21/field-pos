@@ -807,7 +807,7 @@ function PosView({session}:{session:Session}){
 
       <button type="button" disabled={busy||!online||method==="delivery"||cart.items.reduce((s,i)=>s+i.qty,0)<2} onClick={()=>{setSplitBill(v=>!v);setSplitSelection({});setPointsRedeemed(0);setReceived("");setResult("")}} className={"mt-4 min-h-11 w-full rounded-2xl border px-4 text-sm font-semibold "+(splitBill?"border-[#d4af37] bg-[#fff8dc] text-[#765b08]":"border-slate-300 bg-white text-slate-700")+" disabled:opacity-40"}>{splitBill?"ยกเลิกแยกบิล":"แยกบิล / จ่ายแยกตามคน"}</button>
       {splitBill&&<div className="mt-2 rounded-2xl border border-[#d4af37]/40 bg-[#fffaf0] px-3 py-2 text-xs text-slate-700">เลือกจำนวนแก้วของ <b>คนที่กำลังจ่าย</b> · หลังชำระ รายการที่เหลือยังอยู่ในตะกร้าเพื่อรับเงินคนถัดไป</div>}
-      {splitGroup&&<div className="mt-2 rounded-2xl border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs text-emerald-800"><b>กลุ่มเดียวกัน · คิว ${splitGroup.queueNo}</b> · การจ่ายคนถัดไปจะใช้คิวและบัตรเรียกเดิมอัตโนมัติ</div>}
+      {splitGroup&&<div className="mt-2 rounded-2xl border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs text-emerald-800"><b>กลุ่มเดียวกัน · คิว {splitGroup.queueNo}</b> · การจ่ายคนถัดไปจะใช้คิวและบัตรเรียกเดิมอัตโนมัติ</div>}
 
       <div className="mt-3 rounded-[20px] border border-slate-200 bg-slate-50 p-3">
         <div className="flex items-center justify-between gap-3"><div><b className="text-sm">{splitBill?"เลือกสำหรับบิลนี้":"รายการที่สั่ง"}</b><p className="mt-0.5 text-[11px] text-slate-500">{splitBill?"เลือกได้แม้เมนูเดียวกันมีหลายแก้ว":"ทวนเมนู ราคา และระดับหวานก่อนรับเงิน"}</p></div><b className="shrink-0 text-lg text-[#765b08]">฿{formatMoney(payableTotal)}</b></div>
