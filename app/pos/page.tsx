@@ -3,8 +3,9 @@ import {formatMoney} from "@/lib/money-format.mjs";
 
 import {useEffect,useMemo,useRef,useState} from "react";
 import {useRouter} from "next/navigation";
-import {ArrowRight,CheckCircle2,Clock3,Minus,Plus,Search,Trash2,WalletCards,X} from "lucide-react";
+import {ArrowRight,CheckCircle2,ClipboardList,Clock3,Minus,Plus,Search,Trash2,WalletCards,X} from "lucide-react";
 import AuthGate from "@/components/auth-gate";
+import PosQuickOps from "@/components/pos-quick-ops";
 import {api,type Bootstrap,type MenuItem,type RevisionUnchanged,type Session} from "@/lib/api-client";
 import {BOOTSTRAP_OFFLINE_MAX_AGE_MS,cacheGet} from "@/lib/offline-db";
 import {getOfflineCashSummary,queueOfflineCashSale,syncOfflineCashSales,type OfflineCashSummary} from "@/lib/offline-sales";
@@ -72,6 +73,7 @@ function PosView({session}:{session:Session}){
   const [selected,setSelected]=useState<MenuItem|null>(null);
   const [payOpen,setPayOpen]=useState(false);
   const [heldOpen,setHeldOpen]=useState(false);
+  const [quickOpsOpen,setQuickOpsOpen]=useState(false);
   const [method,setMethod]=useState<"cash"|"promptpay"|"bank"|"card"|"delivery">("cash");
   const [deliveryPlatform,setDeliveryPlatform]=useState<"grab"|"lineman"|"other_delivery">("grab");
   const [received,setReceived]=useState("");
@@ -867,10 +869,13 @@ function PosView({session}:{session:Session}){
         <div><p className="gold m-0 text-[10px] font-bold tracking-[.3em]">POINT OF SALE</p><h1 className="m-0 mt-1 text-xl font-semibold tracking-wide md:text-2xl">FIELD DRINKS</h1></div>
         <div className="flex items-center gap-1.5 sm:gap-2">
           {(!online||offlineStats.total>0)&&<div className={"hidden rounded-full border px-2.5 py-1.5 text-[10px] font-bold sm:block sm:text-xs "+(!online?"border-amber-300 bg-amber-50 text-amber-800":offlineStats.needsReview>0?"border-red-300 bg-red-50 text-red-700":"border-emerald-300 bg-emerald-50 text-emerald-700")}>{!online?"OFFLINE · เงินสดเท่านั้น":offlineStats.needsReview>0?"Offline ต้องตรวจ "+offlineStats.needsReview:"Offline รอ Sync "+offlineStats.pending}</div>}
+          <button disabled={busy||payOpen} onClick={()=>setQuickOpsOpen(true)} className="flex min-h-9 items-center gap-1.5 rounded-full border border-slate-300 bg-white px-2.5 text-[11px] font-semibold text-slate-700 disabled:opacity-40 sm:px-3 sm:text-xs"><ClipboardList size={14}/>งานร้าน</button>
           <button onClick={()=>setHeldOpen(true)} className="relative flex min-h-9 items-center gap-1.5 rounded-full border border-slate-300 bg-white px-2.5 text-[11px] font-semibold text-slate-700 sm:px-3 sm:text-xs"><Clock3 size={14}/>พักบิล{heldBills.held.length>0&&<span className="grid h-5 min-w-5 place-items-center rounded-full bg-[#d4af37] px-1 text-[10px] font-black text-black">{heldBills.held.length}</span>}</button>
           <div className="hidden rounded-full border border-slate-300 bg-white px-3 py-1.5 text-[11px] text-slate-600 sm:block sm:px-4 sm:py-2 sm:text-xs">{session.user.username}</div>
         </div>
       </div>
+
+      <PosQuickOps session={session} open={quickOpsOpen} onClose={()=>setQuickOpsOpen(false)} writeBlocked={busy||payOpen}/>
 
       {offlineStats.total>0&&<div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
         <span role="status" aria-live="polite" aria-atomic="true">บิล Offline รอส่ง {offlineStats.pending} · ต้องตรวจสอบ {offlineStats.needsReview}</span>
