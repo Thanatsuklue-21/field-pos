@@ -1,0 +1,52 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import {readFile} from "node:fs/promises";
+const read=p=>readFile(new URL("../"+p,import.meta.url),"utf8");
+
+test("API client time-bounds only writes with durable transaction recovery",async()=>{
+  const api=await read("lib/api-client.ts");
+  assert.match(api,/RECOVERABLE_WRITE_TIMEOUT_MS=20_000/);
+  for(const path of [
+    "/api/pos/checkout",
+    "/api/pos/split/start",
+    "/api/pos/split/pay",
+    "/api/pos/split/cancel",
+    "/api/pos/split/provider-release",
+    "/api/pos/payment-resolutions/reconcile",
+    "/api/payments/promptpay/create",
+    "/api/payments/promptpay/status"
+  ]) assert.match(api,new RegExp(path.replaceAll("/","\\/")));
+  assert.match(api,/recoverableWrite=method!=="GET"&&RECOVERABLE_WRITE_PATHS\.has\(path\)/);
+  assert.match(api,/field_recoverable_write_timeout/);
+});
+
+test("non-recoverable operational writes are deliberately excluded from automatic client timeout",async()=>{
+  const api=await read("lib/api-client.ts");
+  const setStart=api.indexOf("const RECOVERABLE_WRITE_PATHS");
+  const setEnd=api.indexOf("]);",setStart);
+  const allowlist=api.slice(setStart,setEnd);
+  for(const path of [
+    "/api/close-day",
+    "/api/expenses",
+    "/api/stock/transactions",
+    "/api/pos/queue"
+  ]) assert.doesNotMatch(allowlist,new RegExp(path.replaceAll("/","\\/")));
+});
+
+test("client still never retries or deduplicates writes after an ambiguous timeout",async()=>{
+  const api=await read("lib/api-client.ts");
+  const start=api.indexOf("export async function api");
+  const block=api.slice(start);
+  assert.match(block,/Writes are never deduplicated or retried here/);
+  assert.match(block,/return executeApi<T>\(path,init,method\)/);
+  assert.doesNotMatch(block,/RECOVERABLE_WRITE_PATHS.*retry/s);
+});
+
+test("cash and offline checkout retain durable recovery across transport timeout ambiguity",async()=>{
+  const pos=await read("app/pos/page.tsx");
+  const offline=await read("lib/offline-sales.ts");
+  assert.match(pos,/cashPendingWrite/);
+  assert.match(pos,/shouldRetainCashPending\(e\)/);
+  assert.match(offline,/body:JSON\.stringify\(row\.body\)/);
+  assert.match(offline,/throw error/);
+});
