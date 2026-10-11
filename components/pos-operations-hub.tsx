@@ -81,16 +81,29 @@ export default function PosOperationsHub({session,bootstrap,open,onClose}:{sessi
   }
 
   useEffect(()=>{
-    if(open)refresh().catch(()=>setMessage("โหลดข้อมูลร้านไม่สำเร็จ · หน้าขายยังใช้งานต่อได้"));
-  },[open]);
-
-  useEffect(()=>{
-    const recover=()=>recoverExpense().catch(()=>{});
-    recover();
-    window.addEventListener("online",recover);
-    window.addEventListener("focus",recover);
-    return()=>{window.removeEventListener("online",recover);window.removeEventListener("focus",recover)};
-  },[session.csrf,session.offline,canExpense]);
+    if(!open)return;
+    const sync=()=>{
+      refresh().catch(()=>setMessage("โหลดข้อมูลร้านไม่สำเร็จ · หน้าขายยังใช้งานต่อได้"));
+      recoverExpense().catch(()=>{});
+    };
+    const onOnline=()=>sync();
+    const onFocus=()=>sync();
+    const onVisible=()=>{if(document.visibilityState==="visible")sync()};
+    sync();
+    if(session.offline)return;
+    const timer=window.setInterval(()=>{
+      if(document.visibilityState!=="hidden")refresh().catch(()=>{});
+    },5000);
+    window.addEventListener("online",onOnline);
+    window.addEventListener("focus",onFocus);
+    document.addEventListener("visibilitychange",onVisible);
+    return()=>{
+      window.clearInterval(timer);
+      window.removeEventListener("online",onOnline);
+      window.removeEventListener("focus",onFocus);
+      document.removeEventListener("visibilitychange",onVisible);
+    };
+  },[open,session.csrf,session.offline,canQueue,canOrder,canExpense]);
 
   async function saveExpense(){
     if(!(Number(expenseAmount)>0)||expenseBusy||session.offline)return;
