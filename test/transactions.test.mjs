@@ -4,14 +4,48 @@ import {beginWriteTransaction,commitWriteTransaction} from "../lib/transactions.
 
 test("write transaction acquisition retries transient libSQL busy errors",async()=>{
   let calls=0;
-  const tx={};
+  const raw={async rollback(){}};
   const db={async transaction(){
     calls++;
     if(calls<3)throw Object.assign(new Error("busy"),{code:"SQLITE_BUSY"});
-    return tx;
+    return raw;
   }};
-  assert.equal(await beginWriteTransaction(db),tx);
+  const tx=await beginWriteTransaction(db);
+  assert.equal(typeof tx.rollback,"function");
   assert.equal(calls,3);
+  await tx.rollback();
+});
+
+test("same database client serializes writes until the active transaction settles",async()=>{
+  let opens=0;
+  const db={async transaction(){
+    const id=++opens;
+    return {id,async commit(){},async rollback(){}};
+  }};
+  const first=await beginWriteTransaction(db);
+  let secondResolved=false;
+  const secondPromise=beginWriteTransaction(db).then(tx=>{secondResolved=true;return tx});
+  await new Promise(resolve=>setTimeout(resolve,0));
+  assert.equal(opens,1);
+  assert.equal(secondResolved,false);
+  await commitWriteTransaction(first);
+  const second=await secondPromise;
+  assert.equal(opens,2);
+  assert.equal(second.id,2);
+  await second.rollback();
+});
+
+test("rollback releases the per-client write slot",async()=>{
+  let opens=0;
+  const db={async transaction(){opens++;return {async commit(){},async rollback(){}}}};
+  const first=await beginWriteTransaction(db);
+  const secondPromise=beginWriteTransaction(db);
+  await new Promise(resolve=>setTimeout(resolve,0));
+  assert.equal(opens,1);
+  await first.rollback();
+  const second=await secondPromise;
+  assert.equal(opens,2);
+  await second.rollback();
 });
 
 test("commit retries SQLITE_BUSY on the same transaction and then succeeds",async()=>{
@@ -42,4 +76,3 @@ test("critical write modules route commits through the bounded helper",async()=>
     assert.doesNotMatch(source,/await tx\.commit\(\)/);
   }
 });
-
