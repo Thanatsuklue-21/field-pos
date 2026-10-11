@@ -24,18 +24,19 @@ test("operations hub covers queue orders stock and quick expenses in one dialog"
   assert.match(hub,/อยู่หน้า POS ต่อ/);
 });
 
-test("quick expense inside POS reuses the durable expense recovery contract",async()=>{
+test("quick expense inside POS reuses the same durable expense client as the full Expenses page",async()=>{
   const hub=await read("components/pos-operations-hub.tsx");
-  assert.match(hub,/EXPENSE_PENDING_KEY/);
-  assert.match(hub,/validatePendingExpense/);
-  assert.match(hub,/shouldRetainExpensePending/);
-  assert.match(hub,/validateExpenseAck/);
-  const start=hub.indexOf("async function sendExpense");
-  const end=hub.indexOf("function expenseError",start);
-  const block=hub.slice(start,end);
-  assert.ok(block.indexOf("expensePendingWrite(body)")<block.indexOf('api<any>("/api/expenses"'));
-  assert.ok(block.indexOf("validateExpenseAck(r,pending.body)")<block.indexOf("expensePendingClear()"));
-  assert.match(block,/JSON\.stringify\(pending\.body\)/);
+  const expenses=await read("app/expenses/page.tsx");
+  const client=await read("lib/expense-client.ts");
+  assert.match(hub,/sendExpenseDurably\(session\.csrf,body\)/);
+  assert.match(hub,/readPendingExpense\(\)/);
+  assert.match(expenses,/sendExpenseDurably\(session\.csrf,body\)/);
+  assert.match(expenses,/readPendingExpense\(\)/);
+  assert.match(client,/EXPENSE_PENDING_KEY/);
+  assert.match(client,/writePendingExpense\(body\)/);
+  assert.match(client,/validateExpenseAck\(response,pending\.body\)/);
+  assert.ok(client.indexOf("writePendingExpense(body)")<client.indexOf("api<any>(\"/api/expenses\""));
+  assert.ok(client.indexOf("validateExpenseAck(response,pending.body)")<client.indexOf("clearPendingExpense()"));
 });
 
 test("hub is permission-aware and keeps full pages as optional fallbacks",async()=>{
@@ -53,4 +54,29 @@ test("hub remains fail-safe offline and does not mutate queue or stock from the 
   assert.match(hub,/disabled=\{expenseBusy\|\|session\.offline/);
   assert.doesNotMatch(hub,/method:"POST"[\s\S]{0,120}\/api\/pos\/queue/);
   assert.doesNotMatch(hub,/method:"POST"[\s\S]{0,120}\/api\/stock/);
+});
+
+
+test("Operations Hub is a mobile bottom sheet and desktop side drawer",async()=>{
+  const hub=await read("components/pos-operations-hub.tsx");
+  assert.match(hub,/flex items-end bg-black\/30/);
+  assert.match(hub,/max-h-\[88dvh\]/);
+  assert.match(hub,/rounded-t-\[28px\]/);
+  assert.match(hub,/sm:items-stretch sm:justify-end/);
+  assert.match(hub,/sm:w-\[520px\]/);
+  assert.match(hub,/event\.key==="Escape"/);
+});
+
+test("stock status counts use the full health set before display truncation",async()=>{
+  const hub=await read("components/pos-operations-hub.tsx");
+  assert.match(hub,/const stockRows=stockHealth\.slice\(0,12\)/);
+  assert.match(hub,/const outCount=stockHealth\.filter/);
+  assert.match(hub,/lowCount=stockHealth\.filter/);
+});
+
+test("tab layout expands to the operator-visible tab count",async()=>{
+  const hub=await read("components/pos-operations-hub.tsx");
+  assert.match(hub,/const visibleTabs=tabMeta\.filter\(x=>x\.allowed\)/);
+  assert.match(hub,/gridTemplateColumns/);
+  assert.match(hub,/visibleTabs\.length/);
 });
