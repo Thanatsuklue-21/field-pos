@@ -2,26 +2,26 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {beginWriteTransaction,commitWriteTransaction} from "../lib/transactions.mjs";
 
-test("write transaction acquisition retries transient libSQL busy errors",async()=>{
+test("write transaction acquisition tolerates sustained transient libSQL busy contention",async()=>{
   let calls=0;
   const tx={};
   const db={async transaction(){
     calls++;
-    if(calls<3)throw Object.assign(new Error("busy"),{code:"SQLITE_BUSY"});
+    if(calls<7)throw Object.assign(new Error("busy"),{code:"SQLITE_BUSY"});
     return tx;
   }};
   assert.equal(await beginWriteTransaction(db),tx);
-  assert.equal(calls,3);
+  assert.equal(calls,7);
 });
 
-test("commit retries SQLITE_BUSY on the same transaction and then succeeds",async()=>{
+test("commit tolerates sustained SQLITE_BUSY on the same transaction and then succeeds",async()=>{
   let calls=0;
   const tx={async commit(){
     calls++;
-    if(calls<3)throw Object.assign(new Error("busy"),{code:"SQLITE_BUSY"});
+    if(calls<7)throw Object.assign(new Error("busy"),{code:"SQLITE_BUSY"});
   }};
   await commitWriteTransaction(tx);
-  assert.equal(calls,3);
+  assert.equal(calls,7);
 });
 
 test("commit never retries SQLITE_BUSY_SNAPSHOT or unknown outcomes",async()=>{
