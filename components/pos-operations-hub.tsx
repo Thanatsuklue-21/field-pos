@@ -143,7 +143,7 @@ export default function PosOperationsHub({session,bootstrap,open,onClose,onRefre
       }else if(variant.lowStock)rows.push({key:menu.id+"|"+variant.label,name:menu.name,variant:variant.label,level:"low",detail:"ทำได้ประมาณ "+variant.maxServings+" แก้ว"});
     }
     return rows;
-  },[bootstrap?.revision]);
+  },[bootstrap?.menu]);
   const stockRows=stockHealth.slice(0,12);
   const outCount=stockHealth.filter(x=>x.level==="out").length,lowCount=stockHealth.filter(x=>x.level==="low").length;
 
