@@ -9,20 +9,22 @@ test("POS opens Quick Ops in-place instead of routing away for common checks",as
   assert.match(pos,/quickOpsOpen/);
   assert.match(pos,/setQuickOpsOpen\(true\)/);
   assert.match(pos,/>งานร้าน<\/button>/);
-  assert.match(pos,/<PosQuickOps session=\{session\} open=\{quickOpsOpen\}/);
+  assert.match(pos,/<PosQuickOps session=\{session\} bootstrap=\{data\} open=\{quickOpsOpen\}/);
   const buttonStart=pos.indexOf('onClick={()=>setQuickOpsOpen(true)}');
   const buttonBlock=pos.slice(Math.max(0,buttonStart-250),buttonStart+450);
   assert.doesNotMatch(buttonBlock,/router\.push/);
 });
 
-test("Quick Ops keeps queue orders and expense on three focused tabs with full-page fallbacks",async()=>{
+test("Quick Ops keeps queue orders stock and expense in one permission-aware workspace",async()=>{
   const ui=await read("components/pos-quick-ops.tsx");
-  for(const label of ["คิวตอนนี้","ออเดอร์ล่าสุด","รายจ่ายด่วน"])assert.match(ui,new RegExp(label));
+  for(const label of ["คิว","ออเดอร์","สต็อก","รายจ่าย"])assert.match(ui,new RegExp(label));
   assert.match(ui,/api<any>\("\/api\/pos\/queue"\)/);
   assert.match(ui,/api<any>\("\/api\/pos\/history"\)/);
   assert.match(ui,/go\("\/queue"\)/);
   assert.match(ui,/go\("\/orders"\)/);
+  assert.match(ui,/go\("\/stock"\)/);
   assert.match(ui,/go\("\/expenses"\)/);
+  assert.match(ui,/bootstrap\?\.menu/);
   assert.match(ui,/งานร้านโดยไม่ออกจาก POS/);
 });
 
@@ -45,7 +47,7 @@ test("Quick Ops preserves transaction and offline safety",async()=>{
   assert.match(pos,/disabled=\{busy\|\|payOpen\} onClick=\{\(\)=>setQuickOpsOpen\(true\)\}/);
   assert.match(pos,/writeBlocked=\{busy\|\|payOpen\}/);
   assert.match(quick,/disabled=\{session\.offline\|\|writeBlocked\|\|expenseBusy/);
-  assert.match(quick,/Quick Ops ใช้ข้อมูล Cloud/);
+  assert.match(quick,/Offline: สต็อกแสดงจากข้อมูลล่าสุดที่ cache ไว้/);
   assert.match(quick,/session\.offline\|\|expenseRecoveryRef\.current/);
 });
 
@@ -54,7 +56,7 @@ test("Quick Ops uses a mobile bottom sheet and desktop side drawer without repla
   assert.match(ui,/fixed inset-0 z-\[90\]/);
   assert.match(ui,/absolute inset-x-0 bottom-0/);
   assert.match(ui,/sm:static sm:h-full/);
-  assert.match(ui,/sm:w-\[430px\]/);
+  assert.match(ui,/sm:w-\[480px\]/);
   assert.match(ui,/soft-scroll/);
   assert.match(ui,/max-h-\[88dvh\]/);
 });
@@ -67,4 +69,24 @@ test("shared expense business date remains explicitly Asia Bangkok",async()=>{
   const quick=await read("components/pos-quick-ops.tsx");
   assert.match(expenses,/date:currentBusinessDate\(\)/);
   assert.match(quick,/date:currentBusinessDate\(\)/);
+});
+
+
+test("Quick Ops only exposes tabs allowed by the signed-in operator permissions",async()=>{
+  const ui=await read("components/pos-quick-ops.tsx");
+  assert.match(ui,/session\.user\.permissions\?\.queue===true/);
+  assert.match(ui,/session\.user\.permissions\?\.order===true/);
+  assert.match(ui,/session\.user\.permissions\?\.stock===true/);
+  assert.match(ui,/session\.user\.permissions\?\.report===true/);
+  assert.match(ui,/tabs\.filter\(x=>x\.allowed\)/);
+  assert.match(ui,/availableTabs\.includes\(tab\)/);
+});
+
+test("compact queue and stock views remain read-only and delegate deep work to full pages",async()=>{
+  const ui=await read("components/pos-quick-ops.tsx");
+  assert.doesNotMatch(ui,/method:"POST"[\s\S]{0,160}"\/api\/pos\/queue"/);
+  assert.doesNotMatch(ui,/method:"POST"[\s\S]{0,160}"\/api\/stock/);
+  assert.match(ui,/จัดการคิวเต็ม/);
+  assert.match(ui,/เปิด Stock เต็ม \/ รับเข้า \/ นับจริง/);
+  assert.match(ui,/availability ที่ POS ใช้รับออเดอร์/);
 });
