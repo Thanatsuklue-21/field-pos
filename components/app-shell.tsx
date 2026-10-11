@@ -16,7 +16,8 @@ const primaryMobile=["/pos","/queue"];
 export default function AppShell({children}:{children:React.ReactNode}){
   const path=usePathname(),lang=useAppStore(s=>s.language),t=dict[lang],[session,setSession]=useState<Session|null>(null),[moreOpen,setMoreOpen]=useState(false);
   const router=useRouter(),offlineRouteAllowed=!session?.offline||["/pos","/settings"].includes(path);
-  const moreTriggerRef=useRef<HTMLButtonElement>(null);\n  const morePanelRef=useRef<HTMLDivElement>(null);
+  const moreTriggerRef=useRef<HTMLButtonElement>(null);
+  const morePanelRef=useRef<HTMLDivElement>(null);
 
   useEffect(()=>{
     const logged=(e:Event)=>setSession((e as CustomEvent).detail||null),expired=()=>{clearSessionCache();setSession(null)};
