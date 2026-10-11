@@ -114,7 +114,7 @@ function PosView({session}:{session:Session}){
   const load=async(force=false)=>{
     const next=await api<Bootstrap|RevisionUnchanged>("/api/pos/bootstrap",!force&&revisionRef.current!==null?{headers:{"X-Field-Revision":String(revisionRef.current)}}:{});
     const outbox=await getOfflineCashSummary().catch(()=>null);
-    if(outbox?.total>0){
+    if(outbox&&outbox.total>0){
       setOfflineStats(outbox);
       return false;
     }
