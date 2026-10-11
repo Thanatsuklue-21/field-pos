@@ -207,13 +207,13 @@ test('order items preserve sale-time price while production queue hides commerci
   assert.doesNotMatch(queue,/ยอดรวม ฿/);
 });
 
-test('mobile shell synchronizes modal height to the visual viewport for software keyboards',async()=>{
-  const shell=await read('components/app-shell.tsx'),css=await read('app/globals.css');
-  assert.match(shell,/window\.visualViewport/);
-  assert.match(shell,/--field-visual-viewport-height/);
-  assert.match(shell,/viewport\.addEventListener\("resize",sync\)/);
-  assert.match(shell,/viewport\.addEventListener\("scroll",sync\)/);
-  assert.match(shell,/orientationchange/);
+test('PWA runtime synchronizes modal height to the visual viewport for software keyboards',async()=>{
+  const runtime=await read('components/pwa-runtime.tsx'),css=await read('app/globals.css');
+  assert.match(runtime,/window\.visualViewport/);
+  assert.match(runtime,/--field-visual-viewport-height/);
+  assert.match(runtime,/viewport\?\.addEventListener\("resize",syncViewport\)/);
+  assert.match(runtime,/viewport\?\.addEventListener\("scroll",syncViewport\)/);
+  assert.match(runtime,/window\.addEventListener\("resize",syncViewport\)/);
   assert.match(css,/\.field-payment-sheet\{max-height:calc\(var\(--field-visual-viewport-height,100dvh\) - 1rem\)/);
 });
 
