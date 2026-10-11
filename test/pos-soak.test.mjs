@@ -1088,3 +1088,39 @@ test('requires-resolution ambiguous attempt cannot attach a different provider i
   },now:now+(20*60*1000)+2}),/promptpay_provider_changed/);
   assert.equal(JSON.parse(db.storage.document).ingredients.matcha.qty,995);
 });
+
+
+test('provider-managed PromptPay resolution cannot bypass provider-authoritative reconcile',async()=>{
+  const db=fakeDb();
+  const now=12000;
+  const started=await startSplitPayment({db,user,body:{requestKey:'provider-resolve-guard-start-001',cart,date,mode:'promptpay_full'},now});
+  const sessionId=started.session.id;
+  await beginSplitPaymentProviderCharge({db,user,body:{sessionId,provider:'beam',attemptKey:'promptpay:'+sessionId},now:now+10});
+  await attachSplitPaymentProviderCharge({db,user,body:{
+    sessionId,chargeId:'ch_provider_guard_001',provider:'beam',amount:55,currency:'THB',status:'pending',referenceId:sessionId
+  },now:now+20});
+  await listSplitPaymentSessions({db,now:now+(20*60*1000)+1});
+  await assert.rejects(()=>resolveSplitPayment({db,user,now:now+(20*60*1000)+2,body:{
+    requestKey:'provider-resolve-guard-resume-001',sessionId
+  }}),/split_session_provider_managed/);
+  const state=JSON.parse(db.storage.document);
+  const session=state.paymentSessions.find(x=>x.id===sessionId);
+  assert.equal(session.status,'requires_resolution');
+  assert.equal(session.providerCharge.chargeId,'ch_provider_guard_001');
+});
+
+test('manual split requires-resolution session can still resume through the generic admin resolve flow',async()=>{
+  const db=fakeDb();
+  const now=13000;
+  const partialCart=[{...cart[0],qty:2}];
+  const started=await startSplitPayment({db,user,body:{requestKey:'manual-resolve-start-001',cart:partialCart,date,mode:'split'},now});
+  await paySplitPayment({db,user,now:now+10,body:{
+    requestKey:'manual-resolve-pay-001',sessionId:started.session.id,method:'cash',received:55,allocations:[{index:0,qty:1}]
+  }});
+  const listed=await listSplitPaymentSessions({db,now:now+(4*60*60*1000)+1});
+  assert.equal(listed.sessions[0].status,'requires_resolution');
+  const resumed=await resolveSplitPayment({db,user,now:now+(4*60*60*1000)+2,body:{
+    requestKey:'manual-resolve-resume-001',sessionId:started.session.id
+  }});
+  assert.equal(resumed.session.status,'collecting');
+});
