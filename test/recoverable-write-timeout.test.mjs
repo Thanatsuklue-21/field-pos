@@ -50,8 +50,9 @@ test("non-recoverable operational writes remain excluded while queue is allowed 
   assert.match(expenseClient,/writePendingExpense\(body\)/);
   assert.match(expenseClient,/body:JSON\.stringify\(pending\.body\)/);
   assert.match(expenseClient,/validateExpenseAck\(response,pending\.body\)/);
-  assert.ok(expenseClient.indexOf("writePendingExpense(body)")<expenseClient.indexOf('api<any>("/api/expenses"'));
-  assert.ok(expenseClient.indexOf("validateExpenseAck(response,pending.body)")<expenseClient.indexOf("clearPendingExpense()"));
+  const expenseSend=expenseClient.slice(expenseClient.indexOf("export async function sendExpenseDurably"));
+  assert.ok(expenseSend.indexOf("writePendingExpense(body)")<expenseSend.indexOf('api<any>("/api/expenses"'));
+  assert.ok(expenseSend.indexOf("validateExpenseAck(response,pending.body)")<expenseSend.indexOf("clearPendingExpense()"));
   assert.match(expenseRecovery,/shouldRetainExpensePending/);
   const stock=await read("app/stock/page.tsx");
   const stockRecovery=await read("lib/stock-transaction-recovery.mjs");
