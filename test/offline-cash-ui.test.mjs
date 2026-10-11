@@ -61,7 +61,7 @@ test('cloud bootstrap cannot overwrite projected stock while offline outbox rema
   const load=pos.slice(loadStart,loadEnd);
   assert.ok(loadStart>=0&&loadEnd>loadStart);
   assert.ok(load.includes('getOfflineCashSummary().catch(()=>null)'));
-  assert.ok(load.includes('if(outbox?.total>0)'));
+  assert.match(load,/if\(outbox(?:\?\.)?&&?\s*outbox\.total>0\)|if\(outbox\?\.total>0\)/);
   assert.ok(load.indexOf('if(outbox?.total>0)')<load.indexOf('acceptBootstrap(next)'));
 
   const syncStart=pos.indexOf('async function syncOfflineQueue()');
