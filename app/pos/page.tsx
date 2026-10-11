@@ -73,7 +73,8 @@ function PosView({session}:{session:Session}){
   const [selected,setSelected]=useState<MenuItem|null>(null);
   const [payOpen,setPayOpen]=useState(false);
   const [heldOpen,setHeldOpen]=useState(false);
-  const [opsOpen,setOpsOpen]=useState(false);\n  const [opsInitialTab,setOpsInitialTab]=useState<HubTab|undefined>(undefined);
+  const [opsOpen,setOpsOpen]=useState(false);
+  const [opsInitialTab,setOpsInitialTab]=useState<HubTab|undefined>(undefined);
   const [method,setMethod]=useState<"cash"|"promptpay"|"bank"|"card"|"delivery">("cash");
   const [deliveryPlatform,setDeliveryPlatform]=useState<"grab"|"lineman"|"other_delivery">("grab");
   const [received,setReceived]=useState("");
