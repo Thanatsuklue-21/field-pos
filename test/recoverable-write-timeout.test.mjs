@@ -8,6 +8,8 @@ test("API client time-bounds only writes with durable transaction recovery",asyn
   assert.match(api,/RECOVERABLE_WRITE_TIMEOUT_MS=20_000/);
   for(const path of [
     "/api/pos/checkout",
+    "/api/pos/void",
+    "/api/pos/refund",
     "/api/expenses",
     "/api/stock/transactions",
     "/api/pos/queue",
@@ -34,6 +36,8 @@ test("non-recoverable operational writes remain excluded while queue is allowed 
     "/api/close-day"
   ]) assert.doesNotMatch(allowlist,new RegExp(path.replaceAll("/","\\/")));
   assert.match(allowlist,/\/api\/pos\/queue/);
+  assert.match(allowlist,/\/api\/pos\/void/);
+  assert.match(allowlist,/\/api\/pos\/refund/);
   assert.match(allowlist,/\/api\/expenses/);
   assert.match(allowlist,/\/api\/stock\/transactions/);
   assert.match(queue,/queuePendingWrite\(body\)/);
@@ -49,6 +53,11 @@ test("non-recoverable operational writes remain excluded while queue is allowed 
   assert.match(stock,/stockPendingWrite\(body\)/);
   assert.match(stock,/body:JSON\.stringify\(pending\.body\)/);
   assert.match(stockRecovery,/shouldRetainStockPending/);
+  const orders=await read("app/orders/page.tsx");
+  const orderRecovery=await read("lib/order-mutation-recovery.mjs");
+  assert.match(orders,/orderMutationPendingWrite\(kind,body\)/);
+  assert.match(orders,/body:JSON\.stringify\(pending\.body\)/);
+  assert.match(orderRecovery,/shouldRetainOrderMutationPending/);
 });
 
 test("client still never retries or deduplicates writes after an ambiguous timeout",async()=>{
