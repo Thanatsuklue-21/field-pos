@@ -64,6 +64,7 @@ export async function cacheGet<T>(key:string,maxAgeMs=BOOTSTRAP_OFFLINE_MAX_AGE_
     return ()=>r.result;
   }).catch(()=>undefined);
   if(!row||Date.now()-Number(row.savedAt||0)>maxAgeMs)return null;
+  if(key==="/api/pos/bootstrap"&&bangkokDate(Number(row.savedAt))!==bangkokDate(Date.now()))return null;
   return row.value;
 }
 
