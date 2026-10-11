@@ -1088,3 +1088,43 @@ test('requires-resolution ambiguous attempt cannot attach a different provider i
   },now:now+(20*60*1000)+2}),/promptpay_provider_changed/);
   assert.equal(JSON.parse(db.storage.document).ingredients.matcha.qty,995);
 });
+
+
+test('provider release is state-idempotent after commit when the first response is lost',async()=>{
+  const db=fakeDb();
+  const started=await startSplitPayment({db,user,body:{requestKey:'pp-release-state-start-001',cart,date,mode:'promptpay_full'},now:12000});
+  const sessionId=started.session.id;
+  await beginSplitPaymentProviderCharge({db,user,body:{sessionId,provider:'beam',attemptKey:'promptpay:'+sessionId},now:12010});
+  await attachSplitPaymentProviderCharge({db,user,body:{
+    sessionId,chargeId:'ch_release_state_001',provider:'beam',amount:55,currency:'THB',status:'expired',referenceId:sessionId
+  },now:12020});
+  const beforeRelease=JSON.parse(db.storage.document).ingredients.matcha.qty;
+  const first=await releaseSplitPaymentProviderSession({db,user,body:{
+    requestKey:'release-state-key-001',sessionId,paymentReference:'ch_release_state_001',providerStatus:'expired'
+  },now:12030});
+  assert.equal(first.released,true);
+  const afterFirst=JSON.parse(db.storage.document).ingredients.matcha.qty;
+  assert.equal(afterFirst,beforeRelease+5);
+  const retry=await releaseSplitPaymentProviderSession({db,user,body:{
+    requestKey:'release-state-key-NEW',sessionId,paymentReference:'ch_release_state_001',providerStatus:'expired'
+  },now:12040});
+  assert.equal(retry.released,true);
+  assert.equal(retry.stateReplay,true);
+  assert.equal(JSON.parse(db.storage.document).ingredients.matcha.qty,afterFirst);
+});
+
+test('state-idempotent provider release rejects mismatched final state or charge',async()=>{
+  const db=fakeDb();
+  const started=await startSplitPayment({db,user,body:{requestKey:'pp-release-state-start-002',cart,date,mode:'promptpay_full'},now:12100});
+  const sessionId=started.session.id;
+  await beginSplitPaymentProviderCharge({db,user,body:{sessionId,provider:'beam',attemptKey:'promptpay:'+sessionId},now:12110});
+  await attachSplitPaymentProviderCharge({db,user,body:{
+    sessionId,chargeId:'ch_release_state_002',provider:'beam',amount:55,currency:'THB',status:'failed',referenceId:sessionId
+  },now:12120});
+  await releaseSplitPaymentProviderSession({db,user,body:{
+    requestKey:'release-state-key-002',sessionId,paymentReference:'ch_release_state_002',providerStatus:'failed'
+  },now:12130});
+  await assert.rejects(()=>releaseSplitPaymentProviderSession({db,user,body:{
+    requestKey:'release-state-key-003',sessionId,paymentReference:'ch_release_state_002',providerStatus:'expired'
+  },now:12140}),/split_session_unavailable|promptpay_provider_not_final/);
+});
