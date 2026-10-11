@@ -38,7 +38,9 @@ test("Quick expense reuses the same durable client contract as the full Expenses
   assert.match(expenses,/readPendingExpense\(\)/);
   assert.match(client,/EXPENSE_PENDING_KEY/);
   assert.match(client,/validateExpenseAck\(response,pending\.body\)/);
-  assert.ok(client.indexOf("validateExpenseAck(response,pending.body)")<client.indexOf("clearPendingExpense()"));
+  const sendStart=client.indexOf("export async function sendExpenseDurably");
+  const sendBlock=client.slice(sendStart);
+  assert.ok(sendBlock.indexOf("validateExpenseAck(response,pending.body)")<sendBlock.indexOf("clearPendingExpense()"));
 });
 
 test("Quick Ops preserves transaction and offline safety",async()=>{
