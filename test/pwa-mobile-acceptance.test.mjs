@@ -6,11 +6,12 @@ const read=p=>readFile(new URL("../"+p,import.meta.url),"utf8");
 
 test("phone app shell uses bounded primary nav plus overflow menu",async()=>{
   const shell=await read("components/app-shell.tsx");
-  assert.ok(shell.includes('const primaryMobile=["/pos","/queue","/orders","/stock"]'));
+  assert.ok(shell.includes('const primaryMobile=["/pos","/queue"]'));
   assert.ok(shell.includes('mobileOverflow(allowed)'));
   assert.ok(shell.includes("MoreHorizontal"));
   assert.ok(shell.includes("overflow-hidden"));
   assert.ok(shell.includes("min-h-11 min-w-0 flex-1"));
+  assert.ok(shell.includes("mobileOverflow(allowed)"));
   assert.ok(!shell.includes("overflow-x-auto rounded-[20px] p-1 md:hidden"));
 });
 
