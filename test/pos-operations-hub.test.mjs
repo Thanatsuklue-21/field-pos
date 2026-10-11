@@ -171,4 +171,7 @@ test("post-sale queue action stays inside POS and opens the Hub on Queue context
   assert.match(pos,/initialTab=\{opsInitialTab\}/);
   assert.match(hub,/initialTab\?:HubTab/);
   assert.match(hub,/initialTab&&availableTabs\.includes\(initialTab\)\?initialTab:availableTabs\[0\]/);
+  const initialEffect=hub.slice(hub.indexOf("const requested=initialTab"),hub.indexOf("useEffect(()=>{",hub.indexOf("const requested=initialTab")+1));
+  assert.match(initialEffect,/\[open,initialTab,availableTabs\.join\("\\\|"\)\]/);
+  assert.doesNotMatch(initialEffect,/availableTabs\.join\("\\\|"\),tab/);
 });
