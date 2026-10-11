@@ -41,8 +41,10 @@ test("expense recovery clears only after exact server acknowledgement",()=>{
     {},
     {ok:false,expense:{...body,id:"exp-1"}},
     {ok:true,expense:{...body,id:"exp-1",requestKey:"other"}},
+    {ok:true,expense:{...body,id:"exp-1",date:"2026-10-12"}},
     {ok:true,expense:{...body,id:"exp-1",amount:36}},
     {ok:true,expense:{...body,id:"exp-1",category:"OTHER"}},
+    {ok:true,expense:{...body,id:"exp-1",description:"other"}},
     {ok:true,expense:{...body,id:"exp-1",paymentMethod:"bank"}}
   ]) assert.throws(()=>validateExpenseAck(bad,body),/expense_unconfirmed/);
 });
@@ -54,6 +56,7 @@ test("Expenses UI persists exact Bangkok-dated request before send and replays i
   const block=ui.slice(start,end);
   assert.match(ui,/timeZone:"Asia\/Bangkok"/);
   assert.match(ui,/requestKey:crypto\.randomUUID\(\),date:localDate\(\)/);
+  assert.match(ui,/description:description\.trim\(\)\.slice\(0,240\)/);
   assert.match(block,/expensePendingWrite\(body\)/);
   assert.match(block,/body:JSON\.stringify\(pending\.body\)/);
   assert.ok(block.indexOf("expensePendingWrite(body)")<block.indexOf('api<any>("/api/expenses"'));
