@@ -53,3 +53,22 @@ test('server marks synced offline orders returned so they never re-enter product
   assert.match(api,/offline_price_changed/);
   assert.match(api,/pos_checkout_offline_sync/);
 });
+
+test('cloud bootstrap cannot overwrite projected stock while offline outbox remains unresolved',async()=>{
+  const pos=await read('app/pos/page.tsx');
+  const loadStart=pos.indexOf('const load=async(force=false)');
+  const loadEnd=pos.indexOf('const loadCustomers=',loadStart);
+  const load=pos.slice(loadStart,loadEnd);
+  assert.ok(loadStart>=0&&loadEnd>loadStart);
+  assert.ok(load.includes('getOfflineCashSummary().catch(()=>null)'));
+  assert.ok(load.includes('if(outbox?.total>0)'));
+  assert.ok(load.indexOf('if(outbox?.total>0)')<load.indexOf('acceptBootstrap(next)'));
+
+  const syncStart=pos.indexOf('async function syncOfflineQueue()');
+  const syncEnd=pos.indexOf('function finishOfflineSale',syncStart);
+  const sync=pos.slice(syncStart,syncEnd);
+  assert.ok(sync.includes('if(sync.total===0)'));
+  assert.ok(sync.includes('await load(true).catch(()=>{})'));
+  assert.ok(sync.includes('ระบบคง Stock projection ในเครื่องไว้จนกว่าจะจัดการครบ'));
+});
+
