@@ -158,3 +158,17 @@ test("Operations Hub blocks cloud polling and quick expense writes when the devi
   assert.match(hub,/if\(!cloudAvailable\)return/);
   assert.match(hub,/expenseBusy\|\|!cloudAvailable\|\|!/);
 });
+
+
+test("post-sale queue action stays inside POS and opens the Hub on Queue context",async()=>{
+  const pos=await read("app/pos/page.tsx");
+  const hub=await read("components/pos-operations-hub.tsx");
+  const saleStart=pos.indexOf("lastSale&&");
+  const saleBlock=pos.slice(saleStart,pos.indexOf("<PosOperationsHub",saleStart));
+  assert.match(pos,/const \[opsInitialTab,setOpsInitialTab\]=useState<HubTab\|undefined>\(undefined\)/);
+  assert.match(saleBlock,/setOpsInitialTab\("queue"\);setLastSale\(null\);setOpsOpen\(true\)/);
+  assert.doesNotMatch(saleBlock,/router\.push\("\/queue"\)/);
+  assert.match(pos,/initialTab=\{opsInitialTab\}/);
+  assert.match(hub,/initialTab\?:HubTab/);
+  assert.match(hub,/initialTab&&availableTabs\.includes\(initialTab\)\?initialTab:availableTabs\[0\]/);
+});
