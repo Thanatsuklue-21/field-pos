@@ -774,9 +774,12 @@ function PosView({session}:{session:Session}){
         }
         setPrompt(st);
         if(["failed","expired","reversed"].includes(String(st.status||"").toLowerCase())){
-          if(activePending)await cancelPendingReservation(activePending);
-          pendingClear();
-          throw Object.assign(new Error("promptpay_failed"),{status:409});
+          const released=activePending?await cancelPendingReservation(activePending):false;
+          if(released){
+            pendingClear();
+            throw Object.assign(new Error("promptpay_failed"),{status:409});
+          }
+          throw Object.assign(new Error("promptpay_release_unconfirmed"),{status:409});
         }
         if(st.paid){
           const p=activePending||pendingRead();
