@@ -93,6 +93,41 @@ test('real libSQL: durable checkout retry survives 100 newer queue mutations',as
   assert.equal((await state(db)).sales.length,1);assert.equal((await state(db)).ingredients.matcha.qty,990);
 });
 
+test('real libSQL: two stale devices race across 30 queues without double completion or stock drift',async t=>{
+  const db=await setup(t);
+  let conflicts=0;
+  for(let i=1;i<=30;i++){
+    const paid=await sell(db,'two-device-checkout-'+String(i).padStart(2,'0'));
+    const snapshot=await getQueueSnapshot({db});
+    const order=snapshot.orders.find(x=>x.id===paid.orderId);
+    assert.ok(order);
+    const expectedReadyQty=Number(order.items[0].readyQty)||0;
+    const results=await Promise.allSettled([
+      queuePosAction({db,user,body:{requestKey:'device-a-complete-'+i,orderId:paid.orderId,action:'complete_item',itemIndex:0,expectedReadyQty}}),
+      queuePosAction({db,user,body:{requestKey:'device-b-complete-'+i,orderId:paid.orderId,action:'complete_item',itemIndex:0,expectedReadyQty}})
+    ]);
+    const fulfilled=results.filter(x=>x.status==='fulfilled');
+    const rejected=results.filter(x=>x.status==='rejected');
+    assert.equal(fulfilled.length,1);
+    assert.equal(rejected.length,1);
+    assert.match(String(rejected[0].reason?.message||rejected[0].reason),/queue_state_changed/);
+    conflicts++;
+    let doc=await state(db);
+    const saved=doc.orders.find(x=>x.id===paid.orderId);
+    assert.equal(saved.items[0].readyQty,2);
+    await act(db,paid.orderId,'call');
+    await act(db,paid.orderId,'return');
+  }
+  const doc=await state(db);
+  assert.equal(conflicts,30);
+  assert.equal(doc.sales.length,30);
+  assert.equal(doc.orders.length,30);
+  assert.ok(doc.orders.every(x=>x.status==='returned'));
+  assert.equal(doc.ingredients.matcha.qty,1000-(30*10));
+  assert.equal(doc.ingredients.milk.qty,30000-(30*220));
+  assert.equal((await getQueueSnapshot({db})).orders.length,0);
+});
+
 test('real libSQL: split rejects repeated indexes and fractional quantities without modifying stock/payments',async t=>{
   const db=await setup(t);
   const split=await startSplitPayment({db,user,body:{requestKey:'split-start',cart,date:bangkokDate()}});
