@@ -58,5 +58,7 @@ test("CI pins third-party GitHub Actions to reviewed commit SHAs",async()=>{
   assert.match(workflow,/actions\/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1/);
   assert.doesNotMatch(workflow,/actions\/checkout@v\d+/);
   assert.doesNotMatch(workflow,/actions\/setup-node@v\d+/);
+  assert.match(workflow,/permissions:\s*\n\s*contents:\s*read/);
+  assert.match(workflow,/persist-credentials:\s*false/);
 });
 
