@@ -83,7 +83,7 @@ test("tab layout expands to the operator-visible tab count",async()=>{
 });
 
 
-test("open Operations Hub refreshes live data without forcing route changes",async()=>{
+test("open Operations Hub stays live without forcing route changes",async()=>{
   const hub=await read("components/pos-operations-hub.tsx");
   assert.match(hub,/if\(!open\)return/);
   assert.match(hub,/window\.setInterval/);
@@ -94,4 +94,30 @@ test("open Operations Hub refreshes live data without forcing route changes",asy
   assert.match(hub,/document\.addEventListener\("visibilitychange",onVisible\)/);
   assert.match(hub,/document\.visibilityState==="visible"/);
   assert.match(hub,/recoverExpense\(\)\.catch/);
+});
+
+test("Hub loads all permitted data once but background refreshes only the active tab quietly",async()=>{
+  const hub=await read("components/pos-operations-hub.tsx");
+  assert.match(hub,/async function refresh\(scope:HubTab\|"all"="all",quiet=false\)/);
+  assert.match(hub,/canQueue&&\(scope==="all"\|\|scope==="queue"\)/);
+  assert.match(hub,/canOrder&&\(scope==="all"\|\|scope==="orders"\)/);
+  assert.match(hub,/canExpense&&\(scope==="all"\|\|scope==="expenses"\)/);
+  assert.match(hub,/if\(!quiet\)\{setLoading\(true\);setMessage\(""\)\}/);
+  assert.match(hub,/finally\{if\(!quiet\)setLoading\(false\)\}/);
+  assert.match(hub,/refresh\("all",quiet\)/);
+  assert.match(hub,/sync\(false\)/);
+  assert.match(hub,/refresh\(activeTabRef\.current,true\)/);
+  assert.match(hub,/onClick=\{\(\)=>refresh\(tab\)\}/);
+  const timer=hub.slice(hub.indexOf("const timer=window.setInterval"),hub.indexOf('window.addEventListener("online"',hub.indexOf("const timer=window.setInterval")));
+  assert.match(timer,/refresh\(activeTabRef\.current,true\)/);
+  assert.doesNotMatch(timer,/refresh\("all"/);
+});
+
+test("switching Hub tabs refreshes the newly selected tab once without duplicating initial open fetch",async()=>{
+  const hub=await read("components/pos-operations-hub.tsx");
+  const start=hub.indexOf("const changed=activeTabRef.current!==tab");
+  const block=hub.slice(start,start+360);
+  assert.match(block,/const changed=activeTabRef\.current!==tab/);
+  assert.match(block,/activeTabRef\.current=tab/);
+  assert.match(block,/if\(changed&&open&&!session\.offline\)refresh\(tab,true\)/);
 });

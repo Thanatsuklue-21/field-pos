@@ -35,8 +35,14 @@ export default function PosOperationsHub({session,bootstrap,open,onClose}:{sessi
   const [expenseDescription,setExpenseDescription]=useState("");
   const [expensePayment,setExpensePayment]=useState("cash");
   const expenseRecoveryRef=useRef(false);
+  const activeTabRef=useRef<HubTab>(tab);
 
   useEffect(()=>{if(!availableTabs.includes(tab)&&availableTabs[0])setTab(availableTabs[0])},[availableTabs.join("|"),tab]);
+  useEffect(()=>{
+    const changed=activeTabRef.current!==tab;
+    activeTabRef.current=tab;
+    if(changed&&open&&!session.offline)refresh(tab,true).catch(()=>{});
+  },[tab,open,session.offline]);
   useEffect(()=>{
     if(!open)return;
     const onKey=(event:KeyboardEvent)=>{if(event.key==="Escape")onClose()};
@@ -44,15 +50,16 @@ export default function PosOperationsHub({session,bootstrap,open,onClose}:{sessi
     return()=>window.removeEventListener("keydown",onKey);
   },[open,onClose]);
 
-  async function refresh(){
-    if(session.offline){setMessage("OFFLINE · ดูสถานะจากข้อมูลเมนู/สต็อกที่ cache ไว้ได้ แต่คิว ออเดอร์ และรายจ่ายต้องรอเชื่อมต่อ");return}
-    setLoading(true);setMessage("");
+  async function refresh(scope:HubTab|"all"="all",quiet=false){
+    if(session.offline){if(!quiet)setMessage("OFFLINE · ดูสถานะจากข้อมูลเมนู/สต็อกที่ cache ไว้ได้ แต่คิว ออเดอร์ และรายจ่ายต้องรอเชื่อมต่อ");return}
+    if(!quiet){setLoading(true);setMessage("")}
     try{
       const tasks:Promise<any>[]=[];
-      const names:string[]=[];
-      if(canQueue){tasks.push(api<any>("/api/pos/queue"));names.push("queue")}
-      if(canOrder){tasks.push(api<any>("/api/pos/history"));names.push("orders")}
-      if(canExpense){tasks.push(api<any>("/api/expenses"));names.push("expenses")}
+      const names:("queue"|"orders"|"expenses")[]=[];
+      if(canQueue&&(scope==="all"||scope==="queue")){tasks.push(api<any>("/api/pos/queue"));names.push("queue")}
+      if(canOrder&&(scope==="all"||scope==="orders")){tasks.push(api<any>("/api/pos/history"));names.push("orders")}
+      if(canExpense&&(scope==="all"||scope==="expenses")){tasks.push(api<any>("/api/expenses"));names.push("expenses")}
+      if(!tasks.length)return;
       const settled=await Promise.allSettled(tasks);
       settled.forEach((result,index)=>{
         if(result.status!=="fulfilled")return;
@@ -62,7 +69,7 @@ export default function PosOperationsHub({session,bootstrap,open,onClose}:{sessi
         if(name==="expenses")setExpenses(Array.isArray(value.expenses)?value.expenses:[]);
       });
       if(settled.some(x=>x.status==="rejected"))setMessage("บางข้อมูลยังโหลดไม่ได้ · หน้าขายยังใช้งานต่อได้ตามปกติ");
-    }finally{setLoading(false)}
+    }finally{if(!quiet)setLoading(false)}
   }
 
   async function recoverExpense(){
@@ -74,7 +81,7 @@ export default function PosOperationsHub({session,bootstrap,open,onClose}:{sessi
     try{
       await sendExpenseDurably(session.csrf,pending.body);
       setMessage("กู้คืนค่าใช้จ่ายเดิมสำเร็จ · ไม่บันทึกซ้ำ");
-      await refresh();
+      await refresh("expenses",true);
     }catch(e:any){
       setMessage(shouldRetainExpensePending(e)?"ค่าใช้จ่ายเดิมยังไม่ทราบผล · ระบบเก็บ request เดิมไว้และจะตรวจซ้ำ":expenseErrorText(e.message));
     }finally{expenseRecoveryRef.current=false;setExpenseBusy(false)}
@@ -82,17 +89,17 @@ export default function PosOperationsHub({session,bootstrap,open,onClose}:{sessi
 
   useEffect(()=>{
     if(!open)return;
-    const sync=()=>{
-      refresh().catch(()=>setMessage("โหลดข้อมูลร้านไม่สำเร็จ · หน้าขายยังใช้งานต่อได้"));
+    const sync=(quiet=true)=>{
+      refresh("all",quiet).catch(()=>setMessage("โหลดข้อมูลร้านไม่สำเร็จ · หน้าขายยังใช้งานต่อได้"));
       recoverExpense().catch(()=>{});
     };
-    const onOnline=()=>sync();
-    const onFocus=()=>sync();
-    const onVisible=()=>{if(document.visibilityState==="visible")sync()};
-    sync();
+    const onOnline=()=>sync(true);
+    const onFocus=()=>sync(true);
+    const onVisible=()=>{if(document.visibilityState==="visible")sync(true)};
+    sync(false);
     if(session.offline)return;
     const timer=window.setInterval(()=>{
-      if(document.visibilityState!=="hidden")refresh().catch(()=>{});
+      if(document.visibilityState!=="hidden")refresh(activeTabRef.current,true).catch(()=>{});
     },5000);
     window.addEventListener("online",onOnline);
     window.addEventListener("focus",onFocus);
@@ -152,7 +159,7 @@ export default function PosOperationsHub({session,bootstrap,open,onClose}:{sessi
       <div className="mx-auto mt-2 h-1 w-12 rounded-full bg-slate-300 sm:hidden"/>
       <header className="flex items-start justify-between gap-3 border-b border-slate-200 bg-white px-4 py-4 sm:px-5">
         <div><p className="m-0 text-[10px] font-black tracking-[.22em] text-[#765b08]">FIELD OPERATIONS</p><h2 className="mt-1 text-xl font-black text-slate-900">งานร้าน</h2><p className="mt-1 text-xs text-slate-500">ดูงานหลักและบันทึกรายจ่ายด่วนโดยไม่ออกจากหน้า POS</p></div>
-        <div className="flex gap-1"><button disabled={loading} onClick={()=>refresh()} aria-label="รีเฟรชงานร้าน" className="grid h-11 w-11 place-items-center rounded-xl border border-slate-200 bg-white disabled:opacity-40"><RefreshCw size={17}/></button><button onClick={onClose} aria-label="ปิดงานร้าน" className="grid h-11 w-11 place-items-center rounded-xl border border-slate-200 bg-white"><X size={18}/></button></div>
+        <div className="flex gap-1"><button disabled={loading} onClick={()=>refresh(tab)} aria-label="รีเฟรชแท็บงานร้าน" className="grid h-11 w-11 place-items-center rounded-xl border border-slate-200 bg-white disabled:opacity-40"><RefreshCw size={17}/></button><button onClick={onClose} aria-label="ปิดงานร้าน" className="grid h-11 w-11 place-items-center rounded-xl border border-slate-200 bg-white"><X size={18}/></button></div>
       </header>
 
       <div className="grid gap-1 border-b border-slate-200 bg-white p-2" style={{gridTemplateColumns:`repeat(${Math.max(1,visibleTabs.length)},minmax(0,1fr))`}}>
