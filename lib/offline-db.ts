@@ -1,5 +1,6 @@
 const DB_NAME="field-pos-client",CACHE_STORE="cache",OUTBOX_STORE="cash-outbox",VERSION=2;
 export const BOOTSTRAP_OFFLINE_MAX_AGE_MS=36*60*60*1000;
+const bangkokDate=(timestamp:number)=>new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Bangkok",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date(timestamp));
 type Cached<T>={value:T,savedAt:number};
 export type OfflineCashStatus="pending"|"needs_review";
 export type OfflineCashRecord={
@@ -68,7 +69,7 @@ export async function cacheGet<T>(key:string,maxAgeMs=BOOTSTRAP_OFFLINE_MAX_AGE_
 
 export async function offlineCashPut(record:OfflineCashRecord,projectBootstrap?:(value:any)=>any){
   const db=await openDb();if(!db)throw new Error("offline_storage_unavailable");
-  let projected:any;
+  let projected:any,projectionError:Error|undefined;
   await committedTransaction(db,projectBootstrap?[OUTBOX_STORE,CACHE_STORE]:OUTBOX_STORE,"readwrite",tx=>{
     const outbox=tx.objectStore(OUTBOX_STORE);
     // New Offline checkouts must not replace an existing request and deduct stock twice.
@@ -79,14 +80,16 @@ export async function offlineCashPut(record:OfflineCashRecord,projectBootstrap?:
         try{
           const cached=request.result as Cached<any>|undefined;
           if(!cached?.value||!cached.savedAt||Date.now()-cached.savedAt>BOOTSTRAP_OFFLINE_MAX_AGE_MS)throw new Error("offline_catalog_unavailable");
+          const billDate=String(record.body?.date||"");
+          if(!/^\d{4}-\d{2}-\d{2}$/.test(billDate)||bangkokDate(Number(cached.savedAt))!==billDate)throw new Error("offline_catalog_stale_day");
           projected=projectBootstrap(cached.value);
           // Keep the original freshness deadline; an Offline sale is not a Cloud revalidation.
           store.put({...cached,value:projected},"/api/pos/bootstrap");
-        }catch{tx.abort()}
+        }catch(error){projectionError=error instanceof Error?error:new Error("offline_catalog_unavailable");tx.abort()}
       };
     }
     return ()=>undefined;
-  });
+  }).catch(error=>{if(projectionError)throw projectionError;throw error});
   return projected;
 }
 export async function offlineCashList():Promise<OfflineCashRecord[]>{
