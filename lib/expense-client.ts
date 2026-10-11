@@ -4,6 +4,10 @@ import {EXPENSE_PENDING_KEY,shouldRetainExpensePending,validateExpenseAck,valida
 export type ExpenseBody={requestKey:string;date:string;amount:number;category:string;description:string;paymentMethod:string};
 export type PendingExpense={body:ExpenseBody;createdAt:number};
 
+export function currentBusinessDate(){
+  return new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Bangkok",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date());
+}
+
 export function readPendingExpense():PendingExpense|null{
   let raw:string|null=null;
   try{raw=localStorage.getItem(EXPENSE_PENDING_KEY)}catch{throw new Error("expense_recovery_storage_unavailable")}
