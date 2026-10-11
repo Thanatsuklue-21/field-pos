@@ -47,9 +47,9 @@ export async function runDayFlow({extraBankExpense=0,countedCash=514.25,received
    bills.push({...receipt,payment,finalStatus:i===11?'refunded':'paid'});
   }
   await call('stock/transactions','POST',{requestKey:'day-flow-purchase',ingredientId:'cup',type:'PURCHASE',qtyDelta:20,unit:'piece',purchaseCost:60,purchaseDate:date,purchasePaymentMethod:'bank'},201);
-  await call('expenses','POST',{amount:50.25,category:'OTHER',description:'QA cleaning',paymentMethod:'cash',date},201);
-  await call('expenses','POST',{amount:80.25+extraBankExpense,category:'UTILITY',description:'QA electricity',paymentMethod:'bank',date},201);
-  assert.equal((await call('expenses','POST',{amount:1,category:'OTHER',paymentMethod:'cash_typo',date},400)).error,'invalid_expense_payment_method');
+  await call('expenses','POST',{requestKey:'day-flow-expense-cleaning',amount:50.25,category:'OTHER',description:'QA cleaning',paymentMethod:'cash',date},201);
+  await call('expenses','POST',{requestKey:'day-flow-expense-electricity',amount:80.25+extraBankExpense,category:'UTILITY',description:'QA electricity',paymentMethod:'bank',date},201);
+  assert.equal((await call('expenses','POST',{requestKey:'day-flow-expense-invalid-method',amount:1,category:'OTHER',paymentMethod:'cash_typo',date},400)).error,'invalid_expense_payment_method');
   await call('cash-shift/movements','POST',{type:'CASH_OUT',amount:200.30,reason:'QA safe deposit'},201);
   await call('cash-shift/movements','POST',{type:'CASH_OUT',amount:99999,reason:'QA shortage guard'},409);
   assert.equal((await call('reports/summary')).todaySummary.expectedCash,null);
@@ -73,7 +73,7 @@ export async function runDayFlow({extraBankExpense=0,countedCash=514.25,received
   await call('accounting/settlements','POST',{saleDate:date,platform:'grab',receivedAmount:receivedDeliveryAmount,receivedDate:date},409);
   await call('close-day','POST',{countedCash},409);
   await call('pos/checkout','POST',{requestKey:'after-day-close',date,cart:[{id:'qa-latte',variant:'100%',qty:1}],payment:'cash',received:100},409);
-  await call('expenses','POST',{amount:1,category:'OTHER',paymentMethod:'cash',date},409);
+  await call('expenses','POST',{requestKey:'day-flow-expense-after-close',amount:1,category:'OTHER',paymentMethod:'cash',date},409);
   const raw=JSON.parse((await db.execute('SELECT document FROM field_state')).rows[0].document);
   assert.equal(raw.expenses.filter(e=>e.sourceType==='STOCK_REFUND_LOSS').length,1);
   return {date,fixture:true,realProviderPayment:false,productionWrites:false,apiCalls:trace.length,extraBankExpense,bills,close,summary,dashboard,exported,stock,reconciliation,trace};
