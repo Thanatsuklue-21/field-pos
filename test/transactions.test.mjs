@@ -33,3 +33,13 @@ test("commit never retries SQLITE_BUSY_SNAPSHOT or unknown outcomes",async()=>{
     assert.equal(calls,1);
   }
 });
+
+test("critical write modules route commits through the bounded helper",async()=>{
+  const {readFile}=await import("node:fs/promises");
+  for(const path of ["lib/pos-api.mjs","lib/api.mjs","lib/stock-service.mjs"]){
+    const source=await readFile(new URL("../"+path,import.meta.url),"utf8");
+    assert.match(source,/commitWriteTransaction/);
+    assert.doesNotMatch(source,/await tx\.commit\(\)/);
+  }
+});
+
