@@ -14,6 +14,8 @@ const AUTH_SESSION_TIMEOUT_MS=2_500;
 const RECOVERABLE_WRITE_TIMEOUT_MS=20_000;
 const RECOVERABLE_WRITE_PATHS=new Set([
   "/api/pos/checkout",
+  "/api/pos/void",
+  "/api/pos/refund",
   "/api/expenses",
   "/api/stock/transactions",
   "/api/pos/queue",
