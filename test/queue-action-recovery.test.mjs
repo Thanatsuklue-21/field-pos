@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {readFile} from "node:fs/promises";
-import {shouldRetainQueuePending,validatePendingQueueAction} from "../lib/queue-action-recovery.mjs";
+import {shouldRetainQueuePending,validatePendingQueueAction,validateQueueActionAck} from "../lib/queue-action-recovery.mjs";
 
 const read=p=>readFile(new URL("../"+p,import.meta.url),"utf8");
 
@@ -93,4 +93,27 @@ test("pending queue action retries automatically on reconnect focus and visible 
   assert.match(queue,/document\.addEventListener\("visibilitychange",onVisible\)/);
   assert.match(queue,/document\.visibilityState==="visible"/);
   assert.match(queue,/sendQueueAction\(pending\.body\)/);
+});
+
+
+test("queue action pending clears only after exact server acknowledgement",async()=>{
+  const body={requestKey:"queue-ack-0001",orderId:"order-1",action:"waste_remake",itemIndex:0};
+  const good={ok:true,orderId:"order-1",action:"waste_remake",revision:4};
+  assert.equal(validateQueueActionAck(good,body),good);
+  for(const bad of [
+    null,
+    {},
+    {ok:false,orderId:"order-1",action:"waste_remake",revision:4},
+    {ok:true,orderId:"order-2",action:"waste_remake",revision:4},
+    {ok:true,orderId:"order-1",action:"call",revision:4},
+    {ok:true,orderId:"order-1",action:"waste_remake",revision:-1},
+    {ok:true,orderId:"order-1",action:"waste_remake",revision:1.5}
+  ]) assert.throws(()=>validateQueueActionAck(bad,body),/queue_action_unconfirmed/);
+
+  const queue=await read("app/queue/page.tsx");
+  const start=queue.indexOf("async function sendQueueAction");
+  const end=queue.indexOf("useEffect(()=>",start);
+  const block=queue.slice(start,end);
+  assert.ok(block.indexOf("validateQueueActionAck(r,pending.body)")<block.indexOf("queuePendingClear()"));
+  assert.match(queue,/queue_action_unconfirmed/);
 });
