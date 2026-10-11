@@ -39,6 +39,7 @@ export default function PosOperationsHub({session,bootstrap,open,onClose,onRefre
   const activeTabRef=useRef<HubTab>(tab);
   const dialogRef=useRef<HTMLElement|null>(null);
   const previousFocusRef=useRef<HTMLElement|null>(null);
+  const tabRefs=useRef<Partial<Record<HubTab,HTMLButtonElement|null>>>({});
   const onCloseRef=useRef(onClose);
 
   useEffect(()=>{onCloseRef.current=onClose},[onClose]);
@@ -189,6 +190,21 @@ export default function PosOperationsHub({session,bootstrap,open,onClose,onRefre
   ];
 
   const visibleTabs=tabMeta.filter(x=>x.allowed);
+  function onTabKeyDown(event:import("react").KeyboardEvent<HTMLButtonElement>,key:HubTab){
+    const index=visibleTabs.findIndex(x=>x.key===key);
+    if(index<0)return;
+    let nextIndex:number|undefined;
+    if(event.key==="ArrowRight"||event.key==="ArrowDown")nextIndex=(index+1)%visibleTabs.length;
+    else if(event.key==="ArrowLeft"||event.key==="ArrowUp")nextIndex=(index-1+visibleTabs.length)%visibleTabs.length;
+    else if(event.key==="Home")nextIndex=0;
+    else if(event.key==="End")nextIndex=visibleTabs.length-1;
+    if(nextIndex===undefined)return;
+    event.preventDefault();
+    const next=visibleTabs[nextIndex]?.key;
+    if(!next)return;
+    setTab(next);
+    window.requestAnimationFrame(()=>tabRefs.current[next]?.focus());
+  }
   return <div className="fixed inset-0 z-[90] flex items-end bg-black/30 backdrop-blur-[2px] sm:items-stretch sm:justify-end" onClick={onClose}>
     <aside ref={dialogRef} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="field-operations-title" onClick={e=>e.stopPropagation()} className="flex max-h-[88dvh] w-full flex-col rounded-t-[28px] bg-[#f6f7f8] shadow-2xl outline-none sm:h-full sm:max-h-none sm:w-[520px] sm:rounded-none sm:border-l sm:border-slate-300">
       <div className="mx-auto mt-2 h-1 w-12 rounded-full bg-slate-300 sm:hidden"/>
@@ -197,13 +213,13 @@ export default function PosOperationsHub({session,bootstrap,open,onClose,onRefre
         <div className="flex gap-1"><button disabled={loading} onClick={()=>refresh(tab)} aria-label="รีเฟรชแท็บงานร้าน" className="grid h-11 w-11 place-items-center rounded-xl border border-slate-200 bg-white disabled:opacity-40"><RefreshCw size={17}/></button><button onClick={onClose} aria-label="ปิดงานร้าน" className="grid h-11 w-11 place-items-center rounded-xl border border-slate-200 bg-white"><X size={18}/></button></div>
       </header>
 
-      <div role="tablist" aria-label="งานร้าน" className="grid gap-1 border-b border-slate-200 bg-white p-2" style={{gridTemplateColumns:`repeat(${Math.max(1,visibleTabs.length)},minmax(0,1fr))`}}>
-        {visibleTabs.map(({key,label,icon:Icon,count})=><button key={key} role="tab" aria-selected={tab===key} onClick={()=>setTab(key)} className={"relative flex min-h-12 flex-col items-center justify-center rounded-xl px-1 text-[10px] font-bold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1F4D3A] "+(tab===key?"bg-[#d4af37]/20 text-[#6f5510]":"text-slate-600 hover:bg-slate-100")}><Icon size={17}/><span className="mt-0.5">{label}</span>{Number(count)>0&&<span className="absolute right-2 top-1 rounded-full bg-slate-900 px-1.5 text-[9px] text-white">{count}</span>}</button>)}
+      <div role="tablist" aria-label="งานร้าน" aria-orientation="horizontal" className="grid gap-1 border-b border-slate-200 bg-white p-2" style={{gridTemplateColumns:`repeat(${Math.max(1,visibleTabs.length)},minmax(0,1fr))`}}>
+        {visibleTabs.map(({key,label,icon:Icon,count})=><button key={key} ref={node=>{tabRefs.current[key]=node}} id={"field-operations-tab-"+key} role="tab" aria-selected={tab===key} aria-controls={"field-operations-panel-"+key} tabIndex={tab===key?0:-1} onClick={()=>setTab(key)} onKeyDown={event=>onTabKeyDown(event,key)} className={"relative flex min-h-12 flex-col items-center justify-center rounded-xl px-1 text-[10px] font-bold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1F4D3A] "+(tab===key?"bg-[#d4af37]/20 text-[#6f5510]":"text-slate-600 hover:bg-slate-100")}><Icon size={17}/><span className="mt-0.5">{label}</span>{Number(count)>0&&<span className="absolute right-2 top-1 rounded-full bg-slate-900 px-1.5 text-[9px] text-white">{count}</span>}</button>)}
       </div>
 
       {message&&<div className="mx-3 mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-semibold text-amber-900">{message}</div>}
 
-      <div className="soft-scroll min-h-0 flex-1 overflow-auto p-3 sm:p-4">
+      <div role="tabpanel" id={"field-operations-panel-"+tab} aria-labelledby={"field-operations-tab-"+tab} className="soft-scroll min-h-0 flex-1 overflow-auto p-3 sm:p-4">
         {tab==="queue"&&canQueue&&<div className="space-y-2">
           {queueRows.length===0?<Empty text={!cloudAvailable?"ออฟไลน์ · ยังไม่ดึงคิวจาก Server":"ไม่มีคิวที่กำลังทำ"}/>:queueRows.map(order=>{
             const total=(order.items||[]).reduce((s,x)=>s+n(x.qty),0),ready=(order.items||[]).reduce((s,x)=>s+Math.min(n(x.qty),n(x.readyQty)),0),called=(order.items||[]).reduce((s,x)=>s+Math.min(n(x.qty),n(x.calledQty)),0);

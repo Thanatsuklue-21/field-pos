@@ -185,3 +185,18 @@ test("post-sale queue shortcut is shown only to operators with Queue permission"
   assert.match(saleBlock,/!lastSale\.offline&&canQueueOps&&<button/);
   assert.match(saleBlock,/setOpsInitialTab\("queue"\)/);
 });
+
+
+test("Operations Hub tabs follow keyboard roving-tab semantics without extra page navigation",async()=>{
+  const hub=await read("components/pos-operations-hub.tsx");
+  assert.match(hub,/aria-orientation="horizontal"/);
+  assert.match(hub,/tabIndex=\{tab===key\?0:-1\}/);
+  assert.match(hub,/aria-controls=\{"field-operations-panel-"\+key\}/);
+  assert.match(hub,/role="tabpanel"/);
+  assert.match(hub,/aria-labelledby=\{"field-operations-tab-"\+tab\}/);
+  assert.match(hub,/event\.key==="ArrowRight"\|\|event\.key==="ArrowDown"/);
+  assert.match(hub,/event\.key==="ArrowLeft"\|\|event\.key==="ArrowUp"/);
+  assert.match(hub,/event\.key==="Home"/);
+  assert.match(hub,/event\.key==="End"/);
+  assert.match(hub,/window\.requestAnimationFrame\(\(\)=>tabRefs\.current\[next\]\?\.focus\(\)\)/);
+});
