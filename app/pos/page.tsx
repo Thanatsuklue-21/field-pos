@@ -228,7 +228,7 @@ function PosView({session}:{session:Session}){
     });
     if(changed)cart.replaceItems(next);
     if(removed.length)setNotice("นำ "+removed.join(", ")+" ออกจากตะกร้าอัตโนมัติ เพราะสต็อกหรือสูตรไม่พร้อม กรุณาตรวจยอดก่อนชำระ");
-  },[data?.revision]);
+  },[data?.menu]);
 
   const cats=useMemo(()=>["ทั้งหมด",...Array.from(new Set((data?.menu||[]).filter(sellable).map(x=>x.category||"อื่นๆ")))], [data]);
   const menu=(data?.menu||[]).filter(x=>sellable(x)&&(cat==="ทั้งหมด"||(x.category||"อื่นๆ")===cat)&&x.name.toLowerCase().includes(q.toLowerCase()));
