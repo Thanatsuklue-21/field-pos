@@ -401,12 +401,14 @@ test('payment success prioritizes queue prefetch before noncritical refreshes',a
 });
 
 
-test('solo operator daily flow keeps sales and production as separate focused screens',async()=>{
-  const shell=await read('components/app-shell.tsx'),pos=await read('app/pos/page.tsx'),queue=await read('app/queue/page.tsx'),close=await read('app/close/page.tsx');
+test('solo operator daily flow keeps routine queue checks in POS with full production fallback',async()=>{
+  const shell=await read('components/app-shell.tsx'),pos=await read('app/pos/page.tsx'),hub=await read('components/pos-operations-hub.tsx'),queue=await read('app/queue/page.tsx'),close=await read('app/close/page.tsx');
   assert.match(shell,/const primaryMobile=\["\/pos","\/queue"\]/);
   assert.match(shell,/mobileOverflow\(allowed\)/);
-  assert.match(pos,/ไปทำคิว \{lastSale\.queueNo\}/);
+  assert.match(pos,/ดูคิว \{lastSale\.queueNo\} ในงานร้าน/);
+  assert.match(pos,/setOpsInitialTab\("queue"\);setLastSale\(null\);setOpsOpen\(true\)/);
   assert.match(pos,/รับออเดอร์ถัดไป/);
+  assert.match(hub,/href="\/queue"/);
   assert.match(queue,/PRODUCTION RUN/);
   assert.match(queue,/ทำออเดอร์ \/ รันบัตร/);
   assert.doesNotMatch(queue,/router\.push\("\/orders/);
