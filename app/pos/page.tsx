@@ -670,6 +670,7 @@ function PosView({session}:{session:Session}){
       code==="promptpay_provider_not_configured"?"ยังไม่ได้ตั้งค่า Beam Merchant ID / API Key":
       code==="promptpay_webhook_not_configured"?"ยังไม่ได้ตั้งค่า Beam Webhook HMAC Key":
       code==="promptpay_failed"?"PromptPay ไม่สำเร็จ กรุณาลองใหม่":
+      code==="promptpay_amount_out_of_range"?"ยอดนี้อยู่นอกช่วงที่ Provider PromptPay รองรับ · กรุณาใช้ช่องทางชำระอื่นหรือปรับยอดก่อนสร้าง QR":
       code==="promptpay_charge_creation_unknown"?"ผลการสร้าง QR เดิมยังไม่ชัดเจน · ระบบหยุดสร้าง QR ใหม่เพื่อป้องกันเก็บเงินซ้ำ กรุณาตรวจผู้ให้บริการ/Orders ก่อน":
       code==="promptpay_release_unconfirmed"?"Provider สิ้นสุดรายการแล้ว แต่ Server ยังไม่ยืนยันการคืน Stock · เก็บ pending ไว้และห้ามรับเงินใหม่จนกว่าจะตรวจสอบสำเร็จ":
       code==="pending_promptpay_exists"?"มี PromptPay รายการเดิมที่ยังไม่สิ้นสุด กรุณาชำระหรือรอผลรายการเดิม":
