@@ -37,7 +37,7 @@ test("mobile overflow behaves as a modal and traps focus safely",async()=>{
   assert.match(shell,/role="dialog"/);
   assert.match(shell,/aria-modal="true"/);
   assert.match(shell,/document\.body\.style\.overflow="hidden"/);
-  assert.match(shell,/event\.key==="Tab"/);
+  assert.match(shell,/event\.key!=="Tab"/);
   assert.match(shell,/event\.key==="Escape"/);
   assert.match(shell,/moreTriggerRef\.current\?\.focus\(\)/);
 });
