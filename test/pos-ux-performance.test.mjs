@@ -525,6 +525,12 @@ test('queue category call status derives from persisted calledQty rather than lo
 });
 
 
+test('cart reconciliation follows menu availability updates even when revision is unchanged',async()=>{
+  const pos=await read('app/pos/page.tsx');
+  assert.match(pos,/\},\[data\?\.menu\]\);/);
+  assert.doesNotMatch(pos,/\},\[data\?\.revision\]\);/);
+});
+
 test('variant modal reflects cart-aware remaining stock instead of raw availability only',async()=>{
   const pos=await read('app/pos/page.tsx');
   assert.match(pos,/additionalServingsAvailable\(\{cart:cart\.items/);
