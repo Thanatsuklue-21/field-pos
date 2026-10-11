@@ -207,6 +207,16 @@ test('order items preserve sale-time price while production queue hides commerci
   assert.doesNotMatch(queue,/ยอดรวม ฿/);
 });
 
+test('mobile shell synchronizes modal height to the visual viewport for software keyboards',async()=>{
+  const shell=await read('components/app-shell.tsx'),css=await read('app/globals.css');
+  assert.match(shell,/window\.visualViewport/);
+  assert.match(shell,/--field-visual-viewport-height/);
+  assert.match(shell,/viewport\.addEventListener\("resize",sync\)/);
+  assert.match(shell,/viewport\.addEventListener\("scroll",sync\)/);
+  assert.match(shell,/orientationchange/);
+  assert.match(css,/\.field-payment-sheet\{max-height:calc\(var\(--field-visual-viewport-height,100dvh\) - 1rem\)/);
+});
+
 test('mobile operational pages use compact density while preserving touch actions',async()=>{
   const shell=await read('components/app-shell.tsx'),pos=await read('app/pos/page.tsx'),queue=await read('app/queue/page.tsx'),stock=await read('app/stock/page.tsx'),orders=await read('app/orders/page.tsx');
   assert.match(shell,/const primaryMobile=\["\/pos","\/queue"\]/);
