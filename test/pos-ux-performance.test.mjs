@@ -230,6 +230,22 @@ test('mobile operational pages use compact density while preserving touch action
 });
 
 
+
+test('Operations Hub traps keyboard focus, restores the opener and locks background scroll',async()=>{
+  const hub=await read('components/pos-operations-hub.tsx');
+  assert.match(hub,/previousFocusRef\.current=document\.activeElement instanceof HTMLElement/);
+  assert.match(hub,/document\.body\.style\.overflow="hidden"/);
+  assert.match(hub,/document\.body\.style\.overflow=previousOverflow/);
+  assert.match(hub,/previousFocusRef\.current\?\.focus\(\)/);
+  assert.match(hub,/event\.key==="Escape"/);
+  assert.match(hub,/event\.key!=="Tab"/);
+  assert.match(hub,/querySelectorAll<HTMLElement>\(focusableSelector\)/);
+  assert.match(hub,/ref=\{dialogRef\} tabIndex=\{-1\} role="dialog"/);
+  assert.match(hub,/aria-labelledby="field-operations-title"/);
+  assert.match(hub,/role="tablist"/);
+  assert.match(hub,/role="tab" aria-selected=\{tab===key\}/);
+});
+
 test('payment modal reviews cart items prices quantities and sweetness before confirmation',async()=>{
   const pos=await read('app/pos/page.tsx');
   assert.match(pos,/รายการที่สั่ง/);
