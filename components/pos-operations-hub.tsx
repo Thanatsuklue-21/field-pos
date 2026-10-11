@@ -5,20 +5,17 @@ import Link from "next/link";
 import {Boxes,ClipboardList,ListOrdered,Plus,ReceiptText,RefreshCw,X} from "lucide-react";
 import {api,type Bootstrap,type Session} from "@/lib/api-client";
 import {formatMoney} from "@/lib/money-format.mjs";
-import {EXPENSE_PENDING_KEY,shouldRetainExpensePending,validateExpenseAck,validatePendingExpense} from "@/lib/expense-recovery.mjs";
+import {shouldRetainExpensePending} from "@/lib/expense-recovery.mjs";
+import {currentBusinessDate,expenseErrorText,readPendingExpense,sendExpenseDurably,type ExpenseBody,type PendingExpense} from "@/lib/expense-client";
 
 type HubTab="queue"|"orders"|"stock"|"expenses";
 type QueueOrder={id:string;queueNo:string;pagerNo:number;status:string;time:number;items:{name:string;qty:number;readyQty?:number;calledQty?:number}[]};
 type Sale={id:string;billNo:string;date:string;time:number;total:number;payment:string;status:string;queueNo:string;itemCount:number;orderStatus?:string|null};
 type ExpenseRow={id:string;date:string;time:number;category:string;description:string;amount:number;paymentMethod?:string;sourceType?:string};
-type ExpenseBody={requestKey:string;date:string;amount:number;category:string;description:string;paymentMethod:string};
-type PendingExpense={body:ExpenseBody;createdAt:number};
-
-const localDate=()=>new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Bangkok",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date());
 const n=(v:any)=>Number(v)||0;
 const paymentLabel=(v?:string)=>v==="cash"?"เงินสด":v==="bank"?"โอน/ธนาคาร":v==="other"?"อื่น ๆ":String(v||"—").toUpperCase();
 
-function expensePendingRead():PendingExpense|null{
+function readPendingExpense():PendingExpense|null{
   let raw:string|null=null;
   try{raw=localStorage.getItem(EXPENSE_PENDING_KEY)}catch{throw new Error("expense_recovery_storage_unavailable")}
   if(!raw)return null;
@@ -77,72 +74,58 @@ export default function PosOperationsHub({session,bootstrap,open,onClose}:{sessi
     }finally{setLoading(false)}
   }
 
-  async function sendExpense(body:ExpenseBody){
-    let pending=expensePendingRead();
-    if(pending&&pending.body.requestKey!==body.requestKey)throw Object.assign(new Error("expense_pending"),{status:409});
-    if(!pending){expensePendingWrite(body);pending={body,createdAt:Date.now()}}
-    try{
-      const r=await api<any>("/api/expenses",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify(pending.body)});
-      validateExpenseAck(r,pending.body);
-      expensePendingClear();
-      return r;
-    }catch(e:any){
-      if(!shouldRetainExpensePending(e))expensePendingClear();
-      throw e;
-    }
-  }
-
-  function expenseError(code:string){
-    return code==="day_closed"?"ปิดยอดวันนี้แล้ว ไม่สามารถเพิ่มค่าใช้จ่ายได้":
-      code==="expense_pending"?"มีค่าใช้จ่ายเดิมที่ยังไม่ทราบผล · ระบบจะกู้ request เดิมก่อน":
-      code==="expense_unconfirmed"?"Server ยังไม่ยืนยันค่าใช้จ่ายเดิมครบถ้วน · เก็บ request เดิมไว้เพื่อป้องกันยอดซ้ำ":
-      code==="expense_recovery_corrupt"?"ข้อมูล recovery ค่าใช้จ่ายเสีย · เปิดหน้า Expenses เพื่อตรวจสอบ":
-      code==="expense_recovery_storage_unavailable"?"เครื่องนี้เก็บ recovery ค่าใช้จ่ายไม่ได้ · ระบบไม่ส่งรายการเพื่อป้องกันยอดซ้ำ":
-      code==="offline_write_blocked"?"ออฟไลน์อยู่ · ยังไม่บันทึกค่าใช้จ่ายจนกว่าจะเชื่อมต่อ":
-      code;
-  }
-
   async function recoverExpense(){
     if(!canExpense||session.offline||expenseRecoveryRef.current)return;
     let pending:PendingExpense|null=null;
-    try{pending=expensePendingRead()}catch(e:any){setMessage(expenseError(e.message));return}
+    try{pending=readPendingExpense()}catch(e:any){setMessage(expenseErrorText(e.message));return}
     if(!pending)return;
     expenseRecoveryRef.current=true;setExpenseBusy(true);
     try{
-      await sendExpense(pending.body);
+      await sendExpenseDurably(session.csrf,pending.body);
       setMessage("กู้คืนค่าใช้จ่ายเดิมสำเร็จ · ไม่บันทึกซ้ำ");
       await refresh();
     }catch(e:any){
-      setMessage(shouldRetainExpensePending(e)?"ค่าใช้จ่ายเดิมยังไม่ทราบผล · ระบบเก็บ request เดิมไว้และจะตรวจซ้ำ":expenseError(e.message));
+      setMessage(shouldRetainExpensePending(e)?"ค่าใช้จ่ายเดิมยังไม่ทราบผล · ระบบเก็บ request เดิมไว้และจะตรวจซ้ำ":expenseErrorText(e.message));
     }finally{expenseRecoveryRef.current=false;setExpenseBusy(false)}
   }
 
   useEffect(()=>{
-    if(open)refresh().catch(()=>setMessage("โหลดข้อมูลร้านไม่สำเร็จ · หน้าขายยังใช้งานต่อได้"));
-  },[open]);
-
-  useEffect(()=>{
-    const recover=()=>recoverExpense().catch(()=>{});
-    recover();
-    window.addEventListener("online",recover);
-    window.addEventListener("focus",recover);
-    return()=>{window.removeEventListener("online",recover);window.removeEventListener("focus",recover)};
-  },[session.csrf,session.offline,canExpense]);
+    if(!open)return;
+    const sync=()=>{refresh().catch(()=>setMessage("โหลดข้อมูลร้านไม่สำเร็จ · หน้าขายยังใช้งานต่อได้"));recoverExpense().catch(()=>{})};
+    const onKey=(event:KeyboardEvent)=>{if(event.key==="Escape")onClose()};
+    const onOnline=()=>sync();
+    const onFocus=()=>sync();
+    const onVisible=()=>{if(document.visibilityState==="visible")sync()};
+    sync();
+    window.addEventListener("keydown",onKey);
+    if(session.offline)return()=>window.removeEventListener("keydown",onKey);
+    const timer=window.setInterval(()=>refresh().catch(()=>{}),5000);
+    window.addEventListener("online",onOnline);
+    window.addEventListener("focus",onFocus);
+    document.addEventListener("visibilitychange",onVisible);
+    return()=>{
+      window.clearInterval(timer);
+      window.removeEventListener("keydown",onKey);
+      window.removeEventListener("online",onOnline);
+      window.removeEventListener("focus",onFocus);
+      document.removeEventListener("visibilitychange",onVisible);
+    };
+  },[open,session.csrf,session.offline,canQueue,canOrder,canExpense]);
 
   async function saveExpense(){
     if(!(Number(expenseAmount)>0)||expenseBusy||session.offline)return;
     setExpenseBusy(true);setMessage("");
     const body:ExpenseBody={
-      requestKey:crypto.randomUUID(),date:localDate(),amount:Number(expenseAmount),
+      requestKey:crypto.randomUUID(),date:currentBusinessDate(),amount:Number(expenseAmount),
       category:expenseCategory.trim().slice(0,60),description:expenseDescription.trim().slice(0,240),
       paymentMethod:expensePayment.trim().toLowerCase()
     };
     try{
-      const r=await sendExpense(body);
+      const r=await sendExpenseDurably(session.csrf,body);
       setExpenseAmount("");setExpenseDescription("");setExpensePayment("cash");
       setExpenses(prev=>[r.expense,...prev.filter(x=>x.id!==r.expense.id)]);
       setMessage("บันทึกค่าใช้จ่ายแล้ว · อยู่หน้า POS ต่อได้เลย");
-    }catch(e:any){setMessage(expenseError(e.message))}
+    }catch(e:any){setMessage(expenseErrorText(e.message))}
     finally{setExpenseBusy(false)}
   }
 
@@ -169,8 +152,8 @@ export default function PosOperationsHub({session,bootstrap,open,onClose}:{sessi
     {key:"expenses",label:"รายจ่าย",icon:ReceiptText,allowed:canExpense}
   ];
 
-  return <div className="fixed inset-0 z-[90] bg-black/30 backdrop-blur-[2px]" onClick={onClose}>
-    <aside role="dialog" aria-modal="true" aria-label="ศูนย์งานร้าน FIELD" onClick={e=>e.stopPropagation()} className="absolute inset-y-0 right-0 flex w-full flex-col bg-[#f6f7f8] shadow-2xl sm:w-[520px] sm:border-l sm:border-slate-300">
+  return <div className="fixed inset-0 z-[90] bg-black/35" onClick={onClose}>
+    <aside role="dialog" aria-modal="true" aria-label="ศูนย์งานร้าน FIELD" onClick={e=>e.stopPropagation()} className="absolute inset-x-0 bottom-0 flex h-[88dvh] w-full flex-col rounded-t-[28px] bg-[#f6f7f8] shadow-2xl sm:inset-y-0 sm:left-auto sm:right-0 sm:h-full sm:w-[520px] sm:rounded-none sm:border-l sm:border-slate-300">
       <header className="flex items-start justify-between gap-3 border-b border-slate-200 bg-white px-4 py-4 sm:px-5">
         <div><p className="m-0 text-[10px] font-black tracking-[.22em] text-[#765b08]">FIELD OPERATIONS</p><h2 className="mt-1 text-xl font-black text-slate-900">งานร้าน</h2><p className="mt-1 text-xs text-slate-500">ดูงานหลักและบันทึกรายจ่ายด่วนโดยไม่ออกจากหน้า POS</p></div>
         <div className="flex gap-1"><button disabled={loading} onClick={()=>refresh()} aria-label="รีเฟรชงานร้าน" className="grid h-11 w-11 place-items-center rounded-xl border border-slate-200 bg-white disabled:opacity-40"><RefreshCw size={17}/></button><button onClick={onClose} aria-label="ปิดงานร้าน" className="grid h-11 w-11 place-items-center rounded-xl border border-slate-200 bg-white"><X size={18}/></button></div>
@@ -182,7 +165,7 @@ export default function PosOperationsHub({session,bootstrap,open,onClose}:{sessi
 
       {message&&<div className="mx-3 mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-semibold text-amber-900">{message}</div>}
 
-      <div className="soft-scroll min-h-0 flex-1 overflow-auto p-3 sm:p-4">
+      <div className="soft-scroll min-h-0 flex-1 overflow-auto overscroll-contain p-3 sm:p-4">
         {tab==="queue"&&canQueue&&<div className="space-y-2">
           {queueRows.length===0?<Empty text={session.offline?"ออฟไลน์ · ยังไม่ดึงคิวจาก Server":"ไม่มีคิวที่กำลังทำ"}/>:queueRows.map(order=>{
             const total=(order.items||[]).reduce((s,x)=>s+n(x.qty),0),ready=(order.items||[]).reduce((s,x)=>s+Math.min(n(x.qty),n(x.readyQty)),0),called=(order.items||[]).reduce((s,x)=>s+Math.min(n(x.qty),n(x.calledQty)),0);
