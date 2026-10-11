@@ -134,6 +134,6 @@ export async function clientStorageStatus(){
   });
   const pending=rows.filter(x=>x.status==="pending").length,review=rows.filter(x=>x.status==="needs_review").length;
   const savedAt=Number(cached?.savedAt||0),cacheAgeMs=savedAt>0?Math.max(0,Date.now()-savedAt):null;
-  const cacheReady=!!cached?.value&&cacheAgeMs!==null&&cacheAgeMs<=BOOTSTRAP_OFFLINE_MAX_AGE_MS;
+  const cacheReady=!!cached?.value&&cacheAgeMs!==null&&cacheAgeMs<=BOOTSTRAP_OFFLINE_MAX_AGE_MS&&bangkokDate(savedAt)===bangkokDate(Date.now());
   return {indexedDbReady:true,cacheReady,outboxPending:pending+review,outboxNeedsReview:review,schemaVersion:VERSION};
 }
