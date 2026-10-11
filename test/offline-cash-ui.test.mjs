@@ -27,6 +27,15 @@ test('POS captures only cash offline and syncs the same idempotent request later
   assert.match(sync,/needs_review/);
 });
 
+test('offline cash refuses a stock snapshot from a different Bangkok business date',async()=>{
+  const db=await read('lib/offline-db.ts'),pos=await read('app/pos/page.tsx');
+  assert.match(db,/bangkokDate\(Number\(cached\.savedAt\)\)!==billDate/);
+  assert.match(db,/offline_catalog_stale_day/);
+  assert.match(db,/projectionError=error instanceof Error/);
+  assert.match(db,/if\(projectionError\)throw projectionError/);
+  assert.match(pos,/offline_catalog_stale_day/);
+});
+
 test('offline local stock projection prevents the cart from forgetting already-sold ingredients',async()=>{
   const sync=await read('lib/offline-sales.ts'),pos=await read('app/pos/page.tsx');
   assert.match(sync,/applyOfflineCashToBootstrap/);
