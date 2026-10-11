@@ -21,6 +21,9 @@ type ResolutionEvent={id:number;actorId?:string|null;actor:string;action:string;
 type PaymentResolution={
   id:string;status:string;mode?:string;total:number;date:string;pager:number;items:SaleItem[];remainingQty:number[];
   payments?:unknown[];providerManaged?:boolean;providerAttempt?:{state:string;provider:string;attemptKey:string;startedAt:number;updatedAt:number}|null;expiresAt?:number;targetOrderId?:string|null;providerCharge?:{chargeId:string;provider?:string;amount?:number;currency?:string;status?:string;expiresAt?:string|null;referenceId?:string};
+  providerEvidence?:ProviderEvidence|null;timeline?:ResolutionEvent[];
+};
+
 type OrderMutationKind="void"|"refund";
 type OrderMutationBody={requestKey:string;saleId:string;reason:string;manualConfirmed?:boolean;manualReference?:string};
 type PendingOrderMutation={kind:OrderMutationKind;body:OrderMutationBody;createdAt:number};
@@ -39,9 +42,6 @@ function orderMutationPendingClear(){
   try{localStorage.removeItem(ORDER_MUTATION_PENDING_KEY)}
   catch{throw new Error("order_mutation_recovery_storage_unavailable")}
 }
-
-  providerEvidence?:ProviderEvidence|null;timeline?:ResolutionEvent[];
-};
 
 export default function Orders(){return <AuthGate>{s=><OrdersView session={s}/>}</AuthGate>}
 
