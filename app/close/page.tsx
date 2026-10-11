@@ -4,6 +4,7 @@ import {useEffect,useState} from "react";
 import {useRouter} from "next/navigation";
 import AuthGate from "@/components/auth-gate";
 import {api,type Session} from "@/lib/api-client";
+import {getOfflineCashSummary,type OfflineCashSummary} from "@/lib/offline-sales";
 
 type Close={id:string;date:string;revenue:number;cogs:number;expenses:number;purchaseSpend?:number;totalCashOut?:number;grossProfit:number;operatingProfit:number;deliveryFees?:number;cash:number;promptpay:number;bank?:number;card?:number;other:number;openingCash?:number;cashIn?:number;cashPaidOut?:number;cashOut?:number;expectedCash?:number;countedCash?:number;cashVariance?:number;orders:number;cups:number;time:number};
 type Shift={id:string;date:string;status:"open"|"closed";openingCash:number;openedAt:number;openedBy:string;closedAt?:number;cashVariance?:number};
@@ -16,9 +17,19 @@ export default function CloseDay(){return <AuthGate>{s=><View session={s}/>}</Au
 
 function View({session}:{session:Session}){
   const router=useRouter();
-  const [rows,setRows]=useState<Close[]>([]),[shift,setShift]=useState<Shift|null>(null),[businessDate,setBusinessDate]=useState(""),[movements,setMovements]=useState<Movement[]>([]),[paymentBlockers,setPaymentBlockers]=useState<PaymentBlocker[]>([]),[orderBlockers,setOrderBlockers]=useState<OrderBlocker[]>([]),[msg,setMsg]=useState(""),[busy,setBusy]=useState(false),[openingCash,setOpeningCash]=useState("0"),[countedCash,setCountedCash]=useState(""),[movementType,setMovementType]=useState<"CASH_IN"|"CASH_OUT">("CASH_OUT"),[movementAmount,setMovementAmount]=useState(""),[movementReason,setMovementReason]=useState("");
+  const [rows,setRows]=useState<Close[]>([]),[shift,setShift]=useState<Shift|null>(null),[businessDate,setBusinessDate]=useState(""),[movements,setMovements]=useState<Movement[]>([]),[paymentBlockers,setPaymentBlockers]=useState<PaymentBlocker[]>([]),[orderBlockers,setOrderBlockers]=useState<OrderBlocker[]>([]),[offlineOutbox,setOfflineOutbox]=useState<OfflineCashSummary|null>(null),[offlineOutboxError,setOfflineOutboxError]=useState(false),[msg,setMsg]=useState(""),[busy,setBusy]=useState(false),[openingCash,setOpeningCash]=useState("0"),[countedCash,setCountedCash]=useState(""),[movementType,setMovementType]=useState<"CASH_IN"|"CASH_OUT">("CASH_OUT"),[movementAmount,setMovementAmount]=useState(""),[movementReason,setMovementReason]=useState("");
   const load=()=>api<CloseData>("/api/close-day").then(x=>{setRows(x.closes||[]);setShift(x.shift||null);setBusinessDate(x.businessDate||"");setMovements(x.cashMovements||[]);setPaymentBlockers(Array.isArray(x.paymentBlockers)?x.paymentBlockers:[]);setOrderBlockers(Array.isArray(x.orderBlockers)?x.orderBlockers:[]) });
-  useEffect(()=>{load().catch(()=>{})},[]);
+  const refreshOfflineOutbox=async()=>{
+    try{
+      const summary=await getOfflineCashSummary();
+      setOfflineOutbox(summary);setOfflineOutboxError(false);
+      return summary;
+    }catch{
+      setOfflineOutbox(null);setOfflineOutboxError(true);
+      throw new Error("offline_outbox_unavailable");
+    }
+  };
+  useEffect(()=>{load().catch(()=>{});refreshOfflineOutbox().catch(()=>{})},[]);
 
   async function openShift(){
     const opening=Number(openingCash||0);
@@ -46,6 +57,15 @@ function View({session}:{session:Session}){
   async function close(){
     const counted=Number(countedCash);
     if(!shift||shift.status!=="open"){setMsg("กรุณาเปิดร้านและล็อกเงินตั้งต้นก่อนปิดวัน");return}
+    let outbox:OfflineCashSummary;
+    try{outbox=await refreshOfflineOutbox()}catch{
+      setMsg("ปิดวันไม่ได้ · ตรวจ Offline outbox ในเครื่องไม่สำเร็จ กรุณาเปิดหน้า POS/ตรวจพื้นที่เก็บข้อมูลก่อน");
+      return;
+    }
+    if(outbox.total>0){
+      setMsg("ปิดวันไม่ได้ · มีบิล Offline ในเครื่อง "+outbox.total+" รายการ (รอ Sync "+outbox.pending+" · ต้องตรวจ "+outbox.needsReview+") กรุณาจัดการให้เหลือ 0 ก่อน");
+      return;
+    }
     if(paymentBlockers.length){setMsg("ยังมี Payment ที่ค้างอยู่ "+paymentBlockers.length+" รายการ · กรุณาตรวจและจัดการก่อนปิดวัน");return}
     if(orderBlockers.length){setMsg("ยังมีออเดอร์ที่ยังไม่ส่งมอบ "+orderBlockers.length+" คิว · กรุณาทำ/เรียก/ส่งมอบให้ครบก่อนปิดวัน");return}
     if(!countedCash.trim()||!Number.isFinite(counted)||counted<0){setMsg("กรุณากรอกเงินสดที่นับได้จริง");return}
@@ -57,7 +77,14 @@ function View({session}:{session:Session}){
   }
 
   return <section className="soft-scroll h-full overflow-auto p-3 sm:p-5 md:p-7">
-    <header className="flex flex-wrap items-end justify-between gap-3"><div><p className="gold m-0 text-[10px] font-bold tracking-[.3em]">DAILY CONTROL</p><h1 className="mt-1 text-xl font-semibold sm:text-2xl">OPEN / CLOSE DAY</h1><p className="mt-1 text-xs text-slate-500">{businessDate||"วันนี้"} · เปิดร้านด้วยเงินทอนตั้งต้น แล้วนับเงินจริงก่อนปิดร้าน</p></div>{session.user.role==="admin"&&<button disabled={busy||!shift||shift.status!=="open"||paymentBlockers.length>0||orderBlockers.length>0} onClick={close} className="min-h-11 rounded-full bg-[#d4af37] px-5 text-sm font-bold text-black disabled:opacity-40">{busy?"กำลังบันทึก...":paymentBlockers.length>0?"มี Payment ค้าง "+paymentBlockers.length+" รายการ":orderBlockers.length>0?"มีคิวค้าง "+orderBlockers.length+" คิว":"ปิดร้านวันนี้"}</button>}</header>
+    <header className="flex flex-wrap items-end justify-between gap-3"><div><p className="gold m-0 text-[10px] font-bold tracking-[.3em]">DAILY CONTROL</p><h1 className="mt-1 text-xl font-semibold sm:text-2xl">OPEN / CLOSE DAY</h1><p className="mt-1 text-xs text-slate-500">{businessDate||"วันนี้"} · เปิดร้านด้วยเงินทอนตั้งต้น แล้วนับเงินจริงก่อนปิดร้าน</p></div>{session.user.role==="admin"&&<button disabled={busy||!shift||shift.status!=="open"||offlineOutbox===null||offlineOutboxError||offlineOutbox.total>0||paymentBlockers.length>0||orderBlockers.length>0} onClick={close} className="min-h-11 rounded-full bg-[#d4af37] px-5 text-sm font-bold text-black disabled:opacity-40">{busy?"กำลังบันทึก...":offlineOutboxError?"ตรวจ Offline ไม่ได้":offlineOutbox===null?"กำลังตรวจ Offline...":offlineOutbox.total>0?"มีบิล Offline "+offlineOutbox.total+" รายการ":paymentBlockers.length>0?"มี Payment ค้าง "+paymentBlockers.length+" รายการ":orderBlockers.length>0?"มีคิวค้าง "+orderBlockers.length+" คิว":"ปิดร้านวันนี้"}</button>}</header>
+
+    {session.user.role==="admin"&&(offlineOutboxError||offlineOutbox===null||offlineOutbox.total>0)&&<div className="mt-4 rounded-2xl border border-red-300 bg-red-50 p-4 sm:p-5">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div><b className="text-red-900">ปิดวันไม่ได้ · Offline outbox ยังไม่พร้อม</b><p className="mt-1 text-xs text-red-700">{offlineOutboxError?"อ่านข้อมูลบิล Offline ในเครื่องไม่ได้ ต้องแก้ storage/เปิดหน้า POS ให้พร้อมก่อน":offlineOutbox===null?"กำลังตรวจบิล Offline ในเครื่อง…":"รอ Sync "+offlineOutbox.pending+" · ต้องตรวจ "+offlineOutbox.needsReview+" · รวม "+offlineOutbox.total+" รายการ"}</p></div>
+        <button onClick={()=>router.push("/pos")} className="min-h-11 rounded-xl bg-red-800 px-4 text-xs font-bold text-white">ไป POS / Sync Offline</button>
+      </div>
+    </div>}
 
     {session.user.role==="admin"&&paymentBlockers.length>0&&<div className="mt-4 rounded-2xl border border-red-300 bg-red-50 p-4 sm:p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
