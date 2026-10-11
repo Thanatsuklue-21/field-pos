@@ -8,6 +8,7 @@ test("API client time-bounds only writes with durable transaction recovery",asyn
   assert.match(api,/RECOVERABLE_WRITE_TIMEOUT_MS=20_000/);
   for(const path of [
     "/api/pos/checkout",
+    "/api/pos/queue",
     "/api/pos/split/start",
     "/api/pos/split/pay",
     "/api/pos/split/cancel",
@@ -20,17 +21,22 @@ test("API client time-bounds only writes with durable transaction recovery",asyn
   assert.match(api,/field_recoverable_write_timeout/);
 });
 
-test("non-recoverable operational writes are deliberately excluded from automatic client timeout",async()=>{
+test("non-recoverable operational writes remain excluded while queue is allowed only with durable recovery",async()=>{
   const api=await read("lib/api-client.ts");
+  const queue=await read("app/queue/page.tsx");
+  const recovery=await read("lib/queue-action-recovery.mjs");
   const setStart=api.indexOf("const RECOVERABLE_WRITE_PATHS");
   const setEnd=api.indexOf("]);",setStart);
   const allowlist=api.slice(setStart,setEnd);
   for(const path of [
     "/api/close-day",
     "/api/expenses",
-    "/api/stock/transactions",
-    "/api/pos/queue"
+    "/api/stock/transactions"
   ]) assert.doesNotMatch(allowlist,new RegExp(path.replaceAll("/","\\/")));
+  assert.match(allowlist,/\/api\/pos\/queue/);
+  assert.match(queue,/queuePendingWrite\(body\)/);
+  assert.match(queue,/body:JSON\.stringify\(pending\.body\)/);
+  assert.match(recovery,/shouldRetainQueuePending/);
 });
 
 test("client still never retries or deduplicates writes after an ambiguous timeout",async()=>{

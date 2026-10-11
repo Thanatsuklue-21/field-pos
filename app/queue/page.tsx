@@ -9,6 +9,7 @@ import {ArrowLeft,BellRing,CheckCircle2,RotateCcw,X} from "lucide-react";
 import AuthGate from "@/components/auth-gate";
 import {api,type RevisionUnchanged,type Session} from "@/lib/api-client";
 import {readQueueSnapshotCache,writeQueueSnapshotCache} from "@/lib/queue-cache";
+import {QUEUE_PENDING_KEY,shouldRetainQueuePending,validatePendingQueueAction,validateQueueActionAck} from "@/lib/queue-action-recovery.mjs";
 
 type BatchMode="NONE"|"SEQUENTIAL"|"COMBINED";
 type PrepGroup={id:string;label:string;batchMode:BatchMode;qty:number;pendingQty?:number;items:{id:string;name:string;variant:string;qty:number;pendingQty?:number;compatibilityKey:string}[]};
@@ -21,6 +22,25 @@ const itemDone=(item:QItem)=>n(item.readyQty)>=n(item.qty);
 const itemCalled=(item:QItem)=>n(item.calledQty)>=n(item.qty);
 const orderReady=(order:QOrder)=>(order.items||[]).length>0&&(order.items||[]).every(itemDone);
 const orderCalled=(order:QOrder)=>(order.items||[]).length>0&&(order.items||[]).every(itemCalled);
+
+type QueueActionBody={requestKey:string;orderId:string;action:string;itemIndex?:number;expectedReadyQty?:number;reason?:string};
+type PendingQueueAction={body:QueueActionBody;createdAt:number};
+
+function queuePendingRead():PendingQueueAction|null{
+  let raw:string|null=null;
+  try{raw=localStorage.getItem(QUEUE_PENDING_KEY)}catch{throw new Error("queue_recovery_storage_unavailable")}
+  if(!raw)return null;
+  try{return validatePendingQueueAction(JSON.parse(raw)) as PendingQueueAction}
+  catch{throw new Error("queue_recovery_corrupt")}
+}
+function queuePendingWrite(body:QueueActionBody){
+  try{localStorage.setItem(QUEUE_PENDING_KEY,JSON.stringify({body,createdAt:Date.now()}))}
+  catch{throw new Error("queue_recovery_storage_unavailable")}
+}
+function queuePendingClear(){
+  try{localStorage.removeItem(QUEUE_PENDING_KEY)}
+  catch{throw new Error("queue_recovery_storage_unavailable")}
+}
 
 function nextTask(orders:QOrder[]){
   const first=orders.find(order=>!orderCalled(order));
@@ -78,6 +98,7 @@ function QueueView({session}:{session:Session}){
   const [toast,setToast]=useState("");
   const [pickupReviewId,setPickupReviewId]=useState("");
   const busyRef=useRef(false);
+  const queueRecoveryRef=useRef(false);
   const revisionRef=useRef<number|null>(null);
   busyRef.current=busy!=="";
   useEffect(()=>{window.dispatchEvent(new CustomEvent("field:transaction-busy",{detail:{busy:busy!=="" ,source:"queue"}}));return()=>{window.dispatchEvent(new CustomEvent("field:transaction-busy",{detail:{busy:false,source:"queue"}}));}},[busy]);
@@ -128,6 +149,68 @@ function QueueView({session}:{session:Session}){
     return true;
   };
 
+  async function sendQueueAction(body:QueueActionBody){
+    let pending=queuePendingRead();
+    if(pending&&pending.body.requestKey!==body.requestKey)throw Object.assign(new Error("queue_action_pending"),{status:409});
+    if(!pending){queuePendingWrite(body);pending={body,createdAt:Date.now()}}
+    try{
+      const r=await api<any>("/api/pos/queue",{
+        method:"POST",
+        headers:{"X-CSRF-Token":session.csrf},
+        body:JSON.stringify(pending.body)
+      });
+      validateQueueActionAck(r,pending.body);
+      queuePendingClear();
+      return r;
+    }catch(e:any){
+      if(!shouldRetainQueuePending(e))queuePendingClear();
+      throw e;
+    }
+  }
+
+  useEffect(()=>{
+    let disposed=false;
+    const recover=async()=>{
+      if(disposed||queueRecoveryRef.current)return;
+      let pending:PendingQueueAction|null=null;
+      try{pending=queuePendingRead()}
+      catch(e:any){if(!disposed)setMsg(errorText(e.message));return}
+      if(!pending)return;
+      queueRecoveryRef.current=true;
+      busyRef.current=true;setBusy("recover:"+pending.body.requestKey);setMsg("");
+      try{
+        const r=await sendQueueAction(pending.body);
+        if(!disposed){
+          if(!applyState(r))await load().catch(()=>{});
+          setNotice("กู้คืน Queue action เดิมสำเร็จ · ใช้ request key เดิมและไม่ทำรายการซ้ำ");
+        }
+      }catch(e:any){
+        if(!disposed){
+          setMsg(shouldRetainQueuePending(e)
+            ?"Queue action เดิมยังไม่ทราบผล · ระบบเก็บ request เดิมไว้ ห้ามกด action ซ้ำจนกว่าจะเชื่อมต่อและตรวจซ้ำ"
+            :errorText(e.message));
+          await load().catch(()=>{});
+        }
+      }finally{
+        queueRecoveryRef.current=false;
+        if(!disposed){busyRef.current=false;setBusy("")}
+      }
+    };
+    const onOnline=()=>recover();
+    const onFocus=()=>recover();
+    const onVisible=()=>{if(document.visibilityState==="visible")recover()};
+    recover();
+    window.addEventListener("online",onOnline);
+    window.addEventListener("focus",onFocus);
+    document.addEventListener("visibilitychange",onVisible);
+    return()=>{
+      disposed=true;
+      window.removeEventListener("online",onOnline);
+      window.removeEventListener("focus",onFocus);
+      document.removeEventListener("visibilitychange",onVisible);
+    };
+  },[]);
+
   const orders=useMemo(()=>((data?.orders||[]) as QOrder[]).slice().sort((a,b)=>n(a.time)-n(b.time)),[data]);
   const task=useMemo(()=>nextTask(orders),[orders]);
 
@@ -140,7 +223,11 @@ function QueueView({session}:{session:Session}){
       code==="recipe_unavailable"?"ไม่พบสูตรที่ใช้ตอนขาย จึงบันทึกชงเสียอัตโนมัติไม่ได้":
       code.startsWith("stock_shortage:")?"วัตถุดิบไม่พอสำหรับทำใหม่ 1 แก้ว · กรุณาตรวจ Stock":
       code.startsWith("ingredient_missing:")?"สูตรอ้างวัตถุดิบที่ไม่มีใน Stock Master":
-      code==="queue_state_changed"?"สถานะคิวเปลี่ยนแล้ว ระบบกำลังอัปเดต":code;
+      code==="queue_state_changed"?"สถานะคิวเปลี่ยนแล้ว ระบบกำลังอัปเดต":
+      code==="queue_action_pending"?"มี Queue action เดิมที่ยังไม่ทราบผล · ระบบจะตรวจ request เดิมก่อน":
+      code==="queue_action_unconfirmed"?"Server ยังไม่ยืนยัน Queue action เดิมอย่างครบถ้วน · ระบบเก็บ request เดิมไว้เพื่อป้องกันทำซ้ำ":
+      code==="queue_recovery_corrupt"?"ข้อมูล Queue recovery ในเครื่องเสีย · ห้ามทำ action ใหม่จนกว่าจะตรวจสถานะคิว/ข้อมูลเครื่อง":
+      code==="queue_recovery_storage_unavailable"?"เครื่องนี้บันทึก Queue recovery ไม่ได้ · ระบบไม่ส่ง action เพื่อป้องกันตัด Stock/เปลี่ยนคิวซ้ำ":code;
   }
 
   async function completeNext(order:QOrder,item:QItem,itemIndex:number){
@@ -150,7 +237,7 @@ function QueueView({session}:{session:Session}){
     optimistic(list=>list.map(o=>o.id!==order.id?o:{...o,status:"making",items:o.items.map((x,index)=>index===itemIndex?{...x,readyQty:x.qty,prepSelected:false}:x)}));
     pulse("บันทึกว่าทำ "+item.name+" ครบแล้ว");
     try{
-      const r=await api<any>("/api/pos/queue",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({requestKey:crypto.randomUUID(),orderId:order.id,itemIndex,action:"complete_item",expectedReadyQty})});
+      const r=await sendQueueAction({requestKey:crypto.randomUUID(),orderId:order.id,itemIndex,action:"complete_item",expectedReadyQty});
       if(!applyState(r))load().catch(()=>{});
       const updated=(r?.orders||[]).find((x:any)=>x.id===order.id);
       const updatedItem=updated?.items?.[itemIndex];
@@ -170,7 +257,7 @@ function QueueView({session}:{session:Session}){
     optimistic(list=>list.map(o=>o.id!==order.id?o:{...o,status:"making",items:o.items.map((x,index)=>index===itemIndex?{...x,readyQty:n(x.readyQty)>n(x.calledQty)?n(x.readyQty)-1:n(x.readyQty),prepSelected:true,wasteCount:n(x.wasteCount)+1}:x)}));
     pulse("บันทึกชงเสีย · เตรียมทำใหม่ 1 แก้ว");
     try{
-      const r=await api<any>("/api/pos/queue",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({requestKey:crypto.randomUUID(),orderId:order.id,itemIndex,action:"waste_remake",reason:"ชงเสีย / ทำใหม่"})});
+      const r=await sendQueueAction({requestKey:crypto.randomUUID(),orderId:order.id,itemIndex,action:"waste_remake",reason:"ชงเสีย / ทำใหม่"});
       if(!applyState(r))load().catch(()=>{});
       setNotice("บันทึก WASTE "+item.name+" 1 แก้วแล้ว · หัก Stock เพิ่มตามสูตร"+(Number(r?.wasteCost)>0?" · ต้นทุนของเสีย ฿"+formatMoney(Number(r.wasteCost)):"")+" · ทำใหม่ต่อในคิวเดิม");
     }catch(e:any){if(snapshot)setData(snapshot);setMsg(errorText(e.message));await load().catch(()=>{})}finally{busyRef.current=false;setBusy("")}
@@ -182,7 +269,7 @@ function QueueView({session}:{session:Session}){
     optimistic(list=>list.map(o=>o.id!==order.id?o:{...o,status:"ready",items:o.items.map(x=>({...x,calledQty:x.qty,prepSelected:false}))}));
     setToast("");setNotice("");
     try{
-      const r=await api<any>("/api/pos/queue",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({requestKey:crypto.randomUUID(),orderId:order.id,action:"call"})});
+      const r=await sendQueueAction({requestKey:crypto.randomUUID(),orderId:order.id,action:"call"});
       if(!applyState(r))load().catch(()=>{});
 
     }catch(e:any){if(snapshot)setData(snapshot);setMsg(errorText(e.message));await load().catch(()=>{})}finally{busyRef.current=false;setBusy("")}
@@ -198,7 +285,7 @@ function QueueView({session}:{session:Session}){
     try{
       let latest:any=null;
       for(const target of targets){
-        latest=await api<any>("/api/pos/queue",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({requestKey:crypto.randomUUID(),orderId:order.id,itemIndex:target.index,action:"call_item"})});
+        latest=await sendQueueAction({requestKey:crypto.randomUUID(),orderId:order.id,itemIndex:target.index,action:"call_item"});
         applyState(latest);
       }
       setNotice("เรียกลูกค้าแล้ว · "+category.label+" "+category.qty+" แก้ว");
@@ -213,7 +300,7 @@ function QueueView({session}:{session:Session}){
     optimistic(list=>list.filter(o=>o.id!==orderId));
     pulse("กำลังส่งมอบ "+(order?.queueNo||"คิว")+"…");
     try{
-      const r=await api<any>("/api/pos/queue",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({requestKey:crypto.randomUUID(),orderId,action:"return"})});
+      const r=await sendQueueAction({requestKey:crypto.randomUUID(),orderId,action:"return"});
       if(!applyState(r))load().catch(()=>{});
       setNotice("ลูกค้ารับสินค้าแล้ว");
       pulse("✓ ส่งมอบ "+(order?.queueNo||"คิว")+" เรียบร้อยแล้ว");
