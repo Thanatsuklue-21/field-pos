@@ -24,6 +24,28 @@ test("commit tolerates sustained SQLITE_BUSY on the same transaction and then su
   assert.equal(calls,7);
 });
 
+test("write transactions on one client serialize so a second stale device reads after first commit",async()=>{
+  let opens=0;
+  const events=[];
+  const makeTx=id=>({
+    async commit(){events.push("commit-"+id)},
+    async rollback(){events.push("rollback-"+id)}
+  });
+  const db={async transaction(){opens++;events.push("open-"+opens);return makeTx(opens)}};
+  const first=await beginWriteTransaction(db);
+  let secondResolved=false;
+  const secondPromise=beginWriteTransaction(db).then(tx=>{secondResolved=true;return tx});
+  await new Promise(resolve=>setTimeout(resolve,10));
+  assert.equal(secondResolved,false);
+  assert.deepEqual(events,["open-1"]);
+  await commitWriteTransaction(first);
+  const second=await secondPromise;
+  assert.equal(secondResolved,true);
+  assert.deepEqual(events,["open-1","commit-1","open-2"]);
+  await second.rollback();
+  assert.deepEqual(events,["open-1","commit-1","open-2","rollback-2"]);
+});
+
 test("commit never retries SQLITE_BUSY_SNAPSHOT or unknown outcomes",async()=>{
   for(const code of ["SQLITE_BUSY_SNAPSHOT","ECONNRESET",undefined]){
     let calls=0;
