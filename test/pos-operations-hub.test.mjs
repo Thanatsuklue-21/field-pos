@@ -68,7 +68,7 @@ test("Operations Hub is a mobile bottom sheet and desktop side drawer",async()=>
   assert.match(hub,/event\.key==="Escape"/);
 });
 
-test("stock status counts use the full health set before display truncation",async()=>{
+test("stock health recomputes when local projected menu changes without a server revision bump",async()=>{\n  const hub=await read("components/pos-operations-hub.tsx");\n  assert.match(hub,/\},\[bootstrap\?\.menu\]\);/);\n  assert.doesNotMatch(hub,/\},\[bootstrap\?\.revision\]\);/);\n});\n\ntest("stock status counts use the full health set before display truncation",async()=>{
   const hub=await read("components/pos-operations-hub.tsx");
   assert.match(hub,/const stockRows=stockHealth\.slice\(0,12\)/);
   assert.match(hub,/const outCount=stockHealth\.filter/);
