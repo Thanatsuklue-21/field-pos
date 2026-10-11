@@ -74,6 +74,11 @@ test("stock health recomputes when local projected menu changes without a server
   assert.doesNotMatch(hub,/\},\[bootstrap\?\.revision\]\);/);
 });
 
+test("stock health ignores products disabled from the selling surface",async()=>{
+  const hub=await read("components/pos-operations-hub.tsx");
+  assert.match(hub,/\(bootstrap\?\.menu\|\|\[\]\)\.filter\(x=>x\.enabled\)/);
+});
+
 test("stock status counts use the full health set before display truncation",async()=>{
   const hub=await read("components/pos-operations-hub.tsx");
   assert.match(hub,/const stockRows=stockHealth\.slice\(0,12\)/);
