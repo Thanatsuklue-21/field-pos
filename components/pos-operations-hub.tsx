@@ -15,11 +15,12 @@ type ExpenseRow={id:string;date:string;time:number;category:string;description:s
 const n=(v:any)=>Number(v)||0;
 const paymentLabel=(v?:string)=>v==="cash"?"เงินสด":v==="bank"?"โอน/ธนาคาร":v==="other"?"อื่น ๆ":String(v||"—").toUpperCase();
 
-export default function PosOperationsHub({session,bootstrap,open,onClose,onRefreshStock}:{session:Session;bootstrap:Bootstrap|null;open:boolean;onClose:()=>void;onRefreshStock?:()=>Promise<unknown>}){
+export default function PosOperationsHub({session,bootstrap,open,onClose,onRefreshStock,networkOnline}:{session:Session;bootstrap:Bootstrap|null;open:boolean;onClose:()=>void;onRefreshStock?:()=>Promise<unknown>;networkOnline:boolean}){
   const canQueue=session.user.role==="admin"||session.user.permissions?.queue===true;
   const canOrder=session.user.role==="admin"||session.user.permissions?.order===true;
   const canStock=session.user.role==="admin"||session.user.permissions?.stock===true;
   const canExpense=session.user.role==="admin"||session.user.permissions?.report===true;
+  const cloudAvailable=networkOnline&&!session.offline;
   const availableTabs=useMemo(()=>[
     canQueue&&"queue",canOrder&&"orders",canStock&&"stock",canExpense&&"expenses"
   ].filter(Boolean) as HubTab[],[canQueue,canOrder,canStock,canExpense]);
@@ -46,8 +47,8 @@ export default function PosOperationsHub({session,bootstrap,open,onClose,onRefre
   useEffect(()=>{
     const changed=activeTabRef.current!==tab;
     activeTabRef.current=tab;
-    if(changed&&open&&!session.offline)refresh(tab,true).catch(()=>{});
-  },[tab,open,session.offline]);
+    if(changed&&open&&cloudAvailable)refresh(tab,true).catch(()=>{});
+  },[tab,open,cloudAvailable]);
   useEffect(()=>{
     if(!open)return;
     previousFocusRef.current=document.activeElement instanceof HTMLElement?document.activeElement:null;
@@ -78,7 +79,7 @@ export default function PosOperationsHub({session,bootstrap,open,onClose,onRefre
   },[open]);
 
   async function refresh(scope:HubTab|"all"="all",quiet=false){
-    if(session.offline){if(!quiet)setMessage("OFFLINE · ดูสถานะจากข้อมูลเมนู/สต็อกที่ cache ไว้ได้ แต่คิว ออเดอร์ และรายจ่ายต้องรอเชื่อมต่อ");return}
+    if(!cloudAvailable){if(!quiet)setMessage("OFFLINE · ดูสถานะจากข้อมูลเมนู/สต็อกที่ cache ไว้ได้ แต่คิว ออเดอร์ และรายจ่ายต้องรอเชื่อมต่อ");return}
     if(!quiet){setLoading(true);setMessage("")}
     try{
       const tasks:Promise<any>[]=[];
@@ -102,7 +103,7 @@ export default function PosOperationsHub({session,bootstrap,open,onClose,onRefre
   }
 
   async function recoverExpense(){
-    if(!canExpense||session.offline||expenseRecoveryRef.current)return;
+    if(!canExpense||!cloudAvailable||expenseRecoveryRef.current)return;
     let pending:PendingExpense|null=null;
     try{pending=readPendingExpense()}catch(e:any){setMessage(expenseErrorText(e.message));return}
     if(!pending)return;
@@ -126,7 +127,7 @@ export default function PosOperationsHub({session,bootstrap,open,onClose,onRefre
     const onFocus=()=>sync(true);
     const onVisible=()=>{if(document.visibilityState==="visible")sync(true)};
     sync(false);
-    if(session.offline)return;
+    if(!cloudAvailable)return;
     const timer=window.setInterval(()=>{
       if(document.visibilityState!=="hidden")refresh(activeTabRef.current,true).catch(()=>{});
     },5000);
@@ -139,10 +140,10 @@ export default function PosOperationsHub({session,bootstrap,open,onClose,onRefre
       window.removeEventListener("focus",onFocus);
       document.removeEventListener("visibilitychange",onVisible);
     };
-  },[open,session.csrf,session.offline,canQueue,canOrder,canExpense]);
+  },[open,session.csrf,cloudAvailable,canQueue,canOrder,canStock,canExpense]);
 
   async function saveExpense(){
-    if(!(Number(expenseAmount)>0)||expenseBusy||session.offline)return;
+    if(!(Number(expenseAmount)>0)||expenseBusy||!cloudAvailable)return;
     setExpenseBusy(true);setMessage("");
     const body:ExpenseBody={
       requestKey:crypto.randomUUID(),date:currentBusinessDate(),amount:Number(expenseAmount),
@@ -199,7 +200,7 @@ export default function PosOperationsHub({session,bootstrap,open,onClose,onRefre
 
       <div className="soft-scroll min-h-0 flex-1 overflow-auto p-3 sm:p-4">
         {tab==="queue"&&canQueue&&<div className="space-y-2">
-          {queueRows.length===0?<Empty text={session.offline?"ออฟไลน์ · ยังไม่ดึงคิวจาก Server":"ไม่มีคิวที่กำลังทำ"}/>:queueRows.map(order=>{
+          {queueRows.length===0?<Empty text={!cloudAvailable?"ออฟไลน์ · ยังไม่ดึงคิวจาก Server":"ไม่มีคิวที่กำลังทำ"}/>:queueRows.map(order=>{
             const total=(order.items||[]).reduce((s,x)=>s+n(x.qty),0),ready=(order.items||[]).reduce((s,x)=>s+Math.min(n(x.qty),n(x.readyQty)),0),called=(order.items||[]).reduce((s,x)=>s+Math.min(n(x.qty),n(x.calledQty)),0);
             return <div key={order.id} className="rounded-2xl border border-slate-200 bg-white p-3">
               <div className="flex items-center justify-between gap-3"><div><b className="text-base">{order.queueNo}</b><span className="ml-2 text-xs text-slate-500">บัตร {order.pagerNo||"—"}</span></div><span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-bold uppercase">{order.status}</span></div>
@@ -233,7 +234,7 @@ export default function PosOperationsHub({session,bootstrap,open,onClose,onRefre
               <div className="grid grid-cols-2 gap-2"><select value={expenseCategory} onChange={e=>setExpenseCategory(e.target.value)} className="min-h-11 rounded-xl border border-slate-200 bg-white px-3 text-xs"><option value="OTHER">อื่น ๆ</option><option value="UTILITY">ค่าน้ำ/ไฟ</option><option value="MAINTENANCE">ซ่อมบำรุง</option><option value="PACKAGING">บรรจุภัณฑ์ฉุกเฉิน</option><option value="MARKETING">การตลาด</option><option value="TRANSPORT">ขนส่ง</option></select><select value={expensePayment} onChange={e=>setExpensePayment(e.target.value)} className="min-h-11 rounded-xl border border-slate-200 bg-white px-3 text-xs"><option value="cash">เงินสด</option><option value="bank">โอน</option><option value="other">อื่น ๆ</option></select></div>
               <input inputMode="decimal" value={expenseAmount} onChange={e=>setExpenseAmount(e.target.value)} placeholder="จำนวนเงิน" className="min-h-11 rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm outline-none"/>
               <input value={expenseDescription} onChange={e=>setExpenseDescription(e.target.value)} placeholder="รายละเอียด เช่น ค่าน้ำแข็งฉุกเฉิน" className="min-h-11 rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm outline-none"/>
-              <button disabled={expenseBusy||session.offline||!(Number(expenseAmount)>0)} onClick={saveExpense} className="min-h-12 rounded-xl bg-[#1F4D3A] px-4 text-sm font-bold text-white disabled:opacity-40">{expenseBusy?"กำลังตรวจรายการเดิม…":"บันทึก · อยู่หน้า POS ต่อ"}</button>
+              <button disabled={expenseBusy||!cloudAvailable||!(Number(expenseAmount)>0)} onClick={saveExpense} className="min-h-12 rounded-xl bg-[#1F4D3A] px-4 text-sm font-bold text-white disabled:opacity-40">{expenseBusy?"กำลังตรวจรายการเดิม…":"บันทึก · อยู่หน้า POS ต่อ"}</button>
               {expensePayment==="cash"&&<p className="text-[10px] text-amber-700">เงินสดจะถูกนับเป็นเงินออกจากลิ้นชักใน Close Day</p>}
             </div>
           </div>
