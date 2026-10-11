@@ -8,7 +8,7 @@ import {formatMoney} from "@/lib/money-format.mjs";
 import {shouldRetainExpensePending} from "@/lib/expense-recovery.mjs";
 import {currentBusinessDate,expenseErrorText,readPendingExpense,sendExpenseDurably,type ExpenseBody,type PendingExpense} from "@/lib/expense-client";
 
-type HubTab="queue"|"orders"|"stock"|"expenses";
+export type HubTab="queue"|"orders"|"stock"|"expenses";
 type QueueOrder={id:string;queueNo:string;pagerNo:number;status:string;time:number;items:{name:string;qty:number;readyQty?:number;calledQty?:number}[]};
 type Sale={id:string;billNo:string;date:string;time:number;total:number;payment:string;status:string;queueNo:string;itemCount:number;orderStatus?:string|null};
 type ExpenseRow={id:string;date:string;time:number;category:string;description:string;amount:number;paymentMethod?:string;sourceType?:string};
@@ -36,6 +36,11 @@ export default function PosOperationsHub({session,bootstrap,open,onClose,onRefre
   const [expensePayment,setExpensePayment]=useState("cash");
   const expenseRecoveryRef=useRef(false);
   const activeTabRef=useRef<HubTab>(tab);
+  const dialogRef=useRef<HTMLElement|null>(null);
+  const previousFocusRef=useRef<HTMLElement|null>(null);
+  const onCloseRef=useRef(onClose);
+
+  useEffect(()=>{onCloseRef.current=onClose},[onClose]);
 
   useEffect(()=>{if(!availableTabs.includes(tab)&&availableTabs[0])setTab(availableTabs[0])},[availableTabs.join("|"),tab]);
   useEffect(()=>{
@@ -45,10 +50,32 @@ export default function PosOperationsHub({session,bootstrap,open,onClose,onRefre
   },[tab,open,session.offline]);
   useEffect(()=>{
     if(!open)return;
-    const onKey=(event:KeyboardEvent)=>{if(event.key==="Escape")onClose()};
+    previousFocusRef.current=document.activeElement instanceof HTMLElement?document.activeElement:null;
+    const previousOverflow=document.body.style.overflow;
+    document.body.style.overflow="hidden";
+    const focusableSelector='button:not([disabled]),a[href],input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])';
+    const frame=window.requestAnimationFrame(()=>{
+      const first=dialogRef.current?.querySelector<HTMLElement>(focusableSelector);
+      (first||dialogRef.current)?.focus();
+    });
+    const onKey=(event:KeyboardEvent)=>{
+      if(event.key==="Escape"){event.preventDefault();onCloseRef.current();return}
+      if(event.key!=="Tab"||!dialogRef.current)return;
+      const focusable=Array.from(dialogRef.current.querySelectorAll<HTMLElement>(focusableSelector)).filter(el=>el.offsetParent!==null);
+      if(focusable.length===0){event.preventDefault();dialogRef.current.focus();return}
+      const first=focusable[0],last=focusable[focusable.length-1],active=document.activeElement;
+      if(event.shiftKey&&active===first){event.preventDefault();last.focus()}
+      else if(!event.shiftKey&&active===last){event.preventDefault();first.focus()}
+    };
     window.addEventListener("keydown",onKey);
-    return()=>window.removeEventListener("keydown",onKey);
-  },[open,onClose]);
+    return()=>{
+      window.cancelAnimationFrame(frame);
+      window.removeEventListener("keydown",onKey);
+      document.body.style.overflow=previousOverflow;
+      previousFocusRef.current?.focus();
+      previousFocusRef.current=null;
+    };
+  },[open]);
 
   async function refresh(scope:HubTab|"all"="all",quiet=false){
     if(session.offline){if(!quiet)setMessage("OFFLINE · ดูสถานะจากข้อมูลเมนู/สต็อกที่ cache ไว้ได้ แต่คิว ออเดอร์ และรายจ่ายต้องรอเชื่อมต่อ");return}
@@ -157,15 +184,15 @@ export default function PosOperationsHub({session,bootstrap,open,onClose,onRefre
 
   const visibleTabs=tabMeta.filter(x=>x.allowed);
   return <div className="fixed inset-0 z-[90] flex items-end bg-black/30 backdrop-blur-[2px] sm:items-stretch sm:justify-end" onClick={onClose}>
-    <aside role="dialog" aria-modal="true" aria-label="ศูนย์งานร้าน FIELD" onClick={e=>e.stopPropagation()} className="flex max-h-[88dvh] w-full flex-col rounded-t-[28px] bg-[#f6f7f8] shadow-2xl sm:h-full sm:max-h-none sm:w-[520px] sm:rounded-none sm:border-l sm:border-slate-300">
+    <aside ref={dialogRef} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="field-operations-title" onClick={e=>e.stopPropagation()} className="flex max-h-[88dvh] w-full flex-col rounded-t-[28px] bg-[#f6f7f8] shadow-2xl outline-none sm:h-full sm:max-h-none sm:w-[520px] sm:rounded-none sm:border-l sm:border-slate-300">
       <div className="mx-auto mt-2 h-1 w-12 rounded-full bg-slate-300 sm:hidden"/>
       <header className="flex items-start justify-between gap-3 border-b border-slate-200 bg-white px-4 py-4 sm:px-5">
-        <div><p className="m-0 text-[10px] font-black tracking-[.22em] text-[#765b08]">FIELD OPERATIONS</p><h2 className="mt-1 text-xl font-black text-slate-900">งานร้าน</h2><p className="mt-1 text-xs text-slate-500">ดูงานหลักและบันทึกรายจ่ายด่วนโดยไม่ออกจากหน้า POS</p></div>
+        <div><p className="m-0 text-[10px] font-black tracking-[.22em] text-[#765b08]">FIELD OPERATIONS</p><h2 id="field-operations-title" className="mt-1 text-xl font-black text-slate-900">งานร้าน</h2><p className="mt-1 text-xs text-slate-500">ดูงานหลักและบันทึกรายจ่ายด่วนโดยไม่ออกจากหน้า POS</p></div>
         <div className="flex gap-1"><button disabled={loading} onClick={()=>refresh(tab)} aria-label="รีเฟรชแท็บงานร้าน" className="grid h-11 w-11 place-items-center rounded-xl border border-slate-200 bg-white disabled:opacity-40"><RefreshCw size={17}/></button><button onClick={onClose} aria-label="ปิดงานร้าน" className="grid h-11 w-11 place-items-center rounded-xl border border-slate-200 bg-white"><X size={18}/></button></div>
       </header>
 
-      <div className="grid gap-1 border-b border-slate-200 bg-white p-2" style={{gridTemplateColumns:`repeat(${Math.max(1,visibleTabs.length)},minmax(0,1fr))`}}>
-        {visibleTabs.map(({key,label,icon:Icon,count})=><button key={key} onClick={()=>setTab(key)} className={"relative flex min-h-12 flex-col items-center justify-center rounded-xl px-1 text-[10px] font-bold "+(tab===key?"bg-[#d4af37]/20 text-[#6f5510]":"text-slate-600 hover:bg-slate-100")}><Icon size={17}/><span className="mt-0.5">{label}</span>{Number(count)>0&&<span className="absolute right-2 top-1 rounded-full bg-slate-900 px-1.5 text-[9px] text-white">{count}</span>}</button>)}
+      <div role="tablist" aria-label="งานร้าน" className="grid gap-1 border-b border-slate-200 bg-white p-2" style={{gridTemplateColumns:`repeat(${Math.max(1,visibleTabs.length)},minmax(0,1fr))`}}>
+        {visibleTabs.map(({key,label,icon:Icon,count})=><button key={key} role="tab" aria-selected={tab===key} onClick={()=>setTab(key)} className={"relative flex min-h-12 flex-col items-center justify-center rounded-xl px-1 text-[10px] font-bold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1F4D3A] "+(tab===key?"bg-[#d4af37]/20 text-[#6f5510]":"text-slate-600 hover:bg-slate-100")}><Icon size={17}/><span className="mt-0.5">{label}</span>{Number(count)>0&&<span className="absolute right-2 top-1 rounded-full bg-slate-900 px-1.5 text-[9px] text-white">{count}</span>}</button>)}
       </div>
 
       {message&&<div className="mx-3 mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-semibold text-amber-900">{message}</div>}
