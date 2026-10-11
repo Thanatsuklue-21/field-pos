@@ -7,6 +7,7 @@ test("offline operator requires a fresh usable bootstrap cache",async()=>{
   const db=await read("lib/offline-db.ts"),operator=await read("lib/offline-operator.ts"),pos=await read("app/pos/page.tsx");
   assert.ok(db.includes("BOOTSTRAP_OFFLINE_MAX_AGE_MS=36*60*60*1000"));
   assert.ok(db.includes("cacheAgeMs<=BOOTSTRAP_OFFLINE_MAX_AGE_MS"));
+  assert.ok(db.includes("bangkokDate(savedAt)===bangkokDate(Date.now())"));
   assert.ok(operator.includes("if(!storage?.cacheReady)return null"));
   assert.ok(pos.includes("BOOTSTRAP_CACHE_MAX_AGE_MS=BOOTSTRAP_OFFLINE_MAX_AGE_MS"));
 });
