@@ -1,13 +1,14 @@
 "use client";
 import {formatMoney} from "@/lib/money-format.mjs";
 
-import {useEffect,useMemo,useState} from "react";
+import {useEffect,useMemo,useRef,useState} from "react";
 import {useRouter} from "next/navigation";
 import {AlertTriangle,Ban,Eye,Pencil,Printer,RefreshCw,RotateCcw,Search,ShieldCheck,X} from "lucide-react";
 import AuthGate from "@/components/auth-gate";
 import SaleReceipt from "@/components/sale-receipt";
 import {api,type Session} from "@/lib/api-client";
 import {useCartStore} from "@/stores/cart-store"; import {writeRecovery} from "@/lib/recovery-storage";
+import {ORDER_MUTATION_PENDING_KEY,orderMutationPath,shouldRetainOrderMutationPending,validateOrderMutationAck,validatePendingOrderMutation} from "@/lib/order-mutation-recovery.mjs";
 
 type SaleItem={id:string;name:string;variant:string;qty:number;price:number};
 type Sale={
@@ -20,6 +21,25 @@ type ResolutionEvent={id:number;actorId?:string|null;actor:string;action:string;
 type PaymentResolution={
   id:string;status:string;mode?:string;total:number;date:string;pager:number;items:SaleItem[];remainingQty:number[];
   payments?:unknown[];providerManaged?:boolean;providerAttempt?:{state:string;provider:string;attemptKey:string;startedAt:number;updatedAt:number}|null;expiresAt?:number;targetOrderId?:string|null;providerCharge?:{chargeId:string;provider?:string;amount?:number;currency?:string;status?:string;expiresAt?:string|null;referenceId?:string};
+type OrderMutationKind="void"|"refund";
+type OrderMutationBody={requestKey:string;saleId:string;reason:string;manualConfirmed?:boolean;manualReference?:string};
+type PendingOrderMutation={kind:OrderMutationKind;body:OrderMutationBody;createdAt:number};
+
+function orderMutationPendingRead():PendingOrderMutation|null{
+  let raw:string|null=null;
+  try{raw=localStorage.getItem(ORDER_MUTATION_PENDING_KEY)}catch{throw new Error("order_mutation_recovery_storage_unavailable")}
+  if(!raw)return null;
+  try{return validatePendingOrderMutation(JSON.parse(raw)) as PendingOrderMutation}catch{throw new Error("order_mutation_recovery_corrupt")}
+}
+function orderMutationPendingWrite(kind:OrderMutationKind,body:OrderMutationBody){
+  try{localStorage.setItem(ORDER_MUTATION_PENDING_KEY,JSON.stringify({kind,body,createdAt:Date.now()}))}
+  catch{throw new Error("order_mutation_recovery_storage_unavailable")}
+}
+function orderMutationPendingClear(){
+  try{localStorage.removeItem(ORDER_MUTATION_PENDING_KEY)}
+  catch{throw new Error("order_mutation_recovery_storage_unavailable")}
+}
+
   providerEvidence?:ProviderEvidence|null;timeline?:ResolutionEvent[];
 };
 
@@ -36,6 +56,7 @@ function OrdersView({session}:{session:Session}){
   const [resolutions,setResolutions]=useState<PaymentResolution[]>([]);
   const [resolutionBusy,setResolutionBusy]=useState<string|null>(null);
   const [resolutionChargeIds,setResolutionChargeIds]=useState<Record<string,string>>({});
+  const orderMutationRecoveryRef=useRef(false);
 
   async function loadResolutions(){
     if(session.user.role!=="admin"){setResolutions([]);return}
@@ -61,7 +82,71 @@ function OrdersView({session}:{session:Session}){
     }
   }
 
-  useEffect(()=>{load(true).catch(e=>setMsg(String(e?.message||"โหลดข้อมูลไม่สำเร็จ")))},[]);
+  function orderMutationErrorText(code:string){
+    return code==="order_mutation_pending"?"มี VOID/Refund เดิมที่ยังไม่ทราบผล · ระบบจะตรวจ request เดิมก่อน":
+      code==="order_mutation_unconfirmed"?"Server ยังไม่ยืนยัน VOID/Refund เดิมครบถ้วน · ระบบเก็บ request เดิมไว้เพื่อป้องกันคืน Stock/CRM ซ้ำ":
+      code==="order_mutation_recovery_corrupt"?"ข้อมูล recovery ของ VOID/Refund ในเครื่องเสีย · ห้ามทำรายการใหม่จนกว่าจะตรวจ Orders":
+      code==="order_mutation_recovery_storage_unavailable"?"เครื่องนี้เก็บ recovery ของ VOID/Refund ไม่ได้ · ระบบไม่ส่งรายการเพื่อป้องกันทำซ้ำ":
+      code;
+  }
+
+  async function sendOrderMutation(kind:OrderMutationKind,body:OrderMutationBody){
+    let pending=orderMutationPendingRead();
+    if(pending&&pending.body.requestKey!==body.requestKey)throw Object.assign(new Error("order_mutation_pending"),{status:409});
+    if(!pending){orderMutationPendingWrite(kind,body);pending={kind,body,createdAt:Date.now()}}
+    try{
+      const r=await api<any>(orderMutationPath(pending.kind),{
+        method:"POST",
+        headers:{"X-CSRF-Token":session.csrf},
+        body:JSON.stringify(pending.body)
+      });
+      validateOrderMutationAck(r,pending);
+      orderMutationPendingClear();
+      return r;
+    }catch(e:any){
+      if(!shouldRetainOrderMutationPending(e))orderMutationPendingClear();
+      throw e;
+    }
+  }
+
+  useEffect(()=>{
+    load(true).catch(e=>setMsg(String(e?.message||"โหลดข้อมูลไม่สำเร็จ")));
+    let disposed=false;
+    const recover=async()=>{
+      if(disposed||orderMutationRecoveryRef.current)return;
+      let pending:PendingOrderMutation|null=null;
+      try{pending=orderMutationPendingRead()}catch(e:any){if(!disposed)setMsg(orderMutationErrorText(e.message));return}
+      if(!pending)return;
+      orderMutationRecoveryRef.current=true;setBusy(true);setMsg("");
+      try{
+        const r=await sendOrderMutation(pending.kind,pending.body);
+        if(!disposed){
+          setDetail(null);
+          const count=Array.isArray(r.saleIds)?r.saleIds.length:1;
+          setMsg(pending.kind==="void"
+            ?"กู้คืน VOID เดิมสำเร็จ · ใช้ request key เดิม · "+count+" บิล ไม่คืน Stock ซ้ำ"
+            :"กู้คืน Refund เดิมสำเร็จ · ใช้ request key เดิม · "+count+" บิล ไม่ย้อน Stock/CRM ซ้ำ");
+          await load();
+        }
+      }catch(e:any){
+        if(!disposed){
+          setMsg(shouldRetainOrderMutationPending(e)
+            ?"VOID/Refund เดิมยังไม่ทราบผล · ระบบเก็บ request เดิมไว้และจะตรวจซ้ำเมื่อเชื่อมต่อ"
+            :orderMutationErrorText(e.message));
+          await load().catch(()=>{});
+        }
+      }finally{
+        orderMutationRecoveryRef.current=false;
+        if(!disposed)setBusy(false);
+      }
+    };
+    const onOnline=()=>recover(),onFocus=()=>recover(),onVisible=()=>{if(document.visibilityState==="visible")recover()};
+    recover();
+    window.addEventListener("online",onOnline);
+    window.addEventListener("focus",onFocus);
+    document.addEventListener("visibilitychange",onVisible);
+    return()=>{disposed=true;window.removeEventListener("online",onOnline);window.removeEventListener("focus",onFocus);document.removeEventListener("visibilitychange",onVisible)};
+  },[]);
   const rows=useMemo(()=>sales.filter(x=>(x.billNo+" "+x.queueNo).toLowerCase().includes(q.toLowerCase())),[sales,q]);
   const paidOrderGroup=(s:Sale)=>{const group=s.orderId?sales.filter(x=>x.orderId===s.orderId&&x.status==="paid"):[s];return group.length?group:[s]};
   const cashVoidEligible=(s:Sale)=>{const group=paidOrderGroup(s);return s.status==="paid"&&group.every(x=>x.payment==="cash")&&!group.some(x=>x.productionStarted)};
@@ -165,13 +250,14 @@ function OrdersView({session}:{session:Session}){
     if(!window.confirm(confirmText))return;
     setBusy(true);setMsg("");
     try{
-      const r=await api<any>("/api/pos/refund",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({requestKey:crypto.randomUUID(),saleId:s.id,reason,manualConfirmed:external.length>0,manualReference})});
+      const body:OrderMutationBody={requestKey:crypto.randomUUID(),saleId:s.id,reason:reason.trim(),manualConfirmed:external.length>0,manualReference:manualReference.trim()};
+      const r=await sendOrderMutation("refund",body);
       setDetail(null);
       const count=Array.isArray(r.saleIds)?r.saleIds.length:1;
       setMsg((count>1?"Refund ทั้งออเดอร์ "+count+" บิลสำเร็จ":"Refund ถูกบันทึกแล้ว")+" · "+(r.stockRestored?"คืนสต็อกแล้วเพราะยังไม่เริ่มผลิต":"ไม่คืนสต็อกเพราะวัตถุดิบถูกใช้/ออเดอร์ดำเนินการแล้ว"));
       await load();
     }catch(e:any){
-      setMsg(e.message==="refund_closed_day"?"วันนี้ถูก Close Day แล้ว ไม่อนุญาตให้แก้ย้อนหลัง":e.message==="promptpay_manual_refund_required"?"ต้องคืนเงินจริงส่วน PromptPay ภายนอกระบบก่อนยืนยัน":e.message==="external_manual_refund_required"?"ต้องคืนเงินจริงผ่านช่องทางภายนอกก่อนยืนยัน":e.message==="manual_refund_reference_required"?"ต้องกรอกเลขอ้างอิงการคืนเงิน":e.message==="refund_payment_not_supported"?"ช่องทางชำระเงินของบิลในออเดอร์นี้ยังไม่รองรับ Refund":e.message==="order_sale_missing"?"ข้อมูลบิลในออเดอร์ไม่ครบ ระบบจึงหยุดเพื่อป้องกันยอดบัญชีผิด":e.message==="use_void_before_production"?"บิลเงินสดเดี่ยวยังไม่เริ่มผลิต ให้ใช้ VOID เพื่อคืนสต็อกอัตโนมัติ":e.message);
+      setMsg(e.message==="refund_closed_day"?"วันนี้ถูก Close Day แล้ว ไม่อนุญาตให้แก้ย้อนหลัง":e.message==="promptpay_manual_refund_required"?"ต้องคืนเงินจริงส่วน PromptPay ภายนอกระบบก่อนยืนยัน":e.message==="external_manual_refund_required"?"ต้องคืนเงินจริงผ่านช่องทางภายนอกก่อนยืนยัน":e.message==="manual_refund_reference_required"?"ต้องกรอกเลขอ้างอิงการคืนเงิน":e.message==="refund_payment_not_supported"?"ช่องทางชำระเงินของบิลในออเดอร์นี้ยังไม่รองรับ Refund":e.message==="order_sale_missing"?"ข้อมูลบิลในออเดอร์ไม่ครบ ระบบจึงหยุดเพื่อป้องกันยอดบัญชีผิด":e.message==="use_void_before_production"?"บิลเงินสดเดี่ยวยังไม่เริ่มผลิต ให้ใช้ VOID เพื่อคืนสต็อกอัตโนมัติ":orderMutationErrorText(e.message));
     }finally{setBusy(false)}
   }
 
@@ -181,14 +267,15 @@ function OrdersView({session}:{session:Session}){
     if(reason===null)return false;
     setBusy(true);setMsg("");
     try{
-      const r=await api<any>("/api/pos/void",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({requestKey:crypto.randomUUID(),saleId:s.id,reason})});
+      const body:OrderMutationBody={requestKey:crypto.randomUUID(),saleId:s.id,reason:reason.trim()};
+      const r=await sendOrderMutation("void",body);
       setDetail(null);
       const count=Array.isArray(r.saleIds)?r.saleIds.length:1;
       setMsg((count>1?"ยกเลิกออเดอร์เงินสด "+count+" บิลสำเร็จ":"ยกเลิกบิลสำเร็จ")+" · คืน Stock แล้ว");
       await load();
       return true;
     }catch(e:any){
-      setMsg(e.message==="void_after_production_started"?"เริ่มผลิตแล้ว ไม่สามารถยกเลิกและคืน Stock อัตโนมัติ":e.message==="non_cash_void_requires_refund"?"ออเดอร์นี้มีช่องทางที่ไม่ใช่เงินสด ต้องใช้ขั้นตอน Refund":e.message==="void_order_mixed_status"?"ออเดอร์นี้มีบางบิลถูกยกเลิก/คืนเงินไปแล้ว ระบบจึงหยุดเพื่อป้องกันยอดผิด":e.message==="order_sale_missing"?"ข้อมูลบิลในออเดอร์ไม่ครบ ระบบจึงหยุดเพื่อป้องกันยอดบัญชีผิด":e.message);
+      setMsg(e.message==="void_after_production_started"?"เริ่มผลิตแล้ว ไม่สามารถยกเลิกและคืน Stock อัตโนมัติ":e.message==="non_cash_void_requires_refund"?"ออเดอร์นี้มีช่องทางที่ไม่ใช่เงินสด ต้องใช้ขั้นตอน Refund":e.message==="void_order_mixed_status"?"ออเดอร์นี้มีบางบิลถูกยกเลิก/คืนเงินไปแล้ว ระบบจึงหยุดเพื่อป้องกันยอดผิด":e.message==="order_sale_missing"?"ข้อมูลบิลในออเดอร์ไม่ครบ ระบบจึงหยุดเพื่อป้องกันยอดบัญชีผิด":orderMutationErrorText(e.message));
       return false;
     }finally{setBusy(false)}
   }
