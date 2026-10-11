@@ -77,15 +77,20 @@ export async function offlineCashPut(record:OfflineCashRecord,projectBootstrap?:
     if(projectBootstrap){
       const store=tx.objectStore(CACHE_STORE),request=store.get("/api/pos/bootstrap");
       request.onsuccess=()=>{
+        const cached=request.result as Cached<any>|undefined;
         try{
-          const cached=request.result as Cached<any>|undefined;
           if(!cached?.value||!cached.savedAt||Date.now()-cached.savedAt>BOOTSTRAP_OFFLINE_MAX_AGE_MS)throw new Error("offline_catalog_unavailable");
           const billDate=String(record.body?.date||"");
           if(!/^\d{4}-\d{2}-\d{2}$/.test(billDate)||bangkokDate(Number(cached.savedAt))!==billDate)throw new Error("offline_catalog_stale_day");
           projected=projectBootstrap(cached.value);
+        }catch(error){
+          projectionError=error instanceof Error?error:new Error("offline_catalog_unavailable");
+          tx.abort();return;
+        }
+        try{
           // Keep the original freshness deadline; an Offline sale is not a Cloud revalidation.
           store.put({...cached,value:projected},"/api/pos/bootstrap");
-        }catch(error){projectionError=error instanceof Error?error:new Error("offline_catalog_unavailable");tx.abort()}
+        }catch{tx.abort()}
       };
     }
     return ()=>undefined;
