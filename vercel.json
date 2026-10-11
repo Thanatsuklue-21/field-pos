@@ -71,5 +71,8 @@
       "destination": "/pos",
       "permanent": false
     }
+  ],
+  "regions": [
+    "sin1"
   ]
 }
