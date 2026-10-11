@@ -38,7 +38,8 @@ function queuePendingWrite(body:QueueActionBody){
   catch{throw new Error("queue_recovery_storage_unavailable")}
 }
 function queuePendingClear(){
-  try{localStorage.removeItem(QUEUE_PENDING_KEY)}catch{}
+  try{localStorage.removeItem(QUEUE_PENDING_KEY)}
+  catch{throw new Error("queue_recovery_storage_unavailable")}
 }
 
 function nextTask(orders:QOrder[]){
