@@ -1124,3 +1124,28 @@ test('manual split requires-resolution session can still resume through the gene
   }});
   assert.equal(resumed.session.status,'collecting');
 });
+
+
+test('provider release is state-idempotent after commit when the first response is lost',async()=>{
+  const db=fakeDb();
+  const started=await startSplitPayment({db,user,body:{requestKey:'pp-release-v2-start-001',cart,date,mode:'promptpay_full'},now:13000});
+  const sessionId=started.session.id;
+  await beginSplitPaymentProviderCharge({db,user,body:{sessionId,provider:'beam',attemptKey:'promptpay:'+sessionId},now:13010});
+  await attachSplitPaymentProviderCharge({db,user,body:{
+    sessionId,chargeId:'ch_release_v2_001',provider:'beam',amount:55,currency:'THB',status:'expired',referenceId:sessionId
+  },now:13020});
+  const before=JSON.parse(db.storage.document).ingredients.matcha.qty;
+  const first=await releaseSplitPaymentProviderSession({db,user,body:{
+    requestKey:'release-v2-key-001',sessionId,paymentReference:'ch_release_v2_001',providerStatus:'expired'
+  },now:13030});
+  assert.equal(first.released,true);
+  const afterFirst=JSON.parse(db.storage.document).ingredients.matcha.qty;
+  assert.equal(afterFirst,before+5);
+
+  const retry=await releaseSplitPaymentProviderSession({db,user,body:{
+    requestKey:'release-v2-key-NEW',sessionId,paymentReference:'ch_release_v2_001',providerStatus:'expired'
+  },now:13040});
+  assert.equal(retry.released,true);
+  assert.equal(retry.stateReplay,true);
+  assert.equal(JSON.parse(db.storage.document).ingredients.matcha.qty,afterFirst);
+});
