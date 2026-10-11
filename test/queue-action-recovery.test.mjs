@@ -80,3 +80,17 @@ test("server queue action idempotency still precedes mutation and WASTE is repla
   assert.match(core,/const body=\{requestKey:'remake-waste-0001'/);
   assert.match(core,/const replay=await queuePosAction/);
 });
+
+
+test("pending queue action retries automatically on reconnect focus and visible resume with a mutex",async()=>{
+  const queue=await read("app/queue/page.tsx");
+  assert.match(queue,/queueRecoveryRef=useRef\(false\)/);
+  assert.match(queue,/if\(disposed\|\|queueRecoveryRef\.current\)return/);
+  assert.match(queue,/queueRecoveryRef\.current=true/);
+  assert.match(queue,/queueRecoveryRef\.current=false/);
+  assert.match(queue,/window\.addEventListener\("online",onOnline\)/);
+  assert.match(queue,/window\.addEventListener\("focus",onFocus\)/);
+  assert.match(queue,/document\.addEventListener\("visibilitychange",onVisible\)/);
+  assert.match(queue,/document\.visibilityState==="visible"/);
+  assert.match(queue,/sendQueueAction\(pending\.body\)/);
+});
