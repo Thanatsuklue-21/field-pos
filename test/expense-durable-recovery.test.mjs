@@ -51,22 +51,21 @@ test("expense recovery clears only after exact server acknowledgement",()=>{
   ]) assert.throws(()=>validateExpenseAck(bad,body),/expense_unconfirmed/);
 });
 
-test("Expenses UI persists exact Bangkok-dated request before send and replays it on reconnect",async()=>{
+test("shared expense client persists exact Bangkok-dated request before send and Expenses replays it on reconnect",async()=>{
   const ui=await read("app/expenses/page.tsx");
-  const start=ui.indexOf("async function sendExpense");
-  const end=ui.indexOf("useEffect(()=>",start);
-  const block=ui.slice(start,end);
-  assert.match(ui,/timeZone:"Asia\/Bangkok"/);
-  assert.match(ui,/requestKey:crypto\.randomUUID\(\),date:localDate\(\)/);
+  const client=await read("lib/expense-client.ts");
+  assert.match(client,/timeZone:"Asia\/Bangkok"/);
+  assert.match(ui,/requestKey:crypto\.randomUUID\(\),date:currentBusinessDate\(\)/);
   assert.match(ui,/description:description\.trim\(\)\.slice\(0,240\)/);
-  assert.match(block,/expensePendingWrite\(body\)/);
-  assert.match(block,/body:JSON\.stringify\(pending\.body\)/);
-  assert.ok(block.indexOf("expensePendingWrite(body)")<block.indexOf('api<any>("/api/expenses"'));
-  assert.ok(block.indexOf("validateExpenseAck(r,pending.body)")<block.indexOf("expensePendingClear()"));
+  assert.match(client,/writePendingExpense\(body\)/);
+  assert.match(client,/body:JSON\.stringify\(pending\.body\)/);
+  assert.ok(client.indexOf("writePendingExpense(body)")<client.indexOf("api<any>(\"/api/expenses\""));
+  assert.ok(client.indexOf("validateExpenseAck(response,pending.body)")<client.indexOf("clearPendingExpense()"));
   assert.match(ui,/window\.addEventListener\("online",onOnline\)/);
   assert.match(ui,/window\.addEventListener\("focus",onFocus\)/);
   assert.match(ui,/document\.addEventListener\("visibilitychange",onVisible\)/);
   assert.match(ui,/expenseRecoveryRef/);
+  assert.match(ui,/sendExpenseDurably\(session\.csrf,pending\.body\)/);
 });
 
 test("expense backend replays same request key before closed-day rejection and rejects conflicting reuse",async()=>{
