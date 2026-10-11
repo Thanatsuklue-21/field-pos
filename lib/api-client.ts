@@ -16,6 +16,7 @@ const RECOVERABLE_WRITE_PATHS=new Set([
   "/api/pos/checkout",
   "/api/expenses",
   "/api/pos/queue",
+  "/api/expenses",
   "/api/pos/split/start",
   "/api/pos/split/pay",
   "/api/pos/split/cancel",
