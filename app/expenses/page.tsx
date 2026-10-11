@@ -4,26 +4,10 @@ import {useEffect,useRef,useState} from "react";
 import {Plus,Trash2,X} from "lucide-react";
 import AuthGate from "@/components/auth-gate";
 import {api,type Session} from "@/lib/api-client";
-import {EXPENSE_PENDING_KEY,shouldRetainExpensePending,validateExpenseAck,validatePendingExpense} from "@/lib/expense-recovery.mjs";
+import {shouldRetainExpensePending} from "@/lib/expense-recovery.mjs";
+import {expenseErrorText,readPendingExpense,sendExpenseDurably,type ExpenseBody,type PendingExpense} from "@/lib/expense-client";
 
 type E={id:string;date:string;time:number;category:string;description:string;amount:number;paymentMethod?:string;sourceType?:string;createdBy?:string;requestKey?:string};
-type ExpenseBody={requestKey:string;date:string;amount:number;category:string;description:string;paymentMethod:string};
-type PendingExpense={body:ExpenseBody;createdAt:number};
-const localDate=()=>new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Bangkok",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date());
-function expensePendingRead():PendingExpense|null{
-  let raw:string|null=null;
-  try{raw=localStorage.getItem(EXPENSE_PENDING_KEY)}catch{throw new Error("expense_recovery_storage_unavailable")}
-  if(!raw)return null;
-  try{return validatePendingExpense(JSON.parse(raw)) as PendingExpense}catch{throw new Error("expense_recovery_corrupt")}
-}
-function expensePendingWrite(body:ExpenseBody){
-  try{localStorage.setItem(EXPENSE_PENDING_KEY,JSON.stringify({body,createdAt:Date.now()}))}
-  catch{throw new Error("expense_recovery_storage_unavailable")}
-}
-function expensePendingClear(){
-  try{localStorage.removeItem(EXPENSE_PENDING_KEY)}
-  catch{throw new Error("expense_recovery_storage_unavailable")}
-}
 const paymentLabel=(v?:string)=>v==="cash"?"เงินสด":v==="bank"?"โอน/ธนาคาร":v==="noncash"?"ไม่ใช่เงินสด":v==="other"?"อื่น ๆ":"ไม่ระบุ";
 
 export default function Expenses(){return <AuthGate>{s=><View session={s}/>}</AuthGate>}
@@ -33,41 +17,17 @@ function View({session}:{session:Session}){
   const expenseRecoveryRef=useRef(false);
   const load=()=>api<{expenses:E[]}>("/api/expenses").then(x=>setRows(x.expenses));
 
-  function errorText(code:string){
-    return code==="day_closed"?"ปิดยอดวันนี้แล้ว ไม่สามารถแก้ไขค่าใช้จ่ายได้":
-      code==="expense_pending"?"มีค่าใช้จ่ายเดิมที่ยังไม่ทราบผล · ระบบจะตรวจ request เดิมก่อน":
-      code==="expense_unconfirmed"?"Server ยังไม่ยืนยันค่าใช้จ่ายเดิมอย่างครบถ้วน · ระบบเก็บ request เดิมไว้เพื่อป้องกันบันทึกซ้ำ":
-      code==="expense_recovery_corrupt"?"ข้อมูล recovery ค่าใช้จ่ายในเครื่องเสีย · ห้ามบันทึกรายการใหม่จนกว่าจะตรวจข้อมูล":
-      code==="expense_recovery_storage_unavailable"?"เครื่องนี้เก็บ recovery ค่าใช้จ่ายไม่ได้ · ระบบไม่ส่งรายการเพื่อป้องกันยอดซ้ำ":
-      code;
-  }
-
-  async function sendExpense(body:ExpenseBody){
-    let pending=expensePendingRead();
-    if(pending&&pending.body.requestKey!==body.requestKey)throw Object.assign(new Error("expense_pending"),{status:409});
-    if(!pending){expensePendingWrite(body);pending={body,createdAt:Date.now()}}
-    try{
-      const r=await api<any>("/api/expenses",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify(pending.body)});
-      validateExpenseAck(r,pending.body);
-      expensePendingClear();
-      return r;
-    }catch(e:any){
-      if(!shouldRetainExpensePending(e))expensePendingClear();
-      throw e;
-    }
-  }
-
   useEffect(()=>{
     load().catch(()=>{});
     let disposed=false;
     const recover=async()=>{
       if(disposed||expenseRecoveryRef.current)return;
       let pending:PendingExpense|null=null;
-      try{pending=expensePendingRead()}catch(e:any){if(!disposed)setError(errorText(e.message));return}
+      try{pending=readPendingExpense()}catch(e:any){if(!disposed)setError(expenseErrorText(e.message));return}
       if(!pending)return;
       expenseRecoveryRef.current=true;setBusy(true);setError("");setNotice("");
       try{
-        await sendExpense(pending.body);
+        await sendExpenseDurably(session.csrf,pending.body);
         if(!disposed){
           setNotice("กู้คืนค่าใช้จ่ายเดิมสำเร็จ · ใช้ request key เดิมและไม่บันทึกซ้ำ");
           setOpen(false);setAmount("");setDescription("");setPaymentMethod("cash");
@@ -75,7 +35,7 @@ function View({session}:{session:Session}){
         }
       }catch(e:any){
         if(!disposed){
-          setError(shouldRetainExpensePending(e)?"ค่าใช้จ่ายเดิมยังไม่ทราบผล · ระบบเก็บ request เดิมไว้และจะตรวจซ้ำเมื่อเชื่อมต่อ":errorText(e.message));
+          setError(shouldRetainExpensePending(e)?"ค่าใช้จ่ายเดิมยังไม่ทราบผล · ระบบเก็บ request เดิมไว้และจะตรวจซ้ำเมื่อเชื่อมต่อ":expenseErrorText(e.message));
           await load().catch(()=>{});
         }
       }finally{
@@ -95,9 +55,9 @@ function View({session}:{session:Session}){
     setBusy(true);setError("");setNotice("");
     const body:ExpenseBody={requestKey:crypto.randomUUID(),date:localDate(),amount:Number(amount),category:category.trim().slice(0,60),description:description.trim().slice(0,240),paymentMethod:paymentMethod.trim().toLowerCase()};
     try{
-      await sendExpense(body);
+      await sendExpenseDurably(session.csrf,body);
       setOpen(false);setAmount("");setDescription("");setPaymentMethod("cash");setNotice("บันทึกค่าใช้จ่ายแล้ว");await load();
-    }catch(e:any){setError(errorText(e.message))}
+    }catch(e:any){setError(expenseErrorText(e.message))}
     finally{setBusy(false)}
   }
   async function del(row:E){
