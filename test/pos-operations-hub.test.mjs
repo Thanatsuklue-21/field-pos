@@ -177,6 +177,16 @@ test("post-sale queue action stays inside POS and opens the Hub on Queue context
 });
 
 
+test("post-sale queue shortcut is shown only to operators with Queue permission",async()=>{
+  const pos=await read("app/pos/page.tsx");
+  assert.match(pos,/const canQueueOps=session\.user\.role==="admin"\|\|session\.user\.permissions\?\.queue===true/);
+  const saleStart=pos.indexOf("lastSale&&");
+  const saleBlock=pos.slice(saleStart,pos.indexOf("<PosOperationsHub",saleStart));
+  assert.match(saleBlock,/!lastSale\.offline&&canQueueOps&&<button/);
+  assert.match(saleBlock,/setOpsInitialTab\("queue"\)/);
+});
+
+
 test("Operations Hub tabs follow keyboard roving-tab semantics without extra page navigation",async()=>{
   const hub=await read("components/pos-operations-hub.tsx");
   assert.match(hub,/aria-orientation="horizontal"/);
