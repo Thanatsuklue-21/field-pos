@@ -107,8 +107,10 @@ test("auth session probe stays fastest while ordinary GET and only recoverable w
   assert.match(orders,/orderMutationPendingWrite\(kind,body\)/);
   assert.match(orderRecovery,/shouldRetainOrderMutationPending/);
   const expenses=await read("app/expenses/page.tsx");
+  const expenseClient=await read("lib/expense-client.ts");
   const expenseRecovery=await read("lib/expense-recovery.mjs");
-  assert.match(expenses,/expensePendingWrite\(body\)/);
+  assert.match(expenses,/sendExpenseDurably\(session\.csrf,body\)/);
+  assert.match(expenseClient,/writePendingExpense\(body\)/);
   assert.match(expenseRecovery,/shouldRetainExpensePending/);
 });
 
