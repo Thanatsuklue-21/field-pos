@@ -39,8 +39,9 @@ export default function PosOperationsHub({session,bootstrap,open,onClose}:{sessi
 
   useEffect(()=>{if(!availableTabs.includes(tab)&&availableTabs[0])setTab(availableTabs[0])},[availableTabs.join("|"),tab]);
   useEffect(()=>{
+    const changed=activeTabRef.current!==tab;
     activeTabRef.current=tab;
-    if(open&&!session.offline)refresh(tab,true).catch(()=>{});
+    if(changed&&open&&!session.offline)refresh(tab,true).catch(()=>{});
   },[tab,open,session.offline]);
   useEffect(()=>{
     if(!open)return;
