@@ -43,7 +43,11 @@ export default function PosOperationsHub({session,bootstrap,open,onClose,onRefre
 
   useEffect(()=>{onCloseRef.current=onClose},[onClose]);
 
-  useEffect(()=>{\n    if(!open){if(!availableTabs.includes(tab)&&availableTabs[0])setTab(availableTabs[0]);return}\n    const requested=initialTab&&availableTabs.includes(initialTab)?initialTab:availableTabs[0];\n    if(requested&&requested!==tab)setTab(requested);\n  },[open,initialTab,availableTabs.join("|"),tab]);
+  useEffect(()=>{
+    if(!open){if(!availableTabs.includes(tab)&&availableTabs[0])setTab(availableTabs[0]);return}
+    const requested=initialTab&&availableTabs.includes(initialTab)?initialTab:availableTabs[0];
+    if(requested&&requested!==tab)setTab(requested);
+  },[open,initialTab,availableTabs.join("|"),tab]);
   useEffect(()=>{
     const changed=activeTabRef.current!==tab;
     activeTabRef.current=tab;
