@@ -144,3 +144,18 @@ test("stock tab refreshes authoritative POS bootstrap instead of becoming stale"
   const timer=hub.slice(hub.indexOf("const timer=window.setInterval"),hub.indexOf('window.addEventListener("online"',hub.indexOf("const timer=window.setInterval")));
   assert.match(timer,/refresh\(activeTabRef\.current,true\)/);
 });
+
+
+test("Operations Hub traps keyboard focus, restores opener focus, and locks background scroll",async()=>{
+  const hub=await read("components/pos-operations-hub.tsx");
+  assert.match(hub,/const dialogRef=useRef<HTMLElement\|null>\(null\)/);
+  assert.match(hub,/previousFocusRef\.current=document\.activeElement instanceof HTMLElement/);
+  assert.match(hub,/document\.body\.style\.overflow="hidden"/);
+  assert.match(hub,/button:not\(\[disabled\]\),a\[href\],input:not\(\[disabled\]\),select:not\(\[disabled\]\),textarea:not\(\[disabled\]\)/);
+  assert.match(hub,/if\(event\.key!=="Tab"\)return/);
+  assert.match(hub,/event\.shiftKey&&\(active===first\|\|active===dialog\)/);
+  assert.match(hub,/!event\.shiftKey&&active===last/);
+  assert.match(hub,/document\.body\.style\.overflow=previousOverflow/);
+  assert.match(hub,/previous\?\.isConnected&&previous\.focus\(\)/);
+  assert.match(hub,/ref=\{dialogRef\} tabIndex=\{-1\} role="dialog"/);
+});
