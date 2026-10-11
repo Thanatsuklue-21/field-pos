@@ -93,7 +93,7 @@ function View({session}:{session:Session}){
 
   async function save(){
     setBusy(true);setError("");setNotice("");
-    const body:ExpenseBody={requestKey:crypto.randomUUID(),date:localDate(),amount:Number(amount),category,description,paymentMethod};
+    const body:ExpenseBody={requestKey:crypto.randomUUID(),date:localDate(),amount:Number(amount),category:category.trim().slice(0,60),description:description.trim().slice(0,240),paymentMethod:paymentMethod.trim().toLowerCase()};
     try{
       await sendExpense(body);
       setOpen(false);setAmount("");setDescription("");setPaymentMethod("cash");setNotice("บันทึกค่าใช้จ่ายแล้ว");await load();
