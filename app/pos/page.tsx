@@ -111,7 +111,15 @@ function PosView({session}:{session:Session}){
     setData(prev=>!prev||next.revision>=prev.revision?next:prev);
     return true;
   };
-  const load=(force=false)=>api<Bootstrap|RevisionUnchanged>("/api/pos/bootstrap",!force&&revisionRef.current!==null?{headers:{"X-Field-Revision":String(revisionRef.current)}}:{}).then(acceptBootstrap);
+  const load=async(force=false)=>{
+    const next=await api<Bootstrap|RevisionUnchanged>("/api/pos/bootstrap",!force&&revisionRef.current!==null?{headers:{"X-Field-Revision":String(revisionRef.current)}}:{});
+    const outbox=await getOfflineCashSummary().catch(()=>null);
+    if(outbox?.total>0){
+      setOfflineStats(outbox);
+      return false;
+    }
+    return acceptBootstrap(next);
+  };
   const loadCustomers=()=>api<any>("/api/customers").then(x=>{setCustomers(x.customers||[]);setLoyalty({pointsSpend:Number(x.loyalty?.pointsSpend)||0,pointsRedeemValue:Number(x.loyalty?.pointsRedeemValue)||0})});
 
   useEffect(()=>{
@@ -289,9 +297,18 @@ function PosView({session}:{session:Session}){
     try{
       const sync=await syncOfflineCashSales(session);
       setOfflineStats({pending:sync.pending,needsReview:sync.needsReview,total:sync.total});
-      if(sync.synced>0){setNotice("ซิงก์ยอดเงินสด Offline สำเร็จ "+sync.synced+" บิล · Cloud/Stock อัปเดตแล้ว");await load(true).catch(()=>{});await loadCustomers().catch(()=>{})}
-      if(sync.needsReview>0){setNotice("มีบิล Offline "+sync.needsReview+" รายการที่ต้องตรวจสอบก่อนลง Cloud · ระบบเก็บรายการไว้และไม่ลบทิ้ง");window.dispatchEvent(new CustomEvent("field:sync",{detail:{status:"sync_error"}}))}
-      else window.dispatchEvent(new CustomEvent("field:sync",{detail:{status:"online"}}));
+      if(sync.total===0){
+        if(sync.synced>0){
+          setNotice("ซิงก์ยอดเงินสด Offline สำเร็จ "+sync.synced+" บิล · Cloud/Stock อัปเดตแล้ว");
+          await load(true).catch(()=>{});
+          await loadCustomers().catch(()=>{});
+        }
+        window.dispatchEvent(new CustomEvent("field:sync",{detail:{status:"online"}}));
+      }else{
+        const remaining="รอ Sync "+sync.pending+" · ต้องตรวจ "+sync.needsReview;
+        setNotice((sync.synced>0?"ซิงก์สำเร็จ "+sync.synced+" บิล · ":"")+"ยังมีบิล Offline "+sync.total+" รายการ ("+remaining+") · ระบบคง Stock projection ในเครื่องไว้จนกว่าจะจัดการครบ");
+        window.dispatchEvent(new CustomEvent("field:sync",{detail:{status:"sync_error"}}));
+      }
     }catch(error:any){
       window.dispatchEvent(new CustomEvent("field:sync",{detail:{status:"sync_error"}}));
       setNotice(error?.status===401||error?.status===403||error?.message==="offline_session_revalidation"
