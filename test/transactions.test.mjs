@@ -4,7 +4,7 @@ import {beginWriteTransaction,commitWriteTransaction} from "../lib/transactions.
 
 test("write transaction acquisition retries transient libSQL busy errors",async()=>{
   let calls=0;
-  const tx={};
+  const tx={async commit(){return "ok"},async rollback(){return "rolled"}};
   const db={async transaction(){
     calls++;
     if(calls<3)throw Object.assign(new Error("busy"),{code:"SQLITE_BUSY"});
@@ -13,8 +13,7 @@ test("write transaction acquisition retries transient libSQL busy errors",async(
   const owned=await beginWriteTransaction(db);
   assert.notEqual(owned,tx);
   assert.equal(calls,3);
-  assert.equal(typeof owned.commit,"undefined");
-  await owned.rollback?.();
+  assert.equal(await owned.commit(),"ok");
 
 });
 
