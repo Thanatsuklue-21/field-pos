@@ -76,3 +76,11 @@ test("critical write modules route commits through the bounded helper",async()=>
     assert.doesNotMatch(source,/await tx\.commit\(\)/);
   }
 });
+
+test("purchase edit date rejection rolls back before returning",async()=>{
+  const {readFile}=await import("node:fs/promises");
+  const source=await readFile(new URL("../lib/api.mjs",import.meta.url),"utf8");
+  assert.match(source,/invalid_purchase_date[^\n]*\{await tx\.rollback\(\);return reply/);
+  assert.match(source,/if\(purchaseDate>bangkokDate\(now\)\)\{await tx\.rollback\(\);return reply/);
+});
+
