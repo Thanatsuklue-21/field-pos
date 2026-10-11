@@ -36,6 +36,8 @@ export default function PosOperationsHub({session,bootstrap,open,onClose,onRefre
   const [expensePayment,setExpensePayment]=useState("cash");
   const expenseRecoveryRef=useRef(false);
   const activeTabRef=useRef<HubTab>(tab);
+  const dialogRef=useRef<HTMLElement|null>(null);
+  const previousFocusRef=useRef<HTMLElement|null>(null);
 
   useEffect(()=>{if(!availableTabs.includes(tab)&&availableTabs[0])setTab(availableTabs[0])},[availableTabs.join("|"),tab]);
   useEffect(()=>{
@@ -45,9 +47,28 @@ export default function PosOperationsHub({session,bootstrap,open,onClose,onRefre
   },[tab,open,session.offline]);
   useEffect(()=>{
     if(!open)return;
-    const onKey=(event:KeyboardEvent)=>{if(event.key==="Escape")onClose()};
+    previousFocusRef.current=document.activeElement instanceof HTMLElement?document.activeElement:null;
+    const previousOverflow=document.body.style.overflow;
+    document.body.style.overflow="hidden";
+    const dialog=dialogRef.current;
+    const focusables=()=>Array.from(dialog?.querySelectorAll<HTMLElement>('button:not([disabled]),a[href],input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])')||[]).filter(el=>el.offsetParent!==null);
+    queueMicrotask(()=>{const first=focusables()[0];(first||dialog)?.focus()});
+    const onKey=(event:KeyboardEvent)=>{
+      if(event.key==="Escape"){event.preventDefault();onClose();return}
+      if(event.key!=="Tab")return;
+      const nodes=focusables();
+      if(nodes.length===0){event.preventDefault();dialog?.focus();return}
+      const first=nodes[0],last=nodes[nodes.length-1],active=document.activeElement;
+      if(event.shiftKey&&(active===first||active===dialog)){event.preventDefault();last.focus()}
+      else if(!event.shiftKey&&active===last){event.preventDefault();first.focus()}
+    };
     window.addEventListener("keydown",onKey);
-    return()=>window.removeEventListener("keydown",onKey);
+    return()=>{
+      window.removeEventListener("keydown",onKey);
+      document.body.style.overflow=previousOverflow;
+      const previous=previousFocusRef.current;
+      queueMicrotask(()=>previous?.isConnected&&previous.focus());
+    };
   },[open,onClose]);
 
   async function refresh(scope:HubTab|"all"="all",quiet=false){
@@ -157,7 +178,7 @@ export default function PosOperationsHub({session,bootstrap,open,onClose,onRefre
 
   const visibleTabs=tabMeta.filter(x=>x.allowed);
   return <div className="fixed inset-0 z-[90] flex items-end bg-black/30 backdrop-blur-[2px] sm:items-stretch sm:justify-end" onClick={onClose}>
-    <aside role="dialog" aria-modal="true" aria-label="ศูนย์งานร้าน FIELD" onClick={e=>e.stopPropagation()} className="flex max-h-[88dvh] w-full flex-col rounded-t-[28px] bg-[#f6f7f8] shadow-2xl sm:h-full sm:max-h-none sm:w-[520px] sm:rounded-none sm:border-l sm:border-slate-300">
+    <aside ref={dialogRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label="ศูนย์งานร้าน FIELD" onClick={e=>e.stopPropagation()} className="flex max-h-[88dvh] w-full flex-col rounded-t-[28px] bg-[#f6f7f8] shadow-2xl outline-none sm:h-full sm:max-h-none sm:w-[520px] sm:rounded-none sm:border-l sm:border-slate-300">
       <div className="mx-auto mt-2 h-1 w-12 rounded-full bg-slate-300 sm:hidden"/>
       <header className="flex items-start justify-between gap-3 border-b border-slate-200 bg-white px-4 py-4 sm:px-5">
         <div><p className="m-0 text-[10px] font-black tracking-[.22em] text-[#765b08]">FIELD OPERATIONS</p><h2 className="mt-1 text-xl font-black text-slate-900">งานร้าน</h2><p className="mt-1 text-xs text-slate-500">ดูงานหลักและบันทึกรายจ่ายด่วนโดยไม่ออกจากหน้า POS</p></div>
