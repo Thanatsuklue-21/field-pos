@@ -1149,3 +1149,21 @@ test('provider release is state-idempotent after commit when the first response 
   assert.equal(retry.stateReplay,true);
   assert.equal(JSON.parse(db.storage.document).ingredients.matcha.qty,afterFirst);
 });
+
+
+test('ambiguous Opn creation can bind verified provider evidence in requires-resolution state',async()=>{
+  const db=fakeDb();
+  const now=14000;
+  const started=await startSplitPayment({db,user,body:{requestKey:'opn-evidence-start-001',cart,date,mode:'promptpay_full'},now});
+  const sessionId=started.session.id;
+  await beginSplitPaymentProviderCharge({db,user,body:{sessionId,provider:'opn',attemptKey:'promptpay:'+sessionId},now:now+10});
+  const listed=await listSplitPaymentSessions({db,now:now+(20*60*1000)+1});
+  assert.equal(listed.sessions[0].status,'requires_resolution');
+  const attached=await attachSplitPaymentProviderCharge({db,user,body:{
+    sessionId,chargeId:'chrg_OPNEVIDENCE001',provider:'opn',amount:55,currency:'THB',status:'pending',referenceId:sessionId
+  },now:now+(20*60*1000)+2});
+  assert.equal(attached.session.providerCharge.chargeId,'chrg_OPNEVIDENCE001');
+  assert.equal(attached.session.providerCharge.provider,'opn');
+  const ctx=await getSplitPaymentProviderContext({db,sessionId});
+  assert.equal(ctx.providerCharge.referenceId,sessionId);
+});
