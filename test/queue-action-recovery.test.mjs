@@ -62,8 +62,10 @@ test("all operator queue mutations use durable sendQueueAction including WASTE a
 test("queue write timeout is enabled only after durable action recovery exists",async()=>{
   const client=await read("lib/api-client.ts");
   const queue=await read("app/queue/page.tsx");
+  const recovery=await read("lib/queue-action-recovery.mjs");
   assert.match(client,/RECOVERABLE_WRITE_PATHS=new Set\(\[[\s\S]*"\/api\/pos\/queue"/);
-  assert.match(queue,/field-pos-pending-queue-action-v1/);
+  assert.match(recovery,/field-pos-pending-queue-action-v1/);
+  assert.match(queue,/QUEUE_PENDING_KEY/);
   assert.match(queue,/queue_action_pending/);
   assert.match(queue,/queue_recovery_storage_unavailable/);
 });
