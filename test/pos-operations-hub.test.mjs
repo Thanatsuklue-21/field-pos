@@ -80,3 +80,17 @@ test("tab layout expands to the operator-visible tab count",async()=>{
   assert.match(hub,/gridTemplateColumns/);
   assert.match(hub,/visibleTabs\.length/);
 });
+
+
+test("open Operations Hub refreshes live data without forcing route changes",async()=>{
+  const hub=await read("components/pos-operations-hub.tsx");
+  assert.match(hub,/if\(!open\)return/);
+  assert.match(hub,/window\.setInterval/);
+  assert.match(hub,/,5000\)/);
+  assert.match(hub,/document\.visibilityState!=="hidden"/);
+  assert.match(hub,/window\.addEventListener\("online",onOnline\)/);
+  assert.match(hub,/window\.addEventListener\("focus",onFocus\)/);
+  assert.match(hub,/document\.addEventListener\("visibilitychange",onVisible\)/);
+  assert.match(hub,/document\.visibilityState==="visible"/);
+  assert.match(hub,/recoverExpense\(\)\.catch/);
+});
