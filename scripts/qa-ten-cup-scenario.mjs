@@ -27,8 +27,8 @@ export async function runTenCupScenario(call){
       await call('pos/queue','POST',{requestKey:`ten-cup-${i}-${action}`,orderId:receipt.orderId,action,...extra});
     }
   }
-  await call('expenses','POST',{amount:50,category:'OTHER',description:'QA cleaning cash',paymentMethod:'cash',date},201);
-  await call('expenses','POST',{amount:30,category:'OTHER',description:'QA utility bank',paymentMethod:'bank',date},201);
+  await call('expenses','POST',{requestKey:'ten-cup-expense-cash',amount:50,category:'OTHER',description:'QA cleaning cash',paymentMethod:'cash',date},201);
+  await call('expenses','POST',{requestKey:'ten-cup-expense-bank',amount:30,category:'OTHER',description:'QA utility bank',paymentMethod:'bank',date},201);
   await call('cash-shift/movements','POST',{type:'CASH_OUT',amount:200,reason:'QA store surplus'},201);
   const beforeClose=await call('reports/summary');
   assert.equal(beforeClose.todaySummary.expectedCash,null,'blind count remains independent before close');
