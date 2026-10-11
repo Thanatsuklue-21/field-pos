@@ -15,7 +15,7 @@ type ExpenseRow={id:string;date:string;time:number;category:string;description:s
 const n=(v:any)=>Number(v)||0;
 const paymentLabel=(v?:string)=>v==="cash"?"เงินสด":v==="bank"?"โอน/ธนาคาร":v==="other"?"อื่น ๆ":String(v||"—").toUpperCase();
 
-export default function PosOperationsHub({session,bootstrap,open,onClose,onRefreshStock,networkOnline}:{session:Session;bootstrap:Bootstrap|null;open:boolean;onClose:()=>void;onRefreshStock?:()=>Promise<unknown>;networkOnline:boolean}){
+export default function PosOperationsHub({session,bootstrap,open,onClose,onRefreshStock,networkOnline,initialTab}:{session:Session;bootstrap:Bootstrap|null;open:boolean;onClose:()=>void;onRefreshStock?:()=>Promise<unknown>;networkOnline:boolean;initialTab?:HubTab}){
   const canQueue=session.user.role==="admin"||session.user.permissions?.queue===true;
   const canOrder=session.user.role==="admin"||session.user.permissions?.order===true;
   const canStock=session.user.role==="admin"||session.user.permissions?.stock===true;
@@ -44,6 +44,11 @@ export default function PosOperationsHub({session,bootstrap,open,onClose,onRefre
   useEffect(()=>{onCloseRef.current=onClose},[onClose]);
 
   useEffect(()=>{if(!availableTabs.includes(tab)&&availableTabs[0])setTab(availableTabs[0])},[availableTabs.join("|"),tab]);
+  useEffect(()=>{
+    if(!open)return;
+    const requested=initialTab&&availableTabs.includes(initialTab)?initialTab:availableTabs[0];
+    if(requested)setTab(requested);
+  },[open,initialTab,availableTabs.join("|")]);
   useEffect(()=>{
     const changed=activeTabRef.current!==tab;
     activeTabRef.current=tab;
