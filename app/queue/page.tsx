@@ -9,7 +9,7 @@ import {ArrowLeft,BellRing,CheckCircle2,RotateCcw,X} from "lucide-react";
 import AuthGate from "@/components/auth-gate";
 import {api,type RevisionUnchanged,type Session} from "@/lib/api-client";
 import {readQueueSnapshotCache,writeQueueSnapshotCache} from "@/lib/queue-cache";
-import {QUEUE_PENDING_KEY,shouldRetainQueuePending,validatePendingQueueAction} from "@/lib/queue-action-recovery.mjs";
+import {QUEUE_PENDING_KEY,shouldRetainQueuePending,validatePendingQueueAction,validateQueueActionAck} from "@/lib/queue-action-recovery.mjs";
 
 type BatchMode="NONE"|"SEQUENTIAL"|"COMBINED";
 type PrepGroup={id:string;label:string;batchMode:BatchMode;qty:number;pendingQty?:number;items:{id:string;name:string;variant:string;qty:number;pendingQty?:number;compatibilityKey:string}[]};
@@ -159,6 +159,7 @@ function QueueView({session}:{session:Session}){
         headers:{"X-CSRF-Token":session.csrf},
         body:JSON.stringify(pending.body)
       });
+      validateQueueActionAck(r,pending.body);
       queuePendingClear();
       return r;
     }catch(e:any){
@@ -224,6 +225,7 @@ function QueueView({session}:{session:Session}){
       code.startsWith("ingredient_missing:")?"สูตรอ้างวัตถุดิบที่ไม่มีใน Stock Master":
       code==="queue_state_changed"?"สถานะคิวเปลี่ยนแล้ว ระบบกำลังอัปเดต":
       code==="queue_action_pending"?"มี Queue action เดิมที่ยังไม่ทราบผล · ระบบจะตรวจ request เดิมก่อน":
+      code==="queue_action_unconfirmed"?"Server ยังไม่ยืนยัน Queue action เดิมอย่างครบถ้วน · ระบบเก็บ request เดิมไว้เพื่อป้องกันทำซ้ำ":
       code==="queue_recovery_corrupt"?"ข้อมูล Queue recovery ในเครื่องเสีย · ห้ามทำ action ใหม่จนกว่าจะตรวจสถานะคิว/ข้อมูลเครื่อง":
       code==="queue_recovery_storage_unavailable"?"เครื่องนี้บันทึก Queue recovery ไม่ได้ · ระบบไม่ส่ง action เพื่อป้องกันตัด Stock/เปลี่ยนคิวซ้ำ":code;
   }
