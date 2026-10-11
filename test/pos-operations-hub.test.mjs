@@ -175,3 +175,13 @@ test("post-sale queue action stays inside POS and opens the Hub on Queue context
   assert.ok(initialEffect.includes('[open,initialTab,availableTabs.join("|")]'));
   assert.ok(!initialEffect.includes('availableTabs.join("|"),tab'));
 });
+
+
+test("post-sale queue shortcut is shown only to operators with Queue permission",async()=>{
+  const pos=await read("app/pos/page.tsx");
+  assert.match(pos,/const canQueueOps=session\.user\.role==="admin"\|\|session\.user\.permissions\?\.queue===true/);
+  const saleStart=pos.indexOf("lastSale&&");
+  const saleBlock=pos.slice(saleStart,pos.indexOf("<PosOperationsHub",saleStart));
+  assert.match(saleBlock,/!lastSale\.offline&&canQueueOps&&<button/);
+  assert.match(saleBlock,/setOpsInitialTab\("queue"\)/);
+});
