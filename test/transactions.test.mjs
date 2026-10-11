@@ -10,8 +10,12 @@ test("write transaction acquisition retries transient libSQL busy errors",async(
     if(calls<3)throw Object.assign(new Error("busy"),{code:"SQLITE_BUSY"});
     return tx;
   }};
-  assert.equal(await beginWriteTransaction(db),tx);
+  const owned=await beginWriteTransaction(db);
+  assert.notEqual(owned,tx);
   assert.equal(calls,3);
+  assert.equal(typeof owned.commit,"undefined");
+  await owned.rollback?.();
+
 });
 
 test("commit retries SQLITE_BUSY on the same transaction and then succeeds",async()=>{
