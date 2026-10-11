@@ -29,3 +29,16 @@ test("building mobile destinations leaves permission-filtered input intact",()=>
   const input=Object.freeze(all.map(path=>Object.freeze([path]))),before=JSON.stringify(input);
   exports.mobileOverflow(input);assert.equal(JSON.stringify(input),before);
 });
+
+
+test("mobile More modal preserves keyboard and scroll safety",async()=>{
+  const shell=await readFile(new URL("../components/app-shell.tsx",import.meta.url),"utf8");
+  assert.match(shell,/role="dialog"/);
+  assert.match(shell,/aria-modal="true"/);
+  assert.match(shell,/document\.body\.style\.overflow="hidden"/);
+  assert.match(shell,/event\.key!=="Tab"/);
+  assert.match(shell,/event\.key==="Escape"/);
+  assert.match(shell,/dialog\?\.contains\(active\)/);
+  assert.match(shell,/moreTriggerRef\.current\?\.focus\(\)/);
+  assert.match(shell,/onClick=\{closeMore\}/);
+});
