@@ -10,7 +10,8 @@ const compile=async path=>ts.transpileModule(await readFile(new URL("../"+path,i
 }).outputText;
 const dbSource=await compile("lib/offline-db.ts"),salesSource=await compile("lib/offline-sales.ts");
 const stock=()=>({revision:5,settings:{},menu:[{id:"tea",enabled:true,variants:[{label:"normal",available:true,recipeItems:{milk:2}}]}],availabilityStock:{milk:{qty:6,name:"milk"}}});
-const body=key=>({requestKey:key,cart:[{id:"tea",variant:"normal",qty:1}],total:50,received:50});
+const bangkokDate=timestamp=>new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Bangkok",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date(timestamp));
+const body=key=>({requestKey:key,date:bangkokDate(Date.now()),cart:[{id:"tea",variant:"normal",qty:1}],total:50,received:50});
 
 function device({failure=false,expired=false,missing=false}={}){
   const savedAt=Date.now()-(expired?37*60*60*1000:1000),cache=new Map(),outbox=new Map();
@@ -65,19 +66,26 @@ test("successive bills use committed local stock and reject overselling",async()
   const d=device(),{sales}=d.modules();
   for(let i=0;i<3;i++)await sales.queueOfflineCashSale(body("bill-seq-"+i),{projectStock:true});
   assert.equal(d.cache.get("/api/pos/bootstrap").value.availabilityStock.milk.qty,0);
-  await assert.rejects(sales.queueOfflineCashSale(body("bill-seq-4"),{projectStock:true}),/offline_storage_failed/);
+  await assert.rejects(sales.queueOfflineCashSale(body("bill-seq-4"),{projectStock:true}),/stock_shortage/);
   assert.equal(d.outbox.size,3);
 });
 for(const options of [{expired:true},{missing:true}]){
   test(`unusable cached catalog blocks receipt (${Object.keys(options)[0]})`,async()=>{
     const d=device(options);
-    await assert.rejects(d.modules().sales.queueOfflineCashSale(body("bill-key-3"),{projectStock:true}),/offline_storage_failed/);
+    await assert.rejects(d.modules().sales.queueOfflineCashSale(body("bill-key-3"),{projectStock:true}),/offline_catalog_unavailable/);
     assert.equal(d.outbox.size,0);
   });
 }
 test("missing recipe/variant cannot create an untracked Offline sale",async()=>{
   const d=device(),b=body("bill-key-4");b.cart[0].variant="missing";
-  await assert.rejects(d.modules().sales.queueOfflineCashSale(b,{projectStock:true}),/offline_storage_failed/);
+  await assert.rejects(d.modules().sales.queueOfflineCashSale(b,{projectStock:true}),/stock_shortage/);
+  assert.equal(d.outbox.size,0);
+});
+
+test("cached stock from the previous Bangkok business date cannot create an Offline receipt",async()=>{
+  const d=device(),{sales}=d.modules(),b=body("stale-day-key");
+  d.cache.get("/api/pos/bootstrap").savedAt=Date.now()-24*60*60*1000;
+  await assert.rejects(sales.queueOfflineCashSale(b,{projectStock:true}),/offline_catalog_stale_day/);
   assert.equal(d.outbox.size,0);
 });
 
