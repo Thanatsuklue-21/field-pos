@@ -16,7 +16,7 @@ const primaryMobile=["/pos","/queue"];
 export default function AppShell({children}:{children:React.ReactNode}){
   const path=usePathname(),lang=useAppStore(s=>s.language),t=dict[lang],[session,setSession]=useState<Session|null>(null),[moreOpen,setMoreOpen]=useState(false);
   const router=useRouter(),offlineRouteAllowed=!session?.offline||["/pos","/settings"].includes(path);
-  const moreTriggerRef=useRef<HTMLButtonElement>(null);
+  const moreTriggerRef=useRef<HTMLButtonElement>(null);\n  const morePanelRef=useRef<HTMLDivElement>(null);
 
   useEffect(()=>{
     const logged=(e:Event)=>setSession((e as CustomEvent).detail||null),expired=()=>{clearSessionCache();setSession(null)};
@@ -28,8 +28,29 @@ export default function AppShell({children}:{children:React.ReactNode}){
   useEffect(()=>setMoreOpen(false),[path]);
   useEffect(()=>{
     if(!moreOpen)return;
-    const close=(event:KeyboardEvent)=>{if(event.key==="Escape"){setMoreOpen(false);moreTriggerRef.current?.focus()}};
-    window.addEventListener("keydown",close);return()=>window.removeEventListener("keydown",close);
+    const previousOverflow=document.body.style.overflow;
+    document.body.style.overflow="hidden";
+    const focusableSelector='button:not([disabled]),a[href],[tabindex]:not([tabindex="-1"])';
+    const frame=window.requestAnimationFrame(()=>{
+      const first=morePanelRef.current?.querySelector<HTMLElement>(focusableSelector);
+      (first||morePanelRef.current)?.focus();
+    });
+    const onKey=(event:KeyboardEvent)=>{
+      if(event.key==="Escape"){event.preventDefault();setMoreOpen(false);return}
+      if(event.key!=="Tab"||!morePanelRef.current)return;
+      const focusable=Array.from(morePanelRef.current.querySelectorAll<HTMLElement>(focusableSelector)).filter(el=>el.offsetParent!==null);
+      if(focusable.length===0){event.preventDefault();morePanelRef.current.focus();return}
+      const first=focusable[0],last=focusable[focusable.length-1],active=document.activeElement;
+      if(event.shiftKey&&active===first){event.preventDefault();last.focus()}
+      else if(!event.shiftKey&&active===last){event.preventDefault();first.focus()}
+    };
+    window.addEventListener("keydown",onKey);
+    return()=>{
+      window.cancelAnimationFrame(frame);
+      window.removeEventListener("keydown",onKey);
+      document.body.style.overflow=previousOverflow;
+      if(document.contains(moreTriggerRef.current))moreTriggerRef.current?.focus();
+    };
   },[moreOpen]);
   useEffect(()=>{if(session?.offline&&!offlineRouteAllowed)router.replace("/pos")},[session?.offline,offlineRouteAllowed,router]);
 
@@ -49,8 +70,8 @@ export default function AppShell({children}:{children:React.ReactNode}){
     </div>
 
     {mobileMore.length>0&&moreOpen&&<div className="fixed inset-0 z-[48] bg-black/20 md:hidden" onClick={()=>setMoreOpen(false)}>
-      <div id="field-mobile-more" aria-label="เมนูเพิ่มเติม" className="frosted max-h-[calc(100dvh-110px)] overflow-y-auto overscroll-contain absolute bottom-[calc(70px+env(safe-area-inset-bottom))] left-2 right-2 rounded-[20px] p-2 shadow-2xl" onClick={e=>e.stopPropagation()}>
-        <div className="mb-1 flex items-center justify-between px-2"><b className="text-xs">เพิ่มเติม</b><button onClick={()=>setMoreOpen(false)} className="grid h-11 w-11 place-items-center rounded-xl" aria-label="ปิดเมนูเพิ่มเติม"><X size={17}/></button></div>
+      <div ref={morePanelRef} id="field-mobile-more" tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="field-mobile-more-title" className="frosted max-h-[calc(100dvh-110px)] overflow-y-auto overscroll-contain absolute bottom-[calc(70px+env(safe-area-inset-bottom))] left-2 right-2 rounded-[20px] p-2 shadow-2xl" onClick={e=>e.stopPropagation()}>
+        <div className="mb-1 flex items-center justify-between px-2"><b id="field-mobile-more-title" className="text-xs">เพิ่มเติม</b><button onClick={()=>setMoreOpen(false)} className="grid h-11 w-11 place-items-center rounded-xl" aria-label="ปิดเมนูเพิ่มเติม"><X size={17}/></button></div>
         <div className="grid gap-1">{mobileMore.map(([href,key,Icon])=><Link key={href} href={href} aria-label={t[key]} aria-current={path===href?"page":undefined} className={"flex min-h-11 items-center gap-3 rounded-xl px-3 py-2 text-sm "+(path===href?"bg-[#d4af37]/18 font-bold text-[#6f5510]":"text-slate-700")}><Icon size={18}/><span>{t[key]}</span></Link>)}</div>
       </div>
     </div>}
