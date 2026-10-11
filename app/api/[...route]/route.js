@@ -3,7 +3,6 @@ import {createApi} from "../../../lib/api.mjs";
 
 export const runtime="nodejs";
 export const dynamic="force-dynamic";
-export const preferredRegion="sin1";
 
 async function handle(request,{params}){
   const {route=[]}=await params;
