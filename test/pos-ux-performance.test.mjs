@@ -459,15 +459,17 @@ test('queue screen contains only production and handoff actions',async()=>{
 
 
 
-test('safe GET requests are bounded and coalesced while writes remain single-attempt',async()=>{
+test('safe GET requests stay bounded/coalesced and writes remain single-attempt with scoped recovery timeouts',async()=>{
   const client=await read('lib/api-client.ts');
   assert.match(client,/GET_TIMEOUT_MS=8_000/);
+  assert.match(client,/RECOVERABLE_WRITE_TIMEOUT_MS=20_000/);
   assert.match(client,/const getInFlight=new Map/);
   assert.match(client,/const key=getRequestKey\(path,init\),existing=getInFlight\.get\(key\)/);
-  assert.match(client,/controller=method==="GET"&&!init\.signal\?new AbortController\(\):null/);
+  assert.match(client,/recoverableWrite=method!=="GET"&&RECOVERABLE_WRITE_PATHS\.has\(path\)/);
+  assert.match(client,/controller=!init\.signal&&\(method==="GET"\|\|recoverableWrite\)\?new AbortController\(\):null/);
   assert.match(client,/if\(method==="GET"\)\{/);
   assert.match(client,/return executeApi<T>\(path,init,method\);/);
-  assert.doesNotMatch(client,/retry/i);
+  assert.doesNotMatch(client,/for\s*\([^)]*retry/i);
 });
 
 
