@@ -36,7 +36,8 @@ test("quick expense inside POS reuses the same durable expense client as the ful
   assert.match(client,/writePendingExpense\(body\)/);
   assert.match(client,/validateExpenseAck\(response,pending\.body\)/);
   assert.ok(client.indexOf("writePendingExpense(body)")<client.indexOf("api<any>(\"/api/expenses\""));
-  const durable=client.slice(client.indexOf("export async function sendExpenseDurably"),client.indexOf("export function expenseErrorText"));\n  assert.ok(durable.indexOf("validateExpenseAck(response,pending.body)")<durable.indexOf("clearPendingExpense()"));
+  const durable=client.slice(client.indexOf("export async function sendExpenseDurably"),client.indexOf("export function expenseErrorText"));
+  assert.ok(durable.indexOf("validateExpenseAck(response,pending.body)")<durable.indexOf("clearPendingExpense()"));
 });
 
 test("hub is permission-aware and keeps full pages as optional fallbacks",async()=>{
