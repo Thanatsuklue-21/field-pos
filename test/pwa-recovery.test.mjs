@@ -95,7 +95,11 @@ test("auth session probe stays fastest while ordinary GET and only recoverable w
   const allow=client.slice(allowStart,allowEnd);
   assert.ok(!allow.includes("/api/close-day"));
   assert.ok(allow.includes("/api/expenses"));
-  assert.ok(!allow.includes("/api/stock/transactions"));
+  assert.ok(allow.includes("/api/stock/transactions"));
+  const stock=await read("app/stock/page.tsx");
+  const stockRecovery=await read("lib/stock-transaction-recovery.mjs");
+  assert.match(stock,/stockPendingWrite\(body\)/);
+  assert.match(stockRecovery,/shouldRetainStockPending/);
   const expenses=await read("app/expenses/page.tsx");
   const expenseRecovery=await read("lib/expense-recovery.mjs");
   assert.match(expenses,/expensePendingWrite\(body\)/);
