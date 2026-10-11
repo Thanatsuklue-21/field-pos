@@ -5,7 +5,7 @@ import {Plus,Trash2,X} from "lucide-react";
 import AuthGate from "@/components/auth-gate";
 import {api,type Session} from "@/lib/api-client";
 import {shouldRetainExpensePending} from "@/lib/expense-recovery.mjs";
-import {expenseErrorText,readPendingExpense,sendExpenseDurably,type ExpenseBody,type PendingExpense} from "@/lib/expense-client";
+import {currentBusinessDate,expenseErrorText,readPendingExpense,sendExpenseDurably,type ExpenseBody,type PendingExpense} from "@/lib/expense-client";
 
 type E={id:string;date:string;time:number;category:string;description:string;amount:number;paymentMethod?:string;sourceType?:string;createdBy?:string;requestKey?:string};
 const paymentLabel=(v?:string)=>v==="cash"?"เงินสด":v==="bank"?"โอน/ธนาคาร":v==="noncash"?"ไม่ใช่เงินสด":v==="other"?"อื่น ๆ":"ไม่ระบุ";
@@ -53,7 +53,7 @@ function View({session}:{session:Session}){
 
   async function save(){
     setBusy(true);setError("");setNotice("");
-    const body:ExpenseBody={requestKey:crypto.randomUUID(),date:localDate(),amount:Number(amount),category:category.trim().slice(0,60),description:description.trim().slice(0,240),paymentMethod:paymentMethod.trim().toLowerCase()};
+    const body:ExpenseBody={requestKey:crypto.randomUUID(),date:currentBusinessDate(),amount:Number(amount),category:category.trim().slice(0,60),description:description.trim().slice(0,240),paymentMethod:paymentMethod.trim().toLowerCase()};
     try{
       await sendExpenseDurably(session.csrf,body);
       setOpen(false);setAmount("");setDescription("");setPaymentMethod("cash");setNotice("บันทึกค่าใช้จ่ายแล้ว");await load();
