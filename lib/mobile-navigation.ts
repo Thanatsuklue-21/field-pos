@@ -1,5 +1,5 @@
-const PRIMARY=["/pos","/queue","/orders","/stock"];
-const PRIORITY=["/expenses","/close","/settings"];
+const PRIMARY=["/pos","/queue"];
+const PRIORITY=["/orders","/stock","/expenses","/close","/settings"];
 
 // Input is already permission-filtered; never invent destinations for an operator.
 export function mobileOverflow<T extends readonly [string,...unknown[]]>(allowed:readonly T[]):T[]{
