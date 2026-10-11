@@ -39,6 +39,7 @@ export default function PosOperationsHub({session,bootstrap,open,onClose,onRefre
   const activeTabRef=useRef<HubTab>(tab);
   const dialogRef=useRef<HTMLElement|null>(null);
   const previousFocusRef=useRef<HTMLElement|null>(null);
+  const tabRefs=useRef<Partial<Record<HubTab,HTMLButtonElement|null>>>({});
   const onCloseRef=useRef(onClose);
 
   useEffect(()=>{onCloseRef.current=onClose},[onClose]);
@@ -189,6 +190,21 @@ export default function PosOperationsHub({session,bootstrap,open,onClose,onRefre
   ];
 
   const visibleTabs=tabMeta.filter(x=>x.allowed);
+  function onTabKeyDown(event:import("react").KeyboardEvent<HTMLButtonElement>,key:HubTab){
+    const index=visibleTabs.findIndex(x=>x.key===key);
+    if(index<0)return;
+    let nextIndex:number|undefined;
+    if(event.key==="ArrowRight"||event.key==="ArrowDown")nextIndex=(index+1)%visibleTabs.length;
+    else if(event.key==="ArrowLeft"||event.key==="ArrowUp")nextIndex=(index-1+visibleTabs.length)%visibleTabs.length;
+    else if(event.key==="Home")nextIndex=0;
+    else if(event.key==="End")nextIndex=visibleTabs.length-1;
+    if(nextIndex===undefined)return;
+    event.preventDefault();
+    const next=visibleTabs[nextIndex]?.key;
+    if(!next)return;
+    setTab(next);
+    window.requestAnimationFrame(()=>tabRefs.current[next]?.focus());
+  }
   return <div className="fixed inset-0 z-[90] flex items-end bg-black/30 backdrop-blur-[2px] sm:items-stretch sm:justify-end" onClick={onClose}>
     <aside ref={dialogRef} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="field-operations-title" onClick={e=>e.stopPropagation()} className="flex max-h-[88dvh] w-full flex-col rounded-t-[28px] bg-[#f6f7f8] shadow-2xl outline-none sm:h-full sm:max-h-none sm:w-[520px] sm:rounded-none sm:border-l sm:border-slate-300">
       <div className="mx-auto mt-2 h-1 w-12 rounded-full bg-slate-300 sm:hidden"/>
