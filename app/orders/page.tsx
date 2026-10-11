@@ -35,6 +35,7 @@ function OrdersView({session}:{session:Session}){
   const [busy,setBusy]=useState(false);
   const [resolutions,setResolutions]=useState<PaymentResolution[]>([]);
   const [resolutionBusy,setResolutionBusy]=useState<string|null>(null);
+  const [resolutionChargeIds,setResolutionChargeIds]=useState<Record<string,string>>({});
 
   async function loadResolutions(){
     if(session.user.role!=="admin"){setResolutions([]);return}
@@ -77,15 +78,16 @@ function OrdersView({session}:{session:Session}){
   async function reconcileResolution(r:PaymentResolution){
     if(session.user.role!=="admin")return;
     const chargeId=String(r.providerCharge?.chargeId||r.providerEvidence?.chargeId||"");
+    const manualChargeId=String(resolutionChargeIds[r.id]||"").trim();
     const recoverableAttempt=!chargeId&&r.providerAttempt?.state==="creating"&&r.providerAttempt?.provider==="beam";
-    if(!chargeId&&!recoverableAttempt){
-      setMsg("รายการนี้ไม่มี provider charge ที่กู้คืนอัตโนมัติได้ · ต้องตรวจ Provider ด้วยหลักฐานภายนอกก่อน");
+    if(!chargeId&&!manualChargeId&&!recoverableAttempt){
+      setMsg("รายการนี้ไม่มี provider charge ที่กู้คืนอัตโนมัติได้ · กรุณาใส่ Charge ID จาก Provider เพื่อให้ Server ตรวจสอบหลักฐานจริง");
       return;
     }
     if(!window.confirm(
       "ตรวจและแก้สถานะ PromptPay จาก Provider จริง?\n"+
       "Session: "+r.id+"\n"+
-      "Charge: "+(chargeId||"ยังไม่ bind · จะกู้ด้วย Beam idempotency เดิม")+"\n"+
+      "Charge: "+(chargeId||manualChargeId||"ยังไม่ bind · จะกู้ด้วย Beam idempotency เดิม")+"\n"+
       "ยอด: ฿"+formatMoney(r.total)+"\n\n"+
       "ระบบจะ Finalize เฉพาะเมื่อ Provider ยืนยันว่าจ่ายแล้ว หรือคืน Stock เฉพาะเมื่อ Provider ยืนยัน failed/expired/reversed"
     ))return;
@@ -94,7 +96,7 @@ function OrdersView({session}:{session:Session}){
       const x=await api<any>("/api/pos/payment-resolutions/reconcile",{
         method:"POST",
         headers:{"X-CSRF-Token":session.csrf},
-        body:JSON.stringify({sessionId:r.id})
+        body:JSON.stringify({sessionId:r.id,chargeId:manualChargeId||undefined})
       });
       const outcome=String(x.outcome||"");
       setMsg(outcome==="finalized"
@@ -278,6 +280,11 @@ function OrdersView({session}:{session:Session}){
               </div>)}</div>
             </details>}
             {(amountMismatch||refMismatch||ev?.error)&&<div className="mt-2 rounded-lg bg-red-50 p-2 font-semibold text-red-700">{amountMismatch?"ยอด Provider ไม่ตรงกับ Reservation · ":""}{refMismatch?"Reference ไม่ตรงกับ Session · ":""}{ev?.error?"ตรวจ Provider ไม่สำเร็จ: "+ev.error:""}</div>}
+            {r.status==="requires_resolution"&&!charge&&<label className="mt-3 block rounded-lg border border-slate-200 bg-slate-50 p-2">
+              <span className="text-[10px] font-bold text-slate-600">Charge ID จาก Provider (ใช้เมื่อกู้คืนอัตโนมัติไม่ได้)</span>
+              <input value={resolutionChargeIds[r.id]||""} onChange={e=>setResolutionChargeIds(prev=>({...prev,[r.id]:e.target.value}))} placeholder="ch_... / chrg_..." className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 font-mono text-xs"/>
+              <span className="mt-1 block text-[10px] text-slate-500">Server จะดึงข้อมูลจาก Provider และตรวจ Session / ยอด / THB ก่อนทุกครั้ง ไม่ใช้สถานะที่พิมพ์เอง</span>
+            </label>}
             {r.status==="requires_resolution"
               ?<button disabled={resolutionBusy===r.id||amountMismatch||refMismatch||providerStatus==="provider_check_failed"} onClick={()=>reconcileResolution(r)} className="mt-3 min-h-11 w-full rounded-xl bg-slate-900 px-4 font-bold text-white disabled:opacity-35">{resolutionBusy===r.id?"กำลังตรวจและแก้สถานะ...":"ตรวจ Provider และ Reconcile อย่างปลอดภัย"}</button>
               :r.providerManaged!==true&&r.mode!=="promptpay_full"&&(r.payments?.length||0)===0&&!r.providerCharge?.chargeId
