@@ -12,7 +12,7 @@ test("mobile More menu behaves as a trapped modal and restores the trigger",asyn
   assert.match(shell,/tabIndex=\{-1\}/);
   assert.match(shell,/document\.body\.style\.overflow="hidden"/);
   assert.match(shell,/document\.body\.style\.overflow=previousOverflow/);
-  assert.match(shell,/event\.key==="Tab"/);
+  assert.match(shell,/event\.key!=="Tab"/);
   assert.match(shell,/event\.shiftKey/);
   assert.match(shell,/dialog\?\.contains\(active\)/);
   assert.match(shell,/event\.key==="Escape"/);
