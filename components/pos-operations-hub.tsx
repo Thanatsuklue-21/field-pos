@@ -136,7 +136,7 @@ export default function PosOperationsHub({session,bootstrap,open,onClose,onRefre
   const latestExpenses=expenses.slice(0,5);
   const stockHealth=useMemo(()=>{
     const rows:{key:string;name:string;variant:string;level:"out"|"low";detail:string}[]=[];
-    for(const menu of bootstrap?.menu||[])for(const variant of menu.variants||[]){
+    for(const menu of (bootstrap?.menu||[]).filter(x=>x.enabled))for(const variant of menu.variants||[]){
       if(!variant.available){
         const missing=(variant.missingIngredients||[]).map(x=>x.name).join(", ");
         rows.push({key:menu.id+"|"+variant.label,name:menu.name,variant:variant.label,level:"out",detail:missing||variant.reason||"ทำไม่ได้"});
