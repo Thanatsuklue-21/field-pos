@@ -80,7 +80,7 @@ test("critical write modules route commits through the bounded helper",async()=>
 test("purchase edit date rejection rolls back before returning",async()=>{
   const {readFile}=await import("node:fs/promises");
   const source=await readFile(new URL("../lib/api.mjs",import.meta.url),"utf8");
-  assert.match(source,/invalid_purchase_date[^\n]*\{await tx\.rollback\(\);return reply/);
-  assert.match(source,/if\(purchaseDate>bangkokDate\(now\)\)\{await tx\.rollback\(\);return reply/);
+  assert.ok(source.includes("if(!/^\\d{4}-\\d{2}-\\d{2}$/.test(purchaseDate)||!Number.isFinite(parsed)||new Date(parsed).toISOString().slice(0,10)!==purchaseDate){await tx.rollback();return reply(res,400,{error:'invalid_purchase_date'})}"));
+  assert.ok(source.includes("if(purchaseDate>bangkokDate(now)){await tx.rollback();return reply(res,409,{error:'future_purchase_date'})}"));
 });
 
