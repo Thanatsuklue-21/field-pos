@@ -11,11 +11,13 @@ test("expense recovery validates exact durable request shape",()=>{
   for(const bad of [
     null,
     {body:null,createdAt:1},
-    {body:{requestKey:"x",amount:25,category:"OTHER",paymentMethod:"cash"},createdAt:1},
-    {body:{requestKey:"expense-key-0001",amount:0,category:"OTHER",paymentMethod:"cash"},createdAt:1},
-    {body:{requestKey:"expense-key-0001",amount:25,category:"",paymentMethod:"cash"},createdAt:1},
-    {body:{requestKey:"expense-key-0001",amount:25,category:"OTHER",paymentMethod:""},createdAt:1},
-    {body:{requestKey:"expense-key-0001",amount:25,category:"OTHER",paymentMethod:"cash"},createdAt:0}
+    {body:{requestKey:"x",date:"2026-10-11",amount:25,category:"OTHER",description:"",paymentMethod:"cash"},createdAt:1},
+    {body:{requestKey:"expense-key-0001",date:"bad-date",amount:25,category:"OTHER",description:"",paymentMethod:"cash"},createdAt:1},
+    {body:{requestKey:"expense-key-0001",date:"2026-10-11",amount:0,category:"OTHER",description:"",paymentMethod:"cash"},createdAt:1},
+    {body:{requestKey:"expense-key-0001",date:"2026-10-11",amount:25,category:"",description:"",paymentMethod:"cash"},createdAt:1},
+    {body:{requestKey:"expense-key-0001",date:"2026-10-11",amount:25,category:"OTHER",description:1,paymentMethod:"cash"},createdAt:1},
+    {body:{requestKey:"expense-key-0001",date:"2026-10-11",amount:25,category:"OTHER",description:"",paymentMethod:""},createdAt:1},
+    {body:{requestKey:"expense-key-0001",date:"2026-10-11",amount:25,category:"OTHER",description:"",paymentMethod:"cash"},createdAt:0}
   ]) assert.throws(()=>validatePendingExpense(bad),/expense_recovery_corrupt/);
 });
 
