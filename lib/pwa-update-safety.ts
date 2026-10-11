@@ -8,6 +8,10 @@ export function getPwaUpdateBlockReason(state:SafetyState){
       ["field-pos-pending-cash-v1","มี Cash Checkout ที่สถานะยังไม่แน่นอน"],
       ["field-pos-split-group-v1","มี Split Payment ที่ยังไม่จบ"],
       ["field-pos-edit-cash-v1","กำลังแก้ไขออเดอร์เงินสด"],
+      ["field-pos-pending-queue-action-v1","มี Queue action ที่ยังต้องยืนยันผล"],
+      ["field-pos-pending-expense-v1","มีค่าใช้จ่ายที่ยังต้องยืนยันผล"],
+      ["field-pos-pending-stock-transaction-v1","มี Stock transaction ที่ยังต้องยืนยันผล"],
+      ["field-pos-pending-order-mutation-v1","มี VOID/Refund ที่ยังต้องยืนยันผล"],
     ];
     for(const [key,reason] of recovery){
       if(state.readLocal(key)!==null||state.readSession(key)!==null)return reason;
