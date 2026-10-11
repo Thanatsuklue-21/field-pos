@@ -19,24 +19,6 @@ export default function AppShell({children}:{children:React.ReactNode}){
   const moreTriggerRef=useRef<HTMLButtonElement>(null);
 
   useEffect(()=>{
-    const viewport=window.visualViewport;
-    if(!viewport)return;
-    const sync=()=>{
-      document.documentElement.style.setProperty("--field-visual-viewport-height",Math.max(1,Math.round(viewport.height))+"px");
-    };
-    sync();
-    viewport.addEventListener("resize",sync);
-    viewport.addEventListener("scroll",sync);
-    window.addEventListener("orientationchange",sync);
-    return()=>{
-      viewport.removeEventListener("resize",sync);
-      viewport.removeEventListener("scroll",sync);
-      window.removeEventListener("orientationchange",sync);
-      document.documentElement.style.removeProperty("--field-visual-viewport-height");
-    };
-  },[]);
-
-  useEffect(()=>{
     const logged=(e:Event)=>setSession((e as CustomEvent).detail||null),expired=()=>{clearSessionCache();setSession(null)};
     getSessionCached().then(setSession).catch(()=>{getOfflineOperatorIfReady().then(x=>{if(x)setSession(x)}).catch(()=>{})});
     window.addEventListener("field:session",logged);
