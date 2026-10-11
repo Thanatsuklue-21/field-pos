@@ -11,6 +11,7 @@ test("POS exposes one in-place operations hub instead of forcing routine page sw
   assert.match(pos,/>งานร้าน<\/button>/);
   assert.match(pos,/bootstrap=\{data\}/);
   assert.match(pos,/open=\{opsOpen\}/);
+  assert.match(pos,/networkOnline=\{online\}/);
 });
 
 test("operations hub covers queue orders stock and quick expenses in one dialog",async()=>{
@@ -52,7 +53,9 @@ test("hub is permission-aware and keeps full pages as optional fallbacks",async(
 test("hub remains fail-safe offline and does not mutate queue or stock from the compact view",async()=>{
   const hub=await read("components/pos-operations-hub.tsx");
   assert.match(hub,/OFFLINE · ดูสถานะจากข้อมูลเมนู\/สต็อกที่ cache ไว้ได้/);
-  assert.match(hub,/disabled=\{expenseBusy\|\|session\.offline/);
+  assert.match(hub,/const cloudAvailable=networkOnline&&!session\.offline/);
+  assert.match(hub,/if\(!cloudAvailable\).*OFFLINE/s);
+  assert.match(hub,/disabled=\{expenseBusy\|\|!cloudAvailable/);
   assert.doesNotMatch(hub,/method:"POST"[\s\S]{0,120}\/api\/pos\/queue/);
   assert.doesNotMatch(hub,/method:"POST"[\s\S]{0,120}\/api\/stock/);
 });
@@ -130,7 +133,7 @@ test("switching Hub tabs refreshes the newly selected tab once without duplicati
   const block=hub.slice(start,start+360);
   assert.match(block,/const changed=activeTabRef\.current!==tab/);
   assert.match(block,/activeTabRef\.current=tab/);
-  assert.match(block,/if\(changed&&open&&!session\.offline\)refresh\(tab,true\)/);
+  assert.match(block,/if\(changed&&open&&cloudAvailable\)refresh\(tab,true\)/);
 });
 
 
@@ -143,4 +146,15 @@ test("stock tab refreshes authoritative POS bootstrap instead of becoming stale"
   assert.match(pos,/onRefreshStock=\{\(\)=>load\(true\)\}/);
   const timer=hub.slice(hub.indexOf("const timer=window.setInterval"),hub.indexOf('window.addEventListener("online"',hub.indexOf("const timer=window.setInterval")));
   assert.match(timer,/refresh\(activeTabRef\.current,true\)/);
+});
+
+test("Operations Hub blocks cloud polling and quick expense writes when the device network is offline",async()=>{
+  const hub=await read("components/pos-operations-hub.tsx");
+  const pos=await read("app/pos/page.tsx");
+  assert.match(pos,/networkOnline=\{online\}/);
+  assert.match(hub,/const cloudAvailable=networkOnline&&!session\.offline/);
+  assert.match(hub,/if\(!cloudAvailable\)\{if\(!quiet\)setMessage/);
+  assert.match(hub,/if\(!canExpense\|\|!cloudAvailable\|\|expenseRecoveryRef\.current\)return/);
+  assert.match(hub,/if\(!cloudAvailable\)return/);
+  assert.match(hub,/expenseBusy\|\|!cloudAvailable\|\|!/);
 });
