@@ -43,11 +43,12 @@ export default function PosOperationsHub({session,bootstrap,open,onClose,onRefre
 
   useEffect(()=>{onCloseRef.current=onClose},[onClose]);
 
+  useEffect(()=>{if(!availableTabs.includes(tab)&&availableTabs[0])setTab(availableTabs[0])},[availableTabs.join("|"),tab]);
   useEffect(()=>{
-    if(!open){if(!availableTabs.includes(tab)&&availableTabs[0])setTab(availableTabs[0]);return}
+    if(!open)return;
     const requested=initialTab&&availableTabs.includes(initialTab)?initialTab:availableTabs[0];
-    if(requested&&requested!==tab)setTab(requested);
-  },[open,initialTab,availableTabs.join("|"),tab]);
+    if(requested)setTab(requested);
+  },[open,initialTab,availableTabs.join("|")]);
   useEffect(()=>{
     const changed=activeTabRef.current!==tab;
     activeTabRef.current=tab;
