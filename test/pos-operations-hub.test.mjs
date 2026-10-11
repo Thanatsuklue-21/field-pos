@@ -24,18 +24,22 @@ test("operations hub covers queue orders stock and quick expenses in one dialog"
   assert.match(hub,/อยู่หน้า POS ต่อ/);
 });
 
-test("quick expense inside POS reuses the durable expense recovery contract",async()=>{
+test("quick expense inside POS reuses one shared durable expense client",async()=>{
   const hub=await read("components/pos-operations-hub.tsx");
-  assert.match(hub,/EXPENSE_PENDING_KEY/);
-  assert.match(hub,/validatePendingExpense/);
-  assert.match(hub,/shouldRetainExpensePending/);
-  assert.match(hub,/validateExpenseAck/);
-  const start=hub.indexOf("async function sendExpense");
-  const end=hub.indexOf("function expenseError",start);
-  const block=hub.slice(start,end);
-  assert.ok(block.indexOf("expensePendingWrite(body)")<block.indexOf('api<any>("/api/expenses"'));
-  assert.ok(block.indexOf("validateExpenseAck(r,pending.body)")<block.indexOf("expensePendingClear()"));
-  assert.match(block,/JSON\.stringify\(pending\.body\)/);
+  const expenses=await read("app/expenses/page.tsx");
+  const client=await read("lib/expense-client.ts");
+  const send=client.slice(client.indexOf("export async function sendExpenseDurably"));
+  assert.match(hub,/readPendingExpense\(\)/);
+  assert.match(hub,/sendExpenseDurably\(session\.csrf,pending\.body\)/);
+  assert.match(hub,/sendExpenseDurably\(session\.csrf,body\)/);
+  assert.match(expenses,/sendExpenseDurably\(session\.csrf,body\)/);
+  assert.match(send,/writePendingExpense\(body\)/);
+  assert.match(send,/body:JSON\.stringify\(pending\.body\)/);
+  assert.match(send,/validateExpenseAck\(response,pending\.body\)/);
+  assert.ok(send.indexOf("writePendingExpense(body)")<send.indexOf('api<any>("/api/expenses"'));
+  assert.ok(send.indexOf("validateExpenseAck(response,pending.body)")<send.indexOf("clearPendingExpense()"));
+  assert.doesNotMatch(hub,/EXPENSE_PENDING_KEY/);
+  assert.doesNotMatch(hub,/function expensePendingWrite/);
 });
 
 test("hub is permission-aware and keeps full pages as optional fallbacks",async()=>{
@@ -53,4 +57,38 @@ test("hub remains fail-safe offline and does not mutate queue or stock from the 
   assert.match(hub,/disabled=\{expenseBusy\|\|session\.offline/);
   assert.doesNotMatch(hub,/method:"POST"[\s\S]{0,120}\/api\/pos\/queue/);
   assert.doesNotMatch(hub,/method:"POST"[\s\S]{0,120}\/api\/stock/);
+});
+
+
+test("hub behaves as a mobile bottom sheet and desktop side drawer without route switching",async()=>{
+  const hub=await read("components/pos-operations-hub.tsx");
+  assert.match(hub,/fixed inset-0 z-\[90\] bg-black\/35/);
+  assert.match(hub,/absolute inset-x-0 bottom-0 flex h-\[88dvh\]/);
+  assert.match(hub,/rounded-t-\[28px\]/);
+  assert.match(hub,/sm:inset-y-0/);
+  assert.match(hub,/sm:w-\[520px\]/);
+  assert.match(hub,/sm:rounded-none/);
+  assert.match(hub,/overscroll-contain/);
+});
+
+test("open hub stays fresh on timer reconnect focus and foreground and closes with Escape",async()=>{
+  const hub=await read("components/pos-operations-hub.tsx");
+  assert.match(hub,/if\(!open\)return/);
+  assert.match(hub,/window\.setInterval\(\(\)=>refresh\(\)\.catch\(\(\)=>\{\}\),5000\)/);
+  assert.match(hub,/window\.addEventListener\("online",onOnline\)/);
+  assert.match(hub,/window\.addEventListener\("focus",onFocus\)/);
+  assert.match(hub,/document\.addEventListener\("visibilitychange",onVisible\)/);
+  assert.match(hub,/document\.visibilityState==="visible"/);
+  assert.match(hub,/event\.key==="Escape"/);
+  assert.match(hub,/window\.removeEventListener\("keydown",onKey\)/);
+});
+
+test("shared expense client owns Bangkok business date for both full and in-POS writers",async()=>{
+  const client=await read("lib/expense-client.ts");
+  const hub=await read("components/pos-operations-hub.tsx");
+  const expenses=await read("app/expenses/page.tsx");
+  assert.match(client,/timeZone:"Asia\/Bangkok"/);
+  assert.match(client,/export function currentBusinessDate/);
+  assert.match(hub,/date:currentBusinessDate\(\)/);
+  assert.match(expenses,/date:currentBusinessDate\(\)/);
 });
