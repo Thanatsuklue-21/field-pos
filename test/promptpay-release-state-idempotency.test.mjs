@@ -13,3 +13,15 @@ test("provider release returns success from committed cancelled state without re
   assert.match(block,/stateReplay:true/);
   assert.ok(block.indexOf("stateReplay:true")<block.indexOf("restoreStock"));
 });
+
+
+test("provider release API replays committed release before external provider lookup",async()=>{
+  const api=await read("lib/api.mjs");
+  const start=api.indexOf("if(path==='/api/pos/split/provider-release'");
+  const end=api.indexOf("if(path==='/api/pos/split/cancel'",start);
+  const block=api.slice(start,end);
+  assert.match(block,/ctx\.status==='cancelled'/);
+  assert.match(block,/ctx\.providerReleasedAt/);
+  assert.match(block,/ctx\.providerFinalStatus/);
+  assert.ok(block.indexOf("ctx.status==='cancelled'")<block.indexOf("getPromptPayCharge(chargeId)"));
+});
