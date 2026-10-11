@@ -81,13 +81,21 @@ test("session revalidation is single-flight so online telemetry cannot recurse a
 });
 
 
-test("auth session probe fails fast without shortening ordinary GET or financial write semantics",async()=>{
+test("auth session probe stays fastest while ordinary GET and only recoverable writes have bounded semantics",async()=>{
   const client=await read("lib/api-client.ts");
   assert.ok(client.includes("AUTH_SESSION_TIMEOUT_MS=2_500"));
   assert.ok(client.includes("GET_TIMEOUT_MS=8_000"));
-  assert.ok(client.includes('path==="/api/auth/session"?AUTH_SESSION_TIMEOUT_MS:GET_TIMEOUT_MS'));
+  assert.ok(client.includes("RECOVERABLE_WRITE_TIMEOUT_MS=20_000"));
+  assert.ok(client.includes('path==="/api/auth/session"?AUTH_SESSION_TIMEOUT_MS:recoverableWrite?RECOVERABLE_WRITE_TIMEOUT_MS:GET_TIMEOUT_MS'));
   assert.ok(client.includes('"field_auth_session_timeout"'));
-  assert.ok(client.includes('method==="GET"&&!init.signal'));
+  assert.ok(client.includes('"field_recoverable_write_timeout"'));
+  assert.ok(client.includes('method!=="GET"&&RECOVERABLE_WRITE_PATHS.has(path)'));
+  const allowStart=client.indexOf("const RECOVERABLE_WRITE_PATHS");
+  const allowEnd=client.indexOf("]);",allowStart);
+  const allow=client.slice(allowStart,allowEnd);
+  assert.ok(!allow.includes("/api/close-day"));
+  assert.ok(!allow.includes("/api/expenses"));
+  assert.ok(!allow.includes("/api/stock/transactions"));
 });
 
 

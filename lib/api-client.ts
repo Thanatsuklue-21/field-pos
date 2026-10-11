@@ -11,6 +11,17 @@ const SAFE_GET_CACHE=new Set(["/api/pos/bootstrap"]);
 const SESSION_TTL_MS=30_000;
 const GET_TIMEOUT_MS=8_000;
 const AUTH_SESSION_TIMEOUT_MS=2_500;
+const RECOVERABLE_WRITE_TIMEOUT_MS=20_000;
+const RECOVERABLE_WRITE_PATHS=new Set([
+  "/api/pos/checkout",
+  "/api/pos/split/start",
+  "/api/pos/split/pay",
+  "/api/pos/split/cancel",
+  "/api/pos/split/provider-release",
+  "/api/pos/payment-resolutions/reconcile",
+  "/api/payments/promptpay/create",
+  "/api/payments/promptpay/status"
+]);
 let sessionCache:{value:Session;at:number}|null=null;
 let sessionInFlight:Promise<Session>|null=null;
 const getInFlight=new Map<string,Promise<unknown>>();
@@ -26,9 +37,11 @@ function getRequestKey(path:string,init:RequestInit){
 }
 
 async function fetchWithPolicy(path:string,init:RequestInit,method:string){
-  const controller=method==="GET"&&!init.signal?new AbortController():null;
-  const timeoutMs=path==="/api/auth/session"?AUTH_SESSION_TIMEOUT_MS:GET_TIMEOUT_MS;
-  const timer=controller?setTimeout(()=>controller.abort(path==="/api/auth/session"?"field_auth_session_timeout":"field_get_timeout"),timeoutMs):null;
+  const recoverableWrite=method!=="GET"&&RECOVERABLE_WRITE_PATHS.has(path);
+  const controller=!init.signal&&(method==="GET"||recoverableWrite)?new AbortController():null;
+  const timeoutMs=path==="/api/auth/session"?AUTH_SESSION_TIMEOUT_MS:recoverableWrite?RECOVERABLE_WRITE_TIMEOUT_MS:GET_TIMEOUT_MS;
+  const timeoutReason=path==="/api/auth/session"?"field_auth_session_timeout":recoverableWrite?"field_recoverable_write_timeout":"field_get_timeout";
+  const timer=controller?setTimeout(()=>controller.abort(timeoutReason),timeoutMs):null;
   try{
     return await fetch(path,{
       ...init,
