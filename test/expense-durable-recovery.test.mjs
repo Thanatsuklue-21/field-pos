@@ -60,7 +60,8 @@ test("shared expense client persists exact Bangkok-dated request before send and
   assert.match(client,/writePendingExpense\(body\)/);
   assert.match(client,/body:JSON\.stringify\(pending\.body\)/);
   assert.ok(client.indexOf("writePendingExpense(body)")<client.indexOf("api<any>(\"/api/expenses\""));
-  const durable=client.slice(client.indexOf("export async function sendExpenseDurably"),client.indexOf("export function expenseErrorText"));\n  assert.ok(durable.indexOf("validateExpenseAck(response,pending.body)")<durable.indexOf("clearPendingExpense()"));
+  const durable=client.slice(client.indexOf("export async function sendExpenseDurably"),client.indexOf("export function expenseErrorText"));
+  assert.ok(durable.indexOf("validateExpenseAck(response,pending.body)")<durable.indexOf("clearPendingExpense()"));
   assert.match(ui,/window\.addEventListener\("online",onOnline\)/);
   assert.match(ui,/window\.addEventListener\("focus",onFocus\)/);
   assert.match(ui,/document\.addEventListener\("visibilitychange",onVisible\)/);
