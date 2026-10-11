@@ -121,3 +121,15 @@ test("switching Hub tabs refreshes the newly selected tab once without duplicati
   assert.match(block,/activeTabRef\.current=tab/);
   assert.match(block,/if\(changed&&open&&!session\.offline\)refresh\(tab,true\)/);
 });
+
+
+test("stock tab refreshes authoritative POS bootstrap instead of becoming stale",async()=>{
+  const hub=await read("components/pos-operations-hub.tsx");
+  const pos=await read("app/pos/page.tsx");
+  assert.match(hub,/onRefreshStock\?:\(\)=>Promise<unknown>/);
+  assert.match(hub,/canStock&&\(scope==="all"\|\|scope==="stock"\)&&onRefreshStock/);
+  assert.match(hub,/tasks\.push\(onRefreshStock\(\)\);names\.push\("stock"\)/);
+  assert.match(pos,/onRefreshStock=\{\(\)=>load\(true\)\}/);
+  const timer=hub.slice(hub.indexOf("const timer=window.setInterval"),hub.indexOf('window.addEventListener("online"',hub.indexOf("const timer=window.setInterval")));
+  assert.match(timer,/refresh\(activeTabRef\.current,true\)/);
+});
