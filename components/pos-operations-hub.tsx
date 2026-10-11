@@ -15,7 +15,7 @@ type ExpenseRow={id:string;date:string;time:number;category:string;description:s
 const n=(v:any)=>Number(v)||0;
 const paymentLabel=(v?:string)=>v==="cash"?"เงินสด":v==="bank"?"โอน/ธนาคาร":v==="other"?"อื่น ๆ":String(v||"—").toUpperCase();
 
-export default function PosOperationsHub({session,bootstrap,open,onClose}:{session:Session;bootstrap:Bootstrap|null;open:boolean;onClose:()=>void}){
+export default function PosOperationsHub({session,bootstrap,open,onClose,onRefreshStock}:{session:Session;bootstrap:Bootstrap|null;open:boolean;onClose:()=>void;onRefreshStock?:()=>Promise<unknown>}){
   const canQueue=session.user.role==="admin"||session.user.permissions?.queue===true;
   const canOrder=session.user.role==="admin"||session.user.permissions?.order===true;
   const canStock=session.user.role==="admin"||session.user.permissions?.stock===true;
@@ -55,10 +55,11 @@ export default function PosOperationsHub({session,bootstrap,open,onClose}:{sessi
     if(!quiet){setLoading(true);setMessage("")}
     try{
       const tasks:Promise<any>[]=[];
-      const names:("queue"|"orders"|"expenses")[]=[];
+      const names:("queue"|"orders"|"expenses"|"stock")[]=[];
       if(canQueue&&(scope==="all"||scope==="queue")){tasks.push(api<any>("/api/pos/queue"));names.push("queue")}
       if(canOrder&&(scope==="all"||scope==="orders")){tasks.push(api<any>("/api/pos/history"));names.push("orders")}
       if(canExpense&&(scope==="all"||scope==="expenses")){tasks.push(api<any>("/api/expenses"));names.push("expenses")}
+      if(canStock&&(scope==="all"||scope==="stock")&&onRefreshStock){tasks.push(onRefreshStock());names.push("stock")}
       if(!tasks.length)return;
       const settled=await Promise.allSettled(tasks);
       settled.forEach((result,index)=>{
@@ -67,6 +68,7 @@ export default function PosOperationsHub({session,bootstrap,open,onClose}:{sessi
         if(name==="queue")setQueue(Array.isArray(value.orders)?value.orders:[]);
         if(name==="orders")setSales(Array.isArray(value.sales)?value.sales:[]);
         if(name==="expenses")setExpenses(Array.isArray(value.expenses)?value.expenses:[]);
+        // Stock freshness is applied by the parent POS bootstrap loader via onRefreshStock.
       });
       if(settled.some(x=>x.status==="rejected"))setMessage("บางข้อมูลยังโหลดไม่ได้ · หน้าขายยังใช้งานต่อได้ตามปกติ");
     }finally{if(!quiet)setLoading(false)}
