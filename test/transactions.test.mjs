@@ -4,7 +4,7 @@ import {beginWriteTransaction,commitWriteTransaction} from "../lib/transactions.
 
 test("write transaction acquisition tolerates sustained transient libSQL busy contention",async()=>{
   let calls=0;
-  const tx={};
+  const tx={async rollback(){}};
   const db={async transaction(){
     calls++;
     if(calls<7)throw Object.assign(new Error("busy"),{code:"SQLITE_BUSY"});
