@@ -9,7 +9,7 @@ test('POS shows live cash change and closes payment modal after success',async()
   assert.match(pos,/เงินทอน/);
   assert.match(pos,/setPayOpen\(false\)/);
   assert.match(pos,/ชำระเงินสำเร็จ/);
-  assert.match(pos,/ไปทำคิว \{lastSale\.queueNo\}/);
+  assert.match(pos,/ดูคิว \{lastSale\.queueNo\} ในงานร้าน/);
 });
 
 test('POS hides zero-price menus and reconciles stale persisted cart items',async()=>{
