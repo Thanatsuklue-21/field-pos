@@ -98,6 +98,7 @@ function QueueView({session}:{session:Session}){
   const [toast,setToast]=useState("");
   const [pickupReviewId,setPickupReviewId]=useState("");
   const busyRef=useRef(false);
+  const queueRecoveryRef=useRef(false);
   const revisionRef=useRef<number|null>(null);
   busyRef.current=busy!=="";
   useEffect(()=>{window.dispatchEvent(new CustomEvent("field:transaction-busy",{detail:{busy:busy!=="" ,source:"queue"}}));return()=>{window.dispatchEvent(new CustomEvent("field:transaction-busy",{detail:{busy:false,source:"queue"}}));}},[busy]);
@@ -169,10 +170,12 @@ function QueueView({session}:{session:Session}){
   useEffect(()=>{
     let disposed=false;
     const recover=async()=>{
+      if(disposed||queueRecoveryRef.current)return;
       let pending:PendingQueueAction|null=null;
       try{pending=queuePendingRead()}
       catch(e:any){if(!disposed)setMsg(errorText(e.message));return}
       if(!pending)return;
+      queueRecoveryRef.current=true;
       busyRef.current=true;setBusy("recover:"+pending.body.requestKey);setMsg("");
       try{
         const r=await sendQueueAction(pending.body);
@@ -188,11 +191,23 @@ function QueueView({session}:{session:Session}){
           await load().catch(()=>{});
         }
       }finally{
+        queueRecoveryRef.current=false;
         if(!disposed){busyRef.current=false;setBusy("")}
       }
     };
+    const onOnline=()=>recover();
+    const onFocus=()=>recover();
+    const onVisible=()=>{if(document.visibilityState==="visible")recover()};
     recover();
-    return()=>{disposed=true};
+    window.addEventListener("online",onOnline);
+    window.addEventListener("focus",onFocus);
+    document.addEventListener("visibilitychange",onVisible);
+    return()=>{
+      disposed=true;
+      window.removeEventListener("online",onOnline);
+      window.removeEventListener("focus",onFocus);
+      document.removeEventListener("visibilitychange",onVisible);
+    };
   },[]);
 
   const orders=useMemo(()=>((data?.orders||[]) as QOrder[]).slice().sort((a,b)=>n(a.time)-n(b.time)),[data]);
