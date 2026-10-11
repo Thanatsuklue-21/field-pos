@@ -51,3 +51,12 @@ test("vercel.json uses framework auto-detection instead of legacy builds overrid
   const config=JSON.parse(await readFile(join(root,"vercel.json"),"utf8"));
   assert.equal(Object.hasOwn(config,"builds"),false);
 });
+
+test("CI pins third-party GitHub Actions to reviewed commit SHAs",async()=>{
+  const workflow=await readFile(join(root,".github/workflows/ci.yml"),"utf8");
+  assert.match(workflow,/actions\/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1/);
+  assert.match(workflow,/actions\/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1/);
+  assert.doesNotMatch(workflow,/actions\/checkout@v\d+/);
+  assert.doesNotMatch(workflow,/actions\/setup-node@v\d+/);
+});
+
