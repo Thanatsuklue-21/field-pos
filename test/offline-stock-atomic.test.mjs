@@ -48,6 +48,12 @@ function device({failure=false,expired=false,missing=false}={}){
   return {modules,cache,outbox,savedAt,get closed(){return closed}};
 }
 
+test("prior Bangkok day bootstrap is not returned by cache reads",async()=>{
+  const d=device(),{db}=d.modules();
+  d.cache.get("/api/pos/bootstrap").savedAt=Date.now()-24*60*60*1000;
+  assert.equal(await db.cacheGet("/api/pos/bootstrap"),null);
+});
+
 test("receipt commits bill and stock together and cold relaunch sees both",async()=>{
   const d=device();const {sales}=d.modules();
   const receipt=await sales.queueOfflineCashSale(body("bill-key-1"),{projectStock:true});
