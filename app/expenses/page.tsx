@@ -5,6 +5,7 @@ import {Plus,Trash2,X} from "lucide-react";
 import AuthGate from "@/components/auth-gate";
 import {api,type Session} from "@/lib/api-client";
 import {EXPENSE_PENDING_KEY,shouldRetainExpensePending,validateExpenseAck,validatePendingExpense} from "@/lib/expense-recovery.mjs";
+import {EXPENSE_PENDING_KEY,shouldRetainExpensePending,validateExpenseAck,validatePendingExpense} from "@/lib/expense-recovery.mjs";
 
 type E={id:string;date:string;time:number;category:string;description:string;amount:number;paymentMethod?:string;sourceType?:string;createdBy?:string;requestKey?:string};
 type ExpenseBody={requestKey:string;date:string;amount:number;category:string;description:string;paymentMethod:string};
@@ -25,6 +26,23 @@ function expensePendingClear(){
   catch{throw new Error("expense_recovery_storage_unavailable")}
 }
 const paymentLabel=(v?:string)=>v==="cash"?"เงินสด":v==="bank"?"โอน/ธนาคาร":v==="noncash"?"ไม่ใช่เงินสด":v==="other"?"อื่น ๆ":"ไม่ระบุ";
+
+function expensePendingRead():PendingExpense|null{
+  let raw:string|null=null;
+  try{raw=localStorage.getItem(EXPENSE_PENDING_KEY)}catch{throw new Error("expense_recovery_storage_unavailable")}
+  if(!raw)return null;
+  try{return validatePendingExpense(JSON.parse(raw)) as PendingExpense}
+  catch{throw new Error("expense_recovery_corrupt")}
+}
+function expensePendingWrite(body:ExpenseBody){
+  try{localStorage.setItem(EXPENSE_PENDING_KEY,JSON.stringify({body,createdAt:Date.now()}))}
+  catch{throw new Error("expense_recovery_storage_unavailable")}
+}
+function expensePendingClear(){
+  try{localStorage.removeItem(EXPENSE_PENDING_KEY)}
+  catch{throw new Error("expense_recovery_storage_unavailable")}
+}
+
 
 export default function Expenses(){return <AuthGate>{s=><View session={s}/>}</AuthGate>}
 
