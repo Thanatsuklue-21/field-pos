@@ -15,21 +15,6 @@ type ExpenseRow={id:string;date:string;time:number;category:string;description:s
 const n=(v:any)=>Number(v)||0;
 const paymentLabel=(v?:string)=>v==="cash"?"เงินสด":v==="bank"?"โอน/ธนาคาร":v==="other"?"อื่น ๆ":String(v||"—").toUpperCase();
 
-function readPendingExpense():PendingExpense|null{
-  let raw:string|null=null;
-  try{raw=localStorage.getItem(EXPENSE_PENDING_KEY)}catch{throw new Error("expense_recovery_storage_unavailable")}
-  if(!raw)return null;
-  try{return validatePendingExpense(JSON.parse(raw)) as PendingExpense}catch{throw new Error("expense_recovery_corrupt")}
-}
-function expensePendingWrite(body:ExpenseBody){
-  try{localStorage.setItem(EXPENSE_PENDING_KEY,JSON.stringify({body,createdAt:Date.now()}))}
-  catch{throw new Error("expense_recovery_storage_unavailable")}
-}
-function expensePendingClear(){
-  try{localStorage.removeItem(EXPENSE_PENDING_KEY)}
-  catch{throw new Error("expense_recovery_storage_unavailable")}
-}
-
 export default function PosOperationsHub({session,bootstrap,open,onClose}:{session:Session;bootstrap:Bootstrap|null;open:boolean;onClose:()=>void}){
   const canQueue=session.user.role==="admin"||session.user.permissions?.queue===true;
   const canOrder=session.user.role==="admin"||session.user.permissions?.order===true;
