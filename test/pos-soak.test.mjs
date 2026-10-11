@@ -1112,7 +1112,8 @@ test('provider-managed PromptPay resolution cannot bypass provider-authoritative
 test('manual split requires-resolution session can still resume through the generic admin resolve flow',async()=>{
   const db=fakeDb();
   const now=13000;
-  const started=await startSplitPayment({db,user,body:{requestKey:'manual-resolve-start-001',cart,date,mode:'split'},now});
+  const partialCart=[{...cart[0],qty:2}];
+  const started=await startSplitPayment({db,user,body:{requestKey:'manual-resolve-start-001',cart:partialCart,date,mode:'split'},now});
   await paySplitPayment({db,user,now:now+10,body:{
     requestKey:'manual-resolve-pay-001',sessionId:started.session.id,method:'cash',received:55,allocations:[{index:0,qty:1}]
   }});
