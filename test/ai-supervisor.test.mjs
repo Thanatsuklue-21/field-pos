@@ -9,7 +9,7 @@ test('AI supervisor elevates payment, cash and stock risks without mutating stat
     sales:[{date:'2026-10-13',status:'paid',total:100},{date:'2026-10-13',status:'refunded',total:20}],
     orders:[{date:'2026-10-13',status:'making'}],
     expenses:[{date:'2026-10-13',amount:700}],
-    splitPayments:[{status:'pending'}],
+    paymentSessions:[{status:'pending'}],
     closes:[{date:'2026-10-13',cashVariance:-80}],
     cashShifts:[{date:'2026-10-13',status:'closed'}]
   };
