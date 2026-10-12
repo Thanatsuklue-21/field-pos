@@ -27,7 +27,7 @@ test('operator coach teaches recognition-first guarded POS and FIFO production',
 
 test('coach controls are large enough for mobile operation',async()=>{
   const coach=await read('components/operator-coach.tsx');
-  assert.ok((coach.match(/min-h-11/g)||[]).length>=1);
+  assert.ok((coach.match(/min-h-14/g)||[]).length>=1);
   assert.ok((coach.match(/min-h-12/g)||[]).length>=2);
 });
 
