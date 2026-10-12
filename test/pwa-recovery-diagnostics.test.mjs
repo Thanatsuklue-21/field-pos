@@ -9,6 +9,7 @@ test("recovery diagnostics expose only counts and presence flags",async()=>{
   assert.ok(helper.includes('field-pos-held-carts-v1'));
   assert.ok(helper.includes('field-pos-pending-promptpay-v1'));
   assert.ok(helper.includes('field-pos-pending-cash-v1'));
+  assert.ok(helper.includes('field-pos-pending-close-day-v1'));
   assert.ok(helper.includes('field-pos-split-group-v1'));
   assert.ok(helper.includes('field-pos-edit-cash-v1'));
   for(const sensitive of [".body",".customerId",".paymentReference",".received",".total"])assert.ok(!helper.includes(sensitive),sensitive);
@@ -17,7 +18,7 @@ test("recovery diagnostics expose only counts and presence flags",async()=>{
 test("PWA snapshot publishes recovery diagnostics without transaction payloads",async()=>{
   const runtime=await read("components/pwa-runtime.tsx"),meta=await read("lib/pwa-meta.ts");
   assert.ok(runtime.includes("readRecoveryDiagnostics(cartCountRef.current)"));
-  for(const token of ["recoveryCartItems","recoveryHeldBills","recoveryPromptPay","recoveryCash","recoverySplit","recoveryEditCash"]){
+  for(const token of ["recoveryCartItems","recoveryHeldBills","recoveryPromptPay","recoveryCash","recoveryCloseDay","recoverySplit","recoveryEditCash"]){
     assert.ok(runtime.includes(token),token);
     assert.ok(meta.includes(token),token);
   }
@@ -30,6 +31,7 @@ test("readiness panel summarizes recovery state as clear or coarse labels",async
   assert.ok(ui.includes('"Held "+state?.recoveryHeldBills'));
   assert.ok(ui.includes('state?.recoveryPromptPay?"PromptPay":null'));
   assert.ok(ui.includes('state?.recoveryCash?"Cash":null'));
+  assert.ok(ui.includes('state?.recoveryCloseDay?"Close Day":null'));
   assert.ok(ui.includes('state?.recoverySplit?"Split":null'));
   assert.ok(ui.includes('state?.recoveryEditCash?"Edit":null'));
   assert.ok(ui.includes(':"CLEAR"'));
