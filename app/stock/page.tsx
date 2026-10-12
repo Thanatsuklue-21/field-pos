@@ -5,6 +5,7 @@ import {AlertTriangle,Archive,ArrowDownCircle,ArrowUpCircle,Edit3,Plus,RotateCcw
 import AuthGate from "@/components/auth-gate";
 import {api,type Session} from "@/lib/api-client";
 import {STOCK_TX_PENDING_KEY,shouldRetainStockPending,validatePendingStockTransaction,validateStockTransactionAck} from "@/lib/stock-transaction-recovery.mjs";
+import {CYCLE_COUNT_PENDING_KEY,shouldRetainCycleCountPending,validateCycleCountAck,validatePendingCycleCount} from "@/lib/cycle-count-recovery.mjs";
 
 type Purchase={
   id:string;stockTransactionId:string;supplier:string;purchaseDate:string;packageQty:number|null;packageUnit:string;packSize:number|null;packSizeUnit:string;
@@ -19,6 +20,8 @@ type CountInput={packs:string;loose:string;base:string};
 type MasterDraft=Partial<Ingredient>&{originalUnit?:string;loadedAt?:number};
 type StockTxBody=Record<string,any>&{requestKey:string;ingredientId:string;type:"PURCHASE"|"WASTE";unit:string};
 type PendingStockTx={body:StockTxBody;createdAt:number};
+type CycleCountBody={requestKey:string;confirm:true;counts:{ingredientId:string;countedQty:number}[]};
+type PendingCycleCount={body:CycleCountBody;createdAt:number};
 
 function stockPendingRead():PendingStockTx|null{
   let raw:string|null=null;
@@ -33,6 +36,21 @@ function stockPendingWrite(body:StockTxBody){
 function stockPendingClear(){
   try{localStorage.removeItem(STOCK_TX_PENDING_KEY)}
   catch{throw new Error("stock_recovery_storage_unavailable")}
+}
+
+function cycleCountPendingRead():PendingCycleCount|null{
+  let raw:string|null=null;
+  try{raw=localStorage.getItem(CYCLE_COUNT_PENDING_KEY)}catch{throw new Error("cycle_count_recovery_storage_unavailable")}
+  if(!raw)return null;
+  try{return validatePendingCycleCount(JSON.parse(raw)) as PendingCycleCount}catch{throw new Error("cycle_count_recovery_corrupt")}
+}
+function cycleCountPendingWrite(body:CycleCountBody){
+  try{localStorage.setItem(CYCLE_COUNT_PENDING_KEY,JSON.stringify({body,createdAt:Date.now()}))}
+  catch{throw new Error("cycle_count_recovery_storage_unavailable")}
+}
+function cycleCountPendingClear(){
+  try{localStorage.removeItem(CYCLE_COUNT_PENDING_KEY)}
+  catch{throw new Error("cycle_count_recovery_storage_unavailable")}
 }
 
 const today=()=>new Date().toLocaleDateString("en-CA",{timeZone:"Asia/Bangkok"});
@@ -66,6 +84,7 @@ function StockView({session}:{session:Session}){
   const [master,setMaster]=useState<MasterDraft|null>(null),[masterMsg,setMasterMsg]=useState(""),[purchaseEdit,setPurchaseEdit]=useState<{ingredient:Ingredient;purchase:Purchase}|null>(null);
   const [countOpen,setCountOpen]=useState(false),[counts,setCounts]=useState<Record<string,CountInput>>({});
   const stockRecoveryRef=useRef(false);
+  const cycleCountRecoveryRef=useRef(false);
 
   const load=()=>api<Overview>("/api/stock/overview").then(setData);
 
@@ -79,12 +98,18 @@ function StockView({session}:{session:Session}){
       stock_transaction_pending:"มี Stock transaction เดิมที่ยังไม่ทราบผล · ระบบจะตรวจ request เดิมก่อน",
       stock_transaction_unconfirmed:"Server ยังไม่ยืนยัน Stock transaction เดิมครบถ้วน · ระบบเก็บ request เดิมไว้เพื่อป้องกัน Stock/ต้นทุนซ้ำ",
       stock_recovery_corrupt:"ข้อมูล Stock recovery ในเครื่องเสีย · ห้ามบันทึกรายการใหม่จนกว่าจะตรวจสถานะ Stock",
-      stock_recovery_storage_unavailable:"เครื่องนี้เก็บ Stock recovery ไม่ได้ · ระบบไม่ส่งรายการเพื่อป้องกันตัด/เพิ่ม Stock ซ้ำ"
+      stock_recovery_storage_unavailable:"เครื่องนี้เก็บ Stock recovery ไม่ได้ · ระบบไม่ส่งรายการเพื่อป้องกันตัด/เพิ่ม Stock ซ้ำ",
+      cycle_count_pending:"มี Cycle Count เดิมที่ยังไม่ทราบผล · ระบบจะตรวจ request เดิมก่อน",
+      cycle_count_unconfirmed:"Server ยังไม่ยืนยัน Cycle Count เดิมครบถ้วน · ระบบเก็บ request เดิมไว้เพื่อป้องกันบันทึกซ้ำ",
+      cycle_count_recovery_corrupt:"ข้อมูล Cycle Count recovery ในเครื่องเสีย · ห้ามแก้ Stock ใหม่จนกว่าจะตรวจสอบ",
+      cycle_count_recovery_storage_unavailable:"เครื่องนี้เก็บ Cycle Count recovery ไม่ได้ · ระบบไม่ส่งผลตรวจนับเพื่อป้องกันข้อมูลซ้ำ"
     };
     return map[code]||code;
   }
 
   async function sendStockTransaction(body:StockTxBody){
+    const cyclePending=cycleCountPendingRead();
+    if(cyclePending)throw Object.assign(new Error("cycle_count_pending"),{status:409});
     let pending=stockPendingRead();
     if(pending&&pending.body.requestKey!==body.requestKey)throw Object.assign(new Error("stock_transaction_pending"),{status:409});
     if(!pending){stockPendingWrite(body);pending={body,createdAt:Date.now()}}
@@ -131,7 +156,60 @@ function StockView({session}:{session:Session}){
     window.addEventListener("focus",onFocus);
     document.addEventListener("visibilitychange",onVisible);
     return()=>{disposed=true;window.removeEventListener("online",onOnline);window.removeEventListener("focus",onFocus);document.removeEventListener("visibilitychange",onVisible)};
+  },[]
+  async function sendCycleCount(body:CycleCountBody){
+    const stockPending=stockPendingRead();
+    if(stockPending)throw Object.assign(new Error("stock_transaction_pending"),{status:409});
+    let pending=cycleCountPendingRead();
+    if(pending&&pending.body.requestKey!==body.requestKey)throw Object.assign(new Error("cycle_count_pending"),{status:409});
+    if(!pending){cycleCountPendingWrite(body);pending={body,createdAt:Date.now()}}
+    try{
+      const r=await api<any>("/api/stock/cycle-count",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify(pending.body)});
+      validateCycleCountAck(r,pending.body);
+      cycleCountPendingClear();
+      return r;
+    }catch(e:any){
+      if(!shouldRetainCycleCountPending(e))cycleCountPendingClear();
+      throw e;
+    }
+  }
+
+  useEffect(()=>{
+    let disposed=false;
+    const recover=async()=>{
+      if(disposed||cycleCountRecoveryRef.current)return;
+      let pending:PendingCycleCount|null=null;
+      try{
+        if(stockPendingRead())return;
+        pending=cycleCountPendingRead();
+      }catch(e:any){if(!disposed)setMsg(stockErrorText(e.message));return}
+      if(!pending)return;
+      cycleCountRecoveryRef.current=true;setBusy(true);setMsg("");
+      try{
+        await sendCycleCount(pending.body);
+        if(!disposed){
+          setCountOpen(false);
+          setMsg("กู้คืน Cycle Count เดิมสำเร็จ · ใช้ request key เดิมและไม่บันทึกซ้ำ");
+          await load().catch(()=>{});
+        }
+      }catch(e:any){
+        if(!disposed){
+          setMsg(shouldRetainCycleCountPending(e)?"Cycle Count เดิมยังไม่ทราบผล · ระบบเก็บ request เดิมไว้และจะตรวจซ้ำเมื่อเชื่อมต่อ":stockErrorText(e.message));
+          await load().catch(()=>{});
+        }
+      }finally{
+        cycleCountRecoveryRef.current=false;
+        if(!disposed)setBusy(false);
+      }
+    };
+    const onOnline=()=>recover(),onFocus=()=>recover(),onVisible=()=>{if(document.visibilityState==="visible")recover()};
+    recover();
+    window.addEventListener("online",onOnline);
+    window.addEventListener("focus",onFocus);
+    document.addEventListener("visibilitychange",onVisible);
+    return()=>{disposed=true;window.removeEventListener("online",onOnline);window.removeEventListener("focus",onFocus);document.removeEventListener("visibilitychange",onVisible)};
   },[]);
+);
   const rows=useMemo(()=>(data?.ingredients||[]).filter(x=>x.archived===(tab==="archived")&&(x.name+" "+x.id).toLowerCase().includes(q.toLowerCase())),[data,q,tab]);
   const active=(data?.ingredients||[]).filter(x=>!x.archived),low=active.filter(x=>x.lowStock);
   const purchaseHistory=useMemo(()=>(data?.ingredients||[]).flatMap(i=>(i.recentPurchases||[]).map(p=>({ingredient:i,p}))).sort((a,b)=>b.p.createdAt-a.p.createdAt).slice(0,60),[data]);
@@ -231,9 +309,10 @@ function StockView({session}:{session:Session}){
     if(!data)return;setBusy(true);setMsg("");
     try{
       const payload=active.map(x=>{const row=counts[x.id]||{packs:"0",loose:"0",base:String(x.qty)},per=Number(x.purchaseProfile?.quantityPerPackage)||0;return {ingredientId:x.id,countedQty:per>0?Number(row.packs||0)*per+Number(row.loose||0):Number(row.base||0)}});
-      await api("/api/stock/cycle-count",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({requestKey:crypto.randomUUID(),confirm:true,counts:payload})});
+      const body:CycleCountBody={requestKey:crypto.randomUUID(),confirm:true,counts:payload};
+      await sendCycleCount(body);
       setCountOpen(false);setMsg("บันทึกยอดนับจริงแล้ว");await load();
-    }catch(e:any){setMsg(e.message)}finally{setBusy(false)}
+    }catch(e:any){setMsg(stockErrorText(e.message))}finally{setBusy(false)}
   }
 
   async function savePurchaseEdit(){
