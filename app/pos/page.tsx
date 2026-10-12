@@ -14,6 +14,7 @@ import {useHeldCartStore} from "@/stores/held-cart-store";
 import {writeQueueSnapshotCache} from "@/lib/queue-cache"; import {clearRecovery,readRecovery,writeRecovery} from "@/lib/recovery-storage";
 import {shouldRetainCashPending} from "@/lib/cash-recovery-policy.mjs";
 import {inspectPaymentRecoveryRaw} from "@/lib/payment-recovery-integrity.mjs";
+import {buildPosGuidance} from "@/lib/pos-guidance.mjs";
 import PosOperationsHub,{type HubTab} from "@/components/pos-operations-hub";
 
 export default function Pos(){return <AuthGate>{s=><PosView session={s}/>}</AuthGate>}
@@ -99,6 +100,7 @@ function PosView({session}:{session:Session}){
   const [offlineStats,setOfflineStats]=useState<OfflineCashSummary>({pending:0,needsReview:0,total:0});
   const [offlineSyncing,setOfflineSyncing]=useState(false);
   const canQueueOps=session.user.role==="admin"||session.user.permissions?.queue===true;
+  const canOrderOps=session.user.role==="admin"||session.user.permissions?.order===true;
   const revisionRef=useRef<number|null>(null);
   const offlineSyncRef=useRef(false);
   const promptReconcileRef=useRef(false);
@@ -883,6 +885,35 @@ function PosView({session}:{session:Session}){
     setPayOpen(true);
   }
 
+  const posGuide=buildPosGuidance({
+    recoveryBlocked:!!recoveryIntegrityIssue,
+    cashRecoveryBlocked:!!cashRecoveryReview,
+    payOpen,
+    busy,
+    cartQty:cart.items.reduce((sum,item)=>sum+Number(item.qty||0),0),
+    lastSale,
+    online,
+    offlineSession:!!session.offline,
+    offlinePending:offlineStats.pending,
+    canOrder:canOrderOps,
+    canQueue:canQueueOps
+  });
+  function runGuideAction(){
+    if(posGuide.action==="checkout"){openPayment();return}
+    if(posGuide.action==="next_order"){startNextOrder();return}
+    if(posGuide.action==="open_queue"){setOpsInitialTab("queue");setLastSale(null);setOpsOpen(true);return}
+    if(posGuide.action==="open_orders"){setOpsInitialTab("orders");setOpsOpen(true);return}
+  }
+  const guideTone=posGuide.tone==="danger"
+    ?"border-red-300 bg-red-50 text-red-900"
+    :posGuide.tone==="warn"
+      ?"border-amber-300 bg-amber-50 text-amber-900"
+      :posGuide.tone==="success"
+        ?"border-emerald-300 bg-emerald-50 text-emerald-900"
+        :posGuide.tone==="info"
+          ?"border-blue-200 bg-blue-50 text-blue-900"
+          :"border-slate-200 bg-white text-slate-800";
+
   return <section className="flex h-full min-h-0">
     <div className="flex min-w-0 flex-1 flex-col p-3 sm:p-4 md:p-6">
       <div className="mb-3 flex items-center justify-between gap-2">
@@ -893,6 +924,15 @@ function PosView({session}:{session:Session}){
           <button onClick={()=>setHeldOpen(true)} className="relative flex min-h-9 items-center gap-1.5 rounded-full border border-slate-300 bg-white px-2.5 text-[11px] font-semibold text-slate-700 sm:px-3 sm:text-xs"><Clock3 size={14}/>พักบิล{heldBills.held.length>0&&<span className="grid h-5 min-w-5 place-items-center rounded-full bg-[#d4af37] px-1 text-[10px] font-black text-black">{heldBills.held.length}</span>}</button>
           <div className="hidden rounded-full border border-slate-300 bg-white px-3 py-1.5 text-[11px] text-slate-600 sm:block sm:px-4 sm:py-2 sm:text-xs">{session.user.username}</div>
         </div>
+      </div>
+
+      <div data-pos-guidance={posGuide.key} className={"mb-3 flex items-center justify-between gap-3 rounded-2xl border px-3 py-2.5 sm:px-4 sm:py-3 "+guideTone}>
+        <div className="min-w-0">
+          <div className="text-[10px] font-black tracking-[.16em] opacity-70">{posGuide.step}</div>
+          <div className="mt-0.5 text-sm font-black sm:text-base">{posGuide.title}</div>
+          <div className="mt-0.5 text-[11px] leading-relaxed opacity-75 sm:text-xs">{posGuide.detail}</div>
+        </div>
+        {posGuide.action&&<button type="button" disabled={busy} onClick={runGuideAction} className="min-h-11 shrink-0 rounded-xl bg-slate-900 px-3 text-xs font-black text-white disabled:opacity-40 sm:px-4">{posGuide.actionLabel}</button>}
       </div>
 
       {offlineStats.total>0&&<div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
