@@ -12,6 +12,10 @@ export function getPwaUpdateBlockReason(state:SafetyState){
       ["field-pos-pending-expense-v1","มีค่าใช้จ่ายที่ยังต้องยืนยันผล"],
       ["field-pos-pending-stock-transaction-v1","มี Stock transaction ที่ยังต้องยืนยันผล"],
       ["field-pos-pending-order-mutation-v1","มี VOID/Refund ที่ยังต้องยืนยันผล"],
+      ["field-pos-pending-cash-movement-v1","มี Cash Drawer ที่ยังต้องยืนยันผล"],
+      ["field-pos-pending-cycle-count-v1","มี Cycle Count ที่ยังต้องยืนยันผล"],
+      ["field-pos-pending-delivery-settlement-v1","มี Delivery Settlement ที่ยังต้องยืนยันผล"],
+      ["field-pos-pending-crm-points-v1","มี CRM Points ที่ยังต้องยืนยันผล"],
       ["field-pos-pending-close-day-v1","มีการปิดวันที่ยังต้องยืนยันผล"],
     ];
     for(const [key,reason] of recovery){
