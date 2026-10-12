@@ -906,7 +906,7 @@ function PosView({session}:{session:Session}){
           <span className="rounded-full bg-red-200 px-2 py-1 text-[10px] font-black">FAIL CLOSED</span>
         </div>
         <div className="mt-3 flex flex-wrap gap-2">
-          <button onClick={()=>router.push("/orders")} className="min-h-11 rounded-xl border border-red-300 bg-white px-4 text-xs font-bold">เปิด Orders เพื่อตรวจ</button>
+          <button onClick={()=>{setOpsInitialTab("orders");setOpsOpen(true)}} className="min-h-11 rounded-xl border border-red-300 bg-white px-4 text-xs font-bold">ตรวจ Orders ล่าสุดในงานร้าน</button>
           {session.user.role==="admin"&&<button onClick={clearCorruptRecovery} className="min-h-11 rounded-xl bg-red-800 px-4 text-xs font-bold text-white">ตรวจแล้ว · ล้าง recovery ที่เสีย</button>}
         </div>
       </div>}
@@ -916,11 +916,11 @@ function PosView({session}:{session:Session}){
           <span className="rounded-full bg-red-100 px-2 py-1 text-[10px] font-bold uppercase">{cashRecoveryReview.reason}</span>
         </div>
         <div className="mt-3 flex flex-wrap gap-2">
-          <button onClick={()=>router.push("/orders")} className="min-h-11 rounded-xl border border-red-300 bg-white px-4 text-xs font-bold">เปิด Orders เพื่อตรวจ</button>
+          <button onClick={()=>{setOpsInitialTab("orders");setOpsOpen(true)}} className="min-h-11 rounded-xl border border-red-300 bg-white px-4 text-xs font-bold">ตรวจ Orders ล่าสุดในงานร้าน</button>
           {session.user.role==="admin"&&<button onClick={clearReviewedCashPending} className="min-h-11 rounded-xl bg-red-700 px-4 text-xs font-bold text-white">ตรวจแล้ว · ล้าง pending ในเครื่อง</button>}
         </div>
       </div>}
-      {allUnavailable&&<div className="mb-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-900"><b>เมนูทั้งหมดถูกพักขายชั่วคราว</b><p className="mt-1 text-xs">ต้องบันทึกยอดวัตถุดิบจริงก่อนรับออเดอร์{unavailableNames.length?" · ขาด: "+unavailableNames.join(", "):""}</p><button onClick={()=>router.push("/stock")} className="mt-3 rounded-full bg-red-700 px-4 py-2 text-xs font-bold text-white">ตั้งยอดเริ่มต้น Stock</button></div>}
+      {allUnavailable&&<div className="mb-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-900"><b>เมนูทั้งหมดถูกพักขายชั่วคราว</b><p className="mt-1 text-xs">ต้องบันทึกยอดวัตถุดิบจริงก่อนรับออเดอร์{unavailableNames.length?" · ขาด: "+unavailableNames.join(", "):""}</p><button onClick={()=>{setOpsInitialTab("stock");setOpsOpen(true)}} className="mt-3 rounded-full bg-red-700 px-4 py-2 text-xs font-bold text-white">ดูปัญหา Stock ในงานร้าน</button></div>}
 
       <div className="glass mb-2.5 flex items-center gap-2.5 rounded-2xl px-3 py-2.5 sm:mb-3 sm:gap-3 sm:px-4 sm:py-3"><Search size={17} className="text-slate-500"/><input value={q} onChange={e=>setQ(e.target.value)} aria-label="ค้นหาเมนู" placeholder="ค้นหาเมนู" className="w-full bg-transparent outline-none"/></div>
 

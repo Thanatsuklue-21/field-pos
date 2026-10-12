@@ -27,7 +27,7 @@ test("API client time-bounds only writes with durable transaction recovery",asyn
 
 test("non-recoverable operational writes remain excluded while queue is allowed only with durable recovery",async()=>{
   const api=await read("lib/api-client.ts");
-  const queue=await read("app/queue/page.tsx");
+  const queueClient=await read("lib/queue-client.ts");
   const recovery=await read("lib/queue-action-recovery.mjs");
   const setStart=api.indexOf("const RECOVERABLE_WRITE_PATHS");
   const setEnd=api.indexOf("]);",setStart);
@@ -40,8 +40,9 @@ test("non-recoverable operational writes remain excluded while queue is allowed 
   assert.match(allowlist,/\/api\/pos\/refund/);
   assert.match(allowlist,/\/api\/expenses/);
   assert.match(allowlist,/\/api\/stock\/transactions/);
-  assert.match(queue,/queuePendingWrite\(body\)/);
-  assert.match(queue,/body:JSON\.stringify\(pending\.body\)/);
+  assert.match(queueClient,/writePendingQueueAction\(body\)/);
+  assert.match(queueClient,/body:JSON\.stringify\(pending\.body\)/);
+  assert.match(queueClient,/validateQueueActionAck\(result,pending\.body\)/);
   assert.match(recovery,/shouldRetainQueuePending/);
   const expenses=await read("app/expenses/page.tsx");
   const expenseClient=await read("lib/expense-client.ts");

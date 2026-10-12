@@ -9,7 +9,8 @@ import {ArrowLeft,BellRing,CheckCircle2,RotateCcw,X} from "lucide-react";
 import AuthGate from "@/components/auth-gate";
 import {api,type RevisionUnchanged,type Session} from "@/lib/api-client";
 import {readQueueSnapshotCache,writeQueueSnapshotCache} from "@/lib/queue-cache";
-import {QUEUE_PENDING_KEY,shouldRetainQueuePending,validatePendingQueueAction,validateQueueActionAck} from "@/lib/queue-action-recovery.mjs";
+import {shouldRetainQueuePending} from "@/lib/queue-action-recovery.mjs";
+import {readPendingQueueAction,sendQueueActionDurably,type PendingQueueAction,type QueueActionBody} from "@/lib/queue-client";
 
 type BatchMode="NONE"|"SEQUENTIAL"|"COMBINED";
 type PrepGroup={id:string;label:string;batchMode:BatchMode;qty:number;pendingQty?:number;items:{id:string;name:string;variant:string;qty:number;pendingQty?:number;compatibilityKey:string}[]};
@@ -22,25 +23,6 @@ const itemDone=(item:QItem)=>n(item.readyQty)>=n(item.qty);
 const itemCalled=(item:QItem)=>n(item.calledQty)>=n(item.qty);
 const orderReady=(order:QOrder)=>(order.items||[]).length>0&&(order.items||[]).every(itemDone);
 const orderCalled=(order:QOrder)=>(order.items||[]).length>0&&(order.items||[]).every(itemCalled);
-
-type QueueActionBody={requestKey:string;orderId:string;action:string;itemIndex?:number;expectedReadyQty?:number;reason?:string};
-type PendingQueueAction={body:QueueActionBody;createdAt:number};
-
-function queuePendingRead():PendingQueueAction|null{
-  let raw:string|null=null;
-  try{raw=localStorage.getItem(QUEUE_PENDING_KEY)}catch{throw new Error("queue_recovery_storage_unavailable")}
-  if(!raw)return null;
-  try{return validatePendingQueueAction(JSON.parse(raw)) as PendingQueueAction}
-  catch{throw new Error("queue_recovery_corrupt")}
-}
-function queuePendingWrite(body:QueueActionBody){
-  try{localStorage.setItem(QUEUE_PENDING_KEY,JSON.stringify({body,createdAt:Date.now()}))}
-  catch{throw new Error("queue_recovery_storage_unavailable")}
-}
-function queuePendingClear(){
-  try{localStorage.removeItem(QUEUE_PENDING_KEY)}
-  catch{throw new Error("queue_recovery_storage_unavailable")}
-}
 
 function nextTask(orders:QOrder[]){
   const first=orders.find(order=>!orderCalled(order));
@@ -150,22 +132,7 @@ function QueueView({session}:{session:Session}){
   };
 
   async function sendQueueAction(body:QueueActionBody){
-    let pending=queuePendingRead();
-    if(pending&&pending.body.requestKey!==body.requestKey)throw Object.assign(new Error("queue_action_pending"),{status:409});
-    if(!pending){queuePendingWrite(body);pending={body,createdAt:Date.now()}}
-    try{
-      const r=await api<any>("/api/pos/queue",{
-        method:"POST",
-        headers:{"X-CSRF-Token":session.csrf},
-        body:JSON.stringify(pending.body)
-      });
-      validateQueueActionAck(r,pending.body);
-      queuePendingClear();
-      return r;
-    }catch(e:any){
-      if(!shouldRetainQueuePending(e))queuePendingClear();
-      throw e;
-    }
+    return sendQueueActionDurably(session.csrf,body);
   }
 
   useEffect(()=>{
@@ -173,7 +140,7 @@ function QueueView({session}:{session:Session}){
     const recover=async()=>{
       if(disposed||queueRecoveryRef.current)return;
       let pending:PendingQueueAction|null=null;
-      try{pending=queuePendingRead()}
+      try{pending=readPendingQueueAction()}
       catch(e:any){if(!disposed)setMsg(errorText(e.message));return}
       if(!pending)return;
       queueRecoveryRef.current=true;

@@ -50,14 +50,19 @@ test("hub is permission-aware and keeps full pages as optional fallbacks",async(
   for(const href of ["/queue","/orders","/stock","/expenses"])assert.match(hub,new RegExp('href="'+href.replaceAll("/","\\/")+'"'));
 });
 
-test("hub remains fail-safe offline and does not mutate queue or stock from the compact view",async()=>{
+test("hub remains fail-safe offline and routes queue mutations through the shared durable sender",async()=>{
   const hub=await read("components/pos-operations-hub.tsx");
+  const queueClient=await read("lib/queue-client.ts");
   assert.match(hub,/OFFLINE · ดูสถานะจากข้อมูลเมนู\/สต็อกที่ cache ไว้ได้/);
   assert.match(hub,/const cloudAvailable=networkOnline&&!session\.offline/);
   assert.match(hub,/if\(!cloudAvailable\).*OFFLINE/s);
   assert.match(hub,/disabled=\{expenseBusy\|\|!cloudAvailable/);
-  assert.doesNotMatch(hub,/method:"POST"[\s\S]{0,120}\/api\/pos\/queue/);
+  assert.match(hub,/sendQueueActionDurably\(session\.csrf,body\)/);
+  assert.match(hub,/readPendingQueueAction\(\)/);
+  assert.doesNotMatch(hub,/api<any>\("\/api\/pos\/queue"[^\n]*method:"POST"/);
   assert.doesNotMatch(hub,/method:"POST"[\s\S]{0,120}\/api\/stock/);
+  assert.match(queueClient,/writePendingQueueAction\(body\)/);
+  assert.match(queueClient,/validateQueueActionAck\(result,pending\.body\)/);
 });
 
 
@@ -199,4 +204,49 @@ test("Operations Hub tabs follow keyboard roving-tab semantics without extra pag
   assert.match(hub,/event\.key==="Home"/);
   assert.match(hub,/event\.key==="End"/);
   assert.match(hub,/window\.requestAnimationFrame\(\(\)=>tabRefs\.current\[next\]\?\.focus\(\)\)/);
+});
+
+
+test("Queue tab offers one-state-at-a-time quick actions without leaving POS",async()=>{
+  const hub=await read("components/pos-operations-hub.tsx");
+  assert.match(hub,/async function runQuickQueueAction\(order:QueueOrder\)/);
+  assert.match(hub,/action:"complete_item"/);
+  assert.match(hub,/expectedReadyQty:n\(item\.readyQty\)/);
+  assert.match(hub,/action:"call"/);
+  assert.match(hub,/action:"return"/);
+  assert.match(hub,/const productionHead=queueSorted\.find\(order=>\(order\.items\|\|\[\]\)\.some\(item=>n\(item\.calledQty\)<n\(item\.qty\)\)\)\|\|null/);
+  assert.match(hub,/const allCalled=total>0&&called>=total,isProduction=productionHead\?\.id===order\.id/);
+  assert.match(hub,/const quick=\(isProduction\|\|allCalled\)\?quickQueueStep\(order\):null/);
+  assert.match(hub,/Server บังคับ FIFO/);
+  assert.match(hub,/รอลูกค้ารับ/);
+  assert.match(hub,/เปิดหน้าคิวเต็ม \/ งานผลิตละเอียด/);
+});
+
+test("Operations Hub recovers queue mutations from either Queue page or POS using the same pending key",async()=>{
+  const hub=await read("components/pos-operations-hub.tsx");
+  const queue=await read("app/queue/page.tsx");
+  const client=await read("lib/queue-client.ts");
+  assert.match(hub,/recoverQueueAction\(\)\.catch/);
+  assert.match(hub,/readPendingQueueAction\(\)/);
+  assert.match(queue,/readPendingQueueAction\(\)/);
+  assert.match(queue,/sendQueueActionDurably\(session\.csrf,body\)/);
+  assert.match(client,/QUEUE_PENDING_KEY/);
+  assert.match(client,/sendQueueActionDurably/);
+});
+
+test("quick Queue action is disabled when cloud is unavailable or another queue action is resolving",async()=>{
+  const hub=await read("components/pos-operations-hub.tsx");
+  assert.match(hub,/if\(queueBusy\|\|!cloudAvailable\)return/);
+  assert.match(hub,/disabled=\{queueBusy\|\|!cloudAvailable\}/);
+  assert.match(hub,/queueRecoveryRef\.current/);
+});
+
+
+test("next quick Queue tap reconciles an ambiguous existing request instead of creating a new key",async()=>{
+  const hub=await read("components/pos-operations-hub.tsx");
+  const start=hub.indexOf("async function runQuickQueueAction");
+  const end=hub.indexOf("function quickQueueStep",start);
+  const block=hub.slice(start,end);
+  assert.match(block,/if\(readPendingQueueAction\(\)\)\{await recoverQueueAction\(\);return\}/);
+  assert.ok(block.indexOf("readPendingQueueAction()")<block.indexOf("crypto.randomUUID()"));
 });
