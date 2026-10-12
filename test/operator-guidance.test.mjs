@@ -30,3 +30,23 @@ test('coach controls are large enough for mobile operation',async()=>{
   assert.ok((coach.match(/min-h-11/g)||[]).length>=1);
   assert.ok((coach.match(/min-h-12/g)||[]).length>=2);
 });
+
+
+test('payment is hard-gated until the bill has been reviewed with the customer',async()=>{
+  const pos=await read('app/pos/page.tsx');
+  assert.match(pos,/reviewConfirmed/);
+  assert.match(pos,/setReviewConfirmed\(false\)/);
+  assert.match(pos,/ระบบยังไม่เปิดรับเงิน · ต้องทวนบิลกับลูกค้าก่อน/);
+  assert.match(pos,/กดหลังทวน: เมนู · จำนวน · ความหวาน · ยอด/);
+  assert.match(pos,/!reviewConfirmed/);
+});
+
+test('pickup handoff is hard-gated behind visible order review',async()=>{
+  const queue=await read('app/queue/page.tsx');
+  assert.match(queue,/ตรวจรายการก่อนส่งมอบ/);
+  assert.match(queue,/เทียบ “บัตร \{order\.pagerNo\}” \+ จำนวนแก้ว \+ รายการให้ตรง/);
+  assert.match(queue,/ตรวจครบแล้ว · ลูกค้ารับแล้ว/);
+  const review=queue.indexOf('reviewOpen&&<div');
+  const deliver=queue.indexOf('onClick={()=>deliver(order.id)}');
+  assert.ok(review>=0&&deliver>review);
+});
