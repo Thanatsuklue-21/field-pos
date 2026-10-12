@@ -2,7 +2,7 @@
 
 import {useEffect,useMemo,useRef,useState} from "react";
 import Link from "next/link";
-import {BellRing,Boxes,CheckCircle2,ClipboardList,ListOrdered,Plus,ReceiptText,RefreshCw,X} from "lucide-react";
+import {BellRing,Boxes,CheckCircle2,ClipboardList,ListOrdered,Plus,ReceiptText,RefreshCw,RotateCcw,X} from "lucide-react";
 import {api,type Bootstrap,type Session} from "@/lib/api-client";
 import {formatMoney} from "@/lib/money-format.mjs";
 import {shouldRetainExpensePending} from "@/lib/expense-recovery.mjs";
@@ -180,6 +180,34 @@ export default function PosOperationsHub({session,bootstrap,open,onClose,onRefre
     }finally{setQueueBusy(false)}
   }
 
+  async function runQuickWasteRemake(order:QueueOrder,itemIndex:number){
+    if(queueBusy||!cloudAvailable)return;
+    const item=order.items?.[itemIndex];
+    if(!item)return;
+    try{
+      if(readPendingQueueAction()){await recoverQueueAction();return}
+    }catch(e:any){setMessage(queueActionErrorText(e.message));return}
+    if(!window.confirm("บันทึก “ชงเสีย / ทำใหม่” "+item.name+" 1 แก้ว?\nระบบจะหักวัตถุดิบเพิ่มตามสูตรที่ใช้ตอนขาย และลงค่าใช้จ่าย WASTE อัตโนมัติ"))return;
+    setQueueBusy(true);setMessage("");
+    try{
+      const result=await sendQueueActionDurably(session.csrf,{
+        requestKey:crypto.randomUUID(),
+        orderId:order.id,
+        itemIndex,
+        action:"waste_remake",
+        reason:"ชงเสีย / ทำใหม่"
+      });
+      if(Array.isArray(result?.orders))setQueue(result.orders);
+      else await refresh("queue",true);
+      setMessage("บันทึก WASTE "+item.name+" 1 แก้วแล้ว · หัก Stock เพิ่มตามสูตร"+(Number(result?.wasteCost)>0?" · ต้นทุนของเสีย ฿"+formatMoney(Number(result.wasteCost)):"")+" · ทำใหม่ต่อในคิวเดิม");
+    }catch(e:any){
+      setMessage(shouldRetainQueuePending(e)
+        ?"ผล WASTE ยังไม่ชัดเจน · ระบบเก็บ request เดิมไว้ ห้ามกดซ้ำจนกว่าจะตรวจสำเร็จ"
+        :queueActionErrorText(e.message));
+      await refresh("queue",true).catch(()=>{});
+    }finally{setQueueBusy(false)}
+  }
+
   function quickQueueStep(order:QueueOrder){
     const itemIndex=(order.items||[]).findIndex(item=>n(item.readyQty)<n(item.qty));
     if(itemIndex>=0){
@@ -308,7 +336,10 @@ export default function PosOperationsHub({session,bootstrap,open,onClose,onRefre
                 {prepMatch?.group?.label&&<p className="mt-1 text-[9px] font-semibold text-[#765b08]">หมวดเบส: {prepMatch.group.label}</p>}
                 {prepMatch?.item?.recipeUsage?.length?<p className="mt-1.5 text-[10px] leading-5 text-slate-600"><span className="font-bold text-slate-700">สูตรต่อแก้ว:</span> {prepMatch.item.recipeUsage.map(row=>row.name+" "+row.perCup+" "+row.unit).join(" · ")}</p>:<p className="mt-1.5 text-[10px] text-slate-500">สูตรละเอียดดูได้ในหน้าคิวเต็ม</p>}
               </div>}
-              {quick&&QuickIcon&&<button disabled={queueBusy||!cloudAvailable} onClick={()=>runQuickQueueAction(order)} className={"mt-3 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl px-4 text-sm font-black disabled:opacity-40 "+(allCalled?"bg-emerald-600 text-white":"bg-[#1F4D3A] text-white")}><QuickIcon size={17}/>{queueBusy?"กำลังยืนยันคิวเดิม…":quick.label}</button>}
+              {quick&&QuickIcon&&<div className={"mt-3 grid gap-2 "+(isProduction&&nextItem?"grid-cols-[auto_1fr]":"grid-cols-1")}>
+                {isProduction&&nextItem&&<button disabled={queueBusy||!cloudAvailable} onClick={()=>runQuickWasteRemake(order,nextIndex)} className="flex min-h-12 items-center justify-center gap-1.5 rounded-xl border border-red-200 bg-white px-3 text-[11px] font-black text-red-700 disabled:opacity-40"><RotateCcw size={15}/>ชงเสีย / ทำใหม่</button>}
+                <button disabled={queueBusy||!cloudAvailable} onClick={()=>runQuickQueueAction(order)} className={"flex min-h-12 items-center justify-center gap-2 rounded-xl px-4 text-sm font-black disabled:opacity-40 "+(allCalled?"bg-emerald-600 text-white":"bg-[#1F4D3A] text-white")}><QuickIcon size={17}/>{queueBusy?"กำลังยืนยันคิวเดิม…":quick.label}</button>
+              </div>}
               {!isProduction&&!allCalled&&<p className="mt-2 rounded-xl bg-slate-50 px-3 py-2 text-[10px] font-semibold text-slate-500">รอคิวก่อนหน้า · Server บังคับ FIFO</p>}
             </div>
           })}
