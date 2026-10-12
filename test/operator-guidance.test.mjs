@@ -50,3 +50,18 @@ test('pickup handoff is hard-gated behind visible order review',async()=>{
   const deliver=queue.indexOf('onClick={()=>deliver(order.id)}');
   assert.ok(review>=0&&deliver>review);
 });
+
+
+test('checkout handler itself refuses unreviewed payment',async()=>{
+  const pos=await read('app/pos/page.tsx');
+  const checkout=pos.slice(pos.indexOf('async function checkout()'),pos.indexOf('function openPayment()'));
+  assert.match(checkout,/if\(!reviewConfirmed\)/);
+  assert.match(checkout,/ต้องทวนเมนู · จำนวน · ความหวาน · ยอดกับลูกค้าก่อนรับเงิน/);
+});
+
+test('handoff handler itself refuses delivery until the visible pickup review is open',async()=>{
+  const queue=await read('app/queue/page.tsx');
+  const deliver=queue.slice(queue.indexOf('async function deliver('),queue.indexOf('const first='));
+  assert.match(deliver,/pickupReviewId!==orderId/);
+  assert.match(deliver,/ต้องตรวจเลขบัตร จำนวนแก้ว และรายการก่อนส่งมอบ/);
+});
