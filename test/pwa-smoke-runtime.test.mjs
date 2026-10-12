@@ -23,7 +23,7 @@ function fixture(overrides={}){
     if(path==="/manifest.webmanifest")return new Response(JSON.stringify({name:"FIELD POS",start_url:"/pos",display:"standalone",background_color:"#F7F1E3",icons:[192,512].map(size=>({sizes:`${size}x${size}`,src:`/field-icon-${size}.png`}))}),{headers:{"content-type":"application/manifest+json"}});
     for(const size of [192,512])if(path===`/field-icon-${size}.png`)return new Response(pngs[size],{headers:{"content-type":"image/png"}});
     if(path==="/sw.js")return new Response(sw,{headers:{"content-type":"application/javascript","cache-control":"no-cache"}});
-    if(path==="/api/build")return json({buildSha:sha,environment:"preview"});
+    if(path==="/api/build")return json({buildSha:sha,environment:"preview",databaseScope:"uat"});
     if(path==="/api/health")return json({ok:true,storage:"turso"});
     if(path==="/pos"||path==="/settings")return new Response('<html><script src="/_next/static/chunk.js"></script></html>',{headers:{"content-type":"text/html"}});
     assert.fail("unexpected request "+path);
@@ -33,7 +33,7 @@ function fixture(overrides={}){
 
 test("current candidate version and real PNG icons pass read-only release smoke",async()=>{
   const f=fixture(),result=await f.run({bypassSecret:"private-bypass"});
-  assert.equal(result.serviceWorker.version,version);assert.equal(result.buildSha,sha);
+  assert.equal(result.serviceWorker.version,version);assert.equal(result.buildSha,sha);assert.equal(result.databaseScope,"uat");
   assert.equal(f.calls.length,8);assert.ok(f.calls.every(x=>x.init.headers["x-vercel-protection-bypass"]==="private-bypass"));
   assert.ok(!JSON.stringify(result).includes("private-bypass"));
 });
@@ -46,6 +46,15 @@ test("old SW is rejected even when the backend reports the expected SHA",async()
   const f=fixture({"/sw.js":()=>new Response(sw.replace(version,"field-pwa-v6"),{headers:{"content-type":"application/javascript","cache-control":"no-cache"}})});
   await assert.rejects(f.run(),/sw_version_mismatch/);
 });
+
+for(const scope of [undefined,"production","invalid","unconfigured"]){
+  test(`preview smoke fails closed unless database scope is explicitly uat (${String(scope)})`,async()=>{
+    const f=fixture({"/api/build":()=>Response.json({buildSha:sha,environment:"preview",...(scope===undefined?{}:{databaseScope:scope})})});
+    await assert.rejects(f.run(),/preview_database_scope_not_uat/);
+    assert.ok(!f.calls.some(x=>x.path==="/api/health"));
+  });
+}
+
 test("different backend SHA cannot pass",async()=>{
   const f=fixture({"/api/build":()=>Response.json({buildSha:"b".repeat(40),environment:"preview"})});
   await assert.rejects(f.run(),/build_sha_mismatch/);

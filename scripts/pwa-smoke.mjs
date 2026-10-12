@@ -72,11 +72,12 @@ export async function runPwaSmoke({baseUrl,expectedSha,bypassSecret="",fetchImpl
   const build=await json("/api/build");
   requireValue(build?.buildSha===expectedSha,"build_sha_mismatch:"+build?.buildSha);
   requireValue(typeof build?.environment==="string"&&build.environment.length>0,"build_environment");
+  if(build.environment==="preview")requireValue(build?.databaseScope==="uat","preview_database_scope_not_uat:"+String(build?.databaseScope||"missing"));
   let health;
   try{health=await json("/api/health")}
   catch(error){throw new Error("server_health_gate_failed:"+error.message)}
   requireValue(health?.ok===true&&health?.storage==="turso","health_storage");
-  return {ok:true,origin:base.origin,buildSha:build.buildSha,environment:build.environment,protectionBypassUsed:Boolean(bypassSecret),
+  return {ok:true,origin:base.origin,buildSha:build.buildSha,environment:build.environment,databaseScope:build.databaseScope||null,protectionBypassUsed:Boolean(bypassSecret),
     manifest:{name:manifest.name,start_url:manifest.start_url,display:manifest.display},
     serviceWorker:{version:expectedVersion,safeRoutes:["/pos","/settings"]},shells:["/pos","/settings"]};
 }
