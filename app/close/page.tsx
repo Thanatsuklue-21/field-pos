@@ -30,9 +30,14 @@ function View({session}:{session:Session}){
     if(!shift||shift.status!=="open"){setMsg("ต้องเปิดร้านก่อนบันทึกเงินเข้า/ออกลิ้นชัก");return}
     if(!Number.isFinite(amount)||amount<=0){setMsg("กรุณากรอกจำนวนเงินที่ถูกต้อง");return}
     if(movementReason.trim().length<2){setMsg("กรุณาระบุเหตุผล");return}
+    let riskConfirmed=false;
+    if(movementType==="CASH_OUT"&&amount>=500){
+      riskConfirmed=window.confirm("ยืนยันนำเงินสดออก ฿"+amount.toLocaleString()+" ? รายการนี้เป็น High-Risk Action และจะถูกบันทึก Audit Log");
+      if(!riskConfirmed)return;
+    }
     setBusy(true);setMsg("");
     try{
-      await api("/api/cash-shift/movements",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({type:movementType,amount,reason:movementReason.trim()})});
+      await api("/api/cash-shift/movements",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({type:movementType,amount,reason:movementReason.trim(),riskConfirmed})});
       setMovementAmount("");setMovementReason("");setMsg(movementType==="CASH_IN"?"บันทึกเติมเงินสดเข้าลิ้นชักแล้ว":"บันทึกนำเงินสดออกจากลิ้นชักแล้ว");await load();
     }catch(e:any){setMsg(e.message==="drawer_cash_shortage"?"เงินสดตามระบบไม่พอสำหรับนำออกจำนวนนี้":e.message==="cash_shift_not_open"?"ต้องเปิดร้านก่อนบันทึกเงินเข้า/ออก":e.message)}
     finally{setBusy(false)}
