@@ -37,7 +37,7 @@ function View({session}:{session:Session}){
   function settlementError(code:string){
     const map:Record<string,string>={
       delivery_settlement_group_not_found:"ยอดชุดนี้ถูกกระทบไปแล้ว กรุณารีเฟรช",
-      invalid_received_amount:"ยอดรับจริงไม่ถูกต้อง",
+      invalid_received_amount:"ยอดรับจริงไม่ถูกต้อง · รองรับสูงสุด 2 ตำแหน่งทศนิยม (สตางค์)",
       invalid_settlement_date:"วันที่ไม่ถูกต้อง",
       request_key_conflict:"Request เดิมไม่ตรงกับข้อมูลเดิม · ระบบหยุดเพื่อป้องกันยอดซ้ำ",
       settlement_pending:"มีรายการกระทบยอดเดิมที่ยังไม่ทราบผล · ระบบจะตรวจ request เดิมก่อน",

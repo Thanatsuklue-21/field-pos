@@ -46,6 +46,7 @@ export async function sendExpenseDurably(csrf:string,body:ExpenseBody){
 
 export function expenseErrorText(code:string){
   return code==="day_closed"?"ปิดยอดวันนี้แล้ว ไม่สามารถบันทึกค่าใช้จ่ายได้":
+    code==="invalid_expense"?"จำนวนค่าใช้จ่ายต้องมากกว่า 0 และไม่เกิน 2 ตำแหน่งทศนิยม":
     code==="expense_pending"?"มีค่าใช้จ่ายเดิมที่ยังไม่ทราบผล · ระบบจะตรวจ request เดิมก่อน":
     code==="expense_unconfirmed"?"Server ยังไม่ยืนยันค่าใช้จ่ายเดิมอย่างครบถ้วน · ระบบเก็บ request เดิมไว้เพื่อป้องกันบันทึกซ้ำ":
     code==="expense_recovery_corrupt"?"ข้อมูล recovery ค่าใช้จ่ายในเครื่องเสีย · ห้ามบันทึกรายการใหม่จนกว่าจะตรวจข้อมูล":

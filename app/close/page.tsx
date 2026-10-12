@@ -52,6 +52,7 @@ function View({session}:{session:Session}){
 
   function movementError(code:string){
     return code==="drawer_cash_shortage"?"เงินสดตามระบบไม่พอสำหรับนำออกจำนวนนี้":
+      code==="invalid_cash_movement_amount"?"จำนวนเงินต้องมากกว่า 0 และไม่เกิน 2 ตำแหน่งทศนิยม":
       code==="cash_shift_not_open"?"ต้องเปิดร้านก่อนบันทึกเงินเข้า/ออก":
       code==="day_already_closed"?"วันนี้ถูกปิดวันแล้ว":
       code==="cash_movement_pending"?"มีรายการเงินสดเข้า/ออกเดิมที่ยังไม่ทราบผล · ระบบจะตรวจ request เดิมก่อน":
@@ -115,7 +116,7 @@ function View({session}:{session:Session}){
     if(!window.confirm("ยืนยันเปิดร้านด้วยเงินตั้งต้น ฿"+formatMoney(opening)+" ? หลังเปิดแล้วจำนวนนี้จะถูกล็อกสำหรับการกระทบยอดวันนี้"))return;
     setBusy(true);setMsg("");
     try{const r=await api<any>("/api/cash-shift/open",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({openingCash:opening})});setShift(r.shift);setMsg("เปิดร้านแล้ว · เงินตั้งต้น ฿"+formatMoney(Number(r.shift.openingCash))+" ถูกล็อกแล้ว");await load()}
-    catch(e:any){setMsg(e.message==="cash_shift_already_opened"?"วันนี้เปิดร้านไปแล้ว กรุณารีเฟรช":e.message==="day_already_closed"?"วันนี้ถูกปิดวันแล้ว":e.message)}
+    catch(e:any){setMsg(e.message==="cash_shift_already_opened"?"วันนี้เปิดร้านไปแล้ว กรุณารีเฟรช":e.message==="day_already_closed"?"วันนี้ถูกปิดวันแล้ว":e.message==="invalid_opening_cash"?"เงินตั้งต้นต้องเป็นจำนวนไม่ติดลบและไม่เกิน 2 ตำแหน่งทศนิยม":e.message)}
     finally{setBusy(false)}
   }
 
@@ -151,7 +152,7 @@ function View({session}:{session:Session}){
     if(!window.confirm("ยืนยันปิดวัน? ระบบจะใช้เงินตั้งต้นที่ล็อกไว้ ฿"+formatMoney(Number(shift.openingCash))+" และคำนวณเงินสดขาด/เกิน"))return;
     setBusy(true);setMsg("");
     try{const r=await api<any>("/api/close-day",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({countedCash:counted})});const v=Number(r.close.cashVariance||0);setMsg("ปิดวันสำเร็จ · เงินสด "+(v===0?"ตรงพอดี":v>0?"เกิน ฿"+formatMoney(v):"ขาด ฿"+formatMoney(Math.abs(v))));setCountedCash("");await load()}
-    catch(e:any){setMsg(e.message==="day_already_closed"?"วันนี้ถูกปิดวันแล้ว":e.message==="close_day_pending_payments"?"ยังมี Split/Payment ที่ค้างอยู่ กรุณาจัดการให้เสร็จก่อนปิดวัน":e.message==="close_day_open_orders"?"ยังมีออเดอร์ที่ยังไม่ได้ส่งมอบ กรุณาปิดคิวให้ครบก่อนปิดวัน":e.message==="counted_cash_required"?"กรุณากรอกเงินสดที่นับได้จริง":e.message)}
+    catch(e:any){setMsg(e.message==="day_already_closed"?"วันนี้ถูกปิดวันแล้ว":e.message==="close_day_pending_payments"?"ยังมี Split/Payment ที่ค้างอยู่ กรุณาจัดการให้เสร็จก่อนปิดวัน":e.message==="close_day_open_orders"?"ยังมีออเดอร์ที่ยังไม่ได้ส่งมอบ กรุณาปิดคิวให้ครบก่อนปิดวัน":e.message==="counted_cash_required"?"กรุณากรอกเงินสดที่นับได้จริง โดยไม่เกิน 2 ตำแหน่งทศนิยม":e.message)}
     finally{setBusy(false)}
   }
 
