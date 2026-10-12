@@ -103,7 +103,7 @@ function QueueView({session}:{session:Session}){
       try{
         const next=await api<QueueSnapshot|RevisionUnchanged>("/api/pos/queue",revisionRef.current===null?{}:{headers:{"X-Field-Revision":String(revisionRef.current)}});
         if(!disposed&&!busyRef.current)acceptSnapshot(next);
-      }catch(e:any){if(!disposed)setMsg(e.message==="network_unavailable"?"ขาดการเชื่อมต่อ · ตรวจคิวล่าสุดก่อนทำต่อ":e.message)}
+      }catch(e:any){if(!disposed)setMsg(errorText(e.message))}
       finally{inFlight=false;if(!disposed)setSyncing(false)}
     };
     refresh();
@@ -138,7 +138,9 @@ function QueueView({session}:{session:Session}){
       code==="recipe_unavailable"?"ไม่พบสูตรที่ใช้ตอนขาย จึงบันทึกชงเสียอัตโนมัติไม่ได้":
       code.startsWith("stock_shortage:")?"วัตถุดิบไม่พอสำหรับทำใหม่ 1 แก้ว · กรุณาตรวจ Stock":
       code.startsWith("ingredient_missing:")?"สูตรอ้างวัตถุดิบที่ไม่มีใน Stock Master":
-      code==="queue_state_changed"?"สถานะคิวเปลี่ยนแล้ว ระบบกำลังอัปเดต":code;
+      code==="network_unavailable"?"ขาดการเชื่อมต่อ · หยุดกดเปลี่ยนสถานะชั่วคราวและตรวจคิวล่าสุดเมื่ออินเทอร์เน็ตกลับมา":
+      code==="queue_state_changed"?"สถานะคิวเปลี่ยนแล้ว ระบบกำลังอัปเดต":
+      "ระบบยังเปลี่ยนสถานะคิวไม่ได้ · ระบบคืนหน้าจอเป็นข้อมูลล่าสุดแล้ว กรุณาตรวจบัตรปัจจุบันก่อนทำต่อ";
   }
 
   async function completeNext(order:QOrder,item:QItem,itemIndex:number){
