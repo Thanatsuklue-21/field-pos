@@ -49,6 +49,7 @@ function OrdersView({session}:{session:Session}){
   const router=useRouter();
   const cart=useCartStore();
   const [sales,setSales]=useState<Sale[]>([]);
+  const [receiptPaperWidth,setReceiptPaperWidth]=useState<58|80>(80);
   const [q,setQ]=useState("");
   const [detail,setDetail]=useState<Sale|null>(null);
   const [msg,setMsg]=useState("");
@@ -65,8 +66,9 @@ function OrdersView({session}:{session:Session}){
   }
 
   async function load(openFromQuery=false){
-    const x=await api<{sales:Sale[]}>("/api/pos/history");
+    const x=await api<{sales:Sale[];receiptPaperWidth?:58|80}>("/api/pos/history");
     setSales(x.sales);
+    setReceiptPaperWidth(Number(x.receiptPaperWidth)===58?58:80);
     if(session.user.role==="admin")loadResolutions().catch(e=>setMsg("โหลด Orders สำเร็จ แต่ Payment Resolution ตรวจ Provider ไม่สำเร็จ · "+String(e?.message||"server_error")));
     if(detail){
       const latest=x.sales.find(s=>s.id===detail.id);
@@ -398,7 +400,7 @@ function OrdersView({session}:{session:Session}){
 
     {detail&&<div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4" onClick={()=>setDetail(null)}>
       <div onClick={e=>e.stopPropagation()} className="glass card soft-scroll max-h-[90vh] w-full max-w-lg overflow-auto p-4 sm:p-6">
-        <SaleReceipt sale={detail}/>
+        <SaleReceipt sale={detail} paperWidth={receiptPaperWidth}/>
         <div className="flex items-start justify-between gap-3"><div><p className="gold text-[10px] tracking-[.25em]">{detail.billNo}</p><h3 className="mt-1 text-xl">{detail.queueNo}</h3></div><button onClick={()=>setDetail(null)}><X/></button></div>
         <div className="mt-2 flex flex-wrap gap-2 text-xs"><span className="rounded-full bg-slate-100 px-3 py-1 uppercase">{detail.status}</span>{detail.productionStarted?<span className="rounded-full bg-amber-100 px-3 py-1 text-amber-800">เริ่มผลิตแล้ว</span>:detail.status==="paid"?<span className="rounded-full bg-emerald-100 px-3 py-1 text-emerald-800">ยังแก้ก่อนผลิตได้</span>:null}</div>
         <div className="mt-4 space-y-2">{detail.items.map((i,n)=><div key={n} className="flex justify-between gap-3 rounded-2xl bg-slate-50 p-3"><span><b>{i.name}</b><small className="block text-slate-500">{i.variant} ×{i.qty} · ฿{formatMoney(i.price)}/แก้ว</small></span><b className="shrink-0">฿{formatMoney((i.price*i.qty))}</b></div>)}</div>
