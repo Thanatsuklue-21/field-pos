@@ -16,8 +16,8 @@ const grouped=routes=>exports.splitNavigation(routes.map(path=>[path]));
 
 test("novice shell exposes only daily top-level destinations while preserving every route",()=>{
   const result=grouped(all);
-  assert.deepEqual(result.front.map(x=>x[0]),["/pos","/dashboard","/close"]);
-  assert.deepEqual(result.operations.map(x=>x[0]),["/queue","/orders","/stock","/expenses"]);
+  assert.deepEqual(Array.from(result.front,x=>x[0]),["/pos","/dashboard","/close"]);
+  assert.deepEqual(Array.from(result.operations,x=>x[0]),["/queue","/orders","/stock","/expenses"]);
   const reachable=new Set([...result.front,...result.operations,...result.management].map(x=>x[0]));
   assert.deepEqual(reachable,new Set(all));
 });
@@ -35,9 +35,9 @@ test("restricted operator permissions are never expanded by grouping",()=>{
   const result=grouped(input);
   const reachable=[...result.front,...result.operations,...result.management].map(x=>x[0]);
   assert.deepEqual(new Set(reachable),new Set(input));
-  assert.deepEqual(result.front.map(x=>x[0]),["/pos"]);
-  assert.deepEqual(result.operations.map(x=>x[0]),["/queue","/orders"]);
-  assert.deepEqual(result.management.map(x=>x[0]),["/settings"]);
+  assert.deepEqual(Array.from(result.front,x=>x[0]),["/pos"]);
+  assert.deepEqual(Array.from(result.operations,x=>x[0]),["/queue","/orders"]);
+  assert.deepEqual(Array.from(result.management,x=>x[0]),["/settings"]);
 });
 
 test("app shell uses one collapsed store-management disclosure on desktop and grouped mobile sections",async()=>{
