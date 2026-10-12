@@ -263,7 +263,13 @@ function QueueView({session}:{session:Session}){
 
   async function deliver(orderId:string){
     if(busyRef.current)return;
-    const snapshot=data,order=orders.find(x=>x.id===orderId),key="return:"+orderId;busyRef.current=true;setBusy(key);setMsg("");
+    const order=orders.find(x=>x.id===orderId);
+    if(pickupReviewId!==orderId){
+      setPickupReviewId(orderId);
+      setMsg("ต้องตรวจเลขบัตร จำนวนแก้ว และรายการก่อนส่งมอบ");
+      return;
+    }
+    const snapshot=data,key="return:"+orderId;busyRef.current=true;setBusy(key);setMsg("");
     optimistic(list=>list.filter(o=>o.id!==orderId));
     pulse("กำลังส่งมอบ "+(order?.queueNo||"คิว")+"…");
     try{
@@ -353,12 +359,13 @@ function QueueView({session}:{session:Session}){
         <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">{waitingPickup.map(order=>{const reviewOpen=pickupReviewId===order.id;return <div key={order.id} className="rounded-2xl border-2 border-emerald-400 bg-emerald-50 p-3 text-center">
           <small className="block text-[9px] font-bold text-emerald-700">บัตร</small><div className="mt-1 text-3xl font-black text-emerald-800">{order.pagerNo}</div><div className="mt-1 text-[10px] text-slate-500">{(order.items||[]).reduce((sum,item)=>sum+n(item.qty),0)} แก้ว</div>
           <button type="button" aria-expanded={reviewOpen} onClick={()=>setPickupReviewId(reviewOpen?"":order.id)} className="mt-2 min-h-10 w-full rounded-xl border border-emerald-300 bg-white px-2 text-xs font-bold text-emerald-800">{reviewOpen?"ซ่อนรายการ":"ดูรายการ"}</button>
+          {reviewOpen&&<p className="mt-2 rounded-lg bg-emerald-100 px-2 py-1.5 text-[10px] font-semibold text-emerald-900">เทียบ “บัตร {order.pagerNo}” + จำนวนแก้ว + รายการให้ตรง ก่อนกดส่งมอบ</p>}
           {reviewOpen&&<div className="mt-2 space-y-1.5 rounded-xl border border-emerald-200 bg-white p-2 text-left">
             {(order.items||[]).map((item,index)=><div key={item.id+"|"+item.variant+"|pickup|"+index} className="flex items-start justify-between gap-2 rounded-lg bg-slate-50 px-2.5 py-2">
               <div className="min-w-0"><b className="block text-[11px] text-slate-800">{item.name}</b>{item.variant&&item.variant!=="Standard"&&<span className="mt-0.5 block text-[10px] text-slate-500">{item.variant}</span>}</div><b className="shrink-0 text-[11px] text-slate-700">×{item.qty}</b>
             </div>)}
           </div>}
-          <button disabled={busy!==""} onClick={()=>deliver(order.id)} className="mt-2 min-h-12 w-full rounded-xl bg-emerald-600 px-2 text-sm font-bold text-white disabled:opacity-50">ลูกค้ารับแล้ว</button>
+          <button disabled={busy!==""} onClick={()=>reviewOpen?deliver(order.id):setPickupReviewId(order.id)} className={"mt-2 min-h-12 w-full rounded-xl px-2 text-sm font-bold text-white disabled:opacity-50 "+(reviewOpen?"bg-emerald-600":"bg-slate-700")}>{reviewOpen?"ตรวจครบแล้ว · ลูกค้ารับแล้ว":"ดูรายการก่อนส่งมอบ"}</button>
         </div>})}</div>
       </section>}
     </div>

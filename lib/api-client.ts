@@ -4,7 +4,7 @@ import {captureClientTelemetry,clientNow,elapsedMs} from "@/lib/client-telemetry
 export type Session={user:{id:string;username:string;role:"admin"|"staff";permissions:Record<string,boolean>};csrf:string;offline?:boolean};
 export type MenuVariant={label:string;available:boolean;maxServings:number;lowStock:boolean;recipeItems:Record<string,number>;missingIngredients:{id:string;name:string}[];reason:string|null};
 export type MenuItem={id:string;name:string;category?:string;image?:string;price:number;enabled:boolean;available:boolean;maxServings:number;lowStock:boolean;variants:MenuVariant[]};
-export type Bootstrap={revision:number;unchanged?:false;menu:MenuItem[];availabilityStock:Record<string,{qty:number;name:string}>;settings:Record<string,any>};
+export type Bootstrap={revision:number;unchanged?:false;menu:MenuItem[];availabilityStock:Record<string,{qty:number;name:string}>;operational?:{businessDate:string;dayClosed:boolean};settings:Record<string,any>};
 export type RevisionUnchanged={revision:number;unchanged:true};
 
 const SAFE_GET_CACHE=new Set(["/api/pos/bootstrap"]);

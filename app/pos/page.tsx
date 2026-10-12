@@ -78,6 +78,7 @@ function PosView({session}:{session:Session}){
   const [cat,setCat]=useState("ทั้งหมด");
   const [selected,setSelected]=useState<MenuItem|null>(null);
   const [payOpen,setPayOpen]=useState(false);
+  const [reviewConfirmed,setReviewConfirmed]=useState(false);
   const [heldOpen,setHeldOpen]=useState(false);
   const [opsOpen,setOpsOpen]=useState(false);
   const [opsInitialTab,setOpsInitialTab]=useState<HubTab|undefined>(undefined);
@@ -117,6 +118,7 @@ function PosView({session}:{session:Session}){
   const heldBills=useHeldCartStore();
 
   useEffect(()=>{router.prefetch("/queue")},[router]);
+  useEffect(()=>{window.dispatchEvent(new CustomEvent("field:transaction-busy",{detail:{busy:busy||payOpen,source:"pos"}}));return()=>{window.dispatchEvent(new CustomEvent("field:transaction-busy",{detail:{busy:false,source:"pos"}}));}},[busy,payOpen]);
 
   const acceptBootstrap=(next:Bootstrap|RevisionUnchanged)=>{
     if(next?.unchanged===true)return false;
@@ -183,6 +185,7 @@ function PosView({session}:{session:Session}){
   useEffect(()=>{
     if(online)return;
     setMethod("cash");
+    setReviewConfirmed(false);
     setShowMorePaymentMethods(false);
     setSplitBill(false);
     setSplitSelection({});
@@ -254,6 +257,7 @@ function PosView({session}:{session:Session}){
   },[data?.menu]);
 
   const cats=useMemo(()=>["ทั้งหมด",...Array.from(new Set((data?.menu||[]).filter(sellable).map(x=>x.category||"อื่นๆ")))], [data]);
+  const salesClosed=!!data?.operational?.dayClosed;
   const menu=(data?.menu||[]).filter(x=>sellable(x)&&(cat==="ทั้งหมด"||(x.category||"อื่นๆ")===cat)&&x.name.toLowerCase().includes(q.toLowerCase()));
   const allUnavailable=menu.length>0&&menu.every(x=>!x.available);
   const unavailableNames=Array.from(new Set(menu.flatMap(x=>x.variants.flatMap(v=>v.missingIngredients||[]).map(i=>i.name)))).slice(0,4);
@@ -312,6 +316,8 @@ function PosView({session}:{session:Session}){
         :"border-slate-200 bg-white text-slate-700";
 
   useEffect(()=>{if(pointsRedeemed>maxRedeemPoints)setPointsRedeemed(maxRedeemPoints)},[pointsRedeemed,maxRedeemPoints]);
+  useEffect(()=>{if(payOpen)setReviewConfirmed(false)},[payableQty,netPayable,method,customerId,redeemPoints,splitBill,deliveryPlatform]);
+
 
   function applyServerState(r:any){
     const revision=Number(r?.revision)||0;
@@ -462,6 +468,7 @@ function PosView({session}:{session:Session}){
   }
 
   function selectMenu(product:MenuItem){
+    if(salesClosed){setNotice("วันนี้ปิดยอดแล้ว · ยังเพิ่มเมนูใหม่ไม่ได้");return}
     if(!product.available)return;
     if(product.variants.length===1){
       const variant=product.variants[0];
@@ -805,6 +812,14 @@ function PosView({session}:{session:Session}){
 
   async function checkout(){
     if(!cart.items.length||busy||!payableItems.length)return;
+    if(salesClosed){
+      setResult("วันนี้ปิดยอดแล้ว · ระบบไม่อนุญาตให้รับออเดอร์หรือรับเงินเพิ่ม");
+      return;
+    }
+    if(!reviewConfirmed){
+      setResult("ต้องทวนเมนู · จำนวน · ความหวาน · ยอดกับลูกค้าก่อนรับเงิน");
+      return;
+    }
     const integrity=recoveryIntegrityIssue||paymentRecoveryIntegrityIssue();
     if(integrity){
       setRecoveryIntegrityIssue(integrity);
@@ -939,6 +954,10 @@ function PosView({session}:{session:Session}){
 
   function openPayment(){
     if(!cart.items.length)return;
+    if(salesClosed){
+      setNotice("วันนี้ปิดยอดแล้ว · เปิดชำระเงินไม่ได้จนกว่าจะเริ่มวันธุรกิจใหม่");
+      return;
+    }
     const integrity=recoveryIntegrityIssue||paymentRecoveryIntegrityIssue();
     if(integrity){
       setRecoveryIntegrityIssue(integrity);
@@ -964,6 +983,7 @@ function PosView({session}:{session:Session}){
     const current=cartAvailability({cart:cart.items,menu:data?.menu||[],stock:data?.availabilityStock||{}});
     if(!current.available){setNotice(availabilityMessage(current));load().catch(()=>{});return}
     setResult("");
+    setReviewConfirmed(false);
     setShowMorePaymentMethods(method==="card"||method==="delivery");
     setShowAdvancedPayment(!!customerId||!!splitGroup);
     setSplitBill(false);
@@ -1036,19 +1056,21 @@ function PosView({session}:{session:Session}){
       </div>}
       {allUnavailable&&<div className="mb-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-900"><b>เมนูทั้งหมดถูกพักขายชั่วคราว</b><p className="mt-1 text-xs">ต้องบันทึกยอดวัตถุดิบจริงก่อนรับออเดอร์{unavailableNames.length?" · ขาด: "+unavailableNames.join(", "):""}</p><button onClick={()=>{setOpsInitialTab("stock");setOpsOpen(true)}} className="mt-3 rounded-full bg-red-700 px-4 py-2 text-xs font-bold text-white">ดูปัญหา Stock ในงานร้าน</button></div>}
 
+      {salesClosed&&<div className="mb-3 rounded-2xl border-2 border-slate-400 bg-slate-100 p-4 text-sm text-slate-900"><b>วันนี้ปิดยอดแล้ว</b><p className="mt-1 text-xs text-slate-600">ระบบล็อกการเลือกเมนูและการชำระเงิน เพื่อไม่ให้ยอดหลัง Close Day ปะปนกับวันที่ปิดแล้ว</p></div>}
+
       <div className="glass mb-2.5 flex items-center gap-2.5 rounded-2xl px-3 py-2.5 sm:mb-3 sm:gap-3 sm:px-4 sm:py-3"><Search size={17} className="text-slate-500"/><input value={q} onChange={e=>setQ(e.target.value)} aria-label="ค้นหาเมนู" placeholder="ค้นหาเมนู" className="w-full bg-transparent outline-none"/></div>
 
       <div className="soft-scroll mb-3 flex gap-1.5 overflow-x-auto sm:mb-4 sm:gap-2">{cats.map(x=><button key={x} onClick={()=>setCat(x)} className={"shrink-0 rounded-full border px-3 py-1.5 text-[11px] font-semibold sm:px-4 sm:py-2 sm:text-xs "+(cat===x?"border-[#c59b19] bg-[#d4af37] text-black shadow-sm":"border-slate-300 bg-white text-slate-700")}>{x}</button>)}</div>
 
       <div className="soft-scroll min-h-0 flex-1 overflow-auto pb-28 lg:pb-0">
-        <div className="grid grid-cols-2 items-stretch gap-2 sm:gap-3 lg:grid-cols-3 2xl:grid-cols-4">{menu.map(x=><button key={x.id} disabled={!x.available} onClick={()=>selectMenu(x)} className="glass group flex min-h-[154px] flex-col overflow-hidden rounded-[20px] text-left sm:min-h-[190px] sm:rounded-[24px] hover:border-[#c59b19] disabled:border-slate-200 disabled:bg-slate-100 disabled:opacity-65"><div className="relative h-20 shrink-0 bg-[#f4ecd0] sm:h-24">{x.image?<img src={x.image} alt={x.name} loading="lazy" decoding="async" fetchPriority="low" className="h-full w-full object-cover"/>:<div className="grid h-full place-items-center text-2xl font-bold text-[#765b08]">{x.name.slice(0,1)}</div>}<div className="absolute right-2 top-2">{!x.available?<span className="rounded-full bg-red-100 px-2 py-1 text-[10px] font-bold text-red-700">หมดชั่วคราว</span>:x.lowStock?<span className="rounded-full bg-amber-100 px-2 py-1 text-[10px] font-bold text-amber-800">เหลือประมาณ {x.maxServings} แก้ว</span>:null}</div></div><div className="flex flex-1 flex-col p-3 sm:p-4"><div className="text-[9px] uppercase tracking-widest text-slate-500 sm:text-[10px]">{x.category||"DRINK"}</div><b className="mt-1 block line-clamp-2 text-sm sm:text-base">{x.name}</b><div className="mt-auto pt-2 text-base font-semibold text-[#765b08] sm:pt-3 sm:text-lg">฿{formatMoney(x.price)}</div>{!x.available&&<small className="mt-2 block text-xs text-red-600">{Array.from(new Set(x.variants.flatMap(v=>v.missingIngredients||[]).map(i=>i.name))).slice(0,2).join(", ")||"สูตรยังไม่พร้อม"}</small>}</div></button>)}</div>
+        <div className="grid grid-cols-2 items-stretch gap-2 sm:gap-3 lg:grid-cols-3 2xl:grid-cols-4">{menu.map(x=><button key={x.id} disabled={!x.available||salesClosed} onClick={()=>selectMenu(x)} className="glass group flex min-h-[154px] flex-col overflow-hidden rounded-[20px] text-left sm:min-h-[190px] sm:rounded-[24px] hover:border-[#c59b19] disabled:border-slate-200 disabled:bg-slate-100 disabled:opacity-65"><div className="relative h-20 shrink-0 bg-[#f4ecd0] sm:h-24">{x.image?<img src={x.image} alt={x.name} loading="lazy" decoding="async" fetchPriority="low" className="h-full w-full object-cover"/>:<div className="grid h-full place-items-center text-2xl font-bold text-[#765b08]">{x.name.slice(0,1)}</div>}<div className="absolute right-2 top-2">{!x.available?<span className="rounded-full bg-red-100 px-2 py-1 text-[10px] font-bold text-red-700">หมดชั่วคราว</span>:x.lowStock?<span className="rounded-full bg-amber-100 px-2 py-1 text-[10px] font-bold text-amber-800">เหลือประมาณ {x.maxServings} แก้ว</span>:null}</div></div><div className="flex flex-1 flex-col p-3 sm:p-4"><div className="text-[9px] uppercase tracking-widest text-slate-500 sm:text-[10px]">{x.category||"DRINK"}</div><b className="mt-1 block line-clamp-2 text-sm sm:text-base">{x.name}</b><div className="mt-auto pt-2 text-base font-semibold text-[#765b08] sm:pt-3 sm:text-lg">฿{formatMoney(x.price)}</div>{!x.available&&<small className="mt-2 block text-xs text-red-600">{Array.from(new Set(x.variants.flatMap(v=>v.missingIngredients||[]).map(i=>i.name))).slice(0,2).join(", ")||"สูตรยังไม่พร้อม"}</small>}</div></button>)}</div>
       </div>
     </div>
 
     <div className="fixed bottom-[70px] left-2 right-2 z-30 flex items-center justify-between gap-2 rounded-[18px] border border-slate-300 bg-white/95 p-1.5 pl-3 shadow-lg backdrop-blur sm:bottom-[78px] sm:left-4 sm:right-4 sm:rounded-[22px] sm:p-2 sm:pl-5 lg:hidden">
       <div className="min-w-0 flex-1"><small className="block text-[10px] tracking-widest text-slate-500">{cart.items.reduce((s,i)=>s+i.qty,0)} แก้ว</small><b className="text-lg text-[#765b08]">฿{formatMoney(cart.getTotal())}</b></div>
       <button disabled={!cart.items.length} onClick={holdCurrentBill} className="min-h-11 shrink-0 rounded-2xl border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 disabled:opacity-30"><Clock3 size={14} className="mx-auto mb-0.5"/>พักบิล</button>
-      <button disabled={!cart.items.length} onClick={openPayment} className="min-h-11 shrink-0 rounded-2xl bg-[#d4af37] px-4 py-2.5 text-sm font-bold text-black disabled:opacity-30 sm:px-5 sm:py-3">ตรวจรายการ / ชำระเงิน</button>
+      <button disabled={!cart.items.length||salesClosed} onClick={openPayment} className="min-h-11 shrink-0 rounded-2xl bg-[#d4af37] px-4 py-2.5 text-sm font-bold text-black disabled:opacity-30 sm:px-5 sm:py-3">ตรวจรายการ / ชำระเงิน</button>
     </div>
 
     <aside className="glass m-3 ml-0 hidden w-[360px] shrink-0 flex-col rounded-[24px] p-5 lg:flex">
@@ -1059,7 +1081,7 @@ function PosView({session}:{session:Session}){
 
     {heldOpen&&<div className="fixed inset-0 z-[85] grid place-items-center bg-black/55 p-3" onMouseDown={()=>setHeldOpen(false)}><div className="card soft-scroll max-h-[85dvh] w-full max-w-lg overflow-auto border border-slate-300 bg-white p-4 shadow-2xl sm:p-5" onMouseDown={e=>e.stopPropagation()}><div className="flex items-start justify-between gap-3"><div><p className="gold text-[10px] font-bold tracking-[.25em]">พักบิล</p><h3 className="mt-1 text-xl font-semibold">บิลที่พักไว้ · {heldBills.held.length}</h3><p className="mt-1 text-xs text-slate-500">ยังไม่สร้างยอดขาย ไม่ตัด Stock และไม่เข้าคิวจนกว่าจะชำระจริง</p></div><button onClick={()=>setHeldOpen(false)} className="grid h-9 w-9 place-items-center rounded-xl hover:bg-slate-100"><X size={18}/></button></div>{heldBills.held.length===0?<div className="mt-5 rounded-2xl border border-dashed border-slate-300 p-8 text-center text-sm text-slate-400">ยังไม่มีบิลพัก</div>:<div className="mt-4 space-y-2">{heldBills.held.map(h=>{const qty=h.items.reduce((s,i)=>s+i.qty,0),amount=h.items.reduce((s,i)=>s+i.price*i.qty,0);return <div key={h.id} className="rounded-[20px] border border-slate-200 bg-slate-50 p-3 sm:p-4"><div className="flex items-start justify-between gap-3"><div><b className="text-sm">พักเวลา {localTime(h.createdAt)}</b><p className="mt-1 text-xs text-slate-500">{qty} แก้ว · {h.items.length} เมนู · ฿{formatMoney(amount)}</p><p className="mt-1 line-clamp-2 text-[11px] text-slate-500">{h.items.map(i=>i.name+" ×"+i.qty).join(" · ")}</p></div><button onClick={()=>{if(window.confirm("ยกเลิกบิลพักนี้?"))heldBills.removeHeld(h.id)}} className="grid h-9 w-9 shrink-0 place-items-center rounded-xl text-slate-400 hover:bg-red-50 hover:text-red-600" aria-label="ลบบิลพัก"><Trash2 size={15}/></button></div><button onClick={()=>resumeHeldBill(h.id)} className="mt-3 min-h-11 w-full rounded-2xl bg-[#d4af37] px-4 text-sm font-bold text-black">เรียกบิลนี้กลับ</button></div>})}</div>}</div></div>}
 
-    {selected&&<div className="fixed inset-0 z-50 grid place-items-center bg-black/55 p-3 sm:p-4" onMouseDown={()=>setSelected(null)}><div role="dialog" aria-modal="true" aria-labelledby="field-modifier-title" aria-describedby="field-modifier-help" className="card w-full max-w-md border border-slate-300 bg-white p-4 shadow-2xl sm:p-6" onMouseDown={e=>e.stopPropagation()}><div className="flex items-start justify-between"><div><p className="gold text-[10px] tracking-[.25em]">{selected.category||"DRINK"}</p><h3 id="field-modifier-title" className="mt-1 text-lg font-bold sm:text-xl">{selected.name}</h3></div><button aria-label="ปิดการเลือกสูตร" className="grid h-11 w-11 place-items-center rounded-xl hover:bg-slate-100" onClick={()=>setSelected(null)}><X/></button></div><div id="field-modifier-help" className="mt-4 rounded-2xl bg-[#fff8dc] p-3 text-sm text-[#6f5510]"><b>1. เลือกระดับความหวาน / สูตร</b><p className="mt-1 text-xs">แตะ 1 ตัวเลือก ระบบจะเพิ่มลงตะกร้าให้ทันที</p></div><div className="mt-3 grid gap-2">{selected.variants.map(v=>{const remaining=additionalServingsAvailable({cart:cart.items,menu:data?.menu||[],stock:data?.availabilityStock||{},menuId:selected.id,variantLabel:v.label});const canAdd=!!v.available&&remaining>0,preferred=isDefaultOrderOption(v.label);return <button key={v.label} aria-label={"เลือก "+orderOptionLabel(v.label)+" สำหรับ "+selected.name} disabled={!canAdd} onClick={()=>addVariant(selected,v)} className={"min-h-14 rounded-2xl border px-4 py-3 text-left transition disabled:bg-slate-100 disabled:text-slate-400 "+(preferred&&canAdd?"border-[#d4af37] bg-[#fffaf0] shadow-sm":"border-slate-300 bg-white hover:border-[#c59b19]")}><div className="flex items-center justify-between gap-3"><span className="font-semibold">{orderOptionLabel(v.label)}{preferred&&canAdd&&<small className="ml-2 rounded-full bg-[#d4af37]/20 px-2 py-1 text-[10px] font-black text-[#765b08]">แนะนำ</small>}</span><span className="shrink-0 font-semibold text-[#765b08]">฿{formatMoney(selected.price)}</span></div>{!v.available&&<small className="mt-1 block text-xs text-red-600">หมดชั่วคราว{v.missingIngredients?.length?" · ขาด "+v.missingIngredients.map(i=>i.name).join(", "):""}</small>}{v.available&&remaining>0&&<small className="mt-1 block text-xs text-slate-500">เพิ่มได้อีกประมาณ {remaining} แก้ว</small>}{v.available&&remaining<1&&<><small className="mt-1 block text-xs text-red-600">เพิ่มไม่ได้ · ตะกร้าใช้สต๊อกที่เหลือแล้ว</small><small className="mt-1 block text-xs text-slate-500">ลดจำนวนรายการในตะกร้า หรืออัปเดต Stock ก่อนเพิ่มเมนูนี้</small></>}</button>})}</div></div></div>}
+    {selected&&<div className="fixed inset-0 z-50 grid place-items-center bg-black/55 p-3 sm:p-4" onMouseDown={()=>setSelected(null)}><div role="dialog" aria-modal="true" aria-labelledby="field-modifier-title" aria-describedby="field-modifier-help" className="card w-full max-w-md border border-slate-300 bg-white p-4 shadow-2xl sm:p-6" onMouseDown={e=>e.stopPropagation()}><div className="flex items-start justify-between"><div><p className="gold text-[10px] tracking-[.25em]">{selected.category||"DRINK"}</p><h3 id="field-modifier-title" className="mt-1 text-lg font-bold sm:text-xl">{selected.name}</h3></div><button aria-label="ปิดการเลือกสูตร" className="grid h-11 w-11 place-items-center rounded-xl hover:bg-slate-100" onClick={()=>setSelected(null)}><X/></button></div><div id="field-modifier-help" className="mt-4 rounded-2xl bg-[#fff8dc] p-3 text-sm text-[#6f5510]"><b>1. เลือกระดับความหวาน / สูตร</b><p className="mt-1 text-xs">แตะ 1 ตัวเลือก ระบบจะเพิ่มลงตะกร้าให้ทันที</p></div><div className="mt-3 grid gap-2">{selected.variants.map(v=>{const remaining=additionalServingsAvailable({cart:cart.items,menu:data?.menu||[],stock:data?.availabilityStock||{},menuId:selected.id,variantLabel:v.label});const canAdd=!!v.available&&remaining>0,preferred=isDefaultOrderOption(v.label);return <button key={v.label} aria-label={"เลือก "+orderOptionLabel(v.label)+" สำหรับ "+selected.name} disabled={!canAdd||salesClosed} onClick={()=>addVariant(selected,v)} className={"min-h-14 rounded-2xl border px-4 py-3 text-left transition disabled:bg-slate-100 disabled:text-slate-400 "+(preferred&&canAdd?"border-[#d4af37] bg-[#fffaf0] shadow-sm":"border-slate-300 bg-white hover:border-[#c59b19]")}><div className="flex items-center justify-between gap-3"><span className="font-semibold">{orderOptionLabel(v.label)}{preferred&&canAdd&&<small className="ml-2 rounded-full bg-[#d4af37]/20 px-2 py-1 text-[10px] font-black text-[#765b08]">แนะนำ</small>}</span><span className="shrink-0 font-semibold text-[#765b08]">฿{formatMoney(selected.price)}</span></div>{!v.available&&<small className="mt-1 block text-xs text-red-600">หมดชั่วคราว{v.missingIngredients?.length?" · ขาด "+v.missingIngredients.map(i=>i.name).join(", "):""}</small>}{v.available&&remaining>0&&<small className="mt-1 block text-xs text-slate-500">เพิ่มได้อีกประมาณ {remaining} แก้ว</small>}{v.available&&remaining<1&&<><small className="mt-1 block text-xs text-red-600">เพิ่มไม่ได้ · ตะกร้าใช้สต๊อกที่เหลือแล้ว</small><small className="mt-1 block text-xs text-slate-500">ลดจำนวนรายการในตะกร้า หรืออัปเดต Stock ก่อนเพิ่มเมนูนี้</small></>}</button>})}</div></div></div>}
 
     {payOpen&&<div className="fixed inset-0 z-[90] grid place-items-center bg-black/55 p-2 sm:p-4"><div role="dialog" aria-modal="true" aria-labelledby="field-payment-title" className="field-payment-sheet soft-scroll card w-full max-w-md overflow-auto border border-slate-300 bg-white p-4 shadow-2xl sm:max-h-[94vh] sm:p-6"><div className="flex justify-between gap-3"><div><p className="gold text-[10px] tracking-[.25em]">ชำระเงิน</p><h3 id="field-payment-title" className="mt-1 text-2xl font-semibold">รับชำระเงิน ฿{formatMoney(netPayable)}</h3><p className="mt-1 text-xs text-slate-500">{splitBill?"บิลนี้ "+payableQty+" แก้ว · เหลือ "+remainingAfterBill+" แก้ว":payableQty+" แก้ว · "+cart.items.length+" เมนู"}</p></div><button aria-label="ปิดหน้าชำระเงิน" disabled={busy} onClick={()=>setPayOpen(false)} className="grid h-11 w-11 shrink-0 place-items-center rounded-xl disabled:cursor-not-allowed disabled:opacity-30"><X/></button></div><div className="mt-3 grid grid-cols-3 gap-1.5 text-center text-[10px] font-bold"><div className="rounded-xl bg-[#1F4D3A] px-2 py-2 text-white">1 · ทวนรายการ</div><div className="rounded-xl bg-[#fff8dc] px-2 py-2 text-[#765b08]">2 · เลือกวิธีจ่าย</div><div className="rounded-xl bg-slate-100 px-2 py-2 text-slate-600">3 · ยืนยันรับเงิน</div></div>
 
@@ -1085,6 +1107,15 @@ function PosView({session}:{session:Session}){
         <div className="mt-3 border-t border-slate-200 pt-3">{crmDiscount>0&&<div className="mb-1 flex items-center justify-between text-xs text-slate-500"><span>ยอดก่อนส่วนลด</span><span>฿{formatMoney(payableTotal)}</span></div>}{crmDiscount>0&&<div className="mb-1 flex items-center justify-between text-xs text-amber-700"><span>ส่วนลดสมาชิก</span><span>−฿{formatMoney(crmDiscount)}</span></div>}<div className="flex items-center justify-between"><span className="text-sm font-semibold">{splitBill?"บิลนี้":"รวม"} {payableQty} แก้ว</span><b className="text-xl text-[#765b08]">฿{formatMoney(netPayable)}</b></div></div>
       </div>
 
+      <div className={"mt-4 rounded-2xl border-2 p-3 "+(reviewConfirmed?"border-emerald-300 bg-emerald-50":"border-[#d4af37] bg-[#fffaf0]")}>
+        <div className="flex items-start gap-3">
+          <div className={"mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-full "+(reviewConfirmed?"bg-emerald-600 text-white":"bg-[#d4af37] text-black")}><CheckCircle2 size={16}/></div>
+          <div className="min-w-0 flex-1"><b className="text-sm">ทวนบิลกับลูกค้าก่อนรับเงิน</b><p className="mt-1 text-xs text-slate-600">เช็กชื่อเมนู · จำนวน · ความหวาน/สูตร · ยอดสุทธิ ฿{formatMoney(netPayable)}</p></div>
+        </div>
+        <button type="button" disabled={busy} onClick={()=>{setReviewConfirmed(true);setResult("")}} className={"mt-3 min-h-12 w-full rounded-xl px-4 text-sm font-black "+(reviewConfirmed?"bg-emerald-600 text-white":"bg-[#d4af37] text-black")+" disabled:opacity-40"}>{reviewConfirmed?"ทวนแล้ว · พร้อมรับเงิน":"กดหลังทวนบิลกับลูกค้าแล้ว"}</button>
+        {!reviewConfirmed&&<p className="mt-2 text-center text-[11px] font-semibold text-amber-800">ระบบยังไม่เปิดรับเงิน · ต้องทวนบิลกับลูกค้าก่อน</p>}
+      </div>
+
       {!online&&<div className="mt-4 rounded-2xl border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900"><b>Offline Mode</b> · รับเงินสดได้ตามปกติ บิลจะเก็บในเครื่องและ Sync อัตโนมัติเมื่อเน็ตกลับ · QR / แยกบิล / แต้มถูกปิดชั่วคราว</div>}
       <div className="mt-4 rounded-2xl bg-slate-100 p-1">
         <div className="grid grid-cols-3 gap-1.5">
@@ -1104,7 +1135,7 @@ function PosView({session}:{session:Session}){
       {method==="cash"&&<><div className="mt-4 grid grid-cols-[1fr_auto] gap-2"><input autoFocus inputMode="decimal" aria-label="จำนวนเงินสดที่รับจากลูกค้า" value={received} onChange={e=>setReceived(e.target.value)} placeholder="จำนวนเงินที่รับ" className="min-w-0 rounded-2xl border border-slate-300 bg-slate-100 px-4 py-3 text-lg outline-none focus:border-[#c59b19]"/><button type="button" disabled={busy||!payableItems.length} onClick={()=>setReceived(String(netPayable))} className="min-h-12 rounded-2xl border border-[#d4af37] bg-[#fff8dc] px-3 text-sm font-bold text-[#765b08] disabled:opacity-40">รับพอดี ฿{formatMoney(netPayable)}</button></div><div className="mt-2"><p className="mb-1.5 text-[11px] font-semibold text-slate-500">แตะจำนวนเงินที่ลูกค้าจ่าย</p><div className="grid grid-cols-4 gap-1.5">{quickCashAmounts.map(amount=><button key={amount} type="button" disabled={busy||!payableItems.length} onClick={()=>setReceived(String(amount))} aria-label={"รับเงินสด "+amount+" บาท"} className={"min-h-11 rounded-xl border px-2 text-sm font-bold disabled:opacity-40 "+(cashReceived===amount?"border-[#d4af37] bg-[#fff8dc] text-[#765b08]":"border-slate-300 bg-white text-slate-700")}>฿{formatMoney(amount)}</button>)}</div></div>{received.trim()!==""&&Number.isFinite(cashDelta)&&<div className={"mt-3 flex items-center justify-between rounded-2xl border px-4 py-3 "+(cashDelta>=0?"border-emerald-300 bg-emerald-50 text-emerald-900":"border-red-300 bg-red-50 text-red-800")}><span>{cashDelta>=0?"เงินทอน":"ขาดอีก"}</span><b className="text-xl">฿{formatMoney(Math.abs(cashDelta))}</b></div>}</>}
       {method==="promptpay"&&prompt?.qrUrl&&<div className="mt-4 rounded-[20px] border border-slate-300 bg-white p-4 text-center"><img src={prompt.qrUrl} alt="PromptPay QR" className="mx-auto max-h-56 w-auto"/><p className="mt-2 text-xs font-semibold text-black">{prompt.paid?"ชำระเงินแล้ว":"สแกน QR แล้วระบบจะตรวจสอบอัตโนมัติ"}</p></div>}
       <div className="sticky bottom-0 z-10 -mx-4 mt-4 border-t border-slate-200 bg-white/95 px-4 pb-[max(.5rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur sm:-mx-6 sm:px-6">
-        <button disabled={busy||!payableItems.length||(method==="cash"&&(!Number.isFinite(cashReceived)||cashReceived<netPayable))} onClick={checkout} className="w-full rounded-2xl bg-[#d4af37] py-3.5 font-bold text-black shadow-sm disabled:opacity-40">{busy?(method==="promptpay"&&prompt?"กำลังรอยืนยันการชำระ…":"กำลังบันทึกบิล…"):(method==="promptpay"?"สร้าง QR พร้อมเพย์":method==="delivery"?"ยืนยันออเดอร์เดลิเวอรี":method==="bank"?"ยืนยันรับโอน":method==="card"?"ยืนยันรับบัตร":!online?"บันทึกเงินสดออฟไลน์":"ยืนยันรับเงิน")}</button>
+        <button disabled={busy||!reviewConfirmed||salesClosed||!payableItems.length||(method==="cash"&&(!Number.isFinite(cashReceived)||cashReceived<netPayable))} onClick={checkout} className="w-full rounded-2xl bg-[#d4af37] py-3.5 font-bold text-black shadow-sm disabled:opacity-40">{busy?(method==="promptpay"&&prompt?"กำลังรอยืนยันการชำระ…":"กำลังบันทึกบิล…"):(method==="promptpay"?"สร้าง QR พร้อมเพย์":method==="delivery"?"ยืนยันออเดอร์เดลิเวอรี":method==="bank"?"ยืนยันรับโอน":method==="card"?"ยืนยันรับบัตร":!online?"บันทึกเงินสดออฟไลน์":"ยืนยันรับเงิน")}</button>
         {method==="cash"&&Number.isFinite(cashReceived)&&cashReceived===netPayable&&<p className="mt-2 text-center text-xs font-semibold text-emerald-700">รับเงินพอดียอด · กดยืนยันชำระได้เลย</p>}
         {result&&<p className="mt-2 rounded-xl bg-slate-100 px-3 py-2 text-center text-sm text-slate-700">{result}</p>}
       </div>
