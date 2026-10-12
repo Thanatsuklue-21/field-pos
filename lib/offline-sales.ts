@@ -1,10 +1,21 @@
 import {api,type Bootstrap,type Session} from "@/lib/api-client";
-import {offlineCashDelete,offlineCashList,offlineCashPatch,offlineCashPut,type OfflineCashRecord} from "@/lib/offline-db";
+import {offlineCashDelete,offlineCashList,offlineCashPatch,offlineCashPut,type OfflineCashRecord,type OfflineStockShortage} from "@/lib/offline-db";
 import {cartAvailability} from "@/lib/domain/availability.mjs";
 
 type CartLine={id:string;variant:string;qty:number};
-export type OfflineCashSummary={pending:number;needsReview:number;total:number};
+export type OfflineCashSummary={pending:number;needsReview:number;stockReconciliation:number;businessReview:number;total:number};
 export type OfflineCashSyncResult=OfflineCashSummary&{synced:number};
+export type OfflineCashReviewItem={
+  requestKey:string;
+  localNo:string;
+  createdAt:number;
+  total:number;
+  reviewKind:"business_rejection"|"stock_reconciliation";
+  lastError?:string;
+  acceptedOrderId?:string;
+  acceptedSaleIds:string[];
+  stockShortages:OfflineStockShortage[];
+};
 
 export async function queueOfflineCashSale(body:Record<string,any>,options:{projectStock?:boolean}={}){
   const createdAt=Number(body.offlineCreatedAt)||Date.now();
@@ -29,7 +40,35 @@ export async function getOfflineCashSummary():Promise<OfflineCashSummary>{
   const rows=await offlineCashList();
   const pending=rows.filter(x=>x.status==="pending").length;
   const needsReview=rows.filter(x=>x.status==="needs_review").length;
-  return {pending,needsReview,total:rows.length};
+  const stockReconciliation=rows.filter(x=>x.status==="needs_review"&&x.reviewKind==="stock_reconciliation").length;
+  const businessReview=Math.max(0,needsReview-stockReconciliation);
+  return {pending,needsReview,stockReconciliation,businessReview,total:rows.length};
+}
+
+export async function getOfflineCashReviews():Promise<OfflineCashReviewItem[]>{
+  const rows=await offlineCashList();
+  return rows.filter(x=>x.status==="needs_review").map(row=>({
+    requestKey:row.requestKey,
+    localNo:row.localNo,
+    createdAt:Number(row.createdAt)||0,
+    total:Number(row.body?.total)||0,
+    reviewKind:row.reviewKind==="stock_reconciliation"?"stock_reconciliation":"business_rejection",
+    lastError:row.lastError,
+    acceptedOrderId:row.acceptedOrderId,
+    acceptedSaleIds:Array.isArray(row.acceptedSaleIds)?row.acceptedSaleIds.map(String):[],
+    stockShortages:Array.isArray(row.stockShortages)?row.stockShortages.map(x=>({...x})):[],
+  }));
+}
+
+export async function acknowledgeOfflineStockReconciliation(requestKey:string):Promise<OfflineCashSummary>{
+  const rows=await offlineCashList();
+  const row=rows.find(x=>x.requestKey===requestKey);
+  if(!row||row.status!=="needs_review"||row.reviewKind!=="stock_reconciliation"
+    ||!row.acceptedOrderId||!Array.isArray(row.acceptedSaleIds)||!row.acceptedSaleIds.length){
+    throw new Error("offline_stock_reconciliation_not_found");
+  }
+  await offlineCashDelete(requestKey);
+  return getOfflineCashSummary();
 }
 
 function recalcVariant(v:any,stock:Bootstrap["availabilityStock"]){
@@ -89,13 +128,34 @@ export async function syncOfflineCashSales(session:Session):Promise<OfflineCashS
         ||!Number.isFinite(receipt.total)||receipt.total<0
         ||!Number.isFinite(expectedTotal)||Math.abs(receipt.total-expectedTotal)>0.001
         ||(row.body.offlineFulfilled===true&&receipt.offlineFulfilled!==true))throw new Error("offline_sync_unconfirmed");
+      if(receipt.stockReconciliationRequired===true){
+        const stockShortages:OfflineStockShortage[]=(Array.isArray(receipt.stockShortages)?receipt.stockShortages:[])
+          .map((item:any)=>({
+            ingredientId:String(item?.ingredientId||""),
+            available:Number.isFinite(Number(item?.available))?Number(item.available):0,
+            required:Number.isFinite(Number(item?.required))?Number(item.required):0,
+            deficit:Number.isFinite(Number(item?.deficit))?Number(item.deficit):0
+          })).filter((item:OfflineStockShortage)=>item.ingredientId.length>0);
+        await offlineCashPatch(row.requestKey,{
+          status:"needs_review",
+          reviewKind:"stock_reconciliation",
+          lastError:"stock_reconciliation_required",
+          lastAttemptAt:Date.now(),
+          acceptedOrderId:String(receipt.orderId),
+          acceptedSaleIds:receipt.saleIds.map(String),
+          acceptedAt:Date.now(),
+          stockShortages
+        });
+        synced++;
+        continue;
+      }
       await offlineCashDelete(row.requestKey);
       synced++;
     }catch(error:any){
       const code=String(error?.message||"sync_failed");
       const status=Number(error?.status)||0;
       if(status>=400&&status<500&&![401,403,408,425,429].includes(status)){
-        await offlineCashPatch(row.requestKey,{status:"needs_review",lastError:code,lastAttemptAt:Date.now()});
+        await offlineCashPatch(row.requestKey,{status:"needs_review",reviewKind:"business_rejection",lastError:code,lastAttemptAt:Date.now()});
         continue;
       }
       await offlineCashPatch(row.requestKey,{lastError:code,lastAttemptAt:Date.now()});

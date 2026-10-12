@@ -127,3 +127,14 @@ Resumed clean `6c9cb5b`, matching Draft PR #112. Added daily financial summary a
 New isolated real-libSQL scenario covers 10 cash sales with replay, production/handoff, cash/bank expenses, drawer movements, close and export. Repeated through actual Next production HTTP APIs (77 requests). Confirmed: 10 cups/bills, revenue 550, COGS 196, operating expenses 80, operating profit 274, stock 950g matcha / 28,900ml milk / 490 cups, expected/count cash 900, variance 0. Parsed actual CSV independently to confirm rows/totals. Six CSV evidence files are saved outside the repo in the task workspace.
 
 Validation: 10 new tests; **536 PASS / 0 FAIL**, build/TypeScript and read-only v15 local release smoke PASS. Actual frontend component rendering verified today/all-time scope and hidden pre-close drawer. Mobile/browser acceptance remains pending HTTPS Preview; no Production writes or release. Full findings: `docs/TEN_CUP_FLOW_AUDIT_2026-10-09.md`.
+
+
+# Continuation — accepted Offline stock reconciliation lifecycle (2026-10-12)
+
+Resumed from current Draft PR #112 head `48a5311a1f51588cffb92253fc978fa5a1e244ed`. GitHub CI for the prior code head was green; the Vercel failure signal observed during this continuation was a build-rate-limit status, not a GitHub code-test failure.
+
+The server already accepts fulfilled Offline cash sales with controlled negative stock when Cloud stock moved below the local projected requirement and returns `stockReconciliationRequired` plus per-ingredient deficits. Previously the client deleted that accepted outbox bill immediately, so the operator could miss the required physical-stock reconciliation.
+
+This continuation keeps an accepted Cloud sale as a local `needs_review / stock_reconciliation` record instead of resending it. The record stores accepted order/sale identities and shortage evidence, the POS separates stock reconciliation from business-rejected bills, and only an admin can acknowledge the stock review after checking/adjusting actual stock. Business-rejected reviews cannot be removed through that acknowledgement path. Cloud bootstrap remains blocked from overwriting the local stock projection until every unresolved Offline record is cleared.
+
+No Turso schema migration or payment/business rule changed. IndexedDB remains schema version 2; existing outbox records simply carry optional reconciliation metadata. PWA cache/app versions advance to `field-pwa-v18` / `8.0.0-pwa.17`.

@@ -3,6 +3,8 @@ export const BOOTSTRAP_OFFLINE_MAX_AGE_MS=36*60*60*1000;
 const bangkokDate=(timestamp:number)=>new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Bangkok",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date(timestamp));
 type Cached<T>={value:T,savedAt:number};
 export type OfflineCashStatus="pending"|"needs_review";
+export type OfflineCashReviewKind="business_rejection"|"stock_reconciliation";
+export type OfflineStockShortage={ingredientId:string;available:number;required:number;deficit:number};
 export type OfflineCashRecord={
   requestKey:string;
   body:Record<string,any>;
@@ -12,6 +14,11 @@ export type OfflineCashRecord={
   attempts:number;
   lastAttemptAt?:number;
   lastError?:string;
+  reviewKind?:OfflineCashReviewKind;
+  acceptedOrderId?:string;
+  acceptedSaleIds?:string[];
+  acceptedAt?:number;
+  stockShortages?:OfflineStockShortage[];
 };
 
 function openDb():Promise<IDBDatabase|null>{

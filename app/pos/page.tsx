@@ -8,7 +8,7 @@ import AuthGate from "@/components/auth-gate";
 import SaleReceipt,{type ReceiptSale} from "@/components/sale-receipt";
 import {api,type Bootstrap,type MenuItem,type RevisionUnchanged,type Session} from "@/lib/api-client";
 import {BOOTSTRAP_OFFLINE_MAX_AGE_MS,cacheGet} from "@/lib/offline-db";
-import {getOfflineCashSummary,queueOfflineCashSale,syncOfflineCashSales,type OfflineCashSummary} from "@/lib/offline-sales";
+import {acknowledgeOfflineStockReconciliation,getOfflineCashReviews,getOfflineCashSummary,queueOfflineCashSale,syncOfflineCashSales,type OfflineCashReviewItem,type OfflineCashSummary} from "@/lib/offline-sales";
 import {additionalServingsAvailable,cartAvailability} from "@/lib/domain/availability.mjs";
 import {useCartStore} from "@/stores/cart-store";
 import {useHeldCartStore} from "@/stores/held-cart-store";
@@ -100,8 +100,10 @@ function PosView({session}:{session:Session}){
   const [splitSelection,setSplitSelection]=useState<Record<string,number>>({});
   const [splitGroup,setSplitGroup]=useState<SplitGroup|null>(null);
   const [online,setOnline]=useState(true);
-  const [offlineStats,setOfflineStats]=useState<OfflineCashSummary>({pending:0,needsReview:0,total:0});
+  const [offlineStats,setOfflineStats]=useState<OfflineCashSummary>({pending:0,needsReview:0,stockReconciliation:0,businessReview:0,total:0});
+  const [offlineReviews,setOfflineReviews]=useState<OfflineCashReviewItem[]>([]);
   const [offlineSyncing,setOfflineSyncing]=useState(false);
+  const [offlineReviewBusy,setOfflineReviewBusy]=useState<string|null>(null);
   const canQueueOps=session.user.role==="admin"||session.user.permissions?.queue===true;
   const canOrderOps=session.user.role==="admin"||session.user.permissions?.order===true;
   const revisionRef=useRef<number|null>(null);
@@ -123,6 +125,7 @@ function PosView({session}:{session:Session}){
     const outbox=await getOfflineCashSummary().catch(()=>null);
     if(outbox&&outbox.total>0){
       setOfflineStats(outbox);
+      getOfflineCashReviews().then(setOfflineReviews).catch(()=>{});
       return false;
     }
     return acceptBootstrap(next);
@@ -321,7 +324,9 @@ function PosView({session}:{session:Session}){
   }
 
   async function refreshOfflineStats(){
-    setOfflineStats(await getOfflineCashSummary());
+    const [summary,reviews]=await Promise.all([getOfflineCashSummary(),getOfflineCashReviews()]);
+    setOfflineStats(summary);
+    setOfflineReviews(reviews);
   }
 
   async function syncOfflineQueue(){
@@ -331,7 +336,8 @@ function PosView({session}:{session:Session}){
     window.dispatchEvent(new CustomEvent("field:sync",{detail:{status:"syncing"}}));
     try{
       const sync=await syncOfflineCashSales(session);
-      setOfflineStats({pending:sync.pending,needsReview:sync.needsReview,total:sync.total});
+      setOfflineStats({pending:sync.pending,needsReview:sync.needsReview,stockReconciliation:sync.stockReconciliation,businessReview:sync.businessReview,total:sync.total});
+      await getOfflineCashReviews().then(setOfflineReviews).catch(()=>{});
       if(sync.total===0){
         if(sync.synced>0){
           setNotice("ซิงก์ยอดเงินสด Offline สำเร็จ "+sync.synced+" บิล · Cloud/Stock อัปเดตแล้ว");
@@ -340,8 +346,8 @@ function PosView({session}:{session:Session}){
         }
         window.dispatchEvent(new CustomEvent("field:sync",{detail:{status:"online"}}));
       }else{
-        const remaining="รอ Sync "+sync.pending+" · ต้องตรวจ "+sync.needsReview;
-        setNotice((sync.synced>0?"ซิงก์สำเร็จ "+sync.synced+" บิล · ":"")+"ยังมีบิล Offline "+sync.total+" รายการ ("+remaining+") · ระบบคง Stock projection ในเครื่องไว้จนกว่าจะจัดการครบ");
+        const remaining="รอส่ง "+sync.pending+" · ตรวจสต็อก "+sync.stockReconciliation+" · ตรวจบิล "+sync.businessReview;
+        setNotice((sync.synced>0?"ซิงก์ขึ้น Cloud สำเร็จ "+sync.synced+" บิล · ":"")+"ยังมีบิล Offline "+sync.total+" รายการ ("+remaining+") · ระบบคง Stock projection ในเครื่องไว้จนกว่าจะจัดการครบ");
         window.dispatchEvent(new CustomEvent("field:sync",{detail:{status:"sync_error"}}));
       }
     }catch(error:any){
@@ -353,6 +359,26 @@ function PosView({session}:{session:Session}){
       throw error;
     }
     finally{offlineSyncRef.current=false;setOfflineSyncing(false)}
+  }
+
+  async function acknowledgeStockReview(requestKey:string){
+    if(session.user.role!=="admin"){
+      setNotice("รายการนี้ขายและซิงก์แล้ว แต่ต้องให้ผู้ดูแลตรวจสต็อกจริงก่อนปลดล็อก");
+      return;
+    }
+    setOfflineReviewBusy(requestKey);
+    try{
+      const summary=await acknowledgeOfflineStockReconciliation(requestKey);
+      setOfflineStats(summary);
+      setOfflineReviews(await getOfflineCashReviews());
+      setNotice("ยืนยันตรวจสต็อกจริงแล้ว · ปลดล็อกรายการ Offline สำหรับรับ Stock จาก Cloud");
+      if(summary.total===0)await load(true).catch(()=>{});
+    }catch{
+      setNotice("ยังปลดล็อกรายการตรวจสต็อกไม่ได้ · ข้อมูลถูกเปลี่ยนหรือรายการไม่ใช่บิลที่ Cloud รับแล้ว กรุณาตรวจใหม่");
+      await refreshOfflineStats().catch(()=>{});
+    }finally{
+      setOfflineReviewBusy(null);
+    }
   }
 
   function finishOfflineSale(localNo:string,opts:{total:number;received:number;bootstrap:Bootstrap}){
@@ -956,9 +982,25 @@ function PosView({session}:{session:Session}){
       </div>
 
       {offlineStats.total>0&&<div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
-        <span role="status" aria-live="polite" aria-atomic="true">บิลออฟไลน์รอส่ง {offlineStats.pending} · ต้องตรวจสอบ {offlineStats.needsReview}</span>
-        <button disabled={!online||session.offline||offlineSyncing||offlineStats.pending===0} onClick={()=>syncOfflineQueue().catch(()=>{})} className="min-h-11 rounded-xl bg-[#1F4D3A] px-4 font-bold text-white disabled:opacity-45">{offlineSyncing?"กำลังซิงก์บิล…":"ซิงก์บิลที่ค้าง"}</button>
+        <span role="status" aria-live="polite" aria-atomic="true">บิลออฟไลน์ · รอส่ง {offlineStats.pending} · ตรวจสต็อก {offlineStats.stockReconciliation} · ตรวจบิล {offlineStats.businessReview}</span>
+        <div className="flex flex-wrap gap-2">
+          {offlineStats.businessReview>0&&<button type="button" onClick={()=>{setOpsInitialTab("orders");setOpsOpen(true)}} className="min-h-11 rounded-xl border border-amber-400 bg-white px-4 font-bold text-amber-900">เปิดรายการบิล</button>}
+          <button disabled={!online||session.offline||offlineSyncing||offlineStats.pending===0} onClick={()=>syncOfflineQueue().catch(()=>{})} className="min-h-11 rounded-xl bg-[#1F4D3A] px-4 font-bold text-white disabled:opacity-45">{offlineSyncing?"กำลังซิงก์บิล…":"ซิงก์บิลที่ค้าง"}</button>
+        </div>
       </div>}
+      {offlineReviews.filter(review=>review.reviewKind==="stock_reconciliation").map(review=><div key={review.requestKey} className="mb-3 rounded-2xl border-2 border-red-300 bg-red-50 p-3 text-sm text-red-950">
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div><b>ซิงก์บิลออฟไลน์แล้ว · ต้องตรวจสต็อกจริง</b><p className="mt-1 text-xs">เลขชั่วคราว {review.localNo} · ยอด ฿{formatMoney(review.total)} · Cloud order {review.acceptedOrderId||"—"}</p></div>
+          <span className="rounded-full bg-red-200 px-2 py-1 text-[10px] font-black">STOCK CHECK</span>
+        </div>
+        <div className="mt-3 space-y-1 rounded-xl border border-red-200 bg-white p-3 text-xs">
+          {review.stockShortages.length>0?review.stockShortages.map(item=><p key={item.ingredientId}><b>{item.ingredientId}</b> · ก่อนซิงก์มี {item.available} · ต้องใช้ {item.required} · ขาด {item.deficit}</p>):<p>Cloud ระบุว่าต้องกระทบยอดสต็อก แต่ไม่ได้ส่งรายละเอียดวัตถุดิบ กรุณาตรวจ Stock ledger และยอดจริงก่อนยืนยัน</p>}
+        </div>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <button type="button" onClick={()=>{setOpsInitialTab("stock");setOpsOpen(true)}} className="min-h-11 rounded-xl border border-red-300 bg-white px-4 text-xs font-bold">เปิดสต็อกในงานร้าน</button>
+          {session.user.role==="admin"?<button type="button" disabled={offlineReviewBusy===review.requestKey} onClick={()=>acknowledgeStockReview(review.requestKey)} className="min-h-11 rounded-xl bg-red-800 px-4 text-xs font-bold text-white disabled:opacity-45">{offlineReviewBusy===review.requestKey?"กำลังยืนยัน…":"ตรวจสต็อกจริงแล้ว · ปลดล็อก"}</button>:<span className="self-center text-xs font-semibold">ให้ผู้ดูแลยืนยันหลังนับ/ปรับสต็อกจริง</span>}
+        </div>
+      </div>)}
       {notice&&<div role="status" aria-live="polite" aria-atomic="true" className="mb-3 flex items-start justify-between gap-3 rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900"><span>{notice}</span><button aria-label="ปิดข้อความแจ้งเตือน" onClick={()=>setNotice("")} className="shrink-0"><X size={16}/></button></div>}
       {recoveryIntegrityIssue&&<div className="mb-3 rounded-2xl border border-red-400 bg-red-50 p-3 text-sm text-red-950">
         <div className="flex flex-wrap items-start justify-between gap-2">
