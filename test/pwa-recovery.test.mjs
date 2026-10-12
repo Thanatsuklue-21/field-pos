@@ -130,7 +130,7 @@ test("offline direct routes are redirected before server-dependent pages render"
   assert.ok(shell.includes('offlineRouteAllowed=!session?.offline||["/pos","/settings"].includes(path)'));
   assert.ok(shell.includes('if(session?.offline&&!offlineRouteAllowed)router.replace("/pos")'));
   assert.ok(shell.includes('offlineRouteAllowed?children:'));
-  assert.ok(shell.includes("OFFLINE MODE · CASH ONLY"));
+  assert.ok(shell.includes("ออฟไลน์ · รับเงินสดเท่านั้น"));
 });
 
 
