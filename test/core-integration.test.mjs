@@ -483,12 +483,15 @@ test('real libSQL: close day forces blind recount then explicit variance approva
   const token='recount-control-token';
   await db.execute({sql:'INSERT INTO field_sessions VALUES(?,?,?,?)',args:[digest(token),user.id,'csrf',Date.now()+60000]});
   const handler=createApi({db,origin:'https://field.test'});
+  const opened={writeHead(status){this.status=status},end(raw){this.body=JSON.parse(raw)}};
+  await handler({method:'POST',query:{route:'cash-shift/open'},headers:{origin:'https://field.test',cookie:'field_session='+token,'x-csrf-token':'csrf'},body:{openingCash:100}},opened);
+  assert.equal(opened.status,201);
   async function close(body){
     const res={writeHead(status){this.status=status},end(raw){this.body=JSON.parse(raw)}};
     await handler({method:'POST',query:{route:'close-day'},headers:{origin:'https://field.test',cookie:'field_session='+token,'x-csrf-token':'csrf'},body},res);
     return res;
   }
-  const first=await close({openingCash:100,countedCash:200});
+  const first=await close({countedCash:200});
   assert.equal(first.status,409);assert.equal(first.body.error,'cash_recount_required');
   assert.equal('expectedCash' in first.body,false);
   let doc=await state(db);const shift=doc.cashShifts.find(x=>x.date===bangkokDate()&&x.status==='open');
