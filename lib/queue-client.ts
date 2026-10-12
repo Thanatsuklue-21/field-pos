@@ -53,6 +53,10 @@ export function queueActionErrorText(code:string){
     code==="order_not_ready"?"ยังทำเครื่องดื่มไม่ครบ":
     code==="pager_already_called"?"คิวนี้เรียกลูกค้าแล้ว":
     code==="order_not_complete"?"คิวนี้ยังไม่พร้อมส่งมอบ":
+    code==="waste_after_call_not_supported"?"เมนูนี้ถูกเรียกลูกค้าครบแล้ว จึงไม่ย้อนเป็นชงเสียอัตโนมัติ":
+    code==="recipe_unavailable"?"ไม่พบสูตรที่ใช้ตอนขาย จึงบันทึกชงเสียอัตโนมัติไม่ได้":
+    code.startsWith("stock_shortage:")?"วัตถุดิบไม่พอสำหรับทำใหม่ 1 แก้ว · กรุณาตรวจ Stock":
+    code.startsWith("ingredient_missing:")?"สูตรอ้างวัตถุดิบที่ไม่มีใน Stock Master":
     code==="queue_state_changed"?"สถานะคิวเปลี่ยนแล้ว ระบบจะดึงข้อมูลล่าสุด":
     code==="queue_action_pending"?"มี Queue action เดิมที่ยังไม่ทราบผล · ระบบจะตรวจ request เดิมก่อน":
     code==="queue_action_unconfirmed"?"Server ยังไม่ยืนยัน Queue action เดิมครบถ้วน · ระบบเก็บ request เดิมไว้เพื่อป้องกันทำซ้ำ":
