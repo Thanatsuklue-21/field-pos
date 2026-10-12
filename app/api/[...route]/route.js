@@ -4,6 +4,14 @@ import {createApi} from "../../../lib/api.mjs";
 export const runtime="nodejs";
 export const dynamic="force-dynamic";
 
+function databaseScopeError(){
+  const environment=String(process.env.VERCEL_ENV||"").trim().toLowerCase();
+  const scope=String(process.env.FIELD_DB_SCOPE||"").trim().toLowerCase();
+  if(environment==="preview"&&scope!=="uat")return "database_scope_invalid";
+  if(environment==="production"&&scope==="uat")return "database_scope_invalid";
+  return null;
+}
+
 async function handle(request,{params}){
   const {route=[]}=await params;
   const headers=Object.fromEntries(request.headers.entries());
@@ -25,6 +33,10 @@ async function handle(request,{params}){
     if(!process.env.TURSO_DATABASE_URL||!process.env.TURSO_AUTH_TOKEN){
       return Response.json({ok:false,storage:"turso",error:"turso_not_configured"},{status:503,headers:{"Cache-Control":"no-store"}});
     }
+    const scopeError=databaseScopeError();
+    if(scopeError){
+      return Response.json({ok:false,storage:"turso",error:scopeError},{status:503,headers:{"Cache-Control":"no-store"}});
+    }
     try{
       await getDb().execute("SELECT 1 AS ok");
       return Response.json({ok:true,storage:"turso"},{status:200,headers:{"Cache-Control":"no-store"}});
@@ -43,6 +55,8 @@ async function handle(request,{params}){
   if(!process.env.TURSO_DATABASE_URL||!process.env.TURSO_AUTH_TOKEN){
     return Response.json({error:"turso_not_configured"},{status:503,headers:{"Cache-Control":"no-store"}});
   }
+  const scopeError=databaseScopeError();
+  if(scopeError)return Response.json({error:scopeError},{status:503,headers:{"Cache-Control":"no-store"}});
   try{await ensureDbSchema()}
   catch{
     return Response.json({error:"turso_unavailable"},{status:503,headers:{"Cache-Control":"no-store"}});
