@@ -33,6 +33,21 @@ test("cash checkout provides fast tender choices and human-readable CTA",async()
   assert.match(pos,/สร้าง QR เพื่อรับเงิน ฿/);
 });
 
+test("fresh payment opening cannot inherit hidden advanced payment state",async()=>{
+  const pos=await read("app/pos/page.tsx");
+  const start=pos.indexOf("function openPayment()");
+  const end=pos.indexOf("\n\n  return <section",start);
+  assert.ok(start>0&&end>start);
+  const openPayment=pos.slice(start,end);
+  assert.match(openPayment,/setMethod\("cash"\)/);
+  assert.match(openPayment,/setReceived\(""\)/);
+  assert.match(openPayment,/setManualPaymentReference\(""\)/);
+  assert.match(openPayment,/setCustomerId\(""\)/);
+  assert.match(openPayment,/setPointsRedeemed\(0\)/);
+  assert.match(openPayment,/setSplitBill\(false\)/);
+  assert.match(openPayment,/setShowMorePayment\(false\)/);
+});
+
 test("unexpected server codes are not shown raw to shop staff",async()=>{
   const pos=await read("app/pos/page.tsx");
   assert.match(pos,/ระบบยังทำรายการนี้ไม่ได้ กรุณาตรวจ Orders/);
