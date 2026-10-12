@@ -43,7 +43,7 @@ test('payment is hard-gated until the bill has been reviewed with the customer',
 
 test('pickup handoff is hard-gated behind visible order review',async()=>{
   const queue=await read('app/queue/page.tsx');
-  assert.match(queue,/ตรวจรายการก่อนส่งมอบ/);
+  assert.match(queue,/ดูรายการก่อนส่งมอบ/);
   assert.match(queue,/เทียบ “บัตร \{order\.pagerNo\}” \+ จำนวนแก้ว \+ รายการให้ตรง/);
   assert.match(queue,/ตรวจครบแล้ว · ลูกค้ารับแล้ว/);
   const review=queue.indexOf('reviewOpen&&<div');
