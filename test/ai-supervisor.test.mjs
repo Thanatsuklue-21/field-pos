@@ -49,3 +49,27 @@ test('AI supervisor redacts financial and audit data for staff without report pe
   assert.equal(filtered.alerts.some(x=>x.id==='cash-variance'),false);
   assert.equal(filtered.alerts.some(x=>x.id==='payment-pending'),true);
 });
+
+
+test('global AI supervisor is mounted and financial actions remain human-approved',async()=>{
+  const {readFile}=await import('node:fs/promises');
+  const read=p=>readFile(new URL('../'+p,import.meta.url),'utf8');
+  const shell=await read('components/app-shell.tsx');
+  const ui=await read('components/ai-supervisor.tsx');
+  const server=await read('lib/ai-supervisor-server.mjs');
+  assert.match(shell,/AiSupervisor session=\{session\}/);
+  assert.match(ui,/เงินออก Refund Void Stock Adjustment และ Close Day ต้องยืนยันโดยคน/);
+  assert.match(server,/\['navigate','refresh'\]/);
+  assert.match(server,/gpt-6-luna/);
+  assert.match(server,/gpt-6-sol/);
+});
+
+test('pending payment risk is scoped to the selected business date and includes resolution-required sessions',()=>{
+  const doc={paymentSessions:[
+    {id:'today',date:'2026-10-13',status:'requires_resolution'},
+    {id:'old',date:'2026-10-12',status:'collecting'}
+  ],ingredients:{},sales:[],orders:[],expenses:[],closes:[],cashShifts:[]};
+  const s=buildAiSupervisorSnapshot({doc,audit:[],date:'2026-10-13',now:1});
+  assert.equal(s.metrics.pendingPayments,1);
+  assert.equal(s.alerts.some(x=>x.id==='payment-pending'),true);
+});
