@@ -11,7 +11,10 @@ import {queueActionErrorText,readPendingQueueAction,sendQueueActionDurably,type 
 import {shouldRetainQueuePending} from "@/lib/queue-action-recovery.mjs";
 
 export type HubTab="queue"|"orders"|"stock"|"expenses";
-type QueueOrder={id:string;queueNo:string;pagerNo:number;status:string;time:number;items:{name:string;variant?:string;qty:number;readyQty?:number;calledQty?:number}[]};
+type QueueRecipeUse={id:string;name:string;perCup:number;unit:string};
+type QueuePrepItem={id:string;name:string;variant?:string;qty:number;pendingQty?:number;recipeUsage?:QueueRecipeUse[]};
+type QueuePrepGroup={id:string;label:string;batchMode?:string;items?:QueuePrepItem[]};
+type QueueOrder={id:string;queueNo:string;pagerNo:number;status:string;time:number;items:{id?:string;name:string;variant?:string;qty:number;readyQty?:number;calledQty?:number}[];prepGroups?:QueuePrepGroup[]};
 type Sale={id:string;billNo:string;date:string;time:number;total:number;payment:string;status:string;queueNo:string;itemCount:number;orderStatus?:string|null};
 type ExpenseRow={id:string;date:string;time:number;category:string;description:string;amount:number;paymentMethod?:string;sourceType?:string};
 const n=(v:any)=>Number(v)||0;
@@ -292,11 +295,19 @@ export default function PosOperationsHub({session,bootstrap,open,onClose,onRefre
           {queueRows.length===0?<Empty text={!cloudAvailable?"ออฟไลน์ · ยังไม่ดึงคิวจาก Server":"ไม่มีคิวที่กำลังทำ"}/>:queueRows.map(order=>{
             const total=(order.items||[]).reduce((s,x)=>s+n(x.qty),0),ready=(order.items||[]).reduce((s,x)=>s+Math.min(n(x.qty),n(x.readyQty)),0),called=(order.items||[]).reduce((s,x)=>s+Math.min(n(x.qty),n(x.calledQty)),0);
             const allCalled=total>0&&called>=total,isProduction=productionHead?.id===order.id;
+            const nextIndex=isProduction?(order.items||[]).findIndex(item=>n(item.readyQty)<n(item.qty)):-1;
+            const nextItem=nextIndex>=0?order.items[nextIndex]:null;
+            const prepMatch=nextItem?(order.prepGroups||[]).flatMap(group=>(group.items||[]).map(item=>({group,item}))).find(x=>String(x.item.id||"")===String(nextItem.id||"")&&String(x.item.variant||"")===String(nextItem.variant||"")):null;
             const quick=(isProduction||allCalled)?quickQueueStep(order):null,QuickIcon=quick?.icon;
             return <div key={order.id} className={"rounded-2xl border bg-white p-3 "+(isProduction?"border-[#d4af37] shadow-sm":allCalled?"border-emerald-200":"border-slate-200")}>
               <div className="flex items-center justify-between gap-3"><div><b className="text-base">{order.queueNo}</b><span className="ml-2 text-xs text-slate-500">บัตร {order.pagerNo||"—"}</span>{isProduction&&<span className="ml-2 rounded-full bg-[#fff3bf] px-2 py-1 text-[9px] font-black text-[#765b08]">ทำตอนนี้</span>}{allCalled&&<span className="ml-2 rounded-full bg-emerald-100 px-2 py-1 text-[9px] font-black text-emerald-800">รอลูกค้ารับ</span>}</div><span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-bold uppercase">{order.status}</span></div>
               <div className="mt-2 grid grid-cols-3 gap-2 text-center text-xs"><Metric label="ทั้งหมด" value={total}/><Metric label="ทำแล้ว" value={ready}/><Metric label="เรียกแล้ว" value={called}/></div>
               <p className="mt-2 line-clamp-2 text-xs text-slate-500">{(order.items||[]).map(x=>x.name+" ×"+x.qty).join(" · ")}</p>
+              {isProduction&&nextItem&&<div className="mt-2 rounded-xl border border-[#ead58d] bg-[#fffaf0] p-2.5">
+                <div className="flex flex-wrap items-center justify-between gap-1"><b className="text-[11px] text-slate-800">ทำตอนนี้ · {nextItem.name}</b>{nextItem.variant&&nextItem.variant!=="Standard"&&<span className="rounded-full bg-white px-2 py-0.5 text-[9px] font-bold text-[#765b08]">{nextItem.variant}</span>}</div>
+                {prepMatch?.group?.label&&<p className="mt-1 text-[9px] font-semibold text-[#765b08]">หมวดเบส: {prepMatch.group.label}</p>}
+                {prepMatch?.item?.recipeUsage?.length?<p className="mt-1.5 text-[10px] leading-5 text-slate-600"><span className="font-bold text-slate-700">สูตรต่อแก้ว:</span> {prepMatch.item.recipeUsage.map(row=>row.name+" "+row.perCup+" "+row.unit).join(" · ")}</p>:<p className="mt-1.5 text-[10px] text-slate-500">สูตรละเอียดดูได้ในหน้าคิวเต็ม</p>}
+              </div>}
               {quick&&QuickIcon&&<button disabled={queueBusy||!cloudAvailable} onClick={()=>runQuickQueueAction(order)} className={"mt-3 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl px-4 text-sm font-black disabled:opacity-40 "+(allCalled?"bg-emerald-600 text-white":"bg-[#1F4D3A] text-white")}><QuickIcon size={17}/>{queueBusy?"กำลังยืนยันคิวเดิม…":quick.label}</button>}
               {!isProduction&&!allCalled&&<p className="mt-2 rounded-xl bg-slate-50 px-3 py-2 text-[10px] font-semibold text-slate-500">รอคิวก่อนหน้า · Server บังคับ FIFO</p>}
             </div>
