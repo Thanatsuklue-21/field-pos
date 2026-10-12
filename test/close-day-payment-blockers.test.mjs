@@ -28,12 +28,13 @@ test("close-day POST returns actionable pending payment metadata",async()=>{
   assert.match(block,/sessionIds:pendingPayments\.slice\(0,20\)/);
 });
 
-test("Close Day shows blockers before operator submits and disables close button",async()=>{
+test("Close Day shows blockers before operator submits, deep-links the exact payment, and disables close button",async()=>{
   const ui=await read("app/close/page.tsx");
   assert.match(ui,/type PaymentBlocker=/);
   assert.match(ui,/paymentBlockers\.length/);
   assert.match(ui,/ปิดวันไม่ได้ · มี Payment ค้าง/);
-  assert.match(ui,/router\.push\("\/orders"\)/);
+  assert.match(ui,/router\.push\("\/orders\?resolution="\+encodeURIComponent\(paymentBlockers\[0\]\.id\)\)/);
+  assert.match(ui,/router\.push\("\/orders\?resolution="\+encodeURIComponent\(p\.id\)\)/);
   assert.match(ui,/paymentBlockers\.length>0/);
   const closeFn=ui.slice(ui.indexOf("async function close()"),ui.indexOf("return <section",ui.indexOf("async function close()")));
   assert.match(closeFn,/if\(paymentBlockers\.length\)/);
