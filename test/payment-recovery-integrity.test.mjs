@@ -22,8 +22,9 @@ test("payment recovery integrity rejects malformed JSON and invalid shapes",()=>
 test("POS fails closed before checkout, payment open and hold when recovery storage is corrupt",async()=>{
   const pos=await read("app/pos/page.tsx");
   assert.match(pos,/paymentRecoveryIntegrityIssue/);
-  assert.match(pos,/CRITICAL · ข้อมูล recovery การชำระผิดปกติ/);
-  assert.match(pos,/FAIL CLOSED/);
+  assert.match(pos,/ต้องตรวจรายการชำระเดิมก่อนรับเงินใหม่/);
+  assert.match(pos,/หยุดรับเงินชั่วคราว/);
+  assert.match(pos,/ตรวจออเดอร์ล่าสุด/);
   const checkout=pos.slice(pos.indexOf("async function checkout()"),pos.indexOf("function openPayment()"));
   assert.ok(checkout.indexOf("paymentRecoveryIntegrityIssue()")<checkout.indexOf("setBusy(true)"));
   assert.match(checkout,/ห้ามรับชำระรายการใหม่/);
