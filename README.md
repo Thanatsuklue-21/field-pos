@@ -32,7 +32,7 @@ FIELD POS includes a guarded AI Supervisor layer above the deterministic transac
 
 - The always-on watcher uses deterministic rules for money, payment state, cash variance, stock availability, open FIFO work, expenses and audit patterns. The LLM is never the accounting source of truth.
 - The floating supervisor panel polls a compact authenticated snapshot and can explain what should be handled first.
-- If `OPENAI_API_KEY` is configured, `/api/ai/chat` uses the OpenAI Responses API. Set `OPENAI_MODEL` to the approved model for the deployment. Keys stay server-side and are never exposed to the browser.
+- If `OPENAI_API_KEY` is configured, `/api/ai/chat` uses the OpenAI Responses API. Normal guided analysis defaults to `gpt-5.6-luna`; critical snapshots escalate to `gpt-5.6-terra`. Override globally with `OPENAI_MODEL` or independently with `OPENAI_MODEL_FAST` / `OPENAI_MODEL_DEEP`. Keys stay server-side and are never exposed to the browser.
 - Without an OpenAI key, the same panel falls back to deterministic guidance so core supervision still works.
 - Autonomous actions are deliberately limited to navigation, refresh and explanation. Refunds, paid voids, cash out, stock adjustments, close day and payment overrides remain approval-sensitive human actions.
 - The supervisor must never delete financial records, rewrite audit history, change a closed-day balance or mark an unverified payment paid.
