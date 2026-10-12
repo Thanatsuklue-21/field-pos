@@ -17,7 +17,7 @@ test("POS exposes one in-place operations hub instead of forcing routine page sw
 test("operations hub covers queue orders stock and quick expenses in one dialog",async()=>{
   const hub=await read("components/pos-operations-hub.tsx");
   assert.match(hub,/role="dialog"/);
-  for(const label of ["คิว","ออเดอร์","สต็อก","รายจ่าย"])assert.match(hub,new RegExp(label));
+  for(const label of ["วันนี้","คิว","ออเดอร์","สต็อก","รายจ่าย"])assert.match(hub,new RegExp(label));
   assert.match(hub,/\/api\/pos\/queue/);
   assert.match(hub,/\/api\/pos\/history/);
   assert.match(hub,/bootstrap\?\.menu/);
@@ -307,4 +307,28 @@ test("Quick WASTE exposes waste cost and actionable recipe or stock failures wit
   assert.match(client,/recipe_unavailable/);
   assert.match(client,/code\.startsWith\("stock_shortage:"\)/);
   assert.match(client,/code\.startsWith\("ingredient_missing:"\)/);
+});
+
+
+test("Today tab keeps daily status inside POS without moving close-day mutation into the drawer",async()=>{
+  const hub=await read("components/pos-operations-hub.tsx");
+  assert.match(hub,/type TodaySummary=/);
+  assert.match(hub,/type CloseStatus=/);
+  assert.match(hub,/\/api\/management\/dashboard/);
+  assert.match(hub,/\/api\/close-day/);
+  assert.match(hub,/ยอดขายวันนี้/);
+  assert.match(hub,/ออเดอร์วันนี้/);
+  assert.match(hub,/ยังปิดวันไม่ได้/);
+  assert.match(hub,/คิวค้าง/);
+  assert.match(hub,/ชำระค้าง/);
+  assert.match(hub,/href="\/close"/);
+  assert.doesNotMatch(hub,/api<any>\("\/api\/close-day"[^\n]*method:"POST"/);
+});
+
+test("report-capable operators see Today first so routine status does not require Dashboard navigation",async()=>{
+  const hub=await read("components/pos-operations-hub.tsx");
+  assert.match(hub,/canReport&&"today",canQueue&&"queue"/);
+  assert.match(hub,/\{key:"today",label:"วันนี้"/);
+  assert.match(hub,/if\(name==="todaySummary"\)setTodaySummary/);
+  assert.match(hub,/if\(name==="closeStatus"\)setCloseStatus/);
 });
