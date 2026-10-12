@@ -5,7 +5,8 @@ const read=p=>readFile(new URL("../"+p,import.meta.url),"utf8");
 
 test("POS gives a visible three-step selling flow without adding navigation",async()=>{
   const pos=await read("app/pos/page.tsx");
-  assert.match(pos,/const guideStep=posGuide\.step/);\n  assert.match(pos,/buildPosGuidance/);
+  assert.match(pos,/const guideStep=posGuide\.step/);
+  assert.match(pos,/buildPosGuidance/);
   assert.match(pos,/เลือกเมนู/);
   assert.match(pos,/ตรวจรายการ/);
   assert.match(pos,/รับชำระ/);
