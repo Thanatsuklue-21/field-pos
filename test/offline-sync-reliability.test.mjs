@@ -115,14 +115,32 @@ test("failed cross-operator replay lookup keeps the original bill retryable",asy
   assert.equal(c.calls,2);
 });
 
-test("server cross-operator recovery endpoint exposes only committed fulfilled Offline requests",async()=>{
+test("server cross-operator recovery endpoint exposes only matching committed fulfilled Offline requests",async()=>{
   const api=await readFile(new URL("../lib/api.mjs",import.meta.url),"utf8");
   const start=api.indexOf("if(path==='/api/pos/offline/replay'");
   const end=api.indexOf("if(path==='/api/pos/queue'&&method==='GET')",start);
   const segment=api.slice(start,end);
   assert.ok(start>=0&&end>start);
   assert.match(segment,/mayView\(\{\.\.\.user,active:true\},'order'\)/);
+  assert.match(segment,/expectedTotal=Number\(b\.expectedTotal\)/);
+  assert.match(segment,/invalid_expected_total/);
   assert.match(segment,/getPosRequestReplay\(\{db,requestKey\}\)/);
   assert.match(segment,/committed\.offlineFulfilled!==true/);
+  assert.match(segment,/Math\.abs\(Number\(committed\.total\)-expectedTotal\)>0\.001/);
   assert.match(segment,/offline_request_not_found/);
+});
+
+test("cross-operator replay client binds lookup to the original local amount",async()=>{
+  const seen=[];
+  const c=client({apiImpl:async(path,init)=>{
+    const body=JSON.parse(init.body);seen.push({path,body});
+    if(path==="/api/pos/checkout")throw Object.assign(new Error("request_key_conflict"),{status:409});
+    if(path==="/api/pos/offline/replay")return {...receipt,replayed:true};
+    throw new Error("unexpected_path");
+  }});
+  const result=await c.sync(verified);
+  assert.equal(result.synced,1);
+  assert.equal(seen.length,2);
+  assert.equal(seen[0].body.requestKey,"persisted-key");
+  assert.deepEqual(seen[1],{path:"/api/pos/offline/replay",body:{requestKey:"persisted-key",expectedTotal:55}});
 });
