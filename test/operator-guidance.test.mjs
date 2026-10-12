@@ -66,3 +66,15 @@ test('handoff handler itself refuses delivery until the visible pickup review is
   assert.match(deliver,/pickupReviewId!==orderId/);
   assert.match(deliver,/ต้องตรวจเลขบัตร จำนวนแก้ว และรายการก่อนส่งมอบ/);
 });
+
+
+test('close day is exposed in bootstrap and proactively blocks order entry',async()=>{
+  const api=await read('lib/api.mjs');
+  const client=await read('lib/api-client.ts');
+  const pos=await read('app/pos/page.tsx');
+  assert.match(api,/operational:\{businessDate,dayClosed\}/);
+  assert.match(client,/operational\?:\{businessDate:string;dayClosed:boolean\}/);
+  assert.match(pos,/const salesClosed=!!data\?\.operational\?\.dayClosed/);
+  assert.match(pos,/วันนี้ปิดยอดแล้ว · ระบบไม่อนุญาตให้รับออเดอร์เพิ่ม/);
+  assert.match(pos,/เปิด Payment ไม่ได้จนกว่าจะเริ่มวันธุรกิจใหม่/);
+});
