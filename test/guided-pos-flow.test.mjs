@@ -40,3 +40,14 @@ test("guided flow preserves existing durable checkout entry point",async()=>{
   assert.match(pos,/paymentRecoveryIntegrityIssue\(\)/);
   assert.match(pos,/cartAvailability/);
 });
+
+
+test("POS uses human-readable modifier labels instead of raw sweetness percentages",async()=>{
+  const pos=await read("app/pos/page.tsx");
+  assert.match(pos,/function orderOptionLabel\(label:string\)/);
+  assert.match(pos,/หวานปกติ \(100%\)/);
+  assert.match(pos,/หวานน้อย \(50%\)/);
+  assert.match(pos,/ไม่หวาน \(0%\)/);
+  assert.match(pos,/\{orderOptionLabel\(i\.variant\)\}/);
+  assert.match(pos,/\{orderOptionLabel\(v\.label\)\}/);
+});
