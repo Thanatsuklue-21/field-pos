@@ -396,6 +396,16 @@ function PosView({session}:{session:Session}){
     return "มีเมนูหรือตัวเลือกที่หมดชั่วคราว กรุณาตรวจตะกร้า";
   }
 
+  function selectMenu(product:MenuItem){
+    if(!product.available)return;
+    if(product.variants.length===1){
+      const variant=product.variants[0];
+      const remaining=additionalServingsAvailable({cart:cart.items,menu:data?.menu||[],stock:data?.availabilityStock||{},menuId:product.id,variantLabel:variant.label});
+      if(variant.available&&remaining>0){addVariant(product,variant);return}
+    }
+    setSelected(product);
+  }
+
   function addVariant(product:MenuItem,variant:MenuItem["variants"][number]){
     const remaining=additionalServingsAvailable({cart:cart.items,menu:data?.menu||[],stock:data?.availabilityStock||{},menuId:product.id,variantLabel:variant.label});
     if(!variant.available||remaining<1){setNotice("วัตถุดิบเพียงพออีก 0 แก้วเท่านั้น"+(variant.missingIngredients?.length?" · ขาด: "+variant.missingIngredients.map(x=>x.name).join(", "):""));return}
@@ -945,7 +955,7 @@ function PosView({session}:{session:Session}){
       <div className="soft-scroll mb-3 flex gap-1.5 overflow-x-auto sm:mb-4 sm:gap-2">{cats.map(x=><button key={x} onClick={()=>setCat(x)} className={"shrink-0 rounded-full border px-3 py-1.5 text-[11px] font-semibold sm:px-4 sm:py-2 sm:text-xs "+(cat===x?"border-[#c59b19] bg-[#d4af37] text-black shadow-sm":"border-slate-300 bg-white text-slate-700")}>{x}</button>)}</div>
 
       <div className="soft-scroll min-h-0 flex-1 overflow-auto pb-28 lg:pb-0">
-        <div className="grid grid-cols-2 items-stretch gap-2 sm:gap-3 lg:grid-cols-3 2xl:grid-cols-4">{menu.map(x=><button key={x.id} disabled={!x.available} onClick={()=>setSelected(x)} className="glass group flex min-h-[154px] flex-col overflow-hidden rounded-[20px] text-left sm:min-h-[190px] sm:rounded-[24px] hover:border-[#c59b19] disabled:border-slate-200 disabled:bg-slate-100 disabled:opacity-65"><div className="relative h-20 shrink-0 bg-[#f4ecd0] sm:h-24">{x.image?<img src={x.image} alt={x.name} loading="lazy" decoding="async" fetchPriority="low" className="h-full w-full object-cover"/>:<div className="grid h-full place-items-center text-2xl font-bold text-[#765b08]">{x.name.slice(0,1)}</div>}<div className="absolute right-2 top-2">{!x.available?<span className="rounded-full bg-red-100 px-2 py-1 text-[10px] font-bold text-red-700">หมดชั่วคราว</span>:x.lowStock?<span className="rounded-full bg-amber-100 px-2 py-1 text-[10px] font-bold text-amber-800">เหลือประมาณ {x.maxServings} แก้ว</span>:null}</div></div><div className="flex flex-1 flex-col p-3 sm:p-4"><div className="text-[9px] uppercase tracking-widest text-slate-500 sm:text-[10px]">{x.category||"DRINK"}</div><b className="mt-1 block line-clamp-2 text-sm sm:text-base">{x.name}</b><div className="mt-auto pt-2 text-base font-semibold text-[#765b08] sm:pt-3 sm:text-lg">฿{formatMoney(x.price)}</div>{!x.available&&<small className="mt-2 block text-xs text-red-600">{Array.from(new Set(x.variants.flatMap(v=>v.missingIngredients||[]).map(i=>i.name))).slice(0,2).join(", ")||"สูตรยังไม่พร้อม"}</small>}</div></button>)}</div>
+        <div className="grid grid-cols-2 items-stretch gap-2 sm:gap-3 lg:grid-cols-3 2xl:grid-cols-4">{menu.map(x=><button key={x.id} disabled={!x.available} onClick={()=>selectMenu(x)} className="glass group flex min-h-[154px] flex-col overflow-hidden rounded-[20px] text-left sm:min-h-[190px] sm:rounded-[24px] hover:border-[#c59b19] disabled:border-slate-200 disabled:bg-slate-100 disabled:opacity-65"><div className="relative h-20 shrink-0 bg-[#f4ecd0] sm:h-24">{x.image?<img src={x.image} alt={x.name} loading="lazy" decoding="async" fetchPriority="low" className="h-full w-full object-cover"/>:<div className="grid h-full place-items-center text-2xl font-bold text-[#765b08]">{x.name.slice(0,1)}</div>}<div className="absolute right-2 top-2">{!x.available?<span className="rounded-full bg-red-100 px-2 py-1 text-[10px] font-bold text-red-700">หมดชั่วคราว</span>:x.lowStock?<span className="rounded-full bg-amber-100 px-2 py-1 text-[10px] font-bold text-amber-800">เหลือประมาณ {x.maxServings} แก้ว</span>:null}</div></div><div className="flex flex-1 flex-col p-3 sm:p-4"><div className="text-[9px] uppercase tracking-widest text-slate-500 sm:text-[10px]">{x.category||"DRINK"}</div><b className="mt-1 block line-clamp-2 text-sm sm:text-base">{x.name}</b><div className="mt-auto pt-2 text-base font-semibold text-[#765b08] sm:pt-3 sm:text-lg">฿{formatMoney(x.price)}</div>{!x.available&&<small className="mt-2 block text-xs text-red-600">{Array.from(new Set(x.variants.flatMap(v=>v.missingIngredients||[]).map(i=>i.name))).slice(0,2).join(", ")||"สูตรยังไม่พร้อม"}</small>}</div></button>)}</div>
       </div>
     </div>
 
