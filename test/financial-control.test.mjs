@@ -55,12 +55,12 @@ test('AI control summary prioritizes pending money and open orders',()=>{
 });
 
 test('API and close UI enforce the reviewed close-day path',async()=>{
-  const api=await read('lib/api.mjs'),close=await read('app/close/page.tsx'),shell=await read('components/app-shell.tsx');
+  const api=await read('lib/api.mjs'),control=await read('lib/domain/financial-control.mjs'),close=await read('app/close/page.tsx'),shell=await read('components/app-shell.tsx');
   assert.match(api,/\/api\/control-center/);
   assert.match(api,/\/api\/close-day\/review/);
-  assert.match(api,/close_day_review_stale/);
+  assert.match(api,/validateCloseReview/);\n  assert.match(control,/close_day_review_stale/);
   assert.match(api,/cash_variance_reason_required/);
-  assert.match(api,/cash_variance_owner_confirmation_required/);
+  assert.match(api,/cash_variance_owner_confirmation_required/);\n  assert.match(api,/ownerConfirmRequired:assessment\.ownerConfirmRequired/);
   assert.match(close,/Blind Count 2 รอบ/);
   assert.match(close,/AI ตรวจความถูกต้องก่อนปิดวัน/);
   assert.match(close,/reviewId:review\.id/);
