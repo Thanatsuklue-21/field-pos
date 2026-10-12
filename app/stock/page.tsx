@@ -321,7 +321,7 @@ function StockView({session}:{session:Session}){
       const p=purchaseEdit.purchase;
       await api("/api/stock/purchases/"+encodeURIComponent(p.id),{method:"PATCH",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({totalCost:p.totalCost,purchaseDate:p.purchaseDate,supplier:p.supplier,sourceUrl:p.sourceUrl,imageUrl:p.imageUrl,note:p.note,packageQty:p.packageQty,packageUnit:p.packageUnit,packSize:p.packSize,packSizeUnit:p.packSizeUnit,paymentMethod:p.paymentMethod||"bank"})});
       setPurchaseEdit(null);setMsg("แก้ข้อมูลซื้อแล้ว");await load();
-    }catch(e:any){setMsg(e.message==="purchase_before_reset_read_only"?"รายการนี้อยู่ก่อนจุดล้างข้อมูลทดลอง จึงเก็บไว้อ่านอย่างเดียว":e.message==="invalid_purchase_url"?"ลิงก์ไม่ถูกต้อง":e.message)}finally{setBusy(false)}
+    }catch(e:any){setMsg(e.message==="purchase_before_reset_read_only"?"รายการนี้อยู่ก่อนจุดล้างข้อมูลทดลอง จึงเก็บไว้อ่านอย่างเดียว":e.message==="invalid_purchase_url"?"ลิงก์ไม่ถูกต้อง":e.message==="invalid_purchase_cost"?"ยอดซื้อรวมต้องไม่ติดลบและไม่เกิน 2 ตำแหน่งทศนิยม":e.message)}finally{setBusy(false)}
   }
 
   async function cancelPurchase(x:Ingredient,p:Purchase){
