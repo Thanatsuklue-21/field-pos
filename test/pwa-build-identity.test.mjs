@@ -17,6 +17,9 @@ test("build endpoint exposes only non-sensitive release identity",async()=>{
   assert.ok(block.includes("VERCEL_ENV"));
   assert.ok(block.includes("buildSha"));
   assert.ok(block.includes("environment"));
+  assert.ok(block.includes("FIELD_DB_SCOPE"));
+  assert.ok(block.includes("databaseScope"));
+  assert.ok(block.includes('rawScope==="uat"||rawScope==="production"'));
   assert.ok(!block.includes("TURSO_AUTH_TOKEN"));
   assert.ok(!block.includes("password"));
   assert.ok(!block.includes("csrf"));
@@ -46,4 +49,12 @@ test("PWA readiness exposes backend UAT readiness without reusing production sec
   assert.ok(ui.includes('"Backend / Turso"'));
   assert.ok(ui.includes('"UAT BLOCKED"'));
   assert.ok(ui.includes("ห้ามใช้ Production DB กับ Preview"));
+});
+
+
+test("Preview UAT readiness fails closed unless database scope is uat",async()=>{
+  const route=await read("app/api/[...route]/route.js"),ui=await read("components/pwa-readiness.tsx");
+  assert.ok(route.includes('rawScope==="uat"||rawScope==="production"?rawScope:rawScope?"invalid":"unconfigured"'));
+  assert.ok(ui.includes('build.environment==="preview"?build.databaseScope==="uat"'));
+  assert.ok(ui.includes('uatReady?"UAT READY":"UAT BLOCKED"'));
 });
