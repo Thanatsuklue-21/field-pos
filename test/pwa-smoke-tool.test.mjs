@@ -6,7 +6,7 @@ const read=p=>readFile(new URL("../"+p,import.meta.url),"utf8");
 
 test("PWA smoke tool checks exact deployment identity and install surface without writes",async()=>{
   const script=await read("scripts/pwa-smoke.mjs");
-  for(const token of ["/manifest.webmanifest","/sw.js","/pos","/settings","/api/health","EXPECTED_SHA","build_sha_mismatch","SAFE_OFFLINE_ROUTES"])assert.ok(script.includes(token),token);
+  for(const token of ["/manifest.webmanifest","/sw.js","/pos","/settings","/api/health","EXPECTED_SHA","build_sha_mismatch","databaseScope","preview_database_scope_not_uat","SAFE_OFFLINE_ROUTES"])assert.ok(script.includes(token),token);
   assert.ok(script.includes('method')===false||!script.includes('method:"POST"'));
   assert.ok(!script.includes("/api/pos/checkout"));
   assert.ok(!script.includes("/api/pos/queue"));
