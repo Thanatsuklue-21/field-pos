@@ -158,7 +158,9 @@ test("stale cash resolution is explicit admin-only and only clears the matching 
   assert.ok(pos.includes("window.confirm("));
   assert.ok(pos.includes("ล้างเฉพาะ pending ในเครื่อง ไม่สร้างยอดขายและไม่เปลี่ยน Stock"));
   assert.ok(pos.includes('session.user.role==="admin"&&<button onClick={clearReviewedCashPending}'));
-  assert.ok(pos.includes('router.push("/orders")'));
+  assert.ok(pos.includes('setOpsInitialTab("orders");setOpsOpen(true)'));
+  const hub=await read("components/pos-operations-hub.tsx");
+  assert.ok(hub.includes('href="/orders"'));
 });
 
 test("stale cash keeps ambiguous failures pending and sends authoritative rejection to explicit review",async()=>{
