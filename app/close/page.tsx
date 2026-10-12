@@ -3,7 +3,7 @@ import {useEffect,useState} from "react";
 import AuthGate from "@/components/auth-gate";
 import {api,type Session} from "@/lib/api-client";
 
-type Close={id:string;date:string;revenue:number;cogs:number;expenses:number;purchaseSpend?:number;totalCashOut?:number;grossProfit:number;operatingProfit:number;cash:number;promptpay:number;bank?:number;card?:number;other:number;openingCash?:number;cashIn?:number;cashPaidOut?:number;cashOut?:number;expectedCash?:number;countedCash?:number;cashVariance?:number;orders:number;cups:number;time:number};
+type Close={id:string;date:string;revenue:number;cogs:number;expenses:number;purchaseSpend?:number;totalCashOut?:number;grossProfit:number;operatingProfit:number;cash:number;promptpay:number;bank?:number;card?:number;other:number;openingCash?:number;cashIn?:number;cashPaidOut?:number;cashOut?:number;expectedCash?:number;countedCash?:number;cashVariance?:number;firstCount?:number|null;recountResolved?:boolean;varianceApproved?:boolean;varianceReason?:string;orders:number;cups:number;time:number};
 type Shift={id:string;date:string;status:"open"|"closed";openingCash:number;openedAt:number;openedBy:string;closedAt?:number;cashVariance?:number};
 type Movement={id:string;shiftId:string;date:string;type:"CASH_IN"|"CASH_OUT";amount:number;reason:string;time:number;createdBy:string};
 type CloseData={closes:Close[];shift:Shift|null;businessDate:string;cashMovements:Movement[]};
@@ -11,7 +11,7 @@ type CloseData={closes:Close[];shift:Shift|null;businessDate:string;cashMovement
 export default function CloseDay(){return <AuthGate>{s=><View session={s}/>}</AuthGate>}
 
 function View({session}:{session:Session}){
-  const [rows,setRows]=useState<Close[]>([]),[shift,setShift]=useState<Shift|null>(null),[businessDate,setBusinessDate]=useState(""),[movements,setMovements]=useState<Movement[]>([]),[msg,setMsg]=useState(""),[busy,setBusy]=useState(false),[openingCash,setOpeningCash]=useState("0"),[countedCash,setCountedCash]=useState(""),[movementType,setMovementType]=useState<"CASH_IN"|"CASH_OUT">("CASH_OUT"),[movementAmount,setMovementAmount]=useState(""),[movementReason,setMovementReason]=useState("");
+  const [rows,setRows]=useState<Close[]>([]),[shift,setShift]=useState<Shift|null>(null),[businessDate,setBusinessDate]=useState(""),[movements,setMovements]=useState<Movement[]>([]),[msg,setMsg]=useState(""),[busy,setBusy]=useState(false),[openingCash,setOpeningCash]=useState("0"),[countedCash,setCountedCash]=useState(""),[recount,setRecount]=useState(false),[varianceReview,setVarianceReview]=useState<any>(null),[varianceReason,setVarianceReason]=useState(""),[movementType,setMovementType]=useState<"CASH_IN"|"CASH_OUT">("CASH_OUT"),[movementAmount,setMovementAmount]=useState(""),[movementReason,setMovementReason]=useState("");
   const load=()=>api<CloseData>("/api/close-day").then(x=>{setRows(x.closes||[]);setShift(x.shift||null);setBusinessDate(x.businessDate||"");setMovements(x.cashMovements||[]) });
   useEffect(()=>{load().catch(()=>{})},[]);
 
@@ -38,15 +38,27 @@ function View({session}:{session:Session}){
     finally{setBusy(false)}
   }
 
-  async function close(){
-    const counted=Number(countedCash);
+  async function close(opts:{approveVariance?:boolean}={}){
+    const counted=opts.approveVariance?Number(varianceReview?.secondCount):Number(countedCash);
     if(!shift||shift.status!=="open"){setMsg("กรุณาเปิดร้านและล็อกเงินตั้งต้นก่อนปิดวัน");return}
-    if(!countedCash.trim()||!Number.isFinite(counted)||counted<0){setMsg("กรุณากรอกเงินสดที่นับได้จริง");return}
-    if(!window.confirm("ยืนยันปิดวัน? ระบบจะใช้เงินตั้งต้นที่ล็อกไว้ ฿"+Number(shift.openingCash).toLocaleString()+" และคำนวณเงินสดขาด/เกิน"))return;
+    if(!Number.isFinite(counted)||counted<0||(!opts.approveVariance&&!countedCash.trim())){setMsg("กรุณากรอกเงินสดที่นับได้จริง");return}
+    if(opts.approveVariance&&varianceReason.trim().length<4){setMsg("กรุณาระบุเหตุผลส่วนต่างอย่างน้อย 4 ตัวอักษร");return}
+    if(!opts.approveVariance&&!recount&&!window.confirm("ยืนยันยอดนับครั้งแรก? หากไม่ตรง ระบบจะไม่ปิดวันและจะบังคับให้นับซ้ำแบบ Blind Recount"))return;
     setBusy(true);setMsg("");
-    try{const r=await api<any>("/api/close-day",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({countedCash:counted})});const v=Number(r.close.cashVariance||0);setMsg("ปิดวันสำเร็จ · เงินสด "+(v===0?"ตรงพอดี":v>0?"เกิน ฿"+v.toLocaleString():"ขาด ฿"+Math.abs(v).toLocaleString()));setCountedCash("");await load()}
-    catch(e:any){setMsg(e.message==="day_already_closed"?"วันนี้ถูกปิดวันแล้ว":e.message==="close_day_pending_payments"?"ยังมี Split/Payment ที่ค้างอยู่ กรุณาจัดการให้เสร็จก่อนปิดวัน":e.message==="close_day_open_orders"?"ยังมีออเดอร์ที่ยังไม่ได้ส่งมอบ กรุณาปิดคิวให้ครบก่อนปิดวัน":e.message==="counted_cash_required"?"กรุณากรอกเงินสดที่นับได้จริง":e.message)}
-    finally{setBusy(false)}
+    try{
+      const payload:any={countedCash:counted};
+      if(opts.approveVariance){payload.approveVariance=true;payload.varianceReason=varianceReason.trim()}
+      const r=await api<any>("/api/close-day",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify(payload)});
+      const v=Number(r.close.cashVariance||0);
+      setMsg("ปิดวันสำเร็จ · เงินสด "+(v===0?"ตรงพอดี":v>0?"เกิน ฿"+v.toLocaleString():"ขาด ฿"+Math.abs(v).toLocaleString())+(r.close.recountResolved?" · ตรวจนับซ้ำแล้วตรง":"")+(r.close.varianceApproved?" · Owner อนุมัติส่วนต่างพร้อมเหตุผล":""));
+      setCountedCash("");setRecount(false);setVarianceReview(null);setVarianceReason("");await load();
+    }catch(e:any){
+      if(e.message==="cash_recount_required"){
+        setRecount(true);setCountedCash("");setMsg("⚠️ ยอดนับครั้งแรกไม่ตรง · กรุณานับเงินจริงใหม่ตั้งแต่ต้น ระบบยังไม่เปิดเผย Expected Cash หรือยอดครั้งแรก");
+      }else if(e.message==="cash_variance_requires_review"){
+        setVarianceReview(e.data||null);setCountedCash("");setMsg("🔴 นับซ้ำแล้วยังไม่ตรง · ต้องตรวจสอบสาเหตุและยืนยันโดย Owner ก่อนปิดวัน");
+      }else setMsg(e.message==="variance_reason_required"?"กรุณาระบุเหตุผลส่วนต่าง":e.message==="day_already_closed"?"วันนี้ถูกปิดวันแล้ว":e.message==="close_day_pending_payments"?"ยังมี Split/Payment ที่ค้างอยู่ กรุณาจัดการให้เสร็จก่อนปิดวัน":e.message==="close_day_open_orders"?"ยังมีออเดอร์ที่ยังไม่ได้ส่งมอบ กรุณาปิดคิวให้ครบก่อนปิดวัน":e.message==="counted_cash_required"?"กรุณากรอกเงินสดที่นับได้จริง":e.message);
+    }finally{setBusy(false)}
   }
 
   return <section className="soft-scroll h-full overflow-auto p-3 sm:p-5 md:p-7">
