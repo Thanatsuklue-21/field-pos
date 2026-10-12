@@ -54,6 +54,13 @@ test("unexpected server codes are not shown raw to shop staff",async()=>{
   assert.doesNotMatch(pos,/promptpay_zero_total"[\s\S]{0,180}:\s*\n\s*code;/);
 });
 
+test("production queue never falls back to raw technical error codes",async()=>{
+  const queue=await read("app/queue/page.tsx");
+  assert.match(queue,/setMsg\(errorText\(e\.message\)\)/);
+  assert.match(queue,/ระบบยังเปลี่ยนสถานะคิวไม่ได้/);
+  assert.doesNotMatch(queue,/queue_state_changed"\?"สถานะคิวเปลี่ยนแล้ว ระบบกำลังอัปเดต":code;/);
+});
+
 test("mobile navigation is limited to the core operating workflow",async()=>{
   const shell=await read("components/app-shell.tsx");
   assert.match(shell,/\["\/pos","\/queue","\/orders","\/close","\/settings"\]/);
