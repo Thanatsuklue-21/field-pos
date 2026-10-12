@@ -2,14 +2,16 @@
 
 import {useEffect,useMemo,useRef,useState} from "react";
 import Link from "next/link";
-import {Boxes,ClipboardList,ListOrdered,Plus,ReceiptText,RefreshCw,X} from "lucide-react";
+import {BellRing,Boxes,CheckCircle2,ClipboardList,ListOrdered,Plus,ReceiptText,RefreshCw,X} from "lucide-react";
 import {api,type Bootstrap,type Session} from "@/lib/api-client";
 import {formatMoney} from "@/lib/money-format.mjs";
 import {shouldRetainExpensePending} from "@/lib/expense-recovery.mjs";
 import {currentBusinessDate,expenseErrorText,readPendingExpense,sendExpenseDurably,type ExpenseBody,type PendingExpense} from "@/lib/expense-client";
+import {queueActionErrorText,readPendingQueueAction,sendQueueActionDurably,type QueueActionBody,type PendingQueueAction} from "@/lib/queue-client";
+import {shouldRetainQueuePending} from "@/lib/queue-action-recovery.mjs";
 
 export type HubTab="queue"|"orders"|"stock"|"expenses";
-type QueueOrder={id:string;queueNo:string;pagerNo:number;status:string;time:number;items:{name:string;qty:number;readyQty?:number;calledQty?:number}[]};
+type QueueOrder={id:string;queueNo:string;pagerNo:number;status:string;time:number;items:{name:string;variant?:string;qty:number;readyQty?:number;calledQty?:number}[]};
 type Sale={id:string;billNo:string;date:string;time:number;total:number;payment:string;status:string;queueNo:string;itemCount:number;orderStatus?:string|null};
 type ExpenseRow={id:string;date:string;time:number;category:string;description:string;amount:number;paymentMethod?:string;sourceType?:string};
 const n=(v:any)=>Number(v)||0;
@@ -31,11 +33,13 @@ export default function PosOperationsHub({session,bootstrap,open,onClose,onRefre
   const [loading,setLoading]=useState(false);
   const [message,setMessage]=useState("");
   const [expenseBusy,setExpenseBusy]=useState(false);
+  const [queueBusy,setQueueBusy]=useState(false);
   const [expenseAmount,setExpenseAmount]=useState("");
   const [expenseCategory,setExpenseCategory]=useState("OTHER");
   const [expenseDescription,setExpenseDescription]=useState("");
   const [expensePayment,setExpensePayment]=useState("cash");
   const expenseRecoveryRef=useRef(false);
+  const queueRecoveryRef=useRef(false);
   const activeTabRef=useRef<HubTab>(tab);
   const dialogRef=useRef<HTMLElement|null>(null);
   const previousFocusRef=useRef<HTMLElement|null>(null);
@@ -122,12 +126,71 @@ export default function PosOperationsHub({session,bootstrap,open,onClose,onRefre
       setMessage(shouldRetainExpensePending(e)?"ค่าใช้จ่ายเดิมยังไม่ทราบผล · ระบบเก็บ request เดิมไว้และจะตรวจซ้ำ":expenseErrorText(e.message));
     }finally{expenseRecoveryRef.current=false;setExpenseBusy(false)}
   }
+  async function recoverQueueAction(){
+    if(!canQueue||!cloudAvailable||queueRecoveryRef.current)return;
+    let pending:PendingQueueAction|null=null;
+    try{pending=readPendingQueueAction()}catch(e:any){setMessage(queueActionErrorText(e.message));return}
+    if(!pending)return;
+    queueRecoveryRef.current=true;setQueueBusy(true);
+    try{
+      const result=await sendQueueActionDurably(session.csrf,pending.body);
+      if(Array.isArray(result?.orders))setQueue(result.orders);
+      setMessage("กู้คืน Queue action เดิมสำเร็จ · ไม่ทำรายการซ้ำ");
+    }catch(e:any){
+      setMessage(shouldRetainQueuePending(e)
+        ?"Queue action เดิมยังไม่ทราบผล · ระบบเก็บ request เดิมไว้และจะตรวจซ้ำ"
+        :queueActionErrorText(e.message));
+      await refresh("queue",true).catch(()=>{});
+    }finally{queueRecoveryRef.current=false;setQueueBusy(false)}
+  }
+
+  async function runQuickQueueAction(order:QueueOrder){
+    if(queueBusy||!cloudAvailable)return;
+    const itemIndex=(order.items||[]).findIndex(item=>n(item.readyQty)<n(item.qty));
+    let body:QueueActionBody;
+    let successText="";
+    if(itemIndex>=0){
+      const item=order.items[itemIndex];
+      body={requestKey:crypto.randomUUID(),orderId:order.id,action:"complete_item",itemIndex,expectedReadyQty:n(item.readyQty)};
+      successText="ทำ "+item.name+" ครบแล้ว · ไปขั้นตอนถัดไปในคิวเดิม";
+    }else if((order.items||[]).some(item=>n(item.calledQty)<n(item.qty))){
+      body={requestKey:crypto.randomUUID(),orderId:order.id,action:"call"};
+      successText="เรียกลูกค้า "+order.queueNo+" แล้ว";
+    }else{
+      body={requestKey:crypto.randomUUID(),orderId:order.id,action:"return"};
+      successText="ส่งมอบ "+order.queueNo+" แล้ว · คิวถัดไปพร้อมทำต่อ";
+    }
+    setQueueBusy(true);setMessage("");
+    try{
+      const result=await sendQueueActionDurably(session.csrf,body);
+      if(Array.isArray(result?.orders))setQueue(result.orders);
+      else await refresh("queue",true);
+      setMessage(successText);
+    }catch(e:any){
+      setMessage(shouldRetainQueuePending(e)
+        ?"ผล Queue action ยังไม่ชัดเจน · ระบบเก็บ request เดิมไว้ ห้ามกดซ้ำจนกว่าจะตรวจสำเร็จ"
+        :queueActionErrorText(e.message));
+      await refresh("queue",true).catch(()=>{});
+    }finally{setQueueBusy(false)}
+  }
+
+  function quickQueueStep(order:QueueOrder){
+    const itemIndex=(order.items||[]).findIndex(item=>n(item.readyQty)<n(item.qty));
+    if(itemIndex>=0){
+      const item=order.items[itemIndex];
+      return {label:"ทำ "+item.name+" ครบแล้ว"+(n(item.qty)>1?" ×"+n(item.qty):""),icon:CheckCircle2};
+    }
+    if((order.items||[]).some(item=>n(item.calledQty)<n(item.qty)))return {label:"เรียกลูกค้า "+order.queueNo,icon:BellRing};
+    return {label:"ส่งมอบ "+order.queueNo,icon:CheckCircle2};
+  }
+
 
   useEffect(()=>{
     if(!open)return;
     const sync=(quiet=true)=>{
       refresh("all",quiet).catch(()=>setMessage("โหลดข้อมูลร้านไม่สำเร็จ · หน้าขายยังใช้งานต่อได้"));
       recoverExpense().catch(()=>{});
+      recoverQueueAction().catch(()=>{});
     };
     const onOnline=()=>sync(true);
     const onFocus=()=>sync(true);
@@ -221,15 +284,18 @@ export default function PosOperationsHub({session,bootstrap,open,onClose,onRefre
 
       <div role="tabpanel" id={"field-operations-panel-"+tab} aria-labelledby={"field-operations-tab-"+tab} className="soft-scroll min-h-0 flex-1 overflow-auto p-3 sm:p-4">
         {tab==="queue"&&canQueue&&<div className="space-y-2">
-          {queueRows.length===0?<Empty text={!cloudAvailable?"ออฟไลน์ · ยังไม่ดึงคิวจาก Server":"ไม่มีคิวที่กำลังทำ"}/>:queueRows.map(order=>{
+          {queueRows.length===0?<Empty text={!cloudAvailable?"ออฟไลน์ · ยังไม่ดึงคิวจาก Server":"ไม่มีคิวที่กำลังทำ"}/>:queueRows.map((order,index)=>{
             const total=(order.items||[]).reduce((s,x)=>s+n(x.qty),0),ready=(order.items||[]).reduce((s,x)=>s+Math.min(n(x.qty),n(x.readyQty)),0),called=(order.items||[]).reduce((s,x)=>s+Math.min(n(x.qty),n(x.calledQty)),0);
-            return <div key={order.id} className="rounded-2xl border border-slate-200 bg-white p-3">
-              <div className="flex items-center justify-between gap-3"><div><b className="text-base">{order.queueNo}</b><span className="ml-2 text-xs text-slate-500">บัตร {order.pagerNo||"—"}</span></div><span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-bold uppercase">{order.status}</span></div>
+            const quick=index===0?quickQueueStep(order):null,QuickIcon=quick?.icon;
+            return <div key={order.id} className={"rounded-2xl border bg-white p-3 "+(index===0?"border-[#d4af37] shadow-sm":"border-slate-200")}>
+              <div className="flex items-center justify-between gap-3"><div><b className="text-base">{order.queueNo}</b><span className="ml-2 text-xs text-slate-500">บัตร {order.pagerNo||"—"}</span>{index===0&&<span className="ml-2 rounded-full bg-[#fff3bf] px-2 py-1 text-[9px] font-black text-[#765b08]">คิวปัจจุบัน</span>}</div><span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-bold uppercase">{order.status}</span></div>
               <div className="mt-2 grid grid-cols-3 gap-2 text-center text-xs"><Metric label="ทั้งหมด" value={total}/><Metric label="ทำแล้ว" value={ready}/><Metric label="เรียกแล้ว" value={called}/></div>
               <p className="mt-2 line-clamp-2 text-xs text-slate-500">{(order.items||[]).map(x=>x.name+" ×"+x.qty).join(" · ")}</p>
+              {quick&&QuickIcon&&<button disabled={queueBusy||!cloudAvailable} onClick={()=>runQuickQueueAction(order)} className="mt-3 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#1F4D3A] px-4 text-sm font-black text-white disabled:opacity-40"><QuickIcon size={17}/>{queueBusy?"กำลังยืนยันคิวเดิม…":quick.label}</button>}
             </div>
           })}
-          <FullLink href="/queue" label="เปิดหน้าคิวเต็ม / ทำเครื่องดื่ม"/>
+          <p className="px-1 text-[10px] text-slate-500">ปุ่มด่วนทำงานได้เฉพาะคิวแรก · Server ตรวจ FIFO และสถานะจริงทุกครั้ง</p>
+          <FullLink href="/queue" label="เปิดหน้าคิวเต็ม / รายละเอียดการชง"/>
         </div>}
 
         {tab==="orders"&&canOrder&&<div className="space-y-2">
