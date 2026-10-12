@@ -26,6 +26,14 @@ export default function AiSupervisor({session}:{session:Session|null}){
     }catch(e:any){setError(e?.message==="network_unavailable"?"ออฟไลน์ · ใช้กฎตรวจสอบในระบบเดิมต่อได้ แต่ AI อธิบายยังใช้งานไม่ได้":"AI ยังตอบไม่ได้ กรุณาลองใหม่")}
     finally{setBusy(false)}
   }
+  useEffect(()=>{
+    const handler=(event:Event)=>{
+      const next=String((event as CustomEvent)?.detail?.message||"ช่วยตรวจสิ่งที่ผิดปกติตอนนี้");
+      setOpen(true);setMessage(next);ask(next);
+    };
+    window.addEventListener("field:ai-ask",handler);
+    return()=>window.removeEventListener("field:ai-ask",handler);
+  },[session?.user.id,snap?.revision]);
   function runAction(a:AiReply["actions"][number]){
     if(a.type==="refresh"){load();return}
     if(a.type==="navigate"){router.push(a.href);setOpen(false)}
