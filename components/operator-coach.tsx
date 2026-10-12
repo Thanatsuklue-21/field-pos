@@ -3,8 +3,7 @@
 import {useEffect,useMemo,useState} from "react";
 import {ArrowRight,CheckCircle2,CircleHelp,ShieldCheck,X} from "lucide-react";
 import {usePathname} from "next/navigation";
-
-const KEY="field-operator-coach-v2";
+import {operatorCoachSeenKey,shouldAutoOpenOperatorCoach} from "@/lib/operator-coach-state.mjs";
 type Guide={title:string;rule:string;steps:string[];cta:string};
 
 const guides:Record<string,Guide>={
@@ -17,7 +16,7 @@ const guides:Record<string,Guide>={
       "3 · กด “ทวนแล้ว · พร้อมรับเงิน” แล้วรับเงินตามวิธีที่เลือก",
       "4 · เมื่อชำระสำเร็จ หยิบบัตรเลขที่ระบบแสดงให้ลูกค้า"
     ],
-    cta:"งานขายส่วนใหญ่จบจากหน้าเดียว · งานคิว/สต็อก/รายจ่ายด่วนเปิดจาก “งานร้าน” ได้"
+    cta:"ไม่ต้องจำทุกอย่าง · ดูแถบขั้นตอนด้านบนแล้วทำตามสิ่งที่ระบบชี้ งานคิว/สต็อก/รายจ่ายด่วนเปิดจาก “งานร้าน” ได้"
   },
   queue:{
     title:"ทำเครื่องดื่มตามคิวแบบไม่หลง",
@@ -32,10 +31,11 @@ const guides:Record<string,Guide>={
   }
 };
 
-export default function OperatorCoach(){
+export default function OperatorCoach({operatorId}:{operatorId?:string|null}){
   const path=usePathname();
   const mode=path.startsWith("/queue")?"queue":path.startsWith("/pos")?"pos":"";
   const guide=useMemo(()=>mode?guides[mode]:null,[mode]);
+  const seenKey=useMemo(()=>operatorCoachSeenKey({operatorId,mode}),[operatorId,mode]);
   const [open,setOpen]=useState(false);
   const [busy,setBusy]=useState(false);
 
@@ -50,17 +50,18 @@ export default function OperatorCoach(){
   },[]);
 
   useEffect(()=>{
-    if(!guide||busy)return;
+    if(!guide||busy||!seenKey)return;
     try{
-      if(localStorage.getItem(KEY)!=="seen"){
+      const seenValue=localStorage.getItem(seenKey);
+      if(shouldAutoOpenOperatorCoach({seenKey,seenValue,busy,hasGuide:true})){
         const timer=window.setTimeout(()=>setOpen(true),300);
         return()=>window.clearTimeout(timer);
       }
     }catch{}
-  },[guide,busy]);
+  },[guide,busy,seenKey]);
 
   if(!guide)return null;
-  const close=()=>{setOpen(false);try{localStorage.setItem(KEY,"seen")}catch{}};
+  const close=()=>{setOpen(false);if(!seenKey)return;try{localStorage.setItem(seenKey,"seen")}catch{}};
 
   return <>
     <button type="button" disabled={busy} onClick={()=>setOpen(true)} aria-label="เปิดคู่มือใช้งาน 1 นาที"
