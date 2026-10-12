@@ -4,7 +4,7 @@ import AuthGate from "@/components/auth-gate";
 import {api,type Session} from "@/lib/api-client";
 
 type Close={id:string;date:string;revenue:number;cogs:number;expenses:number;purchaseSpend?:number;totalCashOut?:number;grossProfit:number;operatingProfit:number;cash:number;promptpay:number;bank?:number;card?:number;other:number;openingCash?:number;cashIn?:number;cashPaidOut?:number;cashOut?:number;expectedCash?:number;countedCash?:number;cashVariance?:number;firstCount?:number|null;recountResolved?:boolean;varianceApproved?:boolean;varianceReason?:string;orders:number;cups:number;time:number};
-type Shift={id:string;date:string;status:"open"|"closed";openingCash:number;openedAt:number;openedBy:string;closedAt?:number;cashVariance?:number};
+type Shift={id:string;date:string;status:"open"|"closed";openingCash:number;openedAt:number;openedBy:string;closedAt?:number;cashVariance?:number;recountRequired?:boolean;firstCount?:number;secondCount?:number;varianceReviewRequired?:boolean;lastVariance?:number};
 type Movement={id:string;shiftId:string;date:string;type:"CASH_IN"|"CASH_OUT";amount:number;reason:string;time:number;createdBy:string};
 type CloseData={closes:Close[];shift:Shift|null;businessDate:string;cashMovements:Movement[]};
 
@@ -12,7 +12,7 @@ export default function CloseDay(){return <AuthGate>{s=><View session={s}/>}</Au
 
 function View({session}:{session:Session}){
   const [rows,setRows]=useState<Close[]>([]),[shift,setShift]=useState<Shift|null>(null),[businessDate,setBusinessDate]=useState(""),[movements,setMovements]=useState<Movement[]>([]),[msg,setMsg]=useState(""),[busy,setBusy]=useState(false),[openingCash,setOpeningCash]=useState("0"),[countedCash,setCountedCash]=useState(""),[recount,setRecount]=useState(false),[varianceReview,setVarianceReview]=useState<any>(null),[varianceReason,setVarianceReason]=useState(""),[movementType,setMovementType]=useState<"CASH_IN"|"CASH_OUT">("CASH_OUT"),[movementAmount,setMovementAmount]=useState(""),[movementReason,setMovementReason]=useState("");
-  const load=()=>api<CloseData>("/api/close-day").then(x=>{setRows(x.closes||[]);setShift(x.shift||null);setBusinessDate(x.businessDate||"");setMovements(x.cashMovements||[]) });
+  const load=()=>api<CloseData>("/api/close-day").then(x=>{const next=x.shift||null;setRows(x.closes||[]);setShift(next);setBusinessDate(x.businessDate||"");setMovements(x.cashMovements||[]);setRecount(!!(next&&next.status==="open"&&next.recountRequired)) });
   useEffect(()=>{load().catch(()=>{})},[]);
 
   async function openShift(){
