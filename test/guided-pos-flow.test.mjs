@@ -5,7 +5,7 @@ const read=p=>readFile(new URL("../"+p,import.meta.url),"utf8");
 
 test("POS gives a visible three-step selling flow without adding navigation",async()=>{
   const pos=await read("app/pos/page.tsx");
-  assert.match(pos,/const guideStep=payOpen\?3:cartQty>0\?2:1/);
+  assert.match(pos,/const guideStep=posGuide\.step/);\n  assert.match(pos,/buildPosGuidance/);
   assert.match(pos,/เลือกเมนู/);
   assert.match(pos,/ตรวจรายการ/);
   assert.match(pos,/รับชำระ/);
@@ -26,10 +26,9 @@ test("primary novice-facing POS actions use plain Thai wording",async()=>{
 test("guide advances only from real order and payment state",async()=>{
   const pos=await read("app/pos/page.tsx");
   assert.match(pos,/const cartQty=cart\.items\.reduce/);
-  assert.match(pos,/const guideStep=payOpen\?3:cartQty>0\?2:1/);
-  assert.match(pos,/guideStep===1\?"เลือกเครื่องดื่มจากรายการด้านล่าง"/);
-  assert.match(pos,/guideStep===2\?"ตรวจรายการให้ถูกต้อง/);
-  assert.match(pos,/รับชำระเงินตามยอด แล้วระบบจะออกคิวให้อัตโนมัติ/);
+  assert.match(pos,/const guideStep=posGuide\.step/);
+  assert.match(pos,/const guideMessage=posGuide\.message/);
+  assert.doesNotMatch(pos,/const guideStep=payOpen\?3:cartQty>0\?2:1/);
 });
 
 test("guided flow preserves existing durable checkout entry point",async()=>{
