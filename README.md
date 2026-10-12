@@ -26,6 +26,19 @@ Checkout and queue operations have durable request keys stored in `field_pos_req
 
 The POS keeps cart interactions local and immediate. An unpaid cart can be parked with **Hold Bill** and restored on the same device without creating a sale, deducting stock, or entering the production queue. Restoring a held cart re-reads current menu names, prices, variants and availability before checkout. A held bill cannot be created while a payment result is ambiguous or while the cart is the unpaid remainder of an existing split-payment queue.
 
+## AI Supervisor
+
+FIELD POS includes a guarded AI Supervisor layer above the deterministic transaction core.
+
+- The always-on watcher uses deterministic rules for money, payment state, cash variance, stock availability, open FIFO work, expenses and audit patterns. The LLM is never the accounting source of truth.
+- The floating supervisor panel polls a compact authenticated snapshot and can explain what should be handled first.
+- If `OPENAI_API_KEY` is configured, `/api/ai/chat` uses the OpenAI Responses API. Set `OPENAI_MODEL` to the approved model for the deployment. Keys stay server-side and are never exposed to the browser.
+- Without an OpenAI key, the same panel falls back to deterministic guidance so core supervision still works.
+- Autonomous actions are deliberately limited to navigation, refresh and explanation. Refunds, paid voids, cash out, stock adjustments, close day and payment overrides remain approval-sensitive human actions.
+- The supervisor must never delete financial records, rewrite audit history, change a closed-day balance or mark an unverified payment paid.
+
+This hybrid design keeps the fast path deterministic and inexpensive while reserving model calls for explanation, prioritization and guided workflow.
+
 ## Data and recovery
 
 The server remains authoritative for shared transactions. IndexedDB caches POS bootstrap data and also holds a durable cash outbox: when the browser is explicitly offline, the POS may capture a normal full cash sale locally, project recipe usage against cached stock, and sync the same idempotent request when connectivity returns. Offline mode deliberately disables PromptPay, split bills, loyalty redemption/earning and add-ons to an existing queue. Synced offline sales are recorded as already fulfilled so they do not re-enter the live production FIFO; any stock deficit is preserved for reconciliation. If a write becomes network-ambiguous after transmission starts, keep the original request key and reconcile it instead of creating a second bill.
