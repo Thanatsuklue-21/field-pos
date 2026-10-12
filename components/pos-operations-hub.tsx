@@ -146,6 +146,9 @@ export default function PosOperationsHub({session,bootstrap,open,onClose,onRefre
 
   async function runQuickQueueAction(order:QueueOrder){
     if(queueBusy||!cloudAvailable)return;
+    try{
+      if(readPendingQueueAction()){await recoverQueueAction();return}
+    }catch(e:any){setMessage(queueActionErrorText(e.message));return}
     const itemIndex=(order.items||[]).findIndex(item=>n(item.readyQty)<n(item.qty));
     let body:QueueActionBody;
     let successText="";
