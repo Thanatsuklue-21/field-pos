@@ -11,6 +11,7 @@ test("API client time-bounds only writes with durable transaction recovery",asyn
     "/api/pos/void",
     "/api/pos/refund",
     "/api/expenses",
+    "/api/close-day",
     "/api/stock/transactions",
     "/api/pos/queue",
     "/api/pos/split/start",
@@ -32,9 +33,13 @@ test("non-recoverable operational writes remain excluded while queue is allowed 
   const setStart=api.indexOf("const RECOVERABLE_WRITE_PATHS");
   const setEnd=api.indexOf("]);",setStart);
   const allowlist=api.slice(setStart,setEnd);
-  for(const path of [
-    "/api/close-day"
-  ]) assert.doesNotMatch(allowlist,new RegExp(path.replaceAll("/","\\/")));
+  assert.match(allowlist,/\/api\/close-day/);
+  const closeUi=await read("app/close/page.tsx");
+  const closeRecovery=await read("lib/close-day-recovery.mjs");
+  assert.match(closeUi,/closeDayPendingWrite\(body\)/);
+  assert.match(closeUi,/body:JSON\.stringify\(pending\.body\)/);
+  assert.match(closeUi,/validateCloseDayAck\(r,pending\.body\)/);
+  assert.match(closeRecovery,/shouldRetainCloseDayPending/);
   assert.match(allowlist,/\/api\/pos\/queue/);
   assert.match(allowlist,/\/api\/pos\/void/);
   assert.match(allowlist,/\/api\/pos\/refund/);
