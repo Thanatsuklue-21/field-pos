@@ -73,3 +73,27 @@ test('pending payment risk is scoped to the selected business date and includes 
   assert.equal(s.metrics.pendingPayments,1);
   assert.equal(s.alerts.some(x=>x.id==='payment-pending'),true);
 });
+
+
+test('AI supervisor reuses Financial Control source for large cash movements',()=>{
+  const doc={
+    ingredients:{},
+    sales:[],
+    orders:[],
+    expenses:[],
+    closes:[],
+    cashShifts:[],
+    paymentSessions:[],
+    cashMovements:[{id:'mv1',date:'2026-10-13',type:'CASH_OUT',amount:800,reason:'owner withdrawal'}]
+  };
+  const snapshot=buildAiSupervisorSnapshot({doc,audit:[],date:'2026-10-13',now:1});
+  assert.ok(snapshot.alerts.some(x=>x.id==='large-cash-movement'));
+});
+
+test('Control Center can open the global AI Supervisor for focused analysis',async()=>{
+  const {readFile}=await import('node:fs/promises');
+  const ui=await readFile(new URL('../app/control/page.tsx',import.meta.url),'utf8');
+  assert.match(ui,/field:ai-ask/);
+  assert.match(ui,/ตรวจเงินกับ AI/);
+  assert.match(ui,/ตรวจสต๊อก\/Flow/);
+});
