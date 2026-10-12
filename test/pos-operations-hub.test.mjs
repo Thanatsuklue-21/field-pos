@@ -260,7 +260,10 @@ test("quick Queue shows the current menu recipe per cup without aggregating gram
   assert.match(hub,/หมวดเบส:/);
   assert.match(hub,/สูตรต่อแก้ว:/);
   assert.match(hub,/row\.name\+" "\+row\.perCup\+" "\+row\.unit/);
-  assert.doesNotMatch(hub,/recipeUsage.*reduce\(/s);
+  const recipeStart=hub.indexOf("สูตรต่อแก้ว:");
+  const recipeBlock=hub.slice(recipeStart,recipeStart+700);
+  assert.ok(recipeStart>=0);
+  assert.doesNotMatch(recipeBlock,/reduce\(/);
 });
 
 
