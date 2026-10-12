@@ -54,7 +54,7 @@ for(const route of ['pos/checkout','pos/split/pay'])test(route+' rejects success
   globalThis.fetch=async()=>new Response(JSON.stringify({chargeId:'ch_wrong_currency',status:'SUCCEEDED',amount:5500,currency:'USD'}));
   const body={requestKey:'wrong-currency',payment:'promptpay',method:'promptpay',paymentReference:'ch_wrong_currency',cart:[{id:'qa-latte',variant:'100%',qty:1}]};
   if(route.includes('split')){body.sessionId=(await call('pos/split/start','POST',{requestKey:'currency-reserve',cart:body.cart,mode:'promptpay_full'})).session.id;body.allocations=[{index:0,qty:1}];}
-  const rejected=await call(route,'POST',body,409);assert.equal(rejected.error,'promptpay_currency_mismatch');
+  const rejected=await call(route,'POST',body,409);assert.equal(rejected.error,route.includes('split')?'promptpay_session_charge_mismatch':'promptpay_currency_mismatch');
   const doc=JSON.parse((await db.execute('SELECT document FROM field_state')).rows[0].document);assert.equal(doc.sales.length,0);
 });
 
@@ -66,7 +66,7 @@ test('one paid charge cannot fund another bill or a split payment; original repl
   assert.equal((await call('pos/checkout','POST',body)).orderId,first.orderId);
   assert.equal((await call('pos/checkout','POST',{...body,requestKey:'unique-charge-second'},409)).error,'promptpay_charge_already_used');
   const {session}=await call('pos/split/start','POST',{requestKey:'unique-charge-reserve',cart:body.cart,mode:'promptpay_full'});
-  assert.equal((await call('pos/split/pay','POST',{requestKey:'unique-charge-split',sessionId:session.id,method:'promptpay',paymentReference:body.paymentReference,allocations:[{index:0,qty:1}]},409)).error,'promptpay_charge_already_used');
+  assert.equal((await call('pos/split/pay','POST',{requestKey:'unique-charge-split',sessionId:session.id,method:'promptpay',paymentReference:body.paymentReference,allocations:[{index:0,qty:1}]},409)).error,'promptpay_session_charge_mismatch');
   const doc=JSON.parse((await db.execute('SELECT document FROM field_state')).rows[0].document);
   assert.equal(doc.sales.length,1);assert.equal(doc.paymentSessions[0].payments.length,0);
 });
