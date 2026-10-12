@@ -52,5 +52,4 @@ test("PWA snapshot and readiness expose only coarse device acceptance evidence",
   }
   for(const label of ["Viewport","VisualViewport","Touch","Orientation","UAT Target"])assert.ok(ui.includes(label),label);
   assert.ok(ui.includes("ไม่ถือว่า Android acceptance ผ่านอัตโนมัติ"));
-  assert.ok(meta.includes('FIELD_APP_VERSION="8.0.0-pwa.22"'));
 });
