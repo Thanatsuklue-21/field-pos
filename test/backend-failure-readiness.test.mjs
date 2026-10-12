@@ -10,7 +10,7 @@ function route({configured=false,unavailable=false,vercelEnv="",dbScope=""}={}){
   if(vercelEnv)env.VERCEL_ENV=vercelEnv;
   if(dbScope)env.FIELD_DB_SCOPE=dbScope;
   runInNewContext(source,{exports,Response,process:{env},require(path){
-    if(path.endsWith("db.mjs"))return {getDb:()=>({}),ensureDbSchema:async()=>{initialized++;if(unavailable)throw Error("internal credential-bearing diagnostic must not leak")}};
+    if(path.endsWith("db.mjs"))return {getDb:()=>({execute:async()=>({rows:[{ok:1}]})}),ensureDbSchema:async()=>{initialized++;if(unavailable)throw Error("internal credential-bearing diagnostic must not leak")}};
     if(path.endsWith("api.mjs"))return {createApi:()=>async(req,res)=>{res.writeHead(200,{"Content-Type":"application/json"});res.end(JSON.stringify({ok:true}))}};
     throw Error(path);
   }});
