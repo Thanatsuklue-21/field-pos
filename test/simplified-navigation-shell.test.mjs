@@ -16,8 +16,8 @@ const grouped=routes=>exports.splitNavigation(routes.map(path=>[path]));
 
 test("novice shell exposes only daily top-level destinations while preserving every route",()=>{
   const result=grouped(all);
-  assert.deepEqual(Array.from(result.front,x=>x[0]),["/pos","/dashboard","/close"]);
-  assert.deepEqual(Array.from(result.operations,x=>x[0]),["/queue","/orders","/stock","/expenses"]);
+  assert.deepEqual(Array.from(result.front,x=>x[0]),["/pos"]);
+  assert.deepEqual(Array.from(result.operations,x=>x[0]),["/dashboard","/queue","/orders","/stock","/expenses","/close"]);
   const reachable=new Set([...result.front,...result.operations,...result.management].map(x=>x[0]));
   assert.deepEqual(reachable,new Set(all));
 });
@@ -46,7 +46,7 @@ test("app shell uses one collapsed store-management disclosure on desktop and gr
   assert.match(shell,/>จัดการร้าน<\/span>/);
   assert.match(shell,/aria-expanded=\{manageOpen\}/);
   assert.match(shell,/งานประจำวัน/);
-  assert.match(shell,/งานหน้าร้าน/);
+  assert.match(shell,/งานร้าน/);
   assert.match(shell,/ตั้งค่าและหลังบ้าน/);
   assert.match(shell,/grouped\.front\.map/);
   assert.match(shell,/manageOpen&&/);
