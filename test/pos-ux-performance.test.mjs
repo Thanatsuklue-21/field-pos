@@ -403,7 +403,7 @@ test('payment success prioritizes queue prefetch before noncritical refreshes',a
 
 test('solo operator daily flow keeps routine queue checks in POS with full production fallback',async()=>{
   const shell=await read('components/app-shell.tsx'),pos=await read('app/pos/page.tsx'),hub=await read('components/pos-operations-hub.tsx'),queue=await read('app/queue/page.tsx'),close=await read('app/close/page.tsx');
-  assert.match(shell,/const primaryMobile=\["\/pos","\/queue"\]/);
+  assert.match(shell,/const primaryMobile=\["\/pos"\]/);
   assert.match(shell,/mobileOverflow\(allowed\)/);
   assert.match(pos,/ดูคิว \{lastSale\.queueNo\} ในงานร้าน/);
   assert.match(pos,/setOpsInitialTab\("queue"\);setLastSale\(null\);setOpsOpen\(true\)/);
