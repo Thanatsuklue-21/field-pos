@@ -144,7 +144,7 @@ async function recoverCommittedOfflineReceipt(session:Session,row:OfflineCashRec
   return api<any>("/api/pos/offline/replay",{
     method:"POST",
     headers:{"X-CSRF-Token":session.csrf},
-    body:JSON.stringify({requestKey:row.requestKey})
+    body:JSON.stringify({requestKey:row.requestKey,expectedTotal:Number(row.body.total)})
   });
 }
 
