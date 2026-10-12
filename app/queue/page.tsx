@@ -207,6 +207,7 @@ function QueueView({session}:{session:Session}){
 
   async function deliver(orderId:string){
     if(busyRef.current)return;
+    if(pickupReviewId!==orderId){pulse("ต้องตรวจเลขบัตร จำนวนแก้ว และรายการก่อนส่งมอบ");return}
     const snapshot=data,order=orders.find(x=>x.id===orderId),key="return:"+orderId;busyRef.current=true;setBusy(key);setMsg("");
     optimistic(list=>list.filter(o=>o.id!==orderId));
     pulse("กำลังส่งมอบ "+(order?.queueNo||"คิว")+"…");
