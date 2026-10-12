@@ -12,6 +12,7 @@ export function getPwaUpdateBlockReason(state:SafetyState){
       ["field-pos-pending-expense-v1","มีค่าใช้จ่ายที่ยังต้องยืนยันผล"],
       ["field-pos-pending-stock-transaction-v1","มี Stock transaction ที่ยังต้องยืนยันผล"],
       ["field-pos-pending-order-mutation-v1","มี VOID/Refund ที่ยังต้องยืนยันผล"],
+      ["field-pos-pending-close-day-v1","มีการปิดวันที่ยังต้องยืนยันผล"],
     ];
     for(const [key,reason] of recovery){
       if(state.readLocal(key)!==null||state.readSession(key)!==null)return reason;
