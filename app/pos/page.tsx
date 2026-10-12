@@ -926,7 +926,7 @@ function PosView({session}:{session:Session}){
         </div>
       </div>
 
-      <div data-pos-guidance={posGuide.key} aria-label="ขั้นตอนการขาย" className={"mb-3 rounded-2xl border px-3 py-2.5 sm:px-4 sm:py-3 "+guideTone}>
+      {posGuide.key!=="recovery"&&<div data-pos-guidance={posGuide.key} aria-label="ขั้นตอนการขาย" className={"mb-3 rounded-2xl border px-3 py-2.5 sm:px-4 sm:py-3 "+guideTone}>
         {posGuide.progress>0&&<div className="mb-2 grid grid-cols-4 gap-1" aria-hidden="true">{["เลือกเมนู","ตรวจรายการ","รับชำระ","รับบัตร"].map((label,index)=>{const step=index+1,done=posGuide.progress>step,active=posGuide.progress===step;return <div key={label} className="min-w-0"><div className={"h-1.5 rounded-full "+(done||active?"bg-current":"bg-slate-200")}/><div className={"mt-1 truncate text-[9px] font-bold "+(active?"opacity-100":"opacity-50")}>{label}</div></div>})}</div>}
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
@@ -936,7 +936,7 @@ function PosView({session}:{session:Session}){
           </div>
           {posGuide.action&&<button type="button" disabled={busy} onClick={runGuideAction} className="min-h-11 shrink-0 rounded-xl bg-slate-900 px-3 text-xs font-black text-white disabled:opacity-40 sm:px-4">{posGuide.actionLabel}</button>}
         </div>
-      </div>
+      </div>}
 
       {offlineStats.total>0&&<div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
         <span role="status" aria-live="polite" aria-atomic="true">บิล Offline รอส่ง {offlineStats.pending} · ต้องตรวจสอบ {offlineStats.needsReview}</span>
