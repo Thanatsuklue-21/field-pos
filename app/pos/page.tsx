@@ -118,6 +118,7 @@ function PosView({session}:{session:Session}){
   const heldBills=useHeldCartStore();
 
   useEffect(()=>{router.prefetch("/queue")},[router]);
+  useEffect(()=>{window.dispatchEvent(new CustomEvent("field:transaction-busy",{detail:{busy:busy||payOpen,source:"pos"}}));return()=>{window.dispatchEvent(new CustomEvent("field:transaction-busy",{detail:{busy:false,source:"pos"}}));}},[busy,payOpen]);
 
   const acceptBootstrap=(next:Bootstrap|RevisionUnchanged)=>{
     if(next?.unchanged===true)return false;
