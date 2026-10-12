@@ -37,7 +37,7 @@ test("offline sale never fabricates an authoritative receipt before sync",async(
   const end=pos.indexOf("function finishSale",start);
   const block=pos.slice(start,end);
   assert.doesNotMatch(block,/receipt:/);
-  assert.match(pos,/ใบเสร็จจริงจะพิมพ์ได้หลัง Sync สำเร็จ/);
+  assert.match(pos,/ใบเสร็จจริงจะพิมพ์ได้หลังซิงก์สำเร็จ/);
 });
 
 test("receipt renderer supports both common thermal paper widths",async()=>{

@@ -318,7 +318,7 @@ export default function PosOperationsHub({session,bootstrap,open,onClose,onRefre
     <aside ref={dialogRef} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="field-operations-title" onClick={e=>e.stopPropagation()} className="flex max-h-[88dvh] w-full flex-col rounded-t-[28px] bg-[#f6f7f8] shadow-2xl outline-none sm:h-full sm:max-h-none sm:w-[520px] sm:rounded-none sm:border-l sm:border-slate-300">
       <div className="mx-auto mt-2 h-1 w-12 rounded-full bg-slate-300 sm:hidden"/>
       <header className="flex items-start justify-between gap-3 border-b border-slate-200 bg-white px-4 py-4 sm:px-5">
-        <div><p className="m-0 text-[10px] font-black tracking-[.22em] text-[#765b08]">FIELD OPERATIONS</p><h2 id="field-operations-title" className="mt-1 text-xl font-black text-slate-900">งานร้าน</h2><p className="mt-1 text-xs text-slate-500">ดูงานหลักและบันทึกรายจ่ายด่วนโดยไม่ออกจากหน้า POS</p></div>
+        <div><p className="m-0 text-[10px] font-black tracking-[.22em] text-[#765b08]">งานร้าน FIELD</p><h2 id="field-operations-title" className="mt-1 text-xl font-black text-slate-900">งานร้าน</h2><p className="mt-1 text-xs text-slate-500">ดูงานหลักและบันทึกรายจ่ายด่วนโดยไม่ออกจากหน้า POS</p></div>
         <div className="flex gap-1"><button disabled={loading} onClick={()=>refresh(tab)} aria-label="รีเฟรชแท็บงานร้าน" className="grid h-11 w-11 place-items-center rounded-xl border border-slate-200 bg-white disabled:opacity-40"><RefreshCw size={17}/></button><button onClick={onClose} aria-label="ปิดงานร้าน" className="grid h-11 w-11 place-items-center rounded-xl border border-slate-200 bg-white"><X size={18}/></button></div>
       </header>
 
