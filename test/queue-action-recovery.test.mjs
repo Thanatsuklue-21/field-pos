@@ -31,16 +31,16 @@ test("queue pending is retained only for ambiguous transport/server outcomes",()
   }
 });
 
-test("queue UI persists exact action body before sending and replays the same pending request",async()=>{
+test("shared queue client persists exact action body before sending and queue UI replays it",async()=>{
+  const client=await read("lib/queue-client.ts");
   const queue=await read("app/queue/page.tsx");
-  const start=queue.indexOf("async function sendQueueAction");
-  const end=queue.indexOf("useEffect(()=>",start);
-  const block=queue.slice(start,end);
-  assert.match(block,/queuePendingRead\(\)/);
-  assert.match(block,/queuePendingWrite\(body\)/);
+  const start=client.indexOf("export async function sendQueueActionDurably");
+  const block=client.slice(start);
+  assert.match(block,/readPendingQueueAction\(\)/);
+  assert.match(block,/writePendingQueueAction\(body\)/);
   assert.match(block,/body:JSON\.stringify\(pending\.body\)/);
-  assert.ok(block.indexOf("queuePendingWrite(body)")<block.indexOf('api<any>("/api/pos/queue"'));
-  assert.match(block,/if\(!shouldRetainQueuePending\(e\)\)queuePendingClear\(\)/);
+  assert.ok(block.indexOf("writePendingQueueAction(body)")<block.indexOf('api<any>("/api/pos/queue"'));
+  assert.match(block,/if\(!shouldRetainQueuePending\(error\)\)clearPendingQueueAction\(\)/);
 
   const recoverStart=queue.indexOf('setBusy("recover:"');
   const recoverBlock=queue.slice(recoverStart,recoverStart+1700);
@@ -61,13 +61,13 @@ test("all operator queue mutations use durable sendQueueAction including WASTE a
 
 test("queue write timeout is enabled only after durable action recovery exists",async()=>{
   const client=await read("lib/api-client.ts");
-  const queue=await read("app/queue/page.tsx");
+  const queueClient=await read("lib/queue-client.ts");
   const recovery=await read("lib/queue-action-recovery.mjs");
   assert.match(client,/RECOVERABLE_WRITE_PATHS=new Set\(\[[\s\S]*"\/api\/pos\/queue"/);
   assert.match(recovery,/field-pos-pending-queue-action-v1/);
-  assert.match(queue,/QUEUE_PENDING_KEY/);
-  assert.match(queue,/queue_action_pending/);
-  assert.match(queue,/queue_recovery_storage_unavailable/);
+  assert.match(queueClient,/QUEUE_PENDING_KEY/);
+  assert.match(queueClient,/queue_action_pending/);
+  assert.match(queueClient,/queue_recovery_storage_unavailable/);
 });
 
 test("server queue action idempotency still precedes mutation and WASTE is replay-safe",async()=>{
@@ -110,10 +110,9 @@ test("queue action pending clears only after exact server acknowledgement",async
     {ok:true,orderId:"order-1",action:"waste_remake",revision:1.5}
   ]) assert.throws(()=>validateQueueActionAck(bad,body),/queue_action_unconfirmed/);
 
-  const queue=await read("app/queue/page.tsx");
-  const start=queue.indexOf("async function sendQueueAction");
-  const end=queue.indexOf("useEffect(()=>",start);
-  const block=queue.slice(start,end);
-  assert.ok(block.indexOf("validateQueueActionAck(r,pending.body)")<block.indexOf("queuePendingClear()"));
-  assert.match(queue,/queue_action_unconfirmed/);
+  const client=await read("lib/queue-client.ts");
+  const start=client.indexOf("export async function sendQueueActionDurably");
+  const block=client.slice(start);
+  assert.ok(block.indexOf("validateQueueActionAck(result,pending.body)")<block.indexOf("clearPendingQueueAction()"));
+  assert.match(client,/queue_action_unconfirmed/);
 });
