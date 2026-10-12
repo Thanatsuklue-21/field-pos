@@ -58,11 +58,11 @@ test("network status supports syncing and recoverable sync errors",async()=>{
   assert.ok(net.includes("field:sync"));
 });
 
-test("POS menu images are lazy and PWA shell prioritizes core operator routes",async()=>{
+test("POS menu images are lazy and PWA shell keeps selling as the persistent operator route",async()=>{
   const pos=await read("app/pos/page.tsx"),shell=await read("components/app-shell.tsx");
   assert.ok(pos.includes('loading="lazy"'));
   assert.ok(pos.includes('decoding="async"'));
-  assert.ok(shell.includes('primaryMobile=["/pos","/queue"]'));
+  assert.ok(shell.includes('primaryMobile=["/pos"]'));
   assert.ok(shell.includes('mobileOverflow(allowed)'));
 });
 
