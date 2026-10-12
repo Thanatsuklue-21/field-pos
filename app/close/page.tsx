@@ -89,12 +89,13 @@ function View({session}:{session:Session}){
     {session.user.role==="admin"&&paymentBlockers.length>0&&<div className="mt-4 rounded-2xl border border-red-300 bg-red-50 p-4 sm:p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div><b className="text-red-900">ปิดวันไม่ได้ · มี Payment ค้าง {paymentBlockers.length} รายการ</b><p className="mt-1 text-xs text-red-700">ต้องเคลียร์ collecting / requires_resolution ให้จบก่อน เพื่อไม่ให้ยอดขาย Stock และเงินรับชำระค้างข้ามวัน</p></div>
-        <button onClick={()=>router.push("/orders")} className="min-h-11 rounded-xl bg-red-800 px-4 text-xs font-bold text-white">ไป Orders / Payment Resolution</button>
+        <button onClick={()=>router.push("/orders?resolution="+encodeURIComponent(paymentBlockers[0].id))} className="min-h-11 rounded-xl bg-red-800 px-4 text-xs font-bold text-white">ไป Orders / Payment Resolution</button>
       </div>
       <div className="mt-3 space-y-2">{paymentBlockers.map(p=><div key={p.id} className="rounded-xl border border-red-200 bg-white p-3 text-xs">
         <div className="flex flex-wrap items-center justify-between gap-2"><b>{p.id}</b><span className={"rounded-full px-2 py-1 text-[10px] font-black "+(p.status==="requires_resolution"?"bg-red-100 text-red-800":"bg-amber-100 text-amber-800")}>{p.status}</span></div>
         <div className="mt-1 text-slate-600">ยอด ฿{formatMoney(p.total)} · Pager {p.pager||"—"} · {p.mode}</div>
         <div className="mt-1 text-slate-500">Provider {p.provider||"—"} · Charge {p.chargeId||"—"} · Status {p.providerStatus||"—"} · Payments {p.payments}</div>
+        <div className="mt-2 flex justify-end"><button type="button" onClick={()=>router.push("/orders?resolution="+encodeURIComponent(p.id))} className="min-h-11 rounded-xl border border-red-300 bg-red-50 px-3 text-[11px] font-bold text-red-900">ตรวจ Payment นี้โดยตรง</button></div>
       </div>)}</div>
     </div>}
 

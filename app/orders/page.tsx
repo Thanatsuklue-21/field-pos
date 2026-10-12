@@ -56,6 +56,7 @@ function OrdersView({session}:{session:Session}){
   const [resolutions,setResolutions]=useState<PaymentResolution[]>([]);
   const [resolutionBusy,setResolutionBusy]=useState<string|null>(null);
   const [resolutionChargeIds,setResolutionChargeIds]=useState<Record<string,string>>({});
+  const [resolutionTarget,setResolutionTarget]=useState<string|null>(null);
   const orderMutationRecoveryRef=useRef(false);
 
   async function loadResolutions(){
@@ -73,7 +74,10 @@ function OrdersView({session}:{session:Session}){
       if(latest)setDetail(latest);
     }
     if(openFromQuery&&typeof window!=="undefined"){
-      const queue=new URLSearchParams(window.location.search).get("queue")||"";
+      const params=new URLSearchParams(window.location.search);
+      const queue=params.get("queue")||"";
+      const resolution=params.get("resolution")||"";
+      if(resolution)setResolutionTarget(resolution);
       if(queue){
         setQ(queue);
         const hit=x.sales.find(s=>s.queueNo===queue);
@@ -81,6 +85,18 @@ function OrdersView({session}:{session:Session}){
       }
     }
   }
+
+  useEffect(()=>{
+    if(!resolutionTarget||!resolutions.some(r=>r.id===resolutionTarget))return;
+    const id="payment-resolution-"+resolutionTarget;
+    const frame=requestAnimationFrame(()=>{
+      const node=document.getElementById(id);
+      if(!node)return;
+      node.scrollIntoView({behavior:"smooth",block:"center"});
+      node.focus({preventScroll:true});
+    });
+    return()=>cancelAnimationFrame(frame);
+  },[resolutionTarget,resolutions]);
 
   function orderMutationErrorText(code:string){
     return code==="order_mutation_pending"?"มี VOID/Refund เดิมที่ยังไม่ทราบผล · ระบบจะตรวจ request เดิมก่อน":
@@ -340,7 +356,7 @@ function OrdersView({session}:{session:Session}){
           const amount=Number(ev?.amount??r.providerCharge?.amount??r.total);
           const amountMismatch=Number.isFinite(amount)&&Math.abs(amount-Number(r.total))>0.009;
           const refMismatch=!!ev?.referenceId&&ev.referenceId!==r.id;
-          return <div key={r.id} className="rounded-xl border border-amber-200 bg-white p-3 text-xs">
+          return <div key={r.id} id={"payment-resolution-"+r.id} tabIndex={-1} className={"rounded-xl border border-amber-200 bg-white p-3 text-xs outline-none transition "+(resolutionTarget===r.id?"ring-2 ring-red-500 ring-offset-2":"")}>
             <div className="flex flex-wrap items-start justify-between gap-2">
               <div>
                 <b className="text-slate-900">{r.id}</b>
