@@ -556,6 +556,7 @@ function PosView({session}:{session:Session}){
 
   async function checkout(){
     if(!cart.items.length||busy||!payableItems.length)return;
+    if(!reviewConfirmed){setResult("ต้องทวนเมนู · จำนวน · ความหวาน · ยอดกับลูกค้าก่อนรับเงิน");return}
     setBusy(true);
     setResult("");
     try{
