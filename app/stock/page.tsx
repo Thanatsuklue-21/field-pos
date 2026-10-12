@@ -156,7 +156,8 @@ function StockView({session}:{session:Session}){
     window.addEventListener("focus",onFocus);
     document.addEventListener("visibilitychange",onVisible);
     return()=>{disposed=true;window.removeEventListener("online",onOnline);window.removeEventListener("focus",onFocus);document.removeEventListener("visibilitychange",onVisible)};
-  },[]
+  },[]);
+
   async function sendCycleCount(body:CycleCountBody){
     const stockPending=stockPendingRead();
     if(stockPending)throw Object.assign(new Error("stock_transaction_pending"),{status:409});
@@ -209,7 +210,6 @@ function StockView({session}:{session:Session}){
     document.addEventListener("visibilitychange",onVisible);
     return()=>{disposed=true;window.removeEventListener("online",onOnline);window.removeEventListener("focus",onFocus);document.removeEventListener("visibilitychange",onVisible)};
   },[]);
-);
   const rows=useMemo(()=>(data?.ingredients||[]).filter(x=>x.archived===(tab==="archived")&&(x.name+" "+x.id).toLowerCase().includes(q.toLowerCase())),[data,q,tab]);
   const active=(data?.ingredients||[]).filter(x=>!x.archived),low=active.filter(x=>x.lowStock);
   const purchaseHistory=useMemo(()=>(data?.ingredients||[]).flatMap(i=>(i.recentPurchases||[]).map(p=>({ingredient:i,p}))).sort((a,b)=>b.p.createdAt-a.p.createdAt).slice(0,60),[data]);
