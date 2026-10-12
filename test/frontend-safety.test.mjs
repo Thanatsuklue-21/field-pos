@@ -8,7 +8,7 @@ test('POS availability disables unavailable products and variants before payment
 test('POS gives an in-place stock diagnosis path when every sellable product is unavailable',async()=>{const pos=await read('app/pos/page.tsx');assert.match(pos,/ดูปัญหา Stock ในงานร้าน/);assert.match(pos,/setOpsInitialTab\("stock"\);setOpsOpen\(true\)/);assert.match(pos,/เมนูทั้งหมดถูกพักขายชั่วคราว/);assert.doesNotMatch(pos.slice(pos.indexOf("allUnavailable&&"),pos.indexOf("allUnavailable&&")+1200),/router\.push\("\/stock"\)/)});
 test('POS and product management render menu photos and offer a real file upload control',async()=>{const pos=await read('app/pos/page.tsx'),products=await read('app/products/page.tsx');assert.match(pos,/x\.image/);assert.match(products,/type="file"/);assert.match(products,/accept="image\/jpeg,image\/png,image\/webp"/);assert.match(products,/compressMenuImage/);assert.match(products,/\/image/)});
 
-test('POS removes stale unavailable persisted cart items before checkout',async()=>{const pos=await read('app/pos/page.tsx');assert.match(pos,/!currentVariant\.available/);assert.match(pos,/ออกจากตะกร้าอัตโนมัติ/);assert.match(pos,/blockedKeys=new Set/);assert.match(pos,/กด CHECKOUT อีกครั้ง/)});
+test('POS removes stale unavailable persisted cart items before checkout',async()=>{const pos=await read('app/pos/page.tsx');assert.match(pos,/!currentVariant\.available/);assert.match(pos,/ออกจากตะกร้าอัตโนมัติ/);assert.match(pos,/blockedKeys=new Set/);assert.match(pos,/กด “ตรวจรายการ \/ ชำระเงิน” อีกครั้ง/)});
 
 test('login does not publicly prefill the admin username',async()=>{const gate=await read('components/auth-gate.tsx');assert.match(gate,/setUsername\]=useState\(""/);assert.doesNotMatch(gate,/useState\("admin"\)/)});
 
