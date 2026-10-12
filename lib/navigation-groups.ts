@@ -3,7 +3,7 @@ export const OPERATION_ROUTES=["/queue","/orders","/stock","/expenses"] as const
 export const MANAGEMENT_ROUTES=["/products","/costs","/customers","/recipes","/reports","/backup","/users","/audit","/settings"] as const;
 
 export function splitNavigation<T extends readonly [string,...unknown[]]>(allowed:readonly T[]){
-  const by=(routes:readonly string[])=>allowed.filter(([href])=>routes.includes(String(href)));
+  const by=(routes:readonly string[])=>routes.flatMap(route=>allowed.filter(([href])=>String(href)===route));
   const known=new Set([...FRONT_COUNTER_ROUTES,...OPERATION_ROUTES,...MANAGEMENT_ROUTES]);
   return {
     front:by(FRONT_COUNTER_ROUTES),
