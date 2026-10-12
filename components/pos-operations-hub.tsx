@@ -183,8 +183,8 @@ export default function PosOperationsHub({session,bootstrap,open,onClose,onRefre
   function quickQueueStep(order:QueueOrder){
     const itemIndex=(order.items||[]).findIndex(item=>n(item.readyQty)<n(item.qty));
     if(itemIndex>=0){
-      const item=order.items[itemIndex];
-      return {label:"ทำ "+item.name+" ครบแล้ว"+(n(item.qty)>1?" ×"+n(item.qty):""),icon:CheckCircle2};
+      const item=order.items[itemIndex],remaining=Math.max(0,n(item.qty)-n(item.readyQty));
+      return {label:"ทำ "+item.name+" ครบ"+(remaining>1?" · อีก "+remaining+" แก้ว":""),icon:CheckCircle2};
     }
     if((order.items||[]).some(item=>n(item.calledQty)<n(item.qty)))return {label:"เรียกลูกค้า "+order.queueNo,icon:BellRing};
     return {label:"ส่งมอบ "+order.queueNo,icon:CheckCircle2};
