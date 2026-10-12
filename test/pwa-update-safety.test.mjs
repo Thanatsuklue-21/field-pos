@@ -12,7 +12,7 @@ const {getPwaUpdateBlockReason:reason,activateSafePwaUpdate:activate}=exports;
 const safe=()=>({cartCount:0,busy:false,syncing:false,readLocal:()=>null,readSession:()=>null});
 
 test("idle state permits update",()=>assert.equal(reason(safe()),""));
-for(const key of ["field-pos-pending-promptpay-v1","field-pos-pending-cash-v1","field-pos-split-group-v1","field-pos-edit-cash-v1","field-pos-pending-queue-action-v1","field-pos-pending-expense-v1","field-pos-pending-stock-transaction-v1","field-pos-pending-order-mutation-v1"]){
+for(const key of ["field-pos-pending-promptpay-v1","field-pos-pending-cash-v1","field-pos-split-group-v1","field-pos-edit-cash-v1","field-pos-pending-queue-action-v1","field-pos-pending-expense-v1","field-pos-pending-stock-transaction-v1","field-pos-pending-order-mutation-v1","field-pos-pending-close-day-v1"]){
   for(const read of ["readLocal","readSession"]){
     test(`${key} in ${read} blocks update even when malformed or empty`,()=>{
       for(const value of ["","{broken","{}"]){assert.notEqual(reason({...safe(),[read]:candidate=>candidate===key?value:null}),"")}
