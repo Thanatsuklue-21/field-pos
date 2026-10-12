@@ -6,7 +6,7 @@ import ts from "typescript";
 const exports={};
 runInNewContext(ts.transpileModule(await readFile(new URL("../lib/mobile-navigation.ts",import.meta.url),"utf8"),{compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText,{exports});
 const more=routes=>Array.from(exports.mobileOverflow(routes.map(path=>[path])),row=>row[0]);
-const primary=["/pos","/queue"];
+const primary=["/pos"];
 const all=["/dashboard",...primary,"/products","/stock","/costs","/expenses","/customers","/recipes","/close","/orders","/reports","/backup","/users","/audit","/settings"];
 test("every permitted admin destination is reachable on a phone",()=>{
   const overflow=more(all);
@@ -14,10 +14,10 @@ test("every permitted admin destination is reachable on a phone",()=>{
   assert.equal(overflow.length,all.length-primary.length);
 });
 test("operational overflow actions retain priority before administration",()=>{
-  assert.deepEqual(more(all).slice(0,5),["/orders","/stock","/expenses","/close","/settings"]);
+  assert.deepEqual(more(all).slice(0,6),["/queue","/orders","/stock","/expenses","/close","/settings"]);
 });
 test("restricted staff menu never gains admin destinations",()=>{
-  assert.deepEqual(more(["/pos","/queue","/orders","/stock","/settings"]),["/orders","/stock","/settings"]);
+  assert.deepEqual(more(["/pos","/queue","/orders","/stock","/settings"]),["/queue","/orders","/stock","/settings"]);
 });
 test("offline operator can reach only the permitted safe overflow",()=>{
   assert.deepEqual(more(["/pos","/settings"]),["/settings"]);
@@ -41,4 +41,12 @@ test("mobile More modal preserves keyboard and scroll safety",async()=>{
   assert.match(shell,/dialog\?\.contains\(active\)/);
   assert.match(shell,/moreTriggerRef\.current\?\.focus\(\)/);
   assert.match(shell,/onClick=\{closeMore\}/);
+});
+
+
+test("mobile navigation keeps POS as the only persistent destination and moves Queue into first overflow position",()=>{
+  const routes=["/pos","/queue","/orders","/stock","/expenses","/settings"];
+  const overflow=more(routes);
+  assert.deepEqual(overflow.slice(0,5),["/queue","/orders","/stock","/expenses","/settings"]);
+  assert.equal(overflow.includes("/pos"),false);
 });
