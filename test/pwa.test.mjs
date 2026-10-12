@@ -62,7 +62,7 @@ test("POS menu images are lazy and PWA shell prioritizes core operator routes",a
   const pos=await read("app/pos/page.tsx"),shell=await read("components/app-shell.tsx");
   assert.ok(pos.includes('loading="lazy"'));
   assert.ok(pos.includes('decoding="async"'));
-  assert.ok(shell.includes('primaryMobile=["/pos","/queue"]'));
+  assert.ok(shell.includes('primaryMobile=["/pos"]'));
   assert.ok(shell.includes('mobileOverflow(allowed)'));
 });
 
