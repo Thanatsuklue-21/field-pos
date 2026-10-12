@@ -30,5 +30,6 @@ test("PWA tests validate version contracts without pinning stale cache numbers",
   assert.doesNotMatch(pwa,/field-pwa-v21/);
   assert.doesNotMatch(pwa,/8\.0\.0-pwa\.20/);
   assert.match(offline,/field-pwa-v\\d\+/);
-  assert.match(pwa,/FIELD_APP_VERSION="8\\\.0\\\.0-pwa\\\.\\(\\d\\\+\\)"/);
+  assert.match(pwa,/const appVersion=meta\.match/);
+  assert.match(pwa,/FIELD_APP_VERSION/);
 });
