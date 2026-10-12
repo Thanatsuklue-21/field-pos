@@ -85,3 +85,11 @@ test("POS shows a four-stage visual flow but recovery blockers suppress false pr
   const blocked=buildPosGuidance({recoveryBlocked:true,canOrder:true});
   assert.equal(blocked.progress,0);
 });
+
+
+test("recovery state uses the detailed recovery card as the single visible action instead of duplicating the guide",async()=>{
+  const pos=await read("app/pos/page.tsx");
+  assert.match(pos,/posGuide\.key!=="recovery"&&<div data-pos-guidance/);
+  assert.match(pos,/CRITICAL · ข้อมูล recovery การชำระผิดปกติ/);
+  assert.match(pos,/ต้องตรวจรายการเงินสดค้างก่อนรับบิลใหม่/);
+});
