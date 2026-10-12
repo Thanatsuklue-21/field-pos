@@ -7,7 +7,7 @@ const exports={};
 runInNewContext(ts.transpileModule(await readFile(new URL("../lib/mobile-navigation.ts",import.meta.url),"utf8"),{compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText,{exports});
 const more=routes=>Array.from(exports.mobileOverflow(routes.map(path=>[path])),row=>row[0]);
 const primary=["/pos"];
-const all=["/dashboard",...primary,"/products","/stock","/costs","/expenses","/customers","/recipes","/close","/orders","/reports","/backup","/users","/audit","/settings"];
+const all=["/dashboard",...primary,"/queue","/products","/stock","/costs","/expenses","/customers","/recipes","/close","/orders","/reports","/backup","/users","/audit","/settings"];
 test("every permitted admin destination is reachable on a phone",()=>{
   const overflow=more(all);
   assert.deepEqual(new Set([...primary,...overflow]),new Set(all));
