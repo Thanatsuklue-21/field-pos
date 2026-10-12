@@ -27,7 +27,9 @@ async function handle(request,{params}){
   if(routePath==="/api/build"&&request.method==="GET"){
     const buildSha=String(process.env.VERCEL_GIT_COMMIT_SHA||process.env.GIT_COMMIT_SHA||"").slice(0,40);
     const environment=String(process.env.VERCEL_ENV||process.env.NODE_ENV||"unknown").slice(0,24);
-    return Response.json({buildSha:buildSha||null,environment},{status:200,headers:{"Cache-Control":"no-store"}});
+    const rawScope=String(process.env.FIELD_DB_SCOPE||"").trim().toLowerCase();
+    const databaseScope=rawScope==="uat"||rawScope==="production"?rawScope:rawScope?"invalid":"unconfigured";
+    return Response.json({buildSha:buildSha||null,environment,databaseScope},{status:200,headers:{"Cache-Control":"no-store"}});
   }
   if(routePath==="/api/health"&&request.method==="GET"){
     if(!process.env.TURSO_DATABASE_URL||!process.env.TURSO_AUTH_TOKEN){
