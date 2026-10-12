@@ -39,7 +39,7 @@ test("new transactions collapse advanced payment choices back to the simple defa
 
 test("progressive disclosure changes only payment selection UI, not checkout authority",async()=>{
   const pos=await read("app/pos/page.tsx");
-  assert.match(pos,/method:"cash"\|"promptpay"\|"bank"\|"card"\|"delivery"/);
+  assert.match(pos,/useState<"cash"\|"promptpay"\|"bank"\|"card"\|"delivery">\("cash"\)/);
   assert.match(pos,/payment:method==="delivery"\?"other":method/);
   assert.match(pos,/async function checkout\(\)/);
   assert.match(pos,/paymentRecoveryIntegrityIssue\(\)/);
