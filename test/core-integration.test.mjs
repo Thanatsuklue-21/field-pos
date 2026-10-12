@@ -33,6 +33,19 @@ async function setup(t,doc=seed()){
 async function state(db){return JSON.parse((await db.execute('SELECT document FROM field_state')).rows[0].document)}
 const sell=(db,key,extras={})=>checkoutPos({db,user,body:{requestKey:key,cart,date:bangkokDate(),payment:'cash',received:200,...extras}});
 const act=(db,orderId,action,extras={})=>queuePosAction({db,user,body:{requestKey:crypto.randomUUID(),orderId,action,...extras}});
+async function apiPost(handler,token,route,body){
+  const res={writeHead(status){this.status=status},end(raw){this.body=JSON.parse(raw)}};
+  await handler({method:'POST',query:{route},headers:{origin:'https://field.test',cookie:'field_session='+token,'x-csrf-token':'csrf'},body},res);
+  return res;
+}
+async function reviewedClose(handler,token,countedCash,{openingCash=100,varianceReason='test reconciliation',confirmVariance=true}={}){
+  if(countedCash===''||countedCash===null||countedCash===undefined)return apiPost(handler,token,'close-day',{countedCash});
+  const opened=await apiPost(handler,token,['cash-shift','open'],{openingCash});
+  if(opened.status!==201&&opened.body?.error!=='cash_shift_already_opened')return opened;
+  const review=await apiPost(handler,token,['close-day','review'],{firstCount:countedCash,secondCount:countedCash});
+  if(review.status!==200)return review;
+  return apiPost(handler,token,'close-day',{countedCash,reviewId:review.body.review.id,varianceReason,confirmVariance});
+}
 
 test('real libSQL: checkout → grouped preparation → early/full call → handoff → close day',async t=>{
   const db=await setup(t);
@@ -47,7 +60,7 @@ test('real libSQL: checkout → grouped preparation → early/full call → hand
   const token='integration-token';
   await db.execute({sql:'INSERT INTO field_sessions VALUES(?,?,?,?)',args:[digest(token),user.id,'csrf',Date.now()+60000]});
   const handler=createApi({db,origin:'https://field.test'});
-  async function close(countedCash){const res={writeHead(status){this.status=status},end(body){this.body=JSON.parse(body)}};await handler({method:'POST',query:{route:'close-day'},headers:{origin:'https://field.test',cookie:'field_session='+token,'x-csrf-token':'csrf'},body:{openingCash:100,countedCash}},res);return res}
+  async function close(countedCash){return reviewedClose(handler,token,countedCash,{openingCash:100})}
   assert.equal((await close('')).body.error,'counted_cash_required');
   assert.equal((await close(210)).body.error,'close_day_open_orders');
   await act(db,sale.orderId,'call');await act(db,sale.orderId,'return');
@@ -75,8 +88,7 @@ test('real libSQL: production refund clears the order and close day excludes ref
   const token='refund-close-token';
   await db.execute({sql:'INSERT INTO field_sessions VALUES(?,?,?,?)',args:[digest(token),user.id,'csrf',Date.now()+60000]});
   const handler=createApi({db,origin:'https://field.test'});
-  const res={writeHead(status){this.status=status},end(body){this.body=JSON.parse(body)}};
-  await handler({method:'POST',query:{route:'close-day'},headers:{origin:'https://field.test',cookie:'field_session='+token,'x-csrf-token':'csrf'},body:{openingCash:100,countedCash:100}},res);
+  const res=await reviewedClose(handler,token,100,{openingCash:100});
   assert.equal(res.status,201);
   assert.equal(res.body.close.revenue,0);
   assert.equal(res.body.close.cash,0);
@@ -461,8 +473,7 @@ test('real libSQL: bank and card are first-class non-cash channels and do not in
   assert.equal(doc.sales[1].payment,'card');assert.equal(doc.sales[1].paymentReference,'terminal-ref-001');assert.equal(doc.sales[1].payments[0].paymentVerified,'manual');
   for(const orderId of [bank.orderId,card.orderId]){await act(db,orderId,'select',{itemIndex:0,selected:true});await act(db,orderId,'complete_item',{itemIndex:0,expectedReadyQty:0});await act(db,orderId,'call');await act(db,orderId,'return')}
   const token='payment-map-token';await db.execute({sql:'INSERT INTO field_sessions VALUES(?,?,?,?)',args:[digest(token),user.id,'csrf',Date.now()+60000]});
-  const handler=createApi({db,origin:'https://field.test'}),res={writeHead(status){this.status=status},end(body){this.body=JSON.parse(body)}};
-  await handler({method:'POST',query:{route:'close-day'},headers:{origin:'https://field.test',cookie:'field_session='+token,'x-csrf-token':'csrf'},body:{openingCash:100,countedCash:100}},res);
+  const handler=createApi({db,origin:'https://field.test'}),res=await reviewedClose(createApi({db,origin:'https://field.test'}),token,100,{openingCash:100});
   assert.equal(res.status,201);assert.equal(res.body.close.cash,0);assert.equal(res.body.close.bank,110);assert.equal(res.body.close.card,110);assert.equal(res.body.close.expectedCash,100);assert.equal(res.body.close.cashVariance,0);
 });
 

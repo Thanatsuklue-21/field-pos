@@ -1,4 +1,6 @@
-import test from 'node:test';import assert from 'node:assert/strict';import {readFile} from 'node:fs/promises';
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {readFile} from 'node:fs/promises';
 const read=p=>readFile(new URL('../'+p,import.meta.url),'utf8');
 
 test('cash shift opens once per business date and freezes opening cash for close day',async()=>{
@@ -15,12 +17,14 @@ test('cash shift opens once per business date and freezes opening cash for close
   assert.match(seg,/openingCashSource:shift\?'SHIFT_OPEN':'CLOSE_INPUT_LEGACY'/);
 });
 
-test('close day UI records opening float before count and cannot edit it after shift opens',async()=>{
+test('close day UI freezes opening float and requires blind reviewed count',async()=>{
   const ui=await read('app/close/page.tsx');
   assert.match(ui,/เปิดร้านวันนี้/);
   assert.match(ui,/เงินตั้งต้นที่ล็อก/);
   assert.match(ui,/กรุณาเปิดร้านและล็อกเงินตั้งต้นก่อนปิดวัน/);
-  assert.match(ui,/JSON\.stringify\(\{countedCash:counted\}\)/);
+  assert.match(ui,/\/api\/close-day\/review/);
+  assert.match(ui,/firstCount:first,secondCount:second/);
+  assert.match(ui,/reviewId:review\.id/);
   assert.doesNotMatch(ui,/body:JSON\.stringify\(\{openingCash:opening,countedCash:counted\}\)/);
   assert.match(ui,/Expected Cash = เงินตั้งต้น \+ ยอดขายเงินสด \+ เงินเติมเข้า − ค่าใช้จ่ายเงินสด − เงินนำออก/);
 });
