@@ -11,7 +11,8 @@ test("close-day checks the local Offline cash outbox immediately before posting 
   assert.match(block,/await refreshOfflineOutbox\(\)/);
   assert.match(block,/if\(outbox\.total>0\)/);
   assert.match(block,/มีบิล Offline ในเครื่อง/);
-  assert.ok(block.indexOf("await refreshOfflineOutbox()")<block.indexOf('api<any>("/api/close-day"'));
+  assert.match(block,/sendCloseDay\(body\)/);
+  assert.ok(block.indexOf("await refreshOfflineOutbox()")<block.indexOf("sendCloseDay(body)"));
 });
 
 test("close-day fails closed when IndexedDB outbox cannot be read",async()=>{
