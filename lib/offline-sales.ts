@@ -105,6 +105,49 @@ export function applyOfflineCashToBootstrap(data:Bootstrap|null,cart:CartLine[])
   return {...data,menu,availabilityStock:stock};
 }
 
+function isConfirmedOfflineReceipt(row:OfflineCashRecord,receipt:any){
+  const hasIdentity=(value:unknown)=>typeof value==="string"&&value.trim().length>0;
+  const expectedTotal=Number(row.body.total);
+  return receipt?.ok===true&&hasIdentity(receipt.orderId)
+    &&Array.isArray(receipt.saleIds)&&receipt.saleIds.length>0&&receipt.saleIds.every(hasIdentity)
+    &&Number.isFinite(receipt.total)&&receipt.total>=0
+    &&Number.isFinite(expectedTotal)&&Math.abs(receipt.total-expectedTotal)<=0.001
+    &&(row.body.offlineFulfilled!==true||receipt.offlineFulfilled===true);
+}
+
+async function acceptConfirmedOfflineReceipt(row:OfflineCashRecord,receipt:any){
+  if(!isConfirmedOfflineReceipt(row,receipt))throw new Error("offline_sync_unconfirmed");
+  if(receipt.stockReconciliationRequired===true){
+    const stockShortages:OfflineStockShortage[]=(Array.isArray(receipt.stockShortages)?receipt.stockShortages:[])
+      .map((item:any)=>({
+        ingredientId:String(item?.ingredientId||""),
+        available:Number.isFinite(Number(item?.available))?Number(item.available):0,
+        required:Number.isFinite(Number(item?.required))?Number(item.required):0,
+        deficit:Number.isFinite(Number(item?.deficit))?Number(item.deficit):0
+      })).filter((item:OfflineStockShortage)=>item.ingredientId.length>0);
+    await offlineCashPatch(row.requestKey,{
+      status:"needs_review",
+      reviewKind:"stock_reconciliation",
+      lastError:"stock_reconciliation_required",
+      lastAttemptAt:Date.now(),
+      acceptedOrderId:String(receipt.orderId),
+      acceptedSaleIds:receipt.saleIds.map(String),
+      acceptedAt:Date.now(),
+      stockShortages
+    });
+    return;
+  }
+  await offlineCashDelete(row.requestKey);
+}
+
+async function recoverCommittedOfflineReceipt(session:Session,row:OfflineCashRecord){
+  return api<any>("/api/pos/offline/replay",{
+    method:"POST",
+    headers:{"X-CSRF-Token":session.csrf},
+    body:JSON.stringify({requestKey:row.requestKey})
+  });
+}
+
 export async function syncOfflineCashSales(session:Session):Promise<OfflineCashSyncResult>{
   if(session.offline||!session.csrf)throw new Error("offline_session_revalidation");
   const rows=await offlineCashList();
@@ -121,39 +164,31 @@ export async function syncOfflineCashSales(session:Session):Promise<OfflineCashS
       });
       // HTTP success alone can be an empty/proxy response. Retain the original
       // idempotent bill unless the checkout contract confirms a committed sale.
-      const hasIdentity=(value:unknown)=>typeof value==="string"&&value.trim().length>0;
-      const expectedTotal=Number(row.body.total);
-      if(receipt?.ok!==true||!hasIdentity(receipt.orderId)
-        ||!Array.isArray(receipt.saleIds)||!receipt.saleIds.length||!receipt.saleIds.every(hasIdentity)
-        ||!Number.isFinite(receipt.total)||receipt.total<0
-        ||!Number.isFinite(expectedTotal)||Math.abs(receipt.total-expectedTotal)>0.001
-        ||(row.body.offlineFulfilled===true&&receipt.offlineFulfilled!==true))throw new Error("offline_sync_unconfirmed");
-      if(receipt.stockReconciliationRequired===true){
-        const stockShortages:OfflineStockShortage[]=(Array.isArray(receipt.stockShortages)?receipt.stockShortages:[])
-          .map((item:any)=>({
-            ingredientId:String(item?.ingredientId||""),
-            available:Number.isFinite(Number(item?.available))?Number(item.available):0,
-            required:Number.isFinite(Number(item?.required))?Number(item.required):0,
-            deficit:Number.isFinite(Number(item?.deficit))?Number(item.deficit):0
-          })).filter((item:OfflineStockShortage)=>item.ingredientId.length>0);
-        await offlineCashPatch(row.requestKey,{
-          status:"needs_review",
-          reviewKind:"stock_reconciliation",
-          lastError:"stock_reconciliation_required",
-          lastAttemptAt:Date.now(),
-          acceptedOrderId:String(receipt.orderId),
-          acceptedSaleIds:receipt.saleIds.map(String),
-          acceptedAt:Date.now(),
-          stockShortages
-        });
-        synced++;
-        continue;
-      }
-      await offlineCashDelete(row.requestKey);
+      await acceptConfirmedOfflineReceipt(row,receipt);
       synced++;
     }catch(error:any){
       const code=String(error?.message||"sync_failed");
       const status=Number(error?.status)||0;
+      if(status===409&&code==="request_key_conflict"){
+        try{
+          // The original operator may have committed successfully before the device
+          // lost its acknowledgement. A later operator must recover that exact
+          // committed Offline receipt, never create a replacement request key.
+          const recovered=await recoverCommittedOfflineReceipt(session,row);
+          await acceptConfirmedOfflineReceipt(row,recovered);
+          synced++;
+          continue;
+        }catch(recoveryError:any){
+          const recoveryCode=String(recoveryError?.message||"offline_replay_lookup_failed");
+          const recoveryStatus=Number(recoveryError?.status)||0;
+          if(recoveryStatus===404&&recoveryCode==="offline_request_not_found"){
+            await offlineCashPatch(row.requestKey,{status:"needs_review",reviewKind:"business_rejection",lastError:code,lastAttemptAt:Date.now()});
+            continue;
+          }
+          await offlineCashPatch(row.requestKey,{lastError:recoveryCode,lastAttemptAt:Date.now()});
+          throw recoveryError;
+        }
+      }
       if(status>=400&&status<500&&![401,403,408,425,429].includes(status)){
         await offlineCashPatch(row.requestKey,{status:"needs_review",reviewKind:"business_rejection",lastError:code,lastAttemptAt:Date.now()});
         continue;

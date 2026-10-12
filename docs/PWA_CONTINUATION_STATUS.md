@@ -138,3 +138,12 @@ The server already accepts fulfilled Offline cash sales with controlled negative
 This continuation keeps an accepted Cloud sale as a local `needs_review / stock_reconciliation` record instead of resending it. The record stores accepted order/sale identities and shortage evidence, the POS separates stock reconciliation from business-rejected bills, and only an admin can acknowledge the stock review after checking/adjusting actual stock. Business-rejected reviews cannot be removed through that acknowledgement path. Cloud bootstrap remains blocked from overwriting the local stock projection until every unresolved Offline record is cleared.
 
 No Turso schema migration or payment/business rule changed. IndexedDB remains schema version 2; existing outbox records simply carry optional reconciliation metadata. PWA cache/app versions advance to `field-pwa-v18` / `8.0.0-pwa.17`.
+
+
+# Continuation — cross-operator Offline replay recovery (2026-10-12)
+
+After the accepted-stock-reconciliation gate passed, the next recovery risk was actor-bound idempotency. Durable POS request hashes intentionally include the actor identity. If an Offline checkout committed in Cloud but the original device missed the acknowledgement, a later retry after operator/session handoff could receive `request_key_conflict` even though the sale already existed.
+
+The Offline sync client now handles only that exact conflict by querying a restricted authenticated recovery endpoint with the original request key. The server returns a replay only when the durable request is a previously committed `offlineFulfilled` sale; generic/online request keys are not exposed by this endpoint. The recovered receipt must still pass the same order/sale/amount/offline acknowledgement contract before the local outbox can be resolved. A failed lookup remains retryable; a confirmed non-Offline conflict moves to explicit business review. No replacement request key or duplicate sale is created.
+
+This path adds no extra Turso read to ordinary sales or ordinary successful Offline syncs; the lookup runs only after `request_key_conflict`. PWA cache/app versions advance to `field-pwa-v19` / `8.0.0-pwa.18`.
