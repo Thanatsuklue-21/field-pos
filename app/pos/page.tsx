@@ -297,7 +297,11 @@ function PosView({session}:{session:Session}){
     payOpen,busy,cartQty,lastSale,online,
     offlineSession:!!session.offline,
     offlinePending:offlineStats.pending,
-    canOrder:canOrderOps,canQueue:canQueueOps
+    canOrder:canOrderOps,canQueue:canQueueOps,
+    salesClosed,allUnavailable,reviewConfirmed,method,
+    cashReceived:Number.isFinite(cashReceived)?cashReceived:null,
+    netPayable,
+    promptReady:promptConfig?.ready===true
   });
   const guideStep=posGuide.step;
   const guideMessage=posGuide.message;
