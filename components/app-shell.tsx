@@ -75,14 +75,14 @@ export default function AppShell({children}:{children:React.ReactNode}){
 
     {mobileMore.length>0&&moreOpen&&<div className="fixed inset-0 z-[48] bg-black/20 md:hidden" onClick={closeMore}>
       <div ref={moreDialogRef} id="field-mobile-more" role="dialog" aria-modal="true" aria-label="เมนูเพิ่มเติม" tabIndex={-1} className="frosted max-h-[calc(100dvh-110px)] overflow-y-auto overscroll-contain absolute bottom-[calc(70px+env(safe-area-inset-bottom))] left-2 right-2 rounded-[20px] p-2 shadow-2xl" onClick={e=>e.stopPropagation()}>
-        <div className="mb-1 flex items-center justify-between px-2"><b className="text-xs">เพิ่มเติม</b><button onClick={closeMore} className="grid h-11 w-11 place-items-center rounded-xl" aria-label="ปิดเมนูเพิ่มเติม"><X size={17}/></button></div>
+        <div className="mb-1 flex items-center justify-between px-2"><b className="text-xs">เมนูอื่น</b><button onClick={closeMore} className="grid h-11 w-11 place-items-center rounded-xl" aria-label="ปิดเมนูเพิ่มเติม"><X size={17}/></button></div>
         <div className="grid gap-1">{mobileMore.map(([href,key,Icon])=><Link key={href} href={href} aria-label={t[key]} aria-current={path===href?"page":undefined} className={"flex min-h-11 items-center gap-3 rounded-xl px-3 py-2 text-sm "+(path===href?"bg-[#d4af37]/18 font-bold text-[#6f5510]":"text-slate-700")}><Icon size={18}/><span>{t[key]}</span></Link>)}</div>
       </div>
     </div>}
 
     {(mobilePrimary.length>0||mobileMore.length>0)&&<nav aria-label="เมนูหลักบนมือถือ" className="frosted fixed bottom-[max(.35rem,env(safe-area-inset-bottom))] left-1.5 right-1.5 z-50 flex items-stretch gap-0.5 overflow-hidden rounded-[20px] p-1 md:hidden">
       {mobilePrimary.map(([href,key,Icon])=><Link key={href} href={href} aria-label={t[key]} aria-current={path===href?"page":undefined} className={"flex min-h-11 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-[16px] px-1 py-1 text-[9px] "+(path===href?"bg-[#d4af37]/18 font-bold text-[#6f5510]":"text-slate-600")}><Icon size={17}/><span className="truncate">{t[key]}</span></Link>)}
-      {mobileMore.length>0&&<button ref={moreTriggerRef} type="button" aria-controls="field-mobile-more" aria-expanded={moreOpen} onClick={()=>setMoreOpen(v=>!v)} className={"flex min-h-11 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-[16px] px-1 py-1 text-[9px] "+(moreActive||moreOpen?"bg-[#d4af37]/18 font-bold text-[#6f5510]":"text-slate-600")}><MoreHorizontal size={18}/><span>เพิ่มเติม</span></button>}
+      {mobileMore.length>0&&<button ref={moreTriggerRef} type="button" aria-controls="field-mobile-more" aria-expanded={moreOpen} onClick={()=>setMoreOpen(v=>!v)} className={"flex min-h-11 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-[16px] px-1 py-1 text-[9px] "+(moreActive||moreOpen?"bg-[#d4af37]/18 font-bold text-[#6f5510]":"text-slate-600")}><MoreHorizontal size={18}/><span>เมนูอื่น</span></button>}
     </nav>}
   </div>
 }
