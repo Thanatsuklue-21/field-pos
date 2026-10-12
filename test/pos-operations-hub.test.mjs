@@ -273,3 +273,37 @@ test("quick Queue action labels the remaining cups rather than the original item
   assert.match(hub,/remaining>1\?" · อีก "\+remaining\+" แก้ว"/);
   assert.doesNotMatch(hub,/n\(item\.qty\)>1\?" ×"\+n\(item\.qty\)/);
 });
+
+
+test("Quick Queue offers WASTE remake only for the current production item and confirms stock impact",async()=>{
+  const hub=await read("components/pos-operations-hub.tsx");
+  assert.match(hub,/async function runQuickWasteRemake\(order:QueueOrder,itemIndex:number\)/);
+  assert.match(hub,/window\.confirm\("บันทึก “ชงเสีย \/ ทำใหม่”/);
+  assert.match(hub,/หักวัตถุดิบเพิ่มตามสูตรที่ใช้ตอนขาย และลงค่าใช้จ่าย WASTE อัตโนมัติ/);
+  assert.match(hub,/action:"waste_remake"/);
+  assert.match(hub,/reason:"ชงเสีย \/ ทำใหม่"/);
+  assert.match(hub,/sendQueueActionDurably\(session\.csrf,\{/);
+  assert.match(hub,/isProduction&&nextItem&&<button/);
+  assert.match(hub,/runQuickWasteRemake\(order,nextIndex\)/);
+});
+
+test("Quick WASTE reconciles any ambiguous queue request before generating a new request key",async()=>{
+  const hub=await read("components/pos-operations-hub.tsx");
+  const start=hub.indexOf("async function runQuickWasteRemake");
+  const end=hub.indexOf("function quickQueueStep",start);
+  const block=hub.slice(start,end);
+  assert.match(block,/if\(readPendingQueueAction\(\)\)\{await recoverQueueAction\(\);return\}/);
+  assert.ok(block.indexOf("readPendingQueueAction()")<block.indexOf("crypto.randomUUID()"));
+  assert.match(block,/ผล WASTE ยังไม่ชัดเจน/);
+});
+
+test("Quick WASTE exposes waste cost and actionable recipe or stock failures without leaving POS",async()=>{
+  const hub=await read("components/pos-operations-hub.tsx");
+  const client=await read("lib/queue-client.ts");
+  assert.match(hub,/result\?\.wasteCost/);
+  assert.match(hub,/ต้นทุนของเสีย ฿/);
+  assert.match(client,/waste_after_call_not_supported/);
+  assert.match(client,/recipe_unavailable/);
+  assert.match(client,/code\.startsWith\("stock_shortage:"\)/);
+  assert.match(client,/code\.startsWith\("ingredient_missing:"\)/);
+});
