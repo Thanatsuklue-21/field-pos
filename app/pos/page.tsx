@@ -332,6 +332,7 @@ function PosView({session}:{session:Session}){
   function finishOfflineSale(localNo:string,opts:{total:number;received:number;bootstrap:Bootstrap}){
     setData(opts.bootstrap);
     setPayOpen(false);
+    setShowMorePaymentMethods(false);
     setResult("");
     setPrompt(null);
     cart.clearCart();
@@ -352,6 +353,7 @@ function PosView({session}:{session:Session}){
     const serverReceived=Number(r?.received??opts.received);
     const serverChange=Number(r?.change??(opts.payment==="cash"?Math.max(0,serverReceived-serverTotal):0));
     setPayOpen(false);
+    setShowMorePaymentMethods(false);
     setResult("");
     setPrompt(null);
     const remaining=opts.splitBill&&opts.paidCart?subtractPaidCart(opts.paidCart):(cart.clearCart(),[]);
@@ -474,6 +476,7 @@ function PosView({session}:{session:Session}){
     setPrompt(null);
     setReceived("");
     setMethod("cash");
+    setShowMorePaymentMethods(false);
     setSelected(null);
     setQ("");
     setCat("ทั้งหมด");
