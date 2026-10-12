@@ -6,10 +6,12 @@ import {buildPosGuidance} from "../lib/pos-guidance.mjs";
 const read=p=>readFile(new URL("../"+p,import.meta.url),"utf8");
 
 test("new operator sees one deterministic next action for each POS state",()=>{
-  assert.equal(buildPosGuidance({cartQty:0,online:true}).key,"select");
-  assert.equal(buildPosGuidance({cartQty:2,online:true}).key,"checkout");
-  assert.equal(buildPosGuidance({cartQty:2,payOpen:true,online:true}).key,"payment");
-  assert.equal(buildPosGuidance({lastSale:{queueNo:"Q12",pager:4},canQueue:true}).key,"handoff");
+  const select=buildPosGuidance({cartQty:0,online:true});
+  const checkout=buildPosGuidance({cartQty:2,online:true});
+  const payment=buildPosGuidance({cartQty:2,payOpen:true,online:true});
+  const handoff=buildPosGuidance({lastSale:{queueNo:"Q12",pager:4},canQueue:true});
+  assert.deepEqual([select.key,checkout.key,payment.key,handoff.key],["select","checkout","payment","handoff"]);
+  assert.deepEqual([select.progress,checkout.progress,payment.progress,handoff.progress],[1,2,3,4]);
 });
 
 test("payment recovery blocks every lower priority sales instruction",()=>{
@@ -61,4 +63,25 @@ test("mobile shell keeps only sales and queue as primary destinations",async()=>
   assert.doesNotMatch(shell,/const primaryMobile=\["\/pos","\/queue","\/orders","\/stock"\]/);
   assert.match(nav,/const PRIMARY=\["\/pos","\/queue"\]/);
   assert.match(nav,/const PRIORITY=\["\/orders","\/stock","\/expenses","\/close","\/settings"\]/);
+});
+
+
+test("novice-facing POS language is action-oriented Thai rather than implementation jargon",async()=>{
+  const pos=await read("app/pos/page.tsx");
+  assert.match(pos,/ตรวจรายการ \/ ชำระเงิน/);
+  assert.match(pos,/ออเดอร์ปัจจุบัน/);
+  assert.match(pos,/เลือกระดับความหวาน \/ สูตร/);
+  assert.match(pos,/รับชำระเงิน ฿/);
+  assert.match(pos,/ยอดรวม/);
+  assert.match(pos,/orderOptionLabel\(i\.variant\)/);
+  assert.match(pos,/orderOptionLabel\(v\.label\)/);
+});
+
+test("POS shows a four-stage visual flow but recovery blockers suppress false progress",async()=>{
+  const pos=await read("app/pos/page.tsx");
+  assert.match(pos,/aria-label="ขั้นตอนการขาย"/);
+  for(const label of ["เลือกเมนู","ตรวจรายการ","รับชำระ","รับบัตร"])assert.match(pos,new RegExp(label));
+  assert.match(pos,/posGuide\.progress>0/);
+  const blocked=buildPosGuidance({recoveryBlocked:true,canOrder:true});
+  assert.equal(blocked.progress,0);
 });
