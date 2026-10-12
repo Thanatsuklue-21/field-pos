@@ -684,6 +684,11 @@ function PosView({session}:{session:Session}){
     const current=cartAvailability({cart:cart.items,menu:data?.menu||[],stock:data?.availabilityStock||{}});
     if(!current.available){setNotice(availabilityMessage(current));load().catch(()=>{});return}
     setResult("");
+    setMethod("cash");
+    setReceived("");
+    setManualPaymentReference("");
+    setCustomerId("");
+    setPointsRedeemed(0);
     setSplitBill(false);
     setSplitSelection({});
     setShowMorePayment(false);
