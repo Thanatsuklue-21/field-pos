@@ -9,8 +9,8 @@ test("health endpoint keeps established DB-health contract",async()=>{
 });
 
 test("build endpoint exposes only non-sensitive release identity",async()=>{
-  const api=await read("lib/api.mjs");
-  const start=api.indexOf("path==='/api/build'");
+  const api=await read("app/api/[...route]/route.js");
+  const start=api.indexOf('routePath==="/api/build"');
   assert.ok(start>=0);
   const end=api.indexOf('routePath==="/api/health"',start);
   const block=api.slice(start,end);
