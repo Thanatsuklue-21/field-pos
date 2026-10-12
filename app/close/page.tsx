@@ -1,23 +1,42 @@
 "use client";
 import {formatMoney} from "@/lib/money-format.mjs";
-import {useEffect,useState} from "react";
+import {useEffect,useRef,useState} from "react";
 import {useRouter} from "next/navigation";
 import AuthGate from "@/components/auth-gate";
 import {api,type Session} from "@/lib/api-client";
 import {getOfflineCashSummary,type OfflineCashSummary} from "@/lib/offline-sales";
+import {CASH_MOVEMENT_PENDING_KEY,shouldRetainCashMovementPending,validateCashMovementAck,validatePendingCashMovement} from "@/lib/cash-movement-recovery.mjs";
 
 type Close={id:string;date:string;revenue:number;cogs:number;expenses:number;purchaseSpend?:number;totalCashOut?:number;grossProfit:number;operatingProfit:number;deliveryFees?:number;cash:number;promptpay:number;bank?:number;card?:number;other:number;openingCash?:number;cashIn?:number;cashPaidOut?:number;cashOut?:number;expectedCash?:number;countedCash?:number;cashVariance?:number;orders:number;cups:number;time:number};
 type Shift={id:string;date:string;status:"open"|"closed";openingCash:number;openedAt:number;openedBy:string;closedAt?:number;cashVariance?:number};
-type Movement={id:string;shiftId:string;date:string;type:"CASH_IN"|"CASH_OUT";amount:number;reason:string;time:number;createdBy:string};
+type Movement={id:string;requestKey?:string;shiftId:string;date:string;type:"CASH_IN"|"CASH_OUT";amount:number;reason:string;time:number;createdBy:string};
+type CashMovementBody={requestKey:string;type:"CASH_IN"|"CASH_OUT";amount:number;reason:string};
+type PendingCashMovement={body:CashMovementBody;createdAt:number};
 type PaymentBlocker={id:string;status:"collecting"|"requires_resolution";mode:string;total:number;pager:number;createdAt:number;expiresAt:number;chargeId:string;provider:string;providerStatus:string;payments:number};
 type OrderBlocker={id:string;queueNo:string;pagerNo:number;status:string;time:number;cups:number;ready:number;called:number;remainingPrep:number;remainingHandoff:number;items:{name:string;qty:number;readyQty:number;calledQty:number}[]};
 type CloseData={closes:Close[];shift:Shift|null;businessDate:string;cashMovements:Movement[];paymentBlockers?:PaymentBlocker[];orderBlockers?:OrderBlocker[];closeBlockedByPayments?:boolean;closeBlockedByOrders?:boolean};
+
+function cashMovementPendingRead():PendingCashMovement|null{
+  let raw:string|null=null;
+  try{raw=localStorage.getItem(CASH_MOVEMENT_PENDING_KEY)}catch{throw new Error("cash_movement_recovery_storage_unavailable")}
+  if(!raw)return null;
+  try{return validatePendingCashMovement(JSON.parse(raw)) as PendingCashMovement}catch{throw new Error("cash_movement_recovery_corrupt")}
+}
+function cashMovementPendingWrite(body:CashMovementBody){
+  try{localStorage.setItem(CASH_MOVEMENT_PENDING_KEY,JSON.stringify({body,createdAt:Date.now()}))}
+  catch{throw new Error("cash_movement_recovery_storage_unavailable")}
+}
+function cashMovementPendingClear(){
+  try{localStorage.removeItem(CASH_MOVEMENT_PENDING_KEY)}
+  catch{throw new Error("cash_movement_recovery_storage_unavailable")}
+}
 
 export default function CloseDay(){return <AuthGate>{s=><View session={s}/>}</AuthGate>}
 
 function View({session}:{session:Session}){
   const router=useRouter();
   const [rows,setRows]=useState<Close[]>([]),[shift,setShift]=useState<Shift|null>(null),[businessDate,setBusinessDate]=useState(""),[movements,setMovements]=useState<Movement[]>([]),[paymentBlockers,setPaymentBlockers]=useState<PaymentBlocker[]>([]),[orderBlockers,setOrderBlockers]=useState<OrderBlocker[]>([]),[offlineOutbox,setOfflineOutbox]=useState<OfflineCashSummary|null>(null),[offlineOutboxError,setOfflineOutboxError]=useState(false),[msg,setMsg]=useState(""),[busy,setBusy]=useState(false),[openingCash,setOpeningCash]=useState("0"),[countedCash,setCountedCash]=useState(""),[movementType,setMovementType]=useState<"CASH_IN"|"CASH_OUT">("CASH_OUT"),[movementAmount,setMovementAmount]=useState(""),[movementReason,setMovementReason]=useState("");
+  const movementRecoveryRef=useRef(false);
   const load=()=>api<CloseData>("/api/close-day").then(x=>{setRows(x.closes||[]);setShift(x.shift||null);setBusinessDate(x.businessDate||"");setMovements(x.cashMovements||[]);setPaymentBlockers(Array.isArray(x.paymentBlockers)?x.paymentBlockers:[]);setOrderBlockers(Array.isArray(x.orderBlockers)?x.orderBlockers:[]) });
   const refreshOfflineOutbox=async()=>{
     try{
@@ -30,6 +49,65 @@ function View({session}:{session:Session}){
     }
   };
   useEffect(()=>{load().catch(()=>{});refreshOfflineOutbox().catch(()=>{})},[]);
+
+  function movementError(code:string){
+    return code==="drawer_cash_shortage"?"เงินสดตามระบบไม่พอสำหรับนำออกจำนวนนี้":
+      code==="cash_shift_not_open"?"ต้องเปิดร้านก่อนบันทึกเงินเข้า/ออก":
+      code==="day_already_closed"?"วันนี้ถูกปิดวันแล้ว":
+      code==="cash_movement_pending"?"มีรายการเงินสดเข้า/ออกเดิมที่ยังไม่ทราบผล · ระบบจะตรวจ request เดิมก่อน":
+      code==="cash_movement_unconfirmed"?"Server ยังไม่ยืนยันรายการเงินสดเดิมครบถ้วน · ระบบเก็บ request เดิมไว้เพื่อป้องกันยอดซ้ำ":
+      code==="cash_movement_recovery_corrupt"?"ข้อมูล recovery เงินสดในเครื่องเสีย · ห้ามบันทึกรายการใหม่จนกว่าจะตรวจสอบ":
+      code==="cash_movement_recovery_storage_unavailable"?"เครื่องนี้เก็บ recovery เงินสดไม่ได้ · ระบบไม่ส่งรายการเพื่อป้องกันยอดซ้ำ":
+      code;
+  }
+
+  async function sendCashMovement(body:CashMovementBody){
+    let pending=cashMovementPendingRead();
+    if(pending&&pending.body.requestKey!==body.requestKey)throw Object.assign(new Error("cash_movement_pending"),{status:409});
+    if(!pending){cashMovementPendingWrite(body);pending={body,createdAt:Date.now()}}
+    try{
+      const r=await api<any>("/api/cash-shift/movements",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify(pending.body)});
+      validateCashMovementAck(r,pending.body);
+      cashMovementPendingClear();
+      return r;
+    }catch(e:any){
+      if(!shouldRetainCashMovementPending(e))cashMovementPendingClear();
+      throw e;
+    }
+  }
+
+  useEffect(()=>{
+    let disposed=false;
+    const recover=async()=>{
+      if(disposed||movementRecoveryRef.current||session.offline)return;
+      let pending:PendingCashMovement|null=null;
+      try{pending=cashMovementPendingRead()}catch(e:any){if(!disposed)setMsg(movementError(e.message));return}
+      if(!pending)return;
+      movementRecoveryRef.current=true;setBusy(true);setMsg("");
+      try{
+        await sendCashMovement(pending.body);
+        if(!disposed){
+          setMovementAmount("");setMovementReason("");
+          setMsg("กู้คืนรายการเงินสดเข้า/ออกเดิมสำเร็จ · ใช้ request key เดิมและไม่บันทึกซ้ำ");
+          await load().catch(()=>{});
+        }
+      }catch(e:any){
+        if(!disposed){
+          setMsg(shouldRetainCashMovementPending(e)?"รายการเงินสดเดิมยังไม่ทราบผล · ระบบเก็บ request เดิมไว้และจะตรวจซ้ำเมื่อเชื่อมต่อ":movementError(e.message));
+          await load().catch(()=>{});
+        }
+      }finally{
+        movementRecoveryRef.current=false;
+        if(!disposed)setBusy(false);
+      }
+    };
+    const onOnline=()=>recover(),onFocus=()=>recover(),onVisible=()=>{if(document.visibilityState==="visible")recover()};
+    recover();
+    window.addEventListener("online",onOnline);
+    window.addEventListener("focus",onFocus);
+    document.addEventListener("visibilitychange",onVisible);
+    return()=>{disposed=true;window.removeEventListener("online",onOnline);window.removeEventListener("focus",onFocus);document.removeEventListener("visibilitychange",onVisible)};
+  },[session.csrf,session.offline]);
 
   async function openShift(){
     const opening=Number(openingCash||0);
@@ -47,10 +125,11 @@ function View({session}:{session:Session}){
     if(!Number.isFinite(amount)||amount<=0){setMsg("กรุณากรอกจำนวนเงินที่ถูกต้อง");return}
     if(movementReason.trim().length<2){setMsg("กรุณาระบุเหตุผล");return}
     setBusy(true);setMsg("");
+    const body:CashMovementBody={requestKey:crypto.randomUUID(),type:movementType,amount,reason:movementReason.trim().slice(0,240)};
     try{
-      await api("/api/cash-shift/movements",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({type:movementType,amount,reason:movementReason.trim()})});
+      await sendCashMovement(body);
       setMovementAmount("");setMovementReason("");setMsg(movementType==="CASH_IN"?"บันทึกเติมเงินสดเข้าลิ้นชักแล้ว":"บันทึกนำเงินสดออกจากลิ้นชักแล้ว");await load();
-    }catch(e:any){setMsg(e.message==="drawer_cash_shortage"?"เงินสดตามระบบไม่พอสำหรับนำออกจำนวนนี้":e.message==="cash_shift_not_open"?"ต้องเปิดร้านก่อนบันทึกเงินเข้า/ออก":e.message)}
+    }catch(e:any){setMsg(movementError(e.message))}
     finally{setBusy(false)}
   }
 

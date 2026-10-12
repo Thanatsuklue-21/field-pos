@@ -30,7 +30,7 @@ export async function runDayFlow({extraBankExpense=0,countedCash=514.25,received
   await call('auth/login','POST',{username:'qaoperator',password:'LocalQaOnly2026!'});
   await call('cash-shift/open','POST',{openingCash:500.10},201);
   await call('cash-shift/open','POST',{openingCash:999},409);
-  await call('cash-shift/movements','POST',{type:'CASH_IN',amount:100.20,reason:'QA float'},201);
+  await call('cash-shift/movements','POST',{requestKey:'day-flow-cash-in',type:'CASH_IN',amount:100.20,reason:'QA float'},201);
   const methods=['cash','cash','cash','bank','bank','bank','card','card','other','other','cash','cash'];
   for(let i=0;i<methods.length;i++){
    const payment=methods[i],body={requestKey:'day-flow-sale-'+i,date,cart:[{id:'qa-latte',variant:'100%',qty:1}],payment,received:100,salesChannel:payment==='other'?'grab':'store'};
@@ -50,8 +50,8 @@ export async function runDayFlow({extraBankExpense=0,countedCash=514.25,received
   await call('expenses','POST',{requestKey:'day-flow-expense-cleaning',amount:50.25,category:'OTHER',description:'QA cleaning',paymentMethod:'cash',date},201);
   await call('expenses','POST',{requestKey:'day-flow-expense-electricity',amount:80.25+extraBankExpense,category:'UTILITY',description:'QA electricity',paymentMethod:'bank',date},201);
   assert.equal((await call('expenses','POST',{requestKey:'day-flow-expense-invalid-method',amount:1,category:'OTHER',paymentMethod:'cash_typo',date},400)).error,'invalid_expense_payment_method');
-  await call('cash-shift/movements','POST',{type:'CASH_OUT',amount:200.30,reason:'QA safe deposit'},201);
-  await call('cash-shift/movements','POST',{type:'CASH_OUT',amount:99999,reason:'QA shortage guard'},409);
+  await call('cash-shift/movements','POST',{requestKey:'day-flow-cash-out',type:'CASH_OUT',amount:200.30,reason:'QA safe deposit'},201);
+  await call('cash-shift/movements','POST',{requestKey:'day-flow-cash-out-shortage',type:'CASH_OUT',amount:99999,reason:'QA shortage guard'},409);
   assert.equal((await call('reports/summary')).todaySummary.expectedCash,null);
   const {close}=await call('close-day','POST',{countedCash},201);
   const summary=await call('reports/summary'),dashboard=await call('management/dashboard'),exported=await call('reports/accounting-export'),stock=(await call('pos/bootstrap')).availabilityStock;

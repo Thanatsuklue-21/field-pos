@@ -17,7 +17,7 @@ export async function seedTenCupDatabase(db){
 export async function runTenCupScenario(call){
   const date=bangkokDate(),receipts=[];
   await call('cash-shift/open','POST',{openingCash:500},201);
-  await call('cash-shift/movements','POST',{type:'CASH_IN',amount:100,reason:'QA extra change'},201);
+  await call('cash-shift/movements','POST',{requestKey:'ten-cup-cash-in',type:'CASH_IN',amount:100,reason:'QA extra change'},201);
   for(let i=1;i<=10;i++){
     const body={requestKey:'ten-cup-sale-'+i,date,cart:[{id:'qa-latte',variant:'100%',qty:1}],payment:'cash',received:100};
     const receipt=await call('pos/checkout','POST',body);
@@ -29,7 +29,7 @@ export async function runTenCupScenario(call){
   }
   await call('expenses','POST',{requestKey:'ten-cup-expense-cash',amount:50,category:'OTHER',description:'QA cleaning cash',paymentMethod:'cash',date},201);
   await call('expenses','POST',{requestKey:'ten-cup-expense-bank',amount:30,category:'OTHER',description:'QA utility bank',paymentMethod:'bank',date},201);
-  await call('cash-shift/movements','POST',{type:'CASH_OUT',amount:200,reason:'QA store surplus'},201);
+  await call('cash-shift/movements','POST',{requestKey:'ten-cup-cash-out',type:'CASH_OUT',amount:200,reason:'QA store surplus'},201);
   const beforeClose=await call('reports/summary');
   assert.equal(beforeClose.todaySummary.expectedCash,null,'blind count remains independent before close');
   const {close}=await call('close-day','POST',{countedCash:900},201);
