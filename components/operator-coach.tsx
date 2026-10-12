@@ -61,10 +61,11 @@ export default function OperatorCoach(){
       type="button"
       onClick={()=>setOpen(true)}
       aria-label="เปิดคู่มือใช้งาน 1 นาที"
-      className="fixed right-3 top-3 z-[75] flex min-h-11 items-center gap-2 rounded-full border border-[#d4af37]/60 bg-white/95 px-3 text-xs font-black text-[#6f5510] shadow-lg md:right-6 md:top-5"
+      className="fixed right-0 top-1/2 z-[75] flex min-h-14 w-12 -translate-y-1/2 flex-col items-center justify-center gap-0.5 rounded-l-2xl border border-r-0 border-[#d4af37]/60 bg-white/95 text-[#6f5510] shadow-lg"
     >
-      <CircleHelp size={17}/>
-      <span className="hidden sm:inline">ใช้เป็นใน 1 นาที</span>
+      <CircleHelp size={18}/>
+      <span className="text-[9px] font-black">1 นาที</span>
+      <span className="sr-only">ใช้เป็นใน 1 นาที</span>
     </button>
 
     {open&&<div className="fixed inset-0 z-[120] grid place-items-center bg-slate-950/45 p-3">
