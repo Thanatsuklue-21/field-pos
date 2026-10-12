@@ -475,3 +475,36 @@ test('real libSQL: pre-production bank and card refunds require external referen
     const after=await state(db);assert.equal(after.sales[0].status,'refunded');assert.equal(after.sales[0].refundMethod,method==='bank'?'manual_bank':'manual_card');assert.equal(after.sales[0].refundReference,method+'-refund-ref');assert.equal(after.ingredients.matcha.qty,1000);assert.equal(after.ingredients.milk.qty,30000);
   }
 });
+
+
+test('real libSQL: close day forces blind recount then explicit variance approval',async t=>{
+  const db=await setup(t),sale=await sell(db,'recount-control-sale');
+  await act(db,sale.orderId,'call');await act(db,sale.orderId,'return');
+  const token='recount-control-token';
+  await db.execute({sql:'INSERT INTO field_sessions VALUES(?,?,?,?)',args:[digest(token),user.id,'csrf',Date.now()+60000]});
+  const handler=createApi({db,origin:'https://field.test'});
+  async function close(body){
+    const res={writeHead(status){this.status=status},end(raw){this.body=JSON.parse(raw)}};
+    await handler({method:'POST',query:{route:'close-day'},headers:{origin:'https://field.test',cookie:'field_session='+token,'x-csrf-token':'csrf'},body},res);
+    return res;
+  }
+  const first=await close({openingCash:100,countedCash:200});
+  assert.equal(first.status,409);assert.equal(first.body.error,'cash_recount_required');
+  assert.equal('expectedCash' in first.body,false);
+  let doc=await state(db);const shift=doc.cashShifts.find(x=>x.date===bangkokDate()&&x.status==='open');
+  assert.equal(shift.recountRequired,true);assert.equal(shift.firstCount,200);
+
+  const second=await close({countedCash:190});
+  assert.equal(second.status,409);assert.equal(second.body.error,'cash_variance_requires_review');
+  assert.equal(second.body.expectedCash,210);assert.equal(second.body.cashVariance,-20);
+  assert.equal(second.body.firstCount,200);assert.equal(second.body.secondCount,190);
+
+  const noReason=await close({countedCash:190,approveVariance:true,varianceReason:'x'});
+  assert.equal(noReason.status,400);assert.equal(noReason.body.error,'variance_reason_required');
+
+  const approved=await close({countedCash:190,approveVariance:true,varianceReason:'ตรวจนับซ้ำแล้ว เงินขาดจริง'});
+  assert.equal(approved.status,201);assert.equal(approved.body.close.varianceApproved,true);
+  assert.equal(approved.body.close.cashVariance,-20);assert.equal(approved.body.close.firstCount,200);
+  const actions=(await db.execute("SELECT action FROM field_audit WHERE action LIKE 'cash_%' OR action='close_day' ORDER BY id")).rows.map(x=>x.action);
+  assert.ok(actions.includes('cash_recount_required'));assert.ok(actions.includes('cash_variance_review_required'));assert.ok(actions.includes('close_day'));
+});
