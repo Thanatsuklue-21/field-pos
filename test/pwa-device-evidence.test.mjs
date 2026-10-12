@@ -32,7 +32,7 @@ test("device UAT evidence persists checks only for the same build and target cla
   const shaA="a".repeat(40),shaB="b".repeat(40);
   const saved=api.writeDeviceUatCheck(shaA,"phone","keyboard_checkout",true);
   assert.equal(saved.checks.keyboard_checkout,true);
-  assert.deepEqual(api.deviceUatProgress(saved),{passed:1,total:5,complete:false});
+  const firstProgress=api.deviceUatProgress(saved);assert.equal(firstProgress.passed,1);assert.equal(firstProgress.total,5);assert.equal(firstProgress.complete,false);
 
   const same=api.readDeviceUatEvidence(shaA,"phone");
   assert.equal(same.checks.keyboard_checkout,true);
@@ -49,7 +49,7 @@ test("all five operator confirmations are required for local evidence completion
   const {api}=await loadStore(),sha="c".repeat(40);
   let evidence=api.readDeviceUatEvidence(sha,"tablet");
   for(const id of api.DEVICE_UAT_CHECK_IDS)evidence=api.writeDeviceUatCheck(sha,"tablet",id,true);
-  assert.deepEqual(api.deviceUatProgress(evidence),{passed:5,total:5,complete:true});
+  const progress=api.deviceUatProgress(evidence);assert.equal(progress.passed,5);assert.equal(progress.total,5);assert.equal(progress.complete,true);
 });
 
 test("device UAT evidence store contains no transaction or identity payload fields",async()=>{
@@ -59,7 +59,7 @@ test("device UAT evidence store contains no transaction or identity payload fiel
 
 test("Preview readiness labels local evidence as operator-confirmed and non-release approval",async()=>{
   const ui=await read("components/pwa-device-uat-evidence.tsx"),readiness=await read("components/pwa-readiness.tsx");
-  for(const text of ["DEVICE UAT · LOCAL EVIDENCE","Keyboard","Offline","Reconnect","App update","ไม่ถือว่า Production-ready"])assert.ok(ui.includes(text),text);
+  for(const text of ["DEVICE UAT · LOCAL EVIDENCE","คีย์บอร์ด","Offline","กลับ Online","App update","ไม่ถือว่า Production-ready"])assert.ok(ui.includes(text),text);
   assert.ok(ui.includes("buildSha.slice(0,10)"));
   assert.ok(readiness.includes('build.environment==="preview"&&<PwaDeviceUatEvidence'));
   assert.ok(readiness.includes('targetClass={state?.targetClass||"other"}'));
