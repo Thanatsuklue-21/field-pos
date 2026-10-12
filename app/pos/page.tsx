@@ -14,6 +14,7 @@ import {useHeldCartStore} from "@/stores/held-cart-store";
 import {writeQueueSnapshotCache} from "@/lib/queue-cache"; import {clearRecovery,readRecovery,writeRecovery} from "@/lib/recovery-storage";
 import {shouldRetainCashPending} from "@/lib/cash-recovery-policy.mjs";
 import {inspectPaymentRecoveryRaw} from "@/lib/payment-recovery-integrity.mjs";
+import {buildPosGuidance} from "@/lib/pos-guidance.mjs";
 import PosOperationsHub,{type HubTab} from "@/components/pos-operations-hub";
 
 export default function Pos(){return <AuthGate>{s=><PosView session={s}/>}</AuthGate>}
@@ -100,6 +101,7 @@ function PosView({session}:{session:Session}){
   const [offlineStats,setOfflineStats]=useState<OfflineCashSummary>({pending:0,needsReview:0,total:0});
   const [offlineSyncing,setOfflineSyncing]=useState(false);
   const canQueueOps=session.user.role==="admin"||session.user.permissions?.queue===true;
+  const canOrderOps=session.user.role==="admin"||session.user.permissions?.order===true;
   const revisionRef=useRef<number|null>(null);
   const offlineSyncRef=useRef(false);
   const promptReconcileRef=useRef(false);
@@ -265,10 +267,29 @@ function PosView({session}:{session:Session}){
   const deliveryGpFee=Math.round(netPayable*deliveryGpRate*100)/100;
   const deliveryNetSettlement=Math.round((netPayable-deliveryGpFee)*100)/100;
   const cartQty=cart.items.reduce((sum,item)=>sum+item.qty,0);
-  const guideStep=payOpen?3:cartQty>0?2:1;
-  const guideMessage=guideStep===1?"เลือกเครื่องดื่มจากรายการด้านล่าง":
-    guideStep===2?"ตรวจรายการให้ถูกต้อง แล้วกด “ตรวจรายการ / ชำระเงิน”":
-    "รับชำระเงินตามยอด แล้วระบบจะออกคิวให้อัตโนมัติ";
+  const posGuide=buildPosGuidance({
+    recoveryBlocked:!!recoveryIntegrityIssue,
+    cashRecoveryBlocked:!!cashRecoveryReview,
+    payOpen,busy,cartQty,lastSale,online,
+    offlineSession:!!session.offline,
+    offlinePending:offlineStats.pending,
+    canOrder:canOrderOps,canQueue:canQueueOps
+  });
+  const guideStep=posGuide.step;
+  const guideMessage=posGuide.message;
+  function runGuideAction(){
+    if(posGuide.action==="checkout"){openPayment();return}
+    if(posGuide.action==="next_order"){startNextOrder();return}
+    if(posGuide.action==="open_queue"){setOpsInitialTab("queue");setLastSale(null);setOpsOpen(true);return}
+    if(posGuide.action==="open_orders"){setOpsInitialTab("orders");setOpsOpen(true);return}
+  }
+  const guideTone=posGuide.tone==="danger"
+    ?"border-red-300 bg-red-50 text-red-900"
+    :posGuide.tone==="warn"
+      ?"border-amber-300 bg-amber-50 text-amber-900"
+      :posGuide.tone==="success"
+        ?"border-emerald-300 bg-emerald-50 text-emerald-900"
+        :"border-slate-200 bg-white text-slate-700";
 
   useEffect(()=>{if(pointsRedeemed>maxRedeemPoints)setPointsRedeemed(maxRedeemPoints)},[pointsRedeemed,maxRedeemPoints]);
 
@@ -916,12 +937,15 @@ function PosView({session}:{session:Session}){
         </div>
       </div>
 
-      <div aria-label="ขั้นตอนการขาย" className="mb-3 rounded-2xl border border-slate-200 bg-white px-3 py-2.5 shadow-sm">
+      {posGuide.key!=="recovery"&&<div data-pos-guidance={posGuide.key} aria-label="ขั้นตอนการขาย" className={"mb-3 rounded-2xl border px-3 py-2.5 shadow-sm "+guideTone}>
         <div className="flex items-center gap-2">
-          {[["1","เลือกเมนู"],["2","ตรวจรายการ"],["3","รับชำระ"]].map(([no,label],index)=>{const step=index+1,active=guideStep===step,done=guideStep>step;return <div key={no} className={"flex min-w-0 flex-1 items-center gap-1.5 rounded-xl px-2 py-1.5 "+(active?"bg-[#fff8dc] text-[#6f5510]":done?"bg-emerald-50 text-emerald-700":"text-slate-400")}><span className={"grid h-6 w-6 shrink-0 place-items-center rounded-full text-[10px] font-black "+(active?"bg-[#d4af37] text-black":done?"bg-emerald-600 text-white":"bg-slate-200 text-slate-500")}>{done?"✓":no}</span><span className="truncate text-[10px] font-bold sm:text-xs">{label}</span></div>})}
+          {[["1","เลือกเมนู"],["2","ตรวจรายการ"],["3","รับชำระ"]].map(([no,label],index)=>{const step=index+1,active=guideStep===step,done=guideStep>step;return <div key={no} className={"flex min-w-0 flex-1 items-center gap-1.5 rounded-xl px-2 py-1.5 "+(active?"bg-[#fff8dc] text-[#6f5510]":done?"bg-emerald-50 text-emerald-700":"opacity-50")}><span className={"grid h-6 w-6 shrink-0 place-items-center rounded-full text-[10px] font-black "+(active?"bg-[#d4af37] text-black":done?"bg-emerald-600 text-white":"bg-slate-200 text-slate-500")}>{done?"✓":no}</span><span className="truncate text-[10px] font-bold sm:text-xs">{label}</span></div>})}
         </div>
-        <p role="status" aria-live="polite" className="mt-2 text-center text-[11px] font-semibold text-slate-600">{guideMessage}</p>
-      </div>
+        <div className="mt-2 flex items-center justify-between gap-2">
+          <p role="status" aria-live="polite" className="min-w-0 flex-1 text-[11px] font-semibold leading-relaxed">{guideMessage}</p>
+          {posGuide.action&&<button type="button" disabled={busy} onClick={runGuideAction} className="min-h-10 shrink-0 rounded-xl bg-slate-900 px-3 text-[11px] font-black text-white disabled:opacity-40">{posGuide.actionLabel}</button>}
+        </div>
+      </div>}
 
       {offlineStats.total>0&&<div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
         <span role="status" aria-live="polite" aria-atomic="true">บิล Offline รอส่ง {offlineStats.pending} · ต้องตรวจสอบ {offlineStats.needsReview}</span>
