@@ -47,6 +47,16 @@ test("cycle count exact request replays without duplicate count or stock adjustm
   assert.equal(Number((await db.execute("SELECT COUNT(*) AS n FROM field_stock_transactions WHERE reference_type='CYCLE_COUNT'")).rows[0].n),2);
 });
 
+
+test("cycle count requestKey conflict fails closed on different counted quantities",async t=>{
+  const {token,handler}=await setup(t);
+  const body={requestKey:"cycle-count-conflict-1",confirm:true,counts:[{ingredientId:"matcha",countedQty:90},{ingredientId:"milk",countedQty:950}]};
+  assert.equal((await send(handler,token,body)).status,201);
+  const conflict=await send(handler,token,{...body,counts:[{ingredientId:"matcha",countedQty:91},{ingredientId:"milk",countedQty:950}]});
+  assert.equal(conflict.status,409);
+  assert.equal(conflict.body.error,"request_key_conflict");
+});
+
 test("cycle count recovery validates exact counted quantities",()=>{
   const body={requestKey:"cycle-count-0002",confirm:true,counts:[{ingredientId:"matcha",countedQty:90},{ingredientId:"milk",countedQty:950}]};
   const pending={body,createdAt:1};
