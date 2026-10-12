@@ -2,7 +2,7 @@
 
 import {useEffect,useMemo,useRef,useState} from "react";
 import Link from "next/link";
-import {BellRing,Boxes,CheckCircle2,ClipboardList,ListOrdered,Plus,ReceiptText,RefreshCw,RotateCcw,X} from "lucide-react";
+import {BellRing,Boxes,CalendarCheck2,CheckCircle2,ClipboardList,ListOrdered,Plus,ReceiptText,RefreshCw,RotateCcw,X} from "lucide-react";
 import {api,type Bootstrap,type Session} from "@/lib/api-client";
 import {formatMoney} from "@/lib/money-format.mjs";
 import {shouldRetainExpensePending} from "@/lib/expense-recovery.mjs";
@@ -10,13 +10,15 @@ import {currentBusinessDate,expenseErrorText,readPendingExpense,sendExpenseDurab
 import {queueActionErrorText,readPendingQueueAction,sendQueueActionDurably,type QueueActionBody,type PendingQueueAction} from "@/lib/queue-client";
 import {shouldRetainQueuePending} from "@/lib/queue-action-recovery.mjs";
 
-export type HubTab="queue"|"orders"|"stock"|"expenses";
+export type HubTab="today"|"queue"|"orders"|"stock"|"expenses";
 type QueueRecipeUse={id:string;name:string;perCup:number;unit:string};
 type QueuePrepItem={id:string;name:string;variant?:string;qty:number;pendingQty?:number;recipeUsage?:QueueRecipeUse[]};
 type QueuePrepGroup={id:string;label:string;batchMode?:string;items?:QueuePrepItem[]};
 type QueueOrder={id:string;queueNo:string;pagerNo:number;status:string;time:number;items:{id?:string;name:string;variant?:string;qty:number;readyQty?:number;calledQty?:number}[];prepGroups?:QueuePrepGroup[]};
 type Sale={id:string;billNo:string;date:string;time:number;total:number;payment:string;status:string;queueNo:string;itemCount:number;orderStatus?:string|null};
 type ExpenseRow={id:string;date:string;time:number;category:string;description:string;amount:number;paymentMethod?:string;sourceType?:string};
+type TodaySummary={today:string;todayRevenue:number;todayOrders:number;grossMargin:number;lowStock?:{name:string}[];recommendations?:{level:string;title:string;detail:string}[]};
+type CloseStatus={businessDate:string;shift:any;paymentBlockers:any[];orderBlockers:any[];closeBlockedByPayments:boolean;closeBlockedByOrders:boolean;closes:any[]};
 const n=(v:any)=>Number(v)||0;
 const paymentLabel=(v?:string)=>v==="cash"?"เงินสด":v==="bank"?"โอน/ธนาคาร":v==="other"?"อื่น ๆ":String(v||"—").toUpperCase();
 
@@ -25,14 +27,17 @@ export default function PosOperationsHub({session,bootstrap,open,onClose,onRefre
   const canOrder=session.user.role==="admin"||session.user.permissions?.order===true;
   const canStock=session.user.role==="admin"||session.user.permissions?.stock===true;
   const canExpense=session.user.role==="admin"||session.user.permissions?.report===true;
+  const canReport=canExpense;
   const cloudAvailable=networkOnline&&!session.offline;
   const availableTabs=useMemo(()=>[
-    canQueue&&"queue",canOrder&&"orders",canStock&&"stock",canExpense&&"expenses"
-  ].filter(Boolean) as HubTab[],[canQueue,canOrder,canStock,canExpense]);
+    canReport&&"today",canQueue&&"queue",canOrder&&"orders",canStock&&"stock",canExpense&&"expenses"
+  ].filter(Boolean) as HubTab[],[canReport,canQueue,canOrder,canStock,canExpense]);
   const [tab,setTab]=useState<HubTab>(availableTabs[0]||"orders");
   const [queue,setQueue]=useState<QueueOrder[]>([]);
   const [sales,setSales]=useState<Sale[]>([]);
   const [expenses,setExpenses]=useState<ExpenseRow[]>([]);
+  const [todaySummary,setTodaySummary]=useState<TodaySummary|null>(null);
+  const [closeStatus,setCloseStatus]=useState<CloseStatus|null>(null);
   const [loading,setLoading]=useState(false);
   const [message,setMessage]=useState("");
   const [expenseBusy,setExpenseBusy]=useState(false);
@@ -96,7 +101,8 @@ export default function PosOperationsHub({session,bootstrap,open,onClose,onRefre
     if(!quiet){setLoading(true);setMessage("")}
     try{
       const tasks:Promise<any>[]=[];
-      const names:("queue"|"orders"|"expenses"|"stock")[]=[];
+      const names:("todaySummary"|"closeStatus"|"queue"|"orders"|"expenses"|"stock")[]=[];
+      if(canReport&&(scope==="all"||scope==="today")){tasks.push(api<any>("/api/management/dashboard"));names.push("todaySummary");tasks.push(api<any>("/api/close-day"));names.push("closeStatus")}
       if(canQueue&&(scope==="all"||scope==="queue")){tasks.push(api<any>("/api/pos/queue"));names.push("queue")}
       if(canOrder&&(scope==="all"||scope==="orders")){tasks.push(api<any>("/api/pos/history"));names.push("orders")}
       if(canExpense&&(scope==="all"||scope==="expenses")){tasks.push(api<any>("/api/expenses"));names.push("expenses")}
@@ -106,6 +112,8 @@ export default function PosOperationsHub({session,bootstrap,open,onClose,onRefre
       settled.forEach((result,index)=>{
         if(result.status!=="fulfilled")return;
         const name=names[index],value=result.value;
+        if(name==="todaySummary")setTodaySummary(value as TodaySummary);
+        if(name==="closeStatus")setCloseStatus(value as CloseStatus);
         if(name==="queue")setQueue(Array.isArray(value.orders)?value.orders:[]);
         if(name==="orders")setSales(Array.isArray(value.sales)?value.sales:[]);
         if(name==="expenses")setExpenses(Array.isArray(value.expenses)?value.expenses:[]);
@@ -281,7 +289,9 @@ export default function PosOperationsHub({session,bootstrap,open,onClose,onRefre
   const outCount=stockHealth.filter(x=>x.level==="out").length,lowCount=stockHealth.filter(x=>x.level==="low").length;
 
   if(!open)return null;
+  const todayBlockers=n(closeStatus?.paymentBlockers?.length)+n(closeStatus?.orderBlockers?.length);
   const tabMeta:{key:HubTab;label:string;icon:any;count?:number;allowed:boolean}[]=[
+    {key:"today",label:"วันนี้",icon:CalendarCheck2,count:todayBlockers,allowed:canReport},
     {key:"queue",label:"คิว",icon:ListOrdered,count:queue.length,allowed:canQueue},
     {key:"orders",label:"ออเดอร์",icon:ClipboardList,count:sales.length,allowed:canOrder},
     {key:"stock",label:"สต็อก",icon:Boxes,count:outCount+lowCount,allowed:canStock},
@@ -319,6 +329,21 @@ export default function PosOperationsHub({session,bootstrap,open,onClose,onRefre
       {message&&<div className="mx-3 mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-semibold text-amber-900">{message}</div>}
 
       <div role="tabpanel" id={"field-operations-panel-"+tab} aria-labelledby={"field-operations-tab-"+tab} className="soft-scroll min-h-0 flex-1 overflow-auto p-3 sm:p-4">
+        {tab==="today"&&canReport&&<div className="space-y-3">
+          <div className="grid grid-cols-2 gap-2">
+            <div className="rounded-2xl border border-slate-200 bg-white p-4"><p className="text-[10px] font-bold text-slate-500">ยอดขายวันนี้</p><b className="mt-1 block text-2xl text-[#765b08]">฿{formatMoney(n(todaySummary?.todayRevenue))}</b></div>
+            <div className="rounded-2xl border border-slate-200 bg-white p-4"><p className="text-[10px] font-bold text-slate-500">ออเดอร์วันนี้</p><b className="mt-1 block text-2xl">{n(todaySummary?.todayOrders)}</b></div>
+          </div>
+          <div className={"rounded-2xl border p-4 "+(todayBlockers>0?"border-amber-300 bg-amber-50":"border-emerald-200 bg-emerald-50")}>
+            <div className="flex items-start justify-between gap-3"><div><b>{todayBlockers>0?"ยังปิดวันไม่ได้":"พร้อมตรวจปิดวัน"}</b><p className="mt-1 text-xs text-slate-600">{todayBlockers>0?"ต้องเคลียร์คิวหรือรายการชำระที่ค้างก่อน เพื่อไม่ให้ยอดและ Stock คลาดเคลื่อน":"ไม่พบคิวหรือ payment blocker จากข้อมูลล่าสุด"}</p></div><span className={"rounded-full px-2 py-1 text-[10px] font-black "+(todayBlockers>0?"bg-amber-200 text-amber-900":"bg-emerald-200 text-emerald-900")}>{todayBlockers>0?todayBlockers+" ค้าง":"OK"}</span></div>
+            <div className="mt-3 grid grid-cols-2 gap-2 text-center"><Metric label="คิวค้าง" value={n(closeStatus?.orderBlockers?.length)}/><Metric label="ชำระค้าง" value={n(closeStatus?.paymentBlockers?.length)}/></div>
+          </div>
+          {!!todaySummary?.lowStock?.length&&<div className="rounded-2xl border border-amber-200 bg-white p-4"><b className="text-sm">สต็อกที่ควรดูวันนี้</b><p className="mt-2 text-xs text-slate-600">{todaySummary.lowStock.slice(0,4).map(x=>x.name).join(" · ")}</p><button onClick={()=>setTab("stock")} className="mt-3 min-h-11 w-full rounded-xl border border-slate-300 bg-white text-xs font-bold">ดูสต็อกในหน้านี้</button></div>}
+          {!!todaySummary?.recommendations?.length&&<div className="rounded-2xl border border-slate-200 bg-white p-4"><b className="text-sm">ระบบแนะนำ</b><p className="mt-2 text-xs font-semibold text-slate-800">{todaySummary.recommendations[0].title}</p><p className="mt-1 text-xs text-slate-500">{todaySummary.recommendations[0].detail}</p></div>}
+          <div className="grid grid-cols-2 gap-2"><FullLink href="/dashboard" label="ดูสรุปทั้งหมด"/><FullLink href="/close" label="ตรวจและปิดวัน"/></div>
+          <p className="rounded-xl bg-blue-50 px-3 py-2 text-[10px] text-blue-800">แท็บ “วันนี้” เป็นข้อมูลอ่านอย่างเดียว · การปิดวันยังทำในหน้าปิดวันเพื่อให้ตรวจเงินสดและรายการค้างครบก่อนยืนยัน</p>
+        </div>}
+
         {tab==="queue"&&canQueue&&<div className="space-y-2">
           {queueRows.length===0?<Empty text={!cloudAvailable?"ออฟไลน์ · ยังไม่ดึงคิวจาก Server":"ไม่มีคิวที่กำลังทำ"}/>:queueRows.map(order=>{
             const total=(order.items||[]).reduce((s,x)=>s+n(x.qty),0),ready=(order.items||[]).reduce((s,x)=>s+Math.min(n(x.qty),n(x.readyQty)),0),called=(order.items||[]).reduce((s,x)=>s+Math.min(n(x.qty),n(x.calledQty)),0);

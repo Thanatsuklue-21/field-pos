@@ -1,5 +1,5 @@
-export const FRONT_COUNTER_ROUTES=["/pos","/dashboard","/close"] as const;
-export const OPERATION_ROUTES=["/queue","/orders","/stock","/expenses"] as const;
+export const FRONT_COUNTER_ROUTES=["/pos"] as const;
+export const OPERATION_ROUTES=["/dashboard","/queue","/orders","/stock","/expenses","/close"] as const;
 export const MANAGEMENT_ROUTES=["/products","/costs","/customers","/recipes","/reports","/backup","/users","/audit","/settings"] as const;
 
 export function splitNavigation<T extends readonly [string,...unknown[]]>(allowed:readonly T[]){
