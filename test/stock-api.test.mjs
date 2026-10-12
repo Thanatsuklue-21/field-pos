@@ -105,28 +105,25 @@ test('stock API rejects request-key reuse with a different payload', async () =>
   assert.equal(db.rows.length,1);
 });
 
-test('stock API maps domain validation failures to HTTP 400', async () => {
+test('human stock API blocks system-generated transaction types even for admin', async () => {
   const db=fakeDb();
   const user={id:'admin-1',role:'admin',permissions:{}};
-
-  const res=await handleStockApi({
-    path:'/api/stock/transactions',
-    method:'POST',
-    user,
-    db,
-    body:{
-      requestKey:'sale-10001',
-      ingredientId:'matcha',
-      type:'SALE',
-      qtyDelta:5,
-      unit:'g',
-    },
-    now:100,
-  });
-
-  assert.equal(res.status,400);
-  assert.equal(res.body.error,'sale_must_decrease_stock');
+  for(const type of ['SALE','ADJUSTMENT','VOID_REVERSAL','REFUND_REVERSAL']){
+    const res=await handleStockApi({
+      path:'/api/stock/transactions',method:'POST',user,db,
+      body:{requestKey:'blocked-'+type.toLowerCase(),ingredientId:'matcha',type,qtyDelta:type==='SALE'?-5:5,unit:'g',reason:'manual attempt'},
+      now:100,
+    });
+    assert.equal(res.status,403);
+    assert.equal(res.body.error,'system_stock_transaction_type');
+  }
   assert.equal(db.rows.length,0);
+});
+
+test('waste through human stock API requires an explicit reason', async()=>{
+  const db=fakeDb(),user={id:'staff-1',role:'staff',permissions:{stock:true}};
+  const res=await handleStockApi({path:'/api/stock/transactions',method:'POST',user,db,body:{requestKey:'waste-no-reason',ingredientId:'matcha',type:'WASTE',qtyDelta:-5,unit:'g',reason:''},now:100});
+  assert.equal(res.status,400);assert.equal(res.body.error,'waste_reason_required');assert.equal(db.rows.length,0);
 });
 
 test('non-stock route is ignored by stock handler', async () => {

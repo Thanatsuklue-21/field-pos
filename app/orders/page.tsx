@@ -58,13 +58,14 @@ function OrdersView({session}:{session:Session}){
       if(!manualReference.trim())return;
     }
     const reason=window.prompt(refundable.length>1?"เหตุผลในการ Refund ทั้งออเดอร์":"เหตุผลในการ Refund เต็มจำนวน")||"";
+    if(reason.trim().length<2){setMsg("Refund ต้องระบุเหตุผลเพื่อเก็บ Audit Log");return}
     const confirmText=refundable.length>1
       ?"ยืนยัน Refund ทั้งออเดอร์ "+s.queueNo+" จำนวน "+refundable.length+" บิล รวม ฿"+refundTotal.toFixed(0)+" ? ระบบจะคืนทุก sale ในคิวนี้พร้อมกันและตัดสินการคืนสต็อกจากสถานะการผลิต"
       :"ยืนยัน Refund เต็มจำนวน ฿"+refundTotal.toFixed(0)+" ? ระบบจะตัดสินการคืนสต็อกจากสถานะการผลิต";
     if(!window.confirm(confirmText))return;
     setBusy(true);setMsg("");
     try{
-      const r=await api<any>("/api/pos/refund",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({requestKey:crypto.randomUUID(),saleId:s.id,reason,manualConfirmed:external.length>0,manualReference})});
+      const r=await api<any>("/api/pos/refund",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({requestKey:crypto.randomUUID(),saleId:s.id,reason,riskConfirmed:true,manualConfirmed:external.length>0,manualReference})});
       setDetail(null);
       const count=Array.isArray(r.saleIds)?r.saleIds.length:1;
       setMsg((count>1?"Refund ทั้งออเดอร์ "+count+" บิลสำเร็จ":"Refund ถูกบันทึกแล้ว")+" · "+(r.stockRestored?"คืนสต็อกแล้วเพราะยังไม่เริ่มผลิต":"ไม่คืนสต็อกเพราะวัตถุดิบถูกใช้/ออเดอร์ดำเนินการแล้ว"));
@@ -77,9 +78,11 @@ function OrdersView({session}:{session:Session}){
   async function voidCash(s:Sale,reasonInput?:string){
     const reason=reasonInput??window.prompt("เหตุผลในการยกเลิกบิลเงินสด (ทำได้ก่อนเริ่มผลิตเท่านั้น)");
     if(reason===null)return false;
+    if(reason.trim().length<2){setMsg("VOID ต้องระบุเหตุผลเพื่อเก็บ Audit Log");return false}
+    if(reasonInput===undefined&&!window.confirm("ยืนยัน VOID บิลนี้? ระบบจะบันทึกผู้ทำ เหตุผล และคืน Stock ตามเงื่อนไข"))return false;
     setBusy(true);setMsg("");
     try{
-      await api("/api/pos/void",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({requestKey:crypto.randomUUID(),saleId:s.id,reason})});
+      await api("/api/pos/void",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({requestKey:crypto.randomUUID(),saleId:s.id,reason,riskConfirmed:true})});
       setDetail(null);
       setMsg("ยกเลิกบิลสำเร็จ · คืน Stock แล้ว");
       await load();
