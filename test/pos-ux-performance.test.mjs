@@ -589,9 +589,15 @@ test('cash operator actions choose VOID before production and Refund after produ
 });
 
 
-test('cash checkout exposes common tender shortcuts without bypassing confirmation',async()=>{
+test('cash checkout exposes bill-aware tender shortcuts without bypassing confirmation',async()=>{
   const pos=await read('app/pos/page.tsx');
-  assert.match(pos,/\[100,500,1000\]\.map\(amount/);
+  assert.match(pos,/const quickCashAmounts=useMemo/);
+  assert.match(pos,/\[20,50,100,500,1000\]/);
+  assert.match(pos,/Math\.ceil\(netPayable\/10\)\*10/);
+  assert.match(pos,/filter\(value=>value>=netPayable&&value>0\)/);
+  assert.match(pos,/sort\(\(a,b\)=>a-b\)/);
+  assert.match(pos,/slice\(0,4\)/);
+  assert.match(pos,/quickCashAmounts\.map\(amount/);
   assert.match(pos,/setReceived\(String\(amount\)\)/);
   assert.match(pos,/cashReceived===amount/);
   assert.match(pos,/รับพอดี ฿\{formatMoney\(netPayable\)\}/);
