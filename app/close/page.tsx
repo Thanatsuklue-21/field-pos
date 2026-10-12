@@ -57,7 +57,7 @@ function View({session}:{session:Session}){
     }catch(e:any){
       if(e.message==="cash_recount_mismatch"){
         setSecondCount("");setMsg("ยอดนับรอบ 1 และรอบ 2 ไม่ตรงกัน · กรุณานับรอบ 2 ใหม่โดยไม่ดูยอดระบบ");
-      }else setMsg(e.message==="close_day_pending_payments"?"ยังมี Payment ค้าง ต้องจัดการก่อน":e.message==="close_day_open_orders"?"ยังมีออเดอร์ที่ยังไม่ส่งมอบ":e.message==="cash_shift_not_open"?"ยังไม่ได้เปิดกะเงินสด":e.message);
+      }else setMsg(e.message==="close_day_pending_payments"?"ยังมี Payment ค้าง ต้องจัดการก่อน":e.message==="close_day_open_orders"?"ยังมีออเดอร์ที่ยังไม่ส่งมอบ":e.message==="close_day_pending_stock_count_approval"?"มีผลนับสต๊อกรอ Owner อนุมัติ กรุณาจัดการก่อนปิดวัน":e.message==="cash_shift_not_open"?"ยังไม่ได้เปิดกะเงินสด":e.message);
     }finally{setBusy(false)}
   }
 
@@ -78,6 +78,7 @@ function View({session}:{session:Session}){
         day_already_closed:"วันนี้ถูกปิดวันแล้ว",
         close_day_pending_payments:"ยังมี Payment ที่ค้างอยู่",
         close_day_open_orders:"ยังมีออเดอร์ที่ยังไม่ได้ส่งมอบ",
+        close_day_pending_stock_count_approval:"มีผลนับสต๊อกรอ Owner อนุมัติ กรุณาไปหน้า Stock เพื่ออนุมัติหรือตีกลับก่อนปิดวัน",
         close_day_review_required:"ต้องผ่านการตรวจ 2 รอบก่อน",
         close_day_review_expired:"ผลตรวจหมดอายุ กรุณานับใหม่",
         close_day_review_stale:"ข้อมูลการเงินเปลี่ยนหลังตรวจ กรุณานับและตรวจใหม่",
