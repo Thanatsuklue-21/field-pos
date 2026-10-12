@@ -1,4 +1,5 @@
 "use client";
+import {formatMoney} from "@/lib/money-format.mjs";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
@@ -104,7 +105,7 @@ function View() {
             <small className="text-slate-500">{l}</small>
             <strong className="mt-3 block text-2xl">
               {u === "฿" ? "฿" : ""}
-              {Number(v).toLocaleString(undefined, {
+              {u === "฿" ? formatMoney(Number(v)) : Number(v).toLocaleString("en-US", {
                 maximumFractionDigits: u === "%" ? 1 : 0,
               })}
               {u === "%" ? "%" : ""}
@@ -152,19 +153,19 @@ function View() {
             <div>
               <small className="text-slate-500">COGS เดือนนี้</small>
               <div className="mt-1 text-xl">
-                ฿{(d?.cogs || 0).toLocaleString()}
+                ฿{formatMoney((d?.cogs || 0))}
               </div>
             </div>
             <div>
               <small className="text-slate-500">Operating Expenses</small>
               <div className="mt-1 text-xl">
-                ฿{(d?.expenses || 0).toLocaleString()}
+                ฿{formatMoney((d?.expenses || 0))}
               </div>
             </div>
             <div>
               <small className="text-slate-500">Purchase Spend</small>
               <div className="mt-1 text-xl">
-                ฿{(d?.purchaseSpend || 0).toLocaleString()}
+                ฿{formatMoney((d?.purchaseSpend || 0))}
               </div>
             </div>
             <div>
@@ -201,7 +202,7 @@ function View() {
             <div className="rounded-2xl bg-slate-100/80 p-3">
               <small className="text-slate-500">ยอดเฉลี่ย/วัน</small>
               <div className="mt-1 text-lg">
-                ฿{Number(d?.analytics?.avgDailyRevenue || 0).toFixed(0)}
+                ฿{formatMoney(Number(d?.analytics?.avgDailyRevenue || 0))}
               </div>
             </div>
             <div className="rounded-2xl bg-slate-100/80 p-3">

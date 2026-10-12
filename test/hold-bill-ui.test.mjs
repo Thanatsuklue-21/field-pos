@@ -42,7 +42,7 @@ test('mobile and desktop sales UI expose one-tap hold plus a held-bill drawer',a
   const pos=await read('app/pos/page.tsx');
   const hits=(pos.match(/holdCurrentBill/g)||[]).length;
   assert.ok(hits>=3);
-  assert.match(pos,/HOLD BILL/);
+  assert.match(pos,/>พักบิล<\/p>/);
   assert.match(pos,/เรียกบิลนี้กลับ/);
   assert.match(pos,/ยังไม่สร้างยอดขาย ไม่ตัด Stock และไม่เข้าคิวจนกว่าจะชำระจริง/);
 });

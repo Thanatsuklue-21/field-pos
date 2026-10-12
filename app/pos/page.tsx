@@ -1,16 +1,22 @@
 "use client";
+import {formatMoney} from "@/lib/money-format.mjs";
 
 import {useEffect,useMemo,useRef,useState} from "react";
 import {useRouter} from "next/navigation";
-import {ArrowRight,CheckCircle2,Clock3,Minus,Plus,Search,Trash2,WalletCards,X} from "lucide-react";
+import {ArrowRight,CheckCircle2,Clock3,ClipboardList,Minus,Plus,Printer,Search,Trash2,WalletCards,X} from "lucide-react";
 import AuthGate from "@/components/auth-gate";
+import SaleReceipt,{type ReceiptSale} from "@/components/sale-receipt";
 import {api,type Bootstrap,type MenuItem,type RevisionUnchanged,type Session} from "@/lib/api-client";
-import {cacheGet,cachePut} from "@/lib/offline-db";
-import {applyOfflineCashToBootstrap,getOfflineCashSummary,queueOfflineCashSale,syncOfflineCashSales,type OfflineCashSummary} from "@/lib/offline-sales";
+import {BOOTSTRAP_OFFLINE_MAX_AGE_MS,cacheGet} from "@/lib/offline-db";
+import {acknowledgeOfflineStockReconciliation,getOfflineCashReviews,getOfflineCashSummary,queueOfflineCashSale,syncOfflineCashSales,type OfflineCashReviewItem,type OfflineCashSummary} from "@/lib/offline-sales";
 import {additionalServingsAvailable,cartAvailability} from "@/lib/domain/availability.mjs";
 import {useCartStore} from "@/stores/cart-store";
 import {useHeldCartStore} from "@/stores/held-cart-store";
-import {writeQueueSnapshotCache} from "@/lib/queue-cache";
+import {writeQueueSnapshotCache} from "@/lib/queue-cache"; import {clearRecovery,readRecovery,writeRecovery} from "@/lib/recovery-storage";
+import {shouldRetainCashPending} from "@/lib/cash-recovery-policy.mjs";
+import {inspectPaymentRecoveryRaw} from "@/lib/payment-recovery-integrity.mjs";
+import {buildPosGuidance} from "@/lib/pos-guidance.mjs";
+import PosOperationsHub,{type HubTab} from "@/components/pos-operations-hub";
 
 export default function Pos(){return <AuthGate>{s=><PosView session={s}/>}</AuthGate>}
 
@@ -21,7 +27,7 @@ function localTime(ts:number){
   return new Intl.DateTimeFormat("th-TH",{timeZone:"Asia/Bangkok",hour:"2-digit",minute:"2-digit"}).format(new Date(ts));
 }
 
-const BOOTSTRAP_CACHE_MAX_AGE_MS=36*60*60*1000;
+const BOOTSTRAP_CACHE_MAX_AGE_MS=BOOTSTRAP_OFFLINE_MAX_AGE_MS;
 const PENDING_KEY="field-pos-pending-promptpay-v1";
 type PendingPrompt={requestKey:string;payRequestKey?:string;sessionId?:string;date:string;cart:{id:string;variant:string;qty:number}[];paymentReference:string;total:number;customerId:string|null;pointsRedeemed?:number;createdAt:number;checkoutMode?:"full"|"split_bill";targetOrderId?:string|null};
 const pendingRead=():PendingPrompt|null=>{try{return JSON.parse(localStorage.getItem(PENDING_KEY)||"null")}catch{return null}};
@@ -31,17 +37,25 @@ const samePending=(p:PendingPrompt,total:number,cart:{id:string;variant:string;q
 
 const CASH_PENDING_KEY="field-pos-pending-cash-v1";
 type PendingCash={body:any;createdAt:number};
+type CashRecoveryReview={requestKey:string;date:string;total:number;received:number;createdAt:number;reason:"business_date_changed"|"day_closed"|"server_rejected"};
 const cashPendingRead=():PendingCash|null=>{try{return JSON.parse(localStorage.getItem(CASH_PENDING_KEY)||"null")}catch{return null}};
 const cashPendingWrite=(p:PendingCash)=>localStorage.setItem(CASH_PENDING_KEY,JSON.stringify(p));
 const cashPendingClear=()=>localStorage.removeItem(CASH_PENDING_KEY);
 const sameCashPending=(p:PendingCash,total:number,cart:{id:string;variant:string;qty:number}[],customerId:string,received:number,pointsRedeemed:number,targetOrderId?:string|null)=>Number(p.body?.received)===received&&Number(p.body?.total??total)===total&&(p.body?.customerId||null)===(customerId||null)&&Number(p.body?.pointsRedeemed||0)===pointsRedeemed&&String(p.body?.targetOrderId||"")===String(targetOrderId||"")&&JSON.stringify(p.body?.cart||[])===JSON.stringify(cart);
 
-type LastSale={queueNo:string;pager:number;billNo?:string;total:number;received:number;change:number;payment:"cash"|"promptpay"|"bank"|"card"|"delivery";recovered?:boolean;offline?:boolean};
+type RecoveryIntegrityIssue={kind:"promptpay"|"cash"|"storage";reason:string};
+type LastSale={queueNo:string;pager:number;billNo?:string;total:number;received:number;change:number;payment:"cash"|"promptpay"|"bank"|"card"|"delivery";receipt?:ReceiptSale;recovered?:boolean;offline?:boolean};
 type SplitGroup={orderId:string;queueNo:string;pager:number;createdAt:number};
-const SPLIT_GROUP_KEY="field-pos-split-group-v1";
-const splitGroupRead=():SplitGroup|null=>{try{return JSON.parse(sessionStorage.getItem(SPLIT_GROUP_KEY)||"null")}catch{return null}};
-const splitGroupWrite=(g:SplitGroup)=>sessionStorage.setItem(SPLIT_GROUP_KEY,JSON.stringify(g));
-const splitGroupClear=()=>sessionStorage.removeItem(SPLIT_GROUP_KEY);
+const SPLIT_GROUP_KEY="field-pos-split-group-v1",EDIT_CASH_KEY="field-pos-edit-cash-v1";
+const splitGroupRead=():SplitGroup|null=>readRecovery<SplitGroup>(SPLIT_GROUP_KEY);
+const splitGroupWrite=(g:SplitGroup)=>writeRecovery(SPLIT_GROUP_KEY,g);
+const splitGroupClear=()=>clearRecovery(SPLIT_GROUP_KEY);
+const paymentRecoveryIntegrityIssue=():RecoveryIntegrityIssue|null=>{
+  try{
+    const result=inspectPaymentRecoveryRaw({promptRaw:localStorage.getItem(PENDING_KEY),cashRaw:localStorage.getItem(CASH_PENDING_KEY)});
+    return result?.ok===false?{kind:result.kind,reason:result.reason}:null;
+  }catch{return {kind:"storage",reason:"storage_unavailable"}}
+};
 
 const sellable=(x:MenuItem)=>!!x.enabled&&Number(x.price)>0&&Array.isArray(x.variants)&&x.variants.length>0;
 function orderOptionLabel(label:string){
@@ -52,6 +66,10 @@ function orderOptionLabel(label:string){
   if(!raw||v==="standard")return "สูตรมาตรฐาน";
   return raw;
 }
+function isDefaultOrderOption(label:string){
+  const v=String(label||"").trim().toLowerCase().replace(/\s+/g,"");
+  return ["100%","normal","ปกติ","หวานปกติ","standard",""].includes(v);
+}
 
 function PosView({session}:{session:Session}){
   const router=useRouter();
@@ -60,14 +78,21 @@ function PosView({session}:{session:Session}){
   const [cat,setCat]=useState("ทั้งหมด");
   const [selected,setSelected]=useState<MenuItem|null>(null);
   const [payOpen,setPayOpen]=useState(false);
+  const [reviewConfirmed,setReviewConfirmed]=useState(false);
   const [heldOpen,setHeldOpen]=useState(false);
+  const [opsOpen,setOpsOpen]=useState(false);
+  const [opsInitialTab,setOpsInitialTab]=useState<HubTab|undefined>(undefined);
   const [method,setMethod]=useState<"cash"|"promptpay"|"bank"|"card"|"delivery">("cash");
+  const [showMorePaymentMethods,setShowMorePaymentMethods]=useState(false);
+  const [showAdvancedPayment,setShowAdvancedPayment]=useState(false);
   const [deliveryPlatform,setDeliveryPlatform]=useState<"grab"|"lineman"|"other_delivery">("grab");
   const [received,setReceived]=useState("");
   const [manualPaymentReference,setManualPaymentReference]=useState("");
   const [busy,setBusy]=useState(false);
   const [result,setResult]=useState("");
   const [notice,setNotice]=useState("");
+  const [cashRecoveryReview,setCashRecoveryReview]=useState<CashRecoveryReview|null>(null);
+  const [recoveryIntegrityIssue,setRecoveryIntegrityIssue]=useState<RecoveryIntegrityIssue|null>(null);
   const [lastSale,setLastSale]=useState<LastSale|null>(null);
   const [prompt,setPrompt]=useState<any|null>(null);
   const [promptConfig,setPromptConfig]=useState<any|null>(null);
@@ -75,17 +100,25 @@ function PosView({session}:{session:Session}){
   const [customerId,setCustomerId]=useState("");
   const [loyalty,setLoyalty]=useState({pointsSpend:0,pointsRedeemValue:0});
   const [pointsRedeemed,setPointsRedeemed]=useState(0);
+  const [editCustomerRecovery,setEditCustomerRecovery]=useState<{customerId:string;pointsRedeemed:number}|null>(null);
   const [splitBill,setSplitBill]=useState(false);
   const [splitSelection,setSplitSelection]=useState<Record<string,number>>({});
   const [splitGroup,setSplitGroup]=useState<SplitGroup|null>(null);
   const [online,setOnline]=useState(true);
-  const [offlineStats,setOfflineStats]=useState<OfflineCashSummary>({pending:0,needsReview:0,total:0});
+  const [offlineStats,setOfflineStats]=useState<OfflineCashSummary>({pending:0,needsReview:0,stockReconciliation:0,businessReview:0,total:0});
+  const [offlineReviews,setOfflineReviews]=useState<OfflineCashReviewItem[]>([]);
+  const [offlineSyncing,setOfflineSyncing]=useState(false);
+  const [offlineReviewBusy,setOfflineReviewBusy]=useState<string|null>(null);
+  const canQueueOps=session.user.role==="admin"||session.user.permissions?.queue===true;
+  const canOrderOps=session.user.role==="admin"||session.user.permissions?.order===true;
   const revisionRef=useRef<number|null>(null);
   const offlineSyncRef=useRef(false);
+  const promptReconcileRef=useRef(false);
   const cart=useCartStore();
   const heldBills=useHeldCartStore();
 
   useEffect(()=>{router.prefetch("/queue")},[router]);
+  useEffect(()=>{window.dispatchEvent(new CustomEvent("field:transaction-busy",{detail:{busy:busy||payOpen,source:"pos"}}));return()=>{window.dispatchEvent(new CustomEvent("field:transaction-busy",{detail:{busy:false,source:"pos"}}));}},[busy,payOpen]);
 
   const acceptBootstrap=(next:Bootstrap|RevisionUnchanged)=>{
     if(next?.unchanged===true)return false;
@@ -93,7 +126,16 @@ function PosView({session}:{session:Session}){
     setData(prev=>!prev||next.revision>=prev.revision?next:prev);
     return true;
   };
-  const load=(force=false)=>api<Bootstrap|RevisionUnchanged>("/api/pos/bootstrap",!force&&revisionRef.current!==null?{headers:{"X-Field-Revision":String(revisionRef.current)}}:{}).then(acceptBootstrap);
+  const load=async(force=false)=>{
+    const next=await api<Bootstrap|RevisionUnchanged>("/api/pos/bootstrap",!force&&revisionRef.current!==null?{headers:{"X-Field-Revision":String(revisionRef.current)}}:{});
+    const outbox=await getOfflineCashSummary().catch(()=>null);
+    if(outbox&&outbox.total>0){
+      setOfflineStats(outbox);
+      getOfflineCashReviews().then(setOfflineReviews).catch(()=>{});
+      return false;
+    }
+    return acceptBootstrap(next);
+  };
   const loadCustomers=()=>api<any>("/api/customers").then(x=>{setCustomers(x.customers||[]);setLoyalty({pointsSpend:Number(x.loyalty?.pointsSpend)||0,pointsRedeemValue:Number(x.loyalty?.pointsRedeemValue)||0})});
 
   useEffect(()=>{
@@ -110,7 +152,11 @@ function PosView({session}:{session:Session}){
     // These calls are non-blocking secondary data; the menu can render from IndexedDB first.
     loadCustomers().catch(()=>{});
     api<any>("/api/payments/promptpay/config").then(setPromptConfig).catch(()=>setPromptConfig({ready:false,configured:false}));
-    recoverCashCheckout().then(()=>recoverPending()).catch(()=>{});
+    const integrity=paymentRecoveryIntegrityIssue();
+    if(integrity){
+      setRecoveryIntegrityIssue(integrity);
+      setNotice("ข้อมูล recovery การชำระในเครื่องอ่านไม่ได้ · ระบบหยุดรับชำระรายการใหม่เพื่อป้องกันยอดซ้ำ");
+    }else recoverCashCheckout().then(()=>recoverPending()).catch(()=>{});
     return()=>{active=false};
   },[]);
 
@@ -119,7 +165,7 @@ function PosView({session}:{session:Session}){
       const next=typeof navigator==="undefined"||navigator.onLine;
       setOnline(next);
       refreshOfflineStats().catch(()=>{});
-      if(next)syncOfflineQueue().catch(()=>{});
+      if(next&&!session.offline)syncOfflineQueue().catch(()=>{});
     };
     networkChanged();
     window.addEventListener("online",networkChanged);
@@ -127,9 +173,20 @@ function PosView({session}:{session:Session}){
     return()=>{window.removeEventListener("online",networkChanged);window.removeEventListener("offline",networkChanged)};
   },[]);
 
+  useEffect(()=>{if(!session.offline&&online)syncOfflineQueue().catch(()=>{})},[session.offline,session.csrf]);
+
+  useEffect(()=>{
+    if(!online||session.offline||method!=="promptpay"||!payOpen)return;
+    const tick=()=>{if(pendingRead())recoverPending().catch(()=>{})};
+    const timer=window.setInterval(tick,3000);
+    return()=>window.clearInterval(timer);
+  },[online,session.offline,method,payOpen,session.csrf]);
+
   useEffect(()=>{
     if(online)return;
     setMethod("cash");
+    setReviewConfirmed(false);
+    setShowMorePaymentMethods(false);
     setSplitBill(false);
     setSplitSelection({});
     setCustomerId("");
@@ -142,17 +199,30 @@ function PosView({session}:{session:Session}){
 
   useEffect(()=>{
     try{
-      const raw=sessionStorage.getItem("field-pos-edit-cash-v1");
-      if(!raw)return;
-      sessionStorage.removeItem("field-pos-edit-cash-v1");
-      const edit=JSON.parse(raw),heldCash=Number(edit?.heldCash);
+      const edit=readRecovery<any>(EDIT_CASH_KEY);
+      if(!edit)return;
+      const heldCash=Number(edit?.heldCash);
       if(Number.isFinite(heldCash)&&heldCash>0){
         setMethod("cash");
         setReceived(String(heldCash));
-        setNotice("กำลังแก้ไข "+String(edit?.fromQueue||edit?.fromBill||"บิลเดิม")+" · ยอดเงินสดจากบิลเดิม ฿"+heldCash.toFixed(0)+" ถูกกรอกไว้แล้ว เพิ่ม/ลด/เปลี่ยนเมนูแล้วกด CHECKOUT ใหม่");
+        if(edit?.customerId)setEditCustomerRecovery({customerId:String(edit.customerId),pointsRedeemed:Math.max(0,Math.trunc(Number(edit.pointsRedeemed)||0))});
+        setNotice("กำลังแก้ไข "+String(edit?.fromQueue||edit?.fromBill||"บิลเดิม")+" · ยอดเงินสดจากบิลเดิม ฿"+formatMoney(heldCash)+" ถูกกรอกไว้แล้ว เพิ่ม/ลด/เปลี่ยนเมนูแล้วกด “ตรวจรายการ / ชำระเงิน” ใหม่");
       }
     }catch{}
   },[]);
+
+  useEffect(()=>{
+    if(!editCustomerRecovery||!customers.length)return;
+    const found=customers.some(x=>x.id===editCustomerRecovery.customerId);
+    if(found){
+      setCustomerId(editCustomerRecovery.customerId);
+      setPointsRedeemed(editCustomerRecovery.pointsRedeemed);
+      setNotice(prev=>(prev?prev+" · ":"")+"เรียกคืนลูกค้าและแต้มจากบิลเดิมแล้ว กรุณาตรวจสอบก่อนชำระ");
+    }else{
+      setNotice(prev=>(prev?prev+" · ":"")+"ไม่พบลูกค้าเดิมในระบบ กรุณาเลือกลูกค้าใหม่ก่อนชำระ");
+    }
+    setEditCustomerRecovery(null);
+  },[customers,editCustomerRecovery]);
 
   useEffect(()=>{
     const refresh=()=>load().catch(()=>{});
@@ -184,9 +254,10 @@ function PosView({session}:{session:Session}){
     });
     if(changed)cart.replaceItems(next);
     if(removed.length)setNotice("นำ "+removed.join(", ")+" ออกจากตะกร้าอัตโนมัติ เพราะสต็อกหรือสูตรไม่พร้อม กรุณาตรวจยอดก่อนชำระ");
-  },[data?.revision]);
+  },[data?.menu]);
 
   const cats=useMemo(()=>["ทั้งหมด",...Array.from(new Set((data?.menu||[]).filter(sellable).map(x=>x.category||"อื่นๆ")))], [data]);
+  const salesClosed=!!data?.operational?.dayClosed;
   const menu=(data?.menu||[]).filter(x=>sellable(x)&&(cat==="ทั้งหมด"||(x.category||"อื่นๆ")===cat)&&x.name.toLowerCase().includes(q.toLowerCase()));
   const allUnavailable=menu.length>0&&menu.every(x=>!x.available);
   const unavailableNames=Array.from(new Set(menu.flatMap(x=>x.variants.flatMap(v=>v.missingIngredients||[]).map(i=>i.name)))).slice(0,4);
@@ -202,14 +273,51 @@ function PosView({session}:{session:Session}){
   const netPayable=Math.max(0,Math.round((payableTotal-crmDiscount)*100)/100);
   const estimatedPointsAwarded=selectedCustomer&&loyalty.pointsSpend>0?Math.floor(netPayable/loyalty.pointsSpend):0;
   const remainingAfterBill=Math.max(0,cart.items.reduce((s,i)=>s+i.qty,0)-payableQty);
+  const advancedPaymentActive=splitBill||!!customerId||pointsRedeemed>0||!!splitGroup;
+  const advancedPaymentOpen=showAdvancedPayment||advancedPaymentActive;
   const cashReceived=received.trim()===""?NaN:Number(received);
   const cashDelta=Number.isFinite(cashReceived)?cashReceived-netPayable:NaN;
+  const quickCashAmounts=useMemo(()=>{
+    const common=[20,50,100,500,1000];
+    const rounded=Math.ceil(netPayable/10)*10;
+    return Array.from(new Set([rounded,...common.filter(value=>value>=netPayable)]))
+      .filter(value=>value>=netPayable&&value>0)
+      .sort((a,b)=>a-b)
+      .slice(0,4);
+  },[netPayable]);
   const deliveryRates=data?.settings?.deliveryGp||{};
   const deliveryGpRate=Math.max(0,Math.min(.8,Number(deliveryRates?.[deliveryPlatform])||0));
   const deliveryGpFee=Math.round(netPayable*deliveryGpRate*100)/100;
   const deliveryNetSettlement=Math.round((netPayable-deliveryGpFee)*100)/100;
+  const receiptPaperWidth:58|80=Number(data?.settings?.receiptPaperWidth)===58?58:80;
+  const cartQty=cart.items.reduce((sum,item)=>sum+item.qty,0);
+  const posGuide=buildPosGuidance({
+    recoveryBlocked:!!recoveryIntegrityIssue,
+    cashRecoveryBlocked:!!cashRecoveryReview,
+    payOpen,busy,cartQty,lastSale,online,
+    offlineSession:!!session.offline,
+    offlinePending:offlineStats.pending,
+    canOrder:canOrderOps,canQueue:canQueueOps
+  });
+  const guideStep=posGuide.step;
+  const guideMessage=posGuide.message;
+  function runGuideAction(){
+    if(posGuide.action==="checkout"){openPayment();return}
+    if(posGuide.action==="next_order"){startNextOrder();return}
+    if(posGuide.action==="open_queue"){setOpsInitialTab("queue");setLastSale(null);setOpsOpen(true);return}
+    if(posGuide.action==="open_orders"){setOpsInitialTab("orders");setOpsOpen(true);return}
+  }
+  const guideTone=posGuide.tone==="danger"
+    ?"border-red-300 bg-red-50 text-red-900"
+    :posGuide.tone==="warn"
+      ?"border-amber-300 bg-amber-50 text-amber-900"
+      :posGuide.tone==="success"
+        ?"border-emerald-300 bg-emerald-50 text-emerald-900"
+        :"border-slate-200 bg-white text-slate-700";
 
   useEffect(()=>{if(pointsRedeemed>maxRedeemPoints)setPointsRedeemed(maxRedeemPoints)},[pointsRedeemed,maxRedeemPoints]);
+  useEffect(()=>{if(payOpen)setReviewConfirmed(false)},[payableQty,netPayable,method,customerId,redeemPoints,splitBill,deliveryPlatform]);
+
 
   function applyServerState(r:any){
     const revision=Number(r?.revision)||0;
@@ -234,31 +342,67 @@ function PosView({session}:{session:Session}){
   }
 
   async function refreshOfflineStats(){
-    setOfflineStats(await getOfflineCashSummary());
+    const [summary,reviews]=await Promise.all([getOfflineCashSummary(),getOfflineCashReviews()]);
+    setOfflineStats(summary);
+    setOfflineReviews(reviews);
   }
 
   async function syncOfflineQueue(){
-    if(offlineSyncRef.current||typeof navigator!=="undefined"&&!navigator.onLine)return;
+    if(session.offline||offlineSyncRef.current||typeof navigator!=="undefined"&&!navigator.onLine)return;
     offlineSyncRef.current=true;
+    setOfflineSyncing(true);
+    window.dispatchEvent(new CustomEvent("field:sync",{detail:{status:"syncing"}}));
     try{
       const sync=await syncOfflineCashSales(session);
-      setOfflineStats({pending:sync.pending,needsReview:sync.needsReview,total:sync.total});
-      if(sync.synced>0){
-        setNotice("ซิงก์ยอดเงินสด Offline สำเร็จ "+sync.synced+" บิล · Cloud/Stock อัปเดตแล้ว");
-        await load(true).catch(()=>{});
-        await loadCustomers().catch(()=>{});
+      setOfflineStats({pending:sync.pending,needsReview:sync.needsReview,stockReconciliation:sync.stockReconciliation,businessReview:sync.businessReview,total:sync.total});
+      await getOfflineCashReviews().then(setOfflineReviews).catch(()=>{});
+      if(sync.total===0){
+        if(sync.synced>0){
+          setNotice("ซิงก์ยอดเงินสด Offline สำเร็จ "+sync.synced+" บิล · Cloud/Stock อัปเดตแล้ว");
+          await load(true).catch(()=>{});
+          await loadCustomers().catch(()=>{});
+        }
+        window.dispatchEvent(new CustomEvent("field:sync",{detail:{status:"online"}}));
+      }else{
+        const remaining="รอส่ง "+sync.pending+" · ตรวจสต็อก "+sync.stockReconciliation+" · ตรวจบิล "+sync.businessReview;
+        setNotice((sync.synced>0?"ซิงก์ขึ้น Cloud สำเร็จ "+sync.synced+" บิล · ":"")+"ยังมีบิล Offline "+sync.total+" รายการ ("+remaining+") · ระบบคง Stock projection ในเครื่องไว้จนกว่าจะจัดการครบ");
+        window.dispatchEvent(new CustomEvent("field:sync",{detail:{status:"sync_error"}}));
       }
-      if(sync.needsReview>0)setNotice("มีบิล Offline "+sync.needsReview+" รายการที่ต้องตรวจสอบก่อนลง Cloud · ระบบเก็บรายการไว้และไม่ลบทิ้ง");
-    }finally{offlineSyncRef.current=false}
+    }catch(error:any){
+      window.dispatchEvent(new CustomEvent("field:sync",{detail:{status:"sync_error"}}));
+      setNotice(error?.status===401||error?.status===403||error?.message==="offline_session_revalidation"
+        ?"ยังส่งบิล Offline ไม่ได้ · กรุณาตรวจการเข้าสู่ระบบและสิทธิ์ผู้ใช้ บิลยังเก็บอยู่ในเครื่อง"
+        :"ยังส่งบิล Offline ไม่ครบ · บิลที่ค้างยังเก็บอยู่ในเครื่อง ตรวจอินเทอร์เน็ตแล้วกดซิงก์บิลที่ค้างอีกครั้ง");
+      refreshOfflineStats().catch(()=>{});
+      throw error;
+    }
+    finally{offlineSyncRef.current=false;setOfflineSyncing(false)}
   }
 
-  function finishOfflineSale(localNo:string,opts:{total:number;received:number;paidCart:{id:string;variant:string;qty:number}[]}){
-    const projected=applyOfflineCashToBootstrap(data,opts.paidCart);
-    if(projected){
-      setData(projected);
-      cachePut("/api/pos/bootstrap",projected).catch(()=>{});
+  async function acknowledgeStockReview(requestKey:string){
+    if(session.user.role!=="admin"){
+      setNotice("รายการนี้ขายและซิงก์แล้ว แต่ต้องให้ผู้ดูแลตรวจสต็อกจริงก่อนปลดล็อก");
+      return;
     }
+    setOfflineReviewBusy(requestKey);
+    try{
+      const summary=await acknowledgeOfflineStockReconciliation(requestKey);
+      setOfflineStats(summary);
+      setOfflineReviews(await getOfflineCashReviews());
+      setNotice("ยืนยันตรวจสต็อกจริงแล้ว · ปลดล็อกรายการ Offline สำหรับรับ Stock จาก Cloud");
+      if(summary.total===0)await load(true).catch(()=>{});
+    }catch{
+      setNotice("ยังปลดล็อกรายการตรวจสต็อกไม่ได้ · ข้อมูลถูกเปลี่ยนหรือรายการไม่ใช่บิลที่ Cloud รับแล้ว กรุณาตรวจใหม่");
+      await refreshOfflineStats().catch(()=>{});
+    }finally{
+      setOfflineReviewBusy(null);
+    }
+  }
+
+  function finishOfflineSale(localNo:string,opts:{total:number;received:number;bootstrap:Bootstrap}){
+    setData(opts.bootstrap);
     setPayOpen(false);
+    setShowMorePaymentMethods(false);
     setResult("");
     setPrompt(null);
     cart.clearCart();
@@ -267,7 +411,7 @@ function PosView({session}:{session:Session}){
     setPointsRedeemed(0);
     setSplitSelection({});
     setSplitBill(false);
-    splitGroupClear();setSplitGroup(null);
+    splitGroupClear();setSplitGroup(null);clearRecovery(EDIT_CASH_KEY);
     setLastSale({queueNo:localNo,pager:0,total:opts.total,received:opts.received,change:Math.max(0,opts.received-opts.total),payment:"cash",offline:true});
     setNotice("บันทึกเงินสดแบบ Offline แล้ว · "+localNo+" · ระบบจะซิงก์ Cloud อัตโนมัติเมื่ออินเทอร์เน็ตกลับมา");
     refreshOfflineStats().catch(()=>{});
@@ -279,6 +423,7 @@ function PosView({session}:{session:Session}){
     const serverReceived=Number(r?.received??opts.received);
     const serverChange=Number(r?.change??(opts.payment==="cash"?Math.max(0,serverReceived-serverTotal):0));
     setPayOpen(false);
+    setShowMorePaymentMethods(false);
     setResult("");
     setPrompt(null);
     const remaining=opts.splitBill&&opts.paidCart?subtractPaidCart(opts.paidCart):(cart.clearCart(),[]);
@@ -287,6 +432,7 @@ function PosView({session}:{session:Session}){
     setPointsRedeemed(0);
     setSplitSelection({});
     setSplitBill(false);
+    if(!remaining.length)clearRecovery(EDIT_CASH_KEY);
     if(remaining.length&&(opts.splitBill||splitGroup)){
       const orderId=String(r?.orderId||splitGroup?.orderId||"");
       const queueNo=String(r?.queueNo||splitGroup?.queueNo||"—");
@@ -303,11 +449,12 @@ function PosView({session}:{session:Session}){
     setLastSale({
       queueNo:String(r?.queueNo||"—"),
       pager:Number(r?.pager)||0,
-      billNo:r?.billNo?String(r.billNo):undefined,
+      billNo:r?.receipt?.billNo?String(r.receipt.billNo):(r?.billNo?String(r.billNo):undefined),
       total:serverTotal,
       received:serverReceived,
       change:serverChange,
       payment:opts.payment,
+      receipt:r?.receipt&&r.receipt.billNo?r.receipt:undefined,
       recovered:opts.recovered
     });
     warmQueueSnapshot();
@@ -318,6 +465,17 @@ function PosView({session}:{session:Session}){
   function availabilityMessage(result:ReturnType<typeof cartAvailability>){
     if(result.shortages.length)return "วัตถุดิบเพียงพอไม่ครบสำหรับตะกร้านี้ · ขาด: "+result.shortages.map(x=>x.name).join(", ");
     return "มีเมนูหรือตัวเลือกที่หมดชั่วคราว กรุณาตรวจตะกร้า";
+  }
+
+  function selectMenu(product:MenuItem){
+    if(salesClosed){setNotice("วันนี้ปิดยอดแล้ว · ยังเพิ่มเมนูใหม่ไม่ได้");return}
+    if(!product.available)return;
+    if(product.variants.length===1){
+      const variant=product.variants[0];
+      const remaining=additionalServingsAvailable({cart:cart.items,menu:data?.menu||[],stock:data?.availabilityStock||{},menuId:product.id,variantLabel:variant.label});
+      if(variant.available&&remaining>0){addVariant(product,variant);return}
+    }
+    setSelected(product);
   }
 
   function addVariant(product:MenuItem,variant:MenuItem["variants"][number]){
@@ -336,6 +494,12 @@ function PosView({session}:{session:Session}){
 
   function holdCurrentBill(){
     if(!cart.items.length)return;
+    const integrity=recoveryIntegrityIssue||paymentRecoveryIntegrityIssue();
+    if(integrity){
+      setRecoveryIntegrityIssue(integrity);
+      setNotice("ข้อมูล recovery การชำระในเครื่องผิดปกติ · ยังพัก/เปลี่ยนบิลไม่ได้จนกว่าจะตรวจรายการเดิม");
+      return;
+    }
     if(pendingRead()||cashPendingRead()){
       setNotice("ยังมีรายการชำระเงินเดิมที่รอตรวจสอบ · ยังพักบิลนี้ไม่ได้จนกว่าจะยืนยันสถานะเดิม");
       return;
@@ -394,6 +558,7 @@ function PosView({session}:{session:Session}){
     setPrompt(null);
     setReceived("");
     setMethod("cash");
+    setShowMorePaymentMethods(false);
     setSelected(null);
     setQ("");
     setCat("ทั้งหมด");
@@ -403,21 +568,81 @@ function PosView({session}:{session:Session}){
   async function recoverCashCheckout(){
     const p=cashPendingRead();
     if(!p)return;
-    if(Date.now()-Number(p.createdAt||0)>24*60*60*1000){
-      setNotice("พบรายการเงินสดค้างเกิน 24 ชม. กรุณาตรวจ Orders ก่อนดำเนินการต่อ");
-      return;
-    }
+    const ageMs=Math.max(0,Date.now()-Number(p.createdAt||0));
+    if(ageMs>24*60*60*1000)setNotice("พบรายการเงินสดค้างเกิน 24 ชม. · กำลังตรวจ request เดิมกับ Server ก่อน เพื่อป้องกันบิลซ้ำ");
     try{
       const r=await api<any>("/api/pos/checkout",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify(p.body)});
       cashPendingClear();
+      setCashRecoveryReview(null);
       finishSale(r,{payment:"cash",total:Number(p.body?.total)||0,received:Number(p.body?.received)||0,recovered:true,splitBill:p.body?.checkoutMode==="split_bill",paidCart:Array.isArray(p.body?.cart)?p.body.cart:undefined});
     }catch(e:any){
-      if(e.message==="business_date_changed")setNotice("รายการเงินสดค้างข้ามวัน · กรุณาตรวจ Orders ก่อน หากไม่พบบิลให้บันทึกปรับปรุงด้วย Admin");
-      else if(!["network_unavailable","offline_write_blocked"].includes(e.message)){
-        cashPendingClear();
-        setNotice("ตรวจรายการเงินสดค้างไม่สำเร็จ · "+errorText(e.message));
+      if(["business_date_changed","day_closed"].includes(e.message)){
+        setCashRecoveryReview({
+          requestKey:String(p.body?.requestKey||""),
+          date:String(p.body?.date||""),
+          total:Number(p.body?.total)||0,
+          received:Number(p.body?.received)||0,
+          createdAt:Number(p.createdAt)||0,
+          reason:e.message
+        });
+        setNotice("รายการเงินสดค้างข้ามวันและ Server ไม่พบ replay ที่ยืนยันได้ · กรุณาตรวจ Orders ก่อน ระบบยังเก็บ request เดิมไว้และจะไม่สร้างบิลซ้ำ");
+      }else if(shouldRetainCashPending(e)){
+        setCashRecoveryReview(null);
+        setNotice("ยังยืนยันผลรายการเงินสดค้างไม่ได้ · ระบบเก็บ request เดิมไว้เพื่อป้องกันบิลซ้ำ กรุณาตรวจการเชื่อมต่อ/เข้าสู่ระบบแล้วลองอีกครั้ง");
+      }else{
+        setCashRecoveryReview({
+          requestKey:String(p.body?.requestKey||""),
+          date:String(p.body?.date||""),
+          total:Number(p.body?.total)||0,
+          received:Number(p.body?.received)||0,
+          createdAt:Number(p.createdAt)||0,
+          reason:"server_rejected"
+        });
+        setNotice("Server ปฏิเสธรายการเงินสดเดิม · ระบบยังไม่ล้าง pending อัตโนมัติ กรุณาตรวจ Orders ก่อน เพื่อยืนยันว่าไม่มีบิลจาก request เดิม");
       }
     }
+  }
+
+  function clearCorruptRecovery(){
+    if(session.user.role!=="admin"||!recoveryIntegrityIssue)return;
+    const kind=recoveryIntegrityIssue.kind;
+    const ok=window.confirm(
+      kind==="promptpay"
+        ?"ยืนยันว่าตรวจ Orders และผู้ให้บริการ PromptPay แล้วว่าไม่มีรายการชำระที่ต้องรับรู้?\nการล้างข้อมูลนี้อาจทำให้ไม่สามารถติดตาม QR เดิมจากเครื่องนี้ได้"
+        :kind==="cash"
+          ?"ยืนยันว่าตรวจ Orders แล้วว่าไม่มีรายการเงินสดเดิมจากเครื่องนี้ที่ต้องรับรู้?\nการล้างข้อมูลนี้จะลบเฉพาะ recovery ในเครื่อง"
+          :"ยืนยันว่าตรวจ Orders/PromptPay แล้ว? ระบบจะพยายามล้าง recovery keys ในเครื่องเพื่อให้กลับมาใช้งานได้"
+    );
+    if(!ok)return;
+    try{
+      if(kind==="promptpay"||kind==="storage")localStorage.removeItem(PENDING_KEY);
+      if(kind==="cash"||kind==="storage")localStorage.removeItem(CASH_PENDING_KEY);
+      const next=paymentRecoveryIntegrityIssue();
+      setRecoveryIntegrityIssue(next);
+      setNotice(next?"ยังอ่าน recovery storage ไม่ได้ · กรุณาตรวจสิทธิ์/พื้นที่เก็บข้อมูลของเบราว์เซอร์":"ล้าง recovery ที่เสียหลังตรวจสอบแล้ว · กรุณารีเฟรชข้อมูลและตรวจตะกร้าก่อนขายต่อ");
+    }catch{
+      setNotice("ล้าง recovery storage ไม่สำเร็จ · ห้ามรับชำระต่อบนเครื่องนี้จนกว่าพื้นที่เก็บข้อมูลจะใช้งานได้");
+    }
+  }
+
+  function clearReviewedCashPending(){
+    if(session.user.role!=="admin"||!cashRecoveryReview)return;
+    const pending=cashPendingRead();
+    if(!pending||String(pending.body?.requestKey||"")!==cashRecoveryReview.requestKey){
+      setCashRecoveryReview(null);
+      setNotice("รายการเงินสดค้างในเครื่องเปลี่ยนไปแล้ว · กรุณารีเฟรชและตรวจใหม่");
+      return;
+    }
+    const ok=window.confirm(
+      "ยืนยันว่าตรวจ Orders แล้วและไม่พบบิลจาก request นี้?\n"+
+      "วันที่เดิม: "+cashRecoveryReview.date+" · ยอด ฿"+formatMoney(cashRecoveryReview.total)+"\n"+
+      "การทำรายการนี้จะล้างเฉพาะ pending ในเครื่อง ไม่สร้างยอดขายและไม่เปลี่ยน Stock"
+    );
+    if(!ok)return;
+    cashPendingClear();
+    setCashRecoveryReview(null);
+    setPayOpen(false);
+    setNotice("ล้าง pending เงินสดในเครื่องแล้ว · หากรับเงินจริงไปแล้ว ต้องบันทึก/ปรับปรุงยอดตามหลักฐานด้วย Admin ก่อนปิดวัน");
   }
 
   async function finalizePending(p:PendingPrompt,verified:string){
@@ -459,11 +684,17 @@ function PosView({session}:{session:Session}){
   }
 
   async function cancelPendingReservation(p:PendingPrompt){
-    if(!p.sessionId)return;
+    if(!p.sessionId)return false;
     try{
+      if(p.paymentReference){
+        await api<any>("/api/pos/split/provider-release",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({requestKey:crypto.randomUUID(),sessionId:p.sessionId})});
+        return true;
+      }
       await api<any>("/api/pos/split/cancel",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({requestKey:crypto.randomUUID(),sessionId:p.sessionId})});
+      return true;
     }catch(e:any){
-      if(!["split_session_unavailable","split_session_not_found"].includes(e.message))throw e;
+      if(["split_session_unavailable","split_session_not_found","promptpay_provider_not_final","promptpay_already_paid"].includes(e.message))return false;
+      throw e;
     }
   }
 
@@ -477,8 +708,17 @@ function PosView({session}:{session:Session}){
       pendingWrite(next);
     }
     let st:any=null;
+    if(!next.paymentReference&&next.sessionId){
+      const serverSession=await api<any>("/api/pos/split/status",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({sessionId:next.sessionId})});
+      const serverCharge=serverSession?.session?.providerCharge;
+      if(serverCharge?.chargeId){
+        next={...next,paymentReference:String(serverCharge.chargeId),total:Number(serverSession.session.total)||next.total};
+        pendingWrite(next);
+        st=await api<any>("/api/payments/promptpay/status",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({chargeId:next.paymentReference})});
+      }
+    }
     if(!next.paymentReference){
-      st=await api<any>("/api/payments/promptpay/create",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({amount:next.total,reference:next.sessionId})});
+      st=await api<any>("/api/payments/promptpay/create",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({reference:next.sessionId})});
       if(!st?.chargeId)throw new Error("promptpay_qr_unavailable");
       next={...next,paymentReference:st.chargeId};
       pendingWrite(next);
@@ -487,8 +727,10 @@ function PosView({session}:{session:Session}){
   }
 
   async function recoverPending(){
+    if(promptReconcileRef.current)return;
+    promptReconcileRef.current=true;
     let p=pendingRead();
-    if(!p)return;
+    if(!p){promptReconcileRef.current=false;return}
     try{
       if(!p.sessionId||!p.paymentReference){
         const resumed=await ensurePendingPrompt(p);
@@ -507,7 +749,14 @@ function PosView({session}:{session:Session}){
       }
       const st=await api<any>("/api/payments/promptpay/status",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({chargeId:p.paymentReference})});
       if(st.paid){await finalizePending(p,st.chargeId||p.paymentReference);return}
-      if(["failed","expired","reversed"].includes(String(st.status||"").toLowerCase())){await cancelPendingReservation(p);pendingClear();return}
+      if(["failed","expired","reversed"].includes(String(st.status||"").toLowerCase())){
+        const released=await cancelPendingReservation(p);
+        if(released){pendingClear();return}
+        setMethod("promptpay");
+        setPayOpen(true);
+        setResult("Provider แจ้งสถานะสิ้นสุดแล้ว แต่ Server ยังไม่ยืนยันการคืน Stock · ระบบเก็บ pending ไว้และห้ามรับเงินช่องทางอื่นจนกว่าจะ reconcile สำเร็จ");
+        return;
+      }
       setMethod("promptpay");
       setPrompt(st);
       setPayOpen(true);
@@ -516,11 +765,14 @@ function PosView({session}:{session:Session}){
       setMethod("promptpay");
       setPayOpen(true);
       setResult("ยังตรวจสอบ PromptPay รายการเดิมไม่ได้ ระบบเก็บรายการและ Stock reservation ไว้เพื่อป้องกันบิล/การรับเงินซ้ำ");
+    }finally{
+      promptReconcileRef.current=false;
     }
   }
 
   function errorText(code:string){
     return code==="cash_insufficient"?"จำนวนเงินรับไม่พอ":
+      code==="invalid_money_precision"?"จำนวนเงินต้องไม่เกิน 2 ตำแหน่งทศนิยม (หน่วยสตางค์)":
       code==="menu_unavailable"?"มีเมนูในตะกร้าที่ปิดขาย ราคาเป็น 0 หรือยังไม่พร้อมขาย กรุณาตรวจตะกร้าใหม่":
       code==="request_key_conflict"?"รายการเดิมถูกเปลี่ยน กรุณาตรวจประวัติออเดอร์ก่อนชำระอีกครั้ง":
       code==="recipe_unavailable"?"สูตรเมนูยังไม่ครบหรือมีปริมาณผิด กรุณาตรวจสูตรก่อนขาย":
@@ -532,6 +784,9 @@ function PosView({session}:{session:Session}){
       code==="promptpay_provider_not_configured"?"ยังไม่ได้ตั้งค่า Beam Merchant ID / API Key":
       code==="promptpay_webhook_not_configured"?"ยังไม่ได้ตั้งค่า Beam Webhook HMAC Key":
       code==="promptpay_failed"?"PromptPay ไม่สำเร็จ กรุณาลองใหม่":
+      code==="promptpay_amount_out_of_range"?"ยอดนี้อยู่นอกช่วงที่ Provider PromptPay รองรับ · กรุณาใช้ช่องทางชำระอื่นหรือปรับยอดก่อนสร้าง QR":
+      code==="promptpay_charge_creation_unknown"?"ผลการสร้าง QR เดิมยังไม่ชัดเจน · ระบบหยุดสร้าง QR ใหม่เพื่อป้องกันเก็บเงินซ้ำ กรุณาตรวจผู้ให้บริการ/Orders ก่อน":
+      code==="promptpay_release_unconfirmed"?"Provider สิ้นสุดรายการแล้ว แต่ Server ยังไม่ยืนยันการคืน Stock · เก็บ pending ไว้และห้ามรับเงินใหม่จนกว่าจะตรวจสอบสำเร็จ":
       code==="pending_promptpay_exists"?"มี PromptPay รายการเดิมที่ยังไม่สิ้นสุด กรุณาชำระหรือรอผลรายการเดิม":
       code==="pending_cash_checkout_exists"?"มีออเดอร์เงินสดเดิมที่ยังไม่ทราบผล กรุณารอระบบตรวจรายการเดิมก่อนรับบิลใหม่":
       code==="business_date_changed"?"วันธุรกิจเปลี่ยนแล้ว กรุณาตรวจ Orders ก่อนทำรายการใหม่":
@@ -539,7 +794,10 @@ function PosView({session}:{session:Session}){
       code==="offline_split_not_supported"?"โหมด Offline ยังไม่รองรับแยกบิล/เพิ่มเข้าคิวเดิม กรุณารับเป็นบิลปกติ":
       code==="offline_loyalty_not_supported"?"โหมด Offline งดสะสม/ใช้แต้มชั่วคราว เพื่อป้องกันแต้มซ้ำข้ามอุปกรณ์":
       code==="offline_storage_unavailable"?"เครื่องนี้ไม่สามารถเปิดพื้นที่เก็บ Offline ได้ กรุณาเชื่อมต่ออินเทอร์เน็ตก่อนขาย":
+      code==="offline_storage_failed"?"บันทึกบิล Offline ไม่สำเร็จ · ตะกร้ายังอยู่ กรุณาตรวจพื้นที่เก็บข้อมูลหรือเชื่อมต่ออินเทอร์เน็ตก่อนลองอีกครั้ง":
       code==="offline_catalog_unavailable"?"ไม่มีข้อมูลเมนู/สต็อกที่ cache ไว้ จึงยังขาย Offline ไม่ได้":
+      code==="offline_catalog_stale_day"?"ข้อมูลเมนู/สต็อก Offline เป็นของวันก่อน · ต้องเชื่อมต่ออินเทอร์เน็ตเพื่ออัปเดต Stock ก่อนรับเงิน":
+      code==="offline_session_revalidation"?"อินเทอร์เน็ตกลับมาแล้ว · กำลังตรวจสิทธิ์ผู้ใช้กับ Server กรุณากดชำระอีกครั้ง":
       code==="offline_price_changed"?"ราคาบน Cloud เปลี่ยนจากตอนขาย Offline · เก็บบิลไว้ให้ตรวจสอบ ไม่ลงยอดผิด":
       code==="offline_write_blocked"?"ออฟไลน์อยู่ · ระบบรองรับเฉพาะเงินสดแบบ Offline":
       code==="network_unavailable"?"การเชื่อมต่อขาดหาย กรุณาตรวจอินเทอร์เน็ต ระบบจะไม่สร้างบิลซ้ำ":
@@ -554,6 +812,29 @@ function PosView({session}:{session:Session}){
 
   async function checkout(){
     if(!cart.items.length||busy||!payableItems.length)return;
+    if(salesClosed){
+      setResult("วันนี้ปิดยอดแล้ว · ระบบไม่อนุญาตให้รับออเดอร์หรือรับเงินเพิ่ม");
+      return;
+    }
+    if(!reviewConfirmed){
+      setResult("ต้องทวนเมนู · จำนวน · ความหวาน · ยอดกับลูกค้าก่อนรับเงิน");
+      return;
+    }
+    const integrity=recoveryIntegrityIssue||paymentRecoveryIntegrityIssue();
+    if(integrity){
+      setRecoveryIntegrityIssue(integrity);
+      setResult("ข้อมูล recovery การชำระในเครื่องผิดปกติ · ห้ามรับชำระรายการใหม่จนกว่าจะตรวจรายการเดิม");
+      return;
+    }
+    if(cashRecoveryReview){
+      setResult("ต้องตรวจรายการเงินสดค้างก่อนรับชำระบิลใหม่");
+      return;
+    }
+    const unresolvedPrompt=pendingRead();
+    if(unresolvedPrompt&&method!=="promptpay"){
+      setResult("มี PromptPay รายการเดิมที่ยังไม่สิ้นสุด · ห้ามรับเงินช่องทางอื่นจนกว่าจะยืนยันว่า QR เดิมสำเร็จ/ล้มเหลว/หมดอายุ เพื่อป้องกันรับเงินซ้ำ");
+      return;
+    }
     setBusy(true);
     setResult("");
     try{
@@ -564,6 +845,7 @@ function PosView({session}:{session:Session}){
       if(method==="cash"&&Number(received)<checkoutTotal)throw Object.assign(new Error("cash_insufficient"),{status:409});
 
       const offlineAtStart=typeof navigator!=="undefined"&&!navigator.onLine;
+      if(!offlineAtStart&&session.offline)throw Object.assign(new Error("offline_session_revalidation"),{status:409});
       if(offlineAtStart){
         if(method!=="cash")throw Object.assign(new Error("offline_cash_only"),{status:409});
         if(splitBill||splitGroup)throw Object.assign(new Error("offline_split_not_supported"),{status:409});
@@ -575,8 +857,9 @@ function PosView({session}:{session:Session}){
           customerId:null,pointsRedeemed:0,total:checkoutTotal,checkoutMode:"full",
           offlineFulfilled:true,offlineCreatedAt,offlineMenuRevision:data.revision
         };
-        const queued=await queueOfflineCashSale(body);
-        finishOfflineSale(queued.localNo,{total:checkoutTotal,received:Number(received),paidCart:cartPayload});
+        const queued=await queueOfflineCashSale(body,{projectStock:true});
+        if(!queued.bootstrap)throw new Error("offline_storage_failed");
+        finishOfflineSale(queued.localNo,{total:checkoutTotal,received:Number(received),bootstrap:queued.bootstrap});
         return;
       }
 
@@ -594,7 +877,11 @@ function PosView({session}:{session:Session}){
           }
           if(!current)current=await api<any>("/api/payments/promptpay/status",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({chargeId:resumed.paymentReference})});
           if(current.paid){await finalizePending(resumed,current.chargeId||resumed.paymentReference);return}
-          if(["failed","expired","reversed"].includes(String(current.status||"").toLowerCase())){await cancelPendingReservation(resumed);pendingClear()}
+          if(["failed","expired","reversed"].includes(String(current.status||"").toLowerCase())){
+            const released=await cancelPendingReservation(resumed);
+            if(released)pendingClear();
+            else throw Object.assign(new Error("promptpay_release_unconfirmed"),{status:409});
+          }
           else if(!samePending(resumed,checkoutTotal,cartPayload,customerId,redeemPoints,splitGroup?.orderId||null))throw Object.assign(new Error("pending_promptpay_exists"),{status:409});
           else{st=current;paymentReference=resumed.paymentReference;requestKey=resumed.requestKey;activePending=resumed;checkoutTotal=resumed.total}
         }
@@ -610,21 +897,23 @@ function PosView({session}:{session:Session}){
           paymentReference=activePending.paymentReference;
         }
         setPrompt(st);
-        const deadline=Date.now()+15*60*1000;
-        while(!st.paid&&Date.now()<deadline){
-          if(["failed","expired","reversed"].includes(String(st.status||"").toLowerCase())){
-            if(activePending)await cancelPendingReservation(activePending);
+        if(["failed","expired","reversed"].includes(String(st.status||"").toLowerCase())){
+          const released=activePending?await cancelPendingReservation(activePending):false;
+          if(released){
             pendingClear();
             throw Object.assign(new Error("promptpay_failed"),{status:409});
           }
-          await new Promise(resolve=>setTimeout(resolve,2500));
-          st=await api<any>("/api/payments/promptpay/status",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({chargeId:paymentReference})});
-          setPrompt(st);
+          throw Object.assign(new Error("promptpay_release_unconfirmed"),{status:409});
         }
-        if(!st.paid)throw new Error("promptpay_timeout");
-        const p=activePending||pendingRead();
-        if(p?.sessionId){await finalizePending(p,st.chargeId||paymentReference);return}
-        paymentVerified=st.chargeId||paymentReference;
+        if(st.paid){
+          const p=activePending||pendingRead();
+          if(p?.sessionId){await finalizePending(p,st.chargeId||paymentReference);return}
+          paymentVerified=st.chargeId||paymentReference;
+        }else{
+          setPayOpen(true);
+          setResult("QR พร้อมชำระ · ระบบปลดล็อกหน้าจอแล้วและจะตรวจสถานะรายการเดิมอัตโนมัติ โดยไม่สร้าง QR ใหม่");
+          return;
+        }
       }
 
       if(["bank","card"].includes(method)){paymentReference=manualPaymentReference.trim()||null;paymentVerified="manual"}
@@ -649,7 +938,7 @@ function PosView({session}:{session:Session}){
       if(method==="cash")cashPendingClear();
       finishSale(r,{payment:method,total:checkoutTotal,received:method==="cash"?Number(received):checkoutTotal,splitBill:checkoutMode==="split_bill",paidCart:cartPayload});
     }catch(e:any){
-      if(method==="cash"&&e?.status&&e.status<500)cashPendingClear();
+      if(method==="cash"&&!shouldRetainCashPending(e))cashPendingClear();
       const message=errorText(e.message);
       if(["menu_unavailable","variant_unavailable"].includes(e.message)||e.message==="stock_shortage"||e.message.startsWith("stock_shortage:")){
         setPayOpen(false);
@@ -665,6 +954,20 @@ function PosView({session}:{session:Session}){
 
   function openPayment(){
     if(!cart.items.length)return;
+    if(salesClosed){
+      setNotice("วันนี้ปิดยอดแล้ว · เปิดชำระเงินไม่ได้จนกว่าจะเริ่มวันธุรกิจใหม่");
+      return;
+    }
+    const integrity=recoveryIntegrityIssue||paymentRecoveryIntegrityIssue();
+    if(integrity){
+      setRecoveryIntegrityIssue(integrity);
+      setNotice("ข้อมูล recovery การชำระในเครื่องผิดปกติ · กรุณาตรวจรายการเดิมก่อนเปิดชำระ");
+      return;
+    }
+    if(cashRecoveryReview){
+      setNotice("ต้องตรวจรายการเงินสดค้างก่อนเปิดชำระบิลใหม่ · เปิด Orders หรือให้ Admin ล้าง pending ที่ตรวจแล้ว");
+      return;
+    }
     const byId=new Map((data?.menu||[]).filter(sellable).map(x=>[x.id,x]));
     const blocked=cart.items.filter(item=>{
       const variant=byId.get(item.id)?.variants?.find(v=>v.label===item.variant);
@@ -673,13 +976,16 @@ function PosView({session}:{session:Session}){
     if(blocked.length){
       const blockedKeys=new Set(blocked.map(item=>item.key));
       cart.replaceItems(cart.items.filter(item=>!blockedKeys.has(item.key)));
-      setNotice("นำ "+blocked.map(item=>item.name).join(", ")+" ออกจากตะกร้า เพราะเมนูหมดชั่วคราวหรือสูตรไม่พร้อม · กรุณาตรวจยอดแล้วกด CHECKOUT อีกครั้ง");
+      setNotice("นำ "+blocked.map(item=>item.name).join(", ")+" ออกจากตะกร้า เพราะเมนูหมดชั่วคราวหรือสูตรไม่พร้อม · กรุณาตรวจยอดแล้วกด “ตรวจรายการ / ชำระเงิน” อีกครั้ง");
       load().catch(()=>{});
       return;
     }
     const current=cartAvailability({cart:cart.items,menu:data?.menu||[],stock:data?.availabilityStock||{}});
     if(!current.available){setNotice(availabilityMessage(current));load().catch(()=>{});return}
     setResult("");
+    setReviewConfirmed(false);
+    setShowMorePaymentMethods(method==="card"||method==="delivery");
+    setShowAdvancedPayment(!!customerId||!!splitGroup);
     setSplitBill(false);
     setSplitSelection({});
     setPayOpen(true);
@@ -688,75 +994,155 @@ function PosView({session}:{session:Session}){
   return <section className="flex h-full min-h-0">
     <div className="flex min-w-0 flex-1 flex-col p-3 sm:p-4 md:p-6">
       <div className="mb-3 flex items-center justify-between gap-2">
-        <div><p className="gold m-0 text-[10px] font-bold tracking-[.3em]">POINT OF SALE</p><h1 className="m-0 mt-1 text-xl font-semibold tracking-wide md:text-2xl">FIELD DRINKS</h1></div>
+        <div><p className="gold m-0 text-[10px] font-bold tracking-[.3em]">ขายหน้าร้าน</p><h1 className="m-0 mt-1 text-xl font-semibold tracking-wide md:text-2xl">รับออเดอร์</h1></div>
         <div className="flex items-center gap-1.5 sm:gap-2">
-          {(!online||offlineStats.total>0)&&<div className={"hidden rounded-full border px-2.5 py-1.5 text-[10px] font-bold sm:block sm:text-xs "+(!online?"border-amber-300 bg-amber-50 text-amber-800":offlineStats.needsReview>0?"border-red-300 bg-red-50 text-red-700":"border-emerald-300 bg-emerald-50 text-emerald-700")}>{!online?"OFFLINE · เงินสดเท่านั้น":offlineStats.needsReview>0?"Offline ต้องตรวจ "+offlineStats.needsReview:"Offline รอ Sync "+offlineStats.pending}</div>}
+          {(!online||offlineStats.total>0)&&<div className={"hidden rounded-full border px-2.5 py-1.5 text-[10px] font-bold sm:block sm:text-xs "+(!online?"border-amber-300 bg-amber-50 text-amber-800":offlineStats.needsReview>0?"border-red-300 bg-red-50 text-red-700":"border-emerald-300 bg-emerald-50 text-emerald-700")}>{!online?"ออฟไลน์ · เงินสดเท่านั้น":offlineStats.needsReview>0?"ออฟไลน์ ต้องตรวจ "+offlineStats.needsReview:"ออฟไลน์ รอซิงก์ "+offlineStats.pending}</div>}
+          <button disabled={busy||payOpen} onClick={()=>{setOpsInitialTab(undefined);setOpsOpen(true)}} className="flex min-h-9 items-center gap-1.5 rounded-full border border-[#d4af37]/50 bg-[#fff8dc] px-2.5 text-[11px] font-bold text-[#6f5510] disabled:opacity-40 sm:px-3 sm:text-xs"><ClipboardList size={14}/>งานร้าน</button>
           <button onClick={()=>setHeldOpen(true)} className="relative flex min-h-9 items-center gap-1.5 rounded-full border border-slate-300 bg-white px-2.5 text-[11px] font-semibold text-slate-700 sm:px-3 sm:text-xs"><Clock3 size={14}/>พักบิล{heldBills.held.length>0&&<span className="grid h-5 min-w-5 place-items-center rounded-full bg-[#d4af37] px-1 text-[10px] font-black text-black">{heldBills.held.length}</span>}</button>
           <div className="hidden rounded-full border border-slate-300 bg-white px-3 py-1.5 text-[11px] text-slate-600 sm:block sm:px-4 sm:py-2 sm:text-xs">{session.user.username}</div>
         </div>
       </div>
 
-      {notice&&<div className="mb-3 flex items-start justify-between gap-3 rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900"><span>{notice}</span><button onClick={()=>setNotice("")} className="shrink-0"><X size={16}/></button></div>}
-      {allUnavailable&&<div className="mb-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-900"><b>เมนูทั้งหมดถูกพักขายชั่วคราว</b><p className="mt-1 text-xs">ต้องบันทึกยอดวัตถุดิบจริงก่อนรับออเดอร์{unavailableNames.length?" · ขาด: "+unavailableNames.join(", "):""}</p><button onClick={()=>router.push("/stock")} className="mt-3 rounded-full bg-red-700 px-4 py-2 text-xs font-bold text-white">ตั้งยอดเริ่มต้น Stock</button></div>}
+      <div data-pos-guidance={posGuide.key} aria-label="ขั้นตอนการขาย" className={"mb-3 rounded-2xl border px-3 py-2.5 shadow-sm "+guideTone}>
+        <div className="flex items-center gap-2">
+          {[["1","เลือกเมนู"],["2","ตรวจรายการ"],["3","รับชำระ"]].map(([no,label],index)=>{const step=index+1,active=guideStep===step,done=guideStep>step;return <div key={no} className={"flex min-w-0 flex-1 items-center gap-1.5 rounded-xl px-2 py-1.5 "+(active?"bg-[#fff8dc] text-[#6f5510]":done?"bg-emerald-50 text-emerald-700":"opacity-50")}><span className={"grid h-6 w-6 shrink-0 place-items-center rounded-full text-[10px] font-black "+(active?"bg-[#d4af37] text-black":done?"bg-emerald-600 text-white":"bg-slate-200 text-slate-500")}>{done?"✓":no}</span><span className="truncate text-[10px] font-bold sm:text-xs">{label}</span></div>})}
+        </div>
+        <div className="mt-2 flex items-center justify-between gap-2">
+          <p role="status" aria-live="polite" className="min-w-0 flex-1 text-[11px] font-semibold leading-relaxed">{guideMessage}</p>
+          {posGuide.action&&<button type="button" disabled={busy} onClick={runGuideAction} className="min-h-10 shrink-0 rounded-xl bg-slate-900 px-3 text-[11px] font-black text-white disabled:opacity-40">{posGuide.actionLabel}</button>}
+        </div>
+      </div>
 
-      <div className="glass mb-2.5 flex items-center gap-2.5 rounded-2xl px-3 py-2.5 sm:mb-3 sm:gap-3 sm:px-4 sm:py-3"><Search size={17} className="text-slate-500"/><input value={q} onChange={e=>setQ(e.target.value)} placeholder="ค้นหาเมนู" className="w-full bg-transparent outline-none"/></div>
+      {offlineStats.total>0&&<div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
+        <span role="status" aria-live="polite" aria-atomic="true">บิลออฟไลน์ · รอส่ง {offlineStats.pending} · ตรวจสต็อก {offlineStats.stockReconciliation} · ตรวจบิล {offlineStats.businessReview}</span>
+        <div className="flex flex-wrap gap-2">
+          {offlineStats.businessReview>0&&<button type="button" onClick={()=>{setOpsInitialTab("orders");setOpsOpen(true)}} className="min-h-11 rounded-xl border border-amber-400 bg-white px-4 font-bold text-amber-900">เปิดรายการบิล</button>}
+          <button disabled={!online||session.offline||offlineSyncing||offlineStats.pending===0} onClick={()=>syncOfflineQueue().catch(()=>{})} className="min-h-11 rounded-xl bg-[#1F4D3A] px-4 font-bold text-white disabled:opacity-45">{offlineSyncing?"กำลังซิงก์บิล…":"ซิงก์บิลที่ค้าง"}</button>
+        </div>
+      </div>}
+      {offlineReviews.filter(review=>review.reviewKind==="stock_reconciliation").map(review=><div key={review.requestKey} className="mb-3 rounded-2xl border-2 border-red-300 bg-red-50 p-3 text-sm text-red-950">
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div><b>ซิงก์บิลออฟไลน์แล้ว · ต้องตรวจสต็อกจริง</b><p className="mt-1 text-xs">เลขชั่วคราว {review.localNo} · ยอด ฿{formatMoney(review.total)} · เลขออเดอร์ระบบ {review.acceptedOrderId||"—"}</p></div>
+          <span className="rounded-full bg-red-200 px-2 py-1 text-[10px] font-black">ต้องตรวจสต็อก</span>
+        </div>
+        <div className="mt-3 space-y-1 rounded-xl border border-red-200 bg-white p-3 text-xs">
+          {review.stockShortages.length>0?review.stockShortages.map(item=><p key={item.ingredientId}><b>{item.ingredientId}</b> · ก่อนซิงก์มี {item.available} · ต้องใช้ {item.required} · ขาด {item.deficit}</p>):<p>ระบบระบุว่าต้องตรวจสต็อก แต่ไม่มีรายละเอียดวัตถุดิบครบ กรุณาตรวจประวัติสต็อกและนับของจริงก่อนยืนยัน</p>}
+        </div>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <button type="button" onClick={()=>{setOpsInitialTab("stock");setOpsOpen(true)}} className="min-h-11 rounded-xl border border-red-300 bg-white px-4 text-xs font-bold">เปิดสต็อกในงานร้าน</button>
+          {session.user.role==="admin"?<button type="button" disabled={offlineReviewBusy===review.requestKey} onClick={()=>acknowledgeStockReview(review.requestKey)} className="min-h-11 rounded-xl bg-red-800 px-4 text-xs font-bold text-white disabled:opacity-45">{offlineReviewBusy===review.requestKey?"กำลังยืนยัน…":"ตรวจสต็อกจริงแล้ว · ปลดล็อก"}</button>:<span className="self-center text-xs font-semibold">ให้ผู้ดูแลยืนยันหลังนับ/ปรับสต็อกจริง</span>}
+        </div>
+      </div>)}
+      {notice&&<div role="status" aria-live="polite" aria-atomic="true" className="mb-3 flex items-start justify-between gap-3 rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900"><span>{notice}</span><button aria-label="ปิดข้อความแจ้งเตือน" onClick={()=>setNotice("")} className="shrink-0"><X size={16}/></button></div>}
+      {recoveryIntegrityIssue&&<div className="mb-3 rounded-2xl border border-red-400 bg-red-50 p-3 text-sm text-red-950">
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div><b>ต้องตรวจรายการชำระเดิมก่อนรับเงินใหม่</b><p className="mt-1 text-xs">ข้อมูลการชำระเดิมในเครื่องอ่านไม่ได้หรือไม่ตรงกัน · ระบบหยุดรับเงินใหม่ไว้ก่อนเพื่อป้องกันยอดซ้ำ</p></div>
+          <span className="rounded-full bg-red-200 px-2 py-1 text-[10px] font-black">หยุดรับเงินชั่วคราว</span>
+        </div>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <button onClick={()=>{setOpsInitialTab("orders");setOpsOpen(true)}} className="min-h-11 rounded-xl border border-red-300 bg-white px-4 text-xs font-bold">ตรวจออเดอร์ล่าสุด</button>
+          {session.user.role==="admin"&&<button onClick={clearCorruptRecovery} className="min-h-11 rounded-xl bg-red-800 px-4 text-xs font-bold text-white">ตรวจแล้ว · ล้างข้อมูลค้างในเครื่อง</button>}
+        </div>
+      </div>}
+      {cashRecoveryReview&&<div className="mb-3 rounded-2xl border border-red-300 bg-red-50 p-3 text-sm text-red-900">
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div><b>ต้องตรวจรายการเงินสดค้างก่อนรับบิลใหม่</b><p className="mt-1 text-xs">วันที่ {cashRecoveryReview.date||"—"} · ยอด ฿{formatMoney(cashRecoveryReview.total)} · รับ ฿{formatMoney(cashRecoveryReview.received)} · Request …{cashRecoveryReview.requestKey.slice(-8)}</p></div>
+          <span className="rounded-full bg-red-100 px-2 py-1 text-[10px] font-bold uppercase">{cashRecoveryReview.reason}</span>
+        </div>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <button onClick={()=>{setOpsInitialTab("orders");setOpsOpen(true)}} className="min-h-11 rounded-xl border border-red-300 bg-white px-4 text-xs font-bold">ตรวจ Orders ล่าสุดในงานร้าน</button>
+          {session.user.role==="admin"&&<button onClick={clearReviewedCashPending} className="min-h-11 rounded-xl bg-red-700 px-4 text-xs font-bold text-white">ตรวจแล้ว · ล้าง pending ในเครื่อง</button>}
+        </div>
+      </div>}
+      {allUnavailable&&<div className="mb-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-900"><b>เมนูทั้งหมดถูกพักขายชั่วคราว</b><p className="mt-1 text-xs">ต้องบันทึกยอดวัตถุดิบจริงก่อนรับออเดอร์{unavailableNames.length?" · ขาด: "+unavailableNames.join(", "):""}</p><button onClick={()=>{setOpsInitialTab("stock");setOpsOpen(true)}} className="mt-3 rounded-full bg-red-700 px-4 py-2 text-xs font-bold text-white">ดูปัญหา Stock ในงานร้าน</button></div>}
+
+      {salesClosed&&<div className="mb-3 rounded-2xl border-2 border-slate-400 bg-slate-100 p-4 text-sm text-slate-900"><b>วันนี้ปิดยอดแล้ว</b><p className="mt-1 text-xs text-slate-600">ระบบล็อกการเลือกเมนูและการชำระเงิน เพื่อไม่ให้ยอดหลัง Close Day ปะปนกับวันที่ปิดแล้ว</p></div>}
+
+      <div className="glass mb-2.5 flex items-center gap-2.5 rounded-2xl px-3 py-2.5 sm:mb-3 sm:gap-3 sm:px-4 sm:py-3"><Search size={17} className="text-slate-500"/><input value={q} onChange={e=>setQ(e.target.value)} aria-label="ค้นหาเมนู" placeholder="ค้นหาเมนู" className="w-full bg-transparent outline-none"/></div>
 
       <div className="soft-scroll mb-3 flex gap-1.5 overflow-x-auto sm:mb-4 sm:gap-2">{cats.map(x=><button key={x} onClick={()=>setCat(x)} className={"shrink-0 rounded-full border px-3 py-1.5 text-[11px] font-semibold sm:px-4 sm:py-2 sm:text-xs "+(cat===x?"border-[#c59b19] bg-[#d4af37] text-black shadow-sm":"border-slate-300 bg-white text-slate-700")}>{x}</button>)}</div>
 
       <div className="soft-scroll min-h-0 flex-1 overflow-auto pb-28 lg:pb-0">
-        <div className="grid grid-cols-2 items-stretch gap-2 sm:gap-3 lg:grid-cols-3 2xl:grid-cols-4">{menu.map(x=><button key={x.id} disabled={!x.available} onClick={()=>setSelected(x)} className="glass group flex min-h-[154px] flex-col overflow-hidden rounded-[20px] text-left sm:min-h-[190px] sm:rounded-[24px] hover:border-[#c59b19] disabled:border-slate-200 disabled:bg-slate-100 disabled:opacity-65"><div className="relative h-20 shrink-0 bg-[#f4ecd0] sm:h-24">{x.image?<img src={x.image} alt={x.name} className="h-full w-full object-cover"/>:<div className="grid h-full place-items-center text-2xl font-bold text-[#765b08]">{x.name.slice(0,1)}</div>}<div className="absolute right-2 top-2">{!x.available?<span className="rounded-full bg-red-100 px-2 py-1 text-[10px] font-bold text-red-700">หมดชั่วคราว</span>:x.lowStock?<span className="rounded-full bg-amber-100 px-2 py-1 text-[10px] font-bold text-amber-800">เหลือประมาณ {x.maxServings} แก้ว</span>:null}</div></div><div className="flex flex-1 flex-col p-3 sm:p-4"><div className="text-[9px] uppercase tracking-widest text-slate-500 sm:text-[10px]">{x.category||"DRINK"}</div><b className="mt-1 block line-clamp-2 text-sm sm:text-base">{x.name}</b><div className="mt-auto pt-2 text-base font-semibold text-[#765b08] sm:pt-3 sm:text-lg">฿{x.price.toFixed(0)}</div>{!x.available&&<small className="mt-2 block text-xs text-red-600">{Array.from(new Set(x.variants.flatMap(v=>v.missingIngredients||[]).map(i=>i.name))).slice(0,2).join(", ")||"สูตรยังไม่พร้อม"}</small>}</div></button>)}</div>
+        <div className="grid grid-cols-2 items-stretch gap-2 sm:gap-3 lg:grid-cols-3 2xl:grid-cols-4">{menu.map(x=><button key={x.id} disabled={!x.available||salesClosed} onClick={()=>selectMenu(x)} className="glass group flex min-h-[154px] flex-col overflow-hidden rounded-[20px] text-left sm:min-h-[190px] sm:rounded-[24px] hover:border-[#c59b19] disabled:border-slate-200 disabled:bg-slate-100 disabled:opacity-65"><div className="relative h-20 shrink-0 bg-[#f4ecd0] sm:h-24">{x.image?<img src={x.image} alt={x.name} loading="lazy" decoding="async" fetchPriority="low" className="h-full w-full object-cover"/>:<div className="grid h-full place-items-center text-2xl font-bold text-[#765b08]">{x.name.slice(0,1)}</div>}<div className="absolute right-2 top-2">{!x.available?<span className="rounded-full bg-red-100 px-2 py-1 text-[10px] font-bold text-red-700">หมดชั่วคราว</span>:x.lowStock?<span className="rounded-full bg-amber-100 px-2 py-1 text-[10px] font-bold text-amber-800">เหลือประมาณ {x.maxServings} แก้ว</span>:null}</div></div><div className="flex flex-1 flex-col p-3 sm:p-4"><div className="text-[9px] uppercase tracking-widest text-slate-500 sm:text-[10px]">{x.category||"DRINK"}</div><b className="mt-1 block line-clamp-2 text-sm sm:text-base">{x.name}</b><div className="mt-auto pt-2 text-base font-semibold text-[#765b08] sm:pt-3 sm:text-lg">฿{formatMoney(x.price)}</div>{!x.available&&<small className="mt-2 block text-xs text-red-600">{Array.from(new Set(x.variants.flatMap(v=>v.missingIngredients||[]).map(i=>i.name))).slice(0,2).join(", ")||"สูตรยังไม่พร้อม"}</small>}</div></button>)}</div>
       </div>
     </div>
 
     <div className="fixed bottom-[70px] left-2 right-2 z-30 flex items-center justify-between gap-2 rounded-[18px] border border-slate-300 bg-white/95 p-1.5 pl-3 shadow-lg backdrop-blur sm:bottom-[78px] sm:left-4 sm:right-4 sm:rounded-[22px] sm:p-2 sm:pl-5 lg:hidden">
-      <div className="min-w-0 flex-1"><small className="block text-[10px] tracking-widest text-slate-500">{cart.items.reduce((s,i)=>s+i.qty,0)} ITEMS</small><b className="text-lg text-[#765b08]">฿{cart.getTotal().toFixed(0)}</b></div>
+      <div className="min-w-0 flex-1"><small className="block text-[10px] tracking-widest text-slate-500">{cart.items.reduce((s,i)=>s+i.qty,0)} แก้ว</small><b className="text-lg text-[#765b08]">฿{formatMoney(cart.getTotal())}</b></div>
       <button disabled={!cart.items.length} onClick={holdCurrentBill} className="min-h-11 shrink-0 rounded-2xl border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 disabled:opacity-30"><Clock3 size={14} className="mx-auto mb-0.5"/>พักบิล</button>
-      <button disabled={!cart.items.length} onClick={openPayment} className="min-h-11 shrink-0 rounded-2xl bg-[#d4af37] px-4 py-2.5 text-sm font-bold text-black disabled:opacity-30 sm:px-5 sm:py-3">CHECKOUT</button>
+      <button disabled={!cart.items.length||salesClosed} onClick={openPayment} className="min-h-11 shrink-0 rounded-2xl bg-[#d4af37] px-4 py-2.5 text-sm font-bold text-black disabled:opacity-30 sm:px-5 sm:py-3">ตรวจรายการ / ชำระเงิน</button>
     </div>
 
     <aside className="glass m-3 ml-0 hidden w-[360px] shrink-0 flex-col rounded-[24px] p-5 lg:flex">
-      <div className="mb-4 flex items-center justify-between"><div><p className="m-0 text-[10px] tracking-[.25em] text-slate-500">CURRENT ORDER</p><h2 className="m-0 mt-1 text-lg">CART</h2></div><span className="rounded-full border border-slate-200 bg-slate-100 px-3 py-1 text-xs">{cart.items.reduce((s,i)=>s+i.qty,0)} ITEMS</span></div>
-      <div className="soft-scroll min-h-0 flex-1 overflow-auto">{cart.items.length===0?<div className="grid h-full place-items-center text-sm text-slate-400">เลือกเมนูเพื่อเริ่มออเดอร์</div>:cart.items.map(i=><div key={i.key} className="mb-3 rounded-[18px] border border-slate-200 bg-slate-100/70 p-4"><div className="flex gap-3"><div className="flex-1"><b className="text-sm">{i.name}</b><small className="mt-1 block text-slate-500">{i.variant}</small></div><button onClick={()=>cart.removeItem(i.key)} className="text-slate-500 hover:text-red-600"><Trash2 size={16}/></button></div><div className="mt-3 flex items-center justify-between"><div className="flex items-center gap-2"><button onClick={()=>updateCartQuantity(i.key,i.qty-1)} className="grid h-9 w-9 place-items-center rounded-xl border border-slate-300 bg-white"><Minus size={13}/></button><span className="w-5 text-center">{i.qty}</span><button onClick={()=>updateCartQuantity(i.key,i.qty+1)} className="grid h-9 w-9 place-items-center rounded-xl border border-slate-300 bg-white"><Plus size={13}/></button></div><b className="text-[#765b08]">฿{(i.price*i.qty).toFixed(0)}</b></div></div>)}</div>
-      <div className="border-t border-slate-300 pt-4"><div className="mb-2 flex justify-between text-sm text-slate-600"><span>Subtotal</span><span>฿{cart.getSubtotal().toFixed(0)}</span></div><div className="mb-4 flex justify-between text-xl font-semibold"><span>Total</span><span className="text-[#765b08]">฿{cart.getTotal().toFixed(0)}</span></div><div className="grid grid-cols-[auto_1fr] gap-2"><button disabled={!cart.items.length} onClick={holdCurrentBill} className="flex min-h-12 items-center justify-center gap-2 rounded-2xl border border-slate-300 bg-white px-4 text-sm font-bold text-slate-700 disabled:opacity-30"><Clock3 size={17}/>พักบิล</button><button disabled={!cart.items.length} onClick={openPayment} className="flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-[#d4af37] px-4 font-bold text-black disabled:opacity-30"><WalletCards size={18}/>CHECKOUT / PAY</button></div></div>
+      <div className="mb-4 flex items-center justify-between"><div><p className="m-0 text-[10px] tracking-[.25em] text-slate-500">รายการที่กำลังขาย</p><h2 className="m-0 mt-1 text-lg">ออเดอร์ปัจจุบัน</h2></div><span className="rounded-full border border-slate-200 bg-slate-100 px-3 py-1 text-xs">{cart.items.reduce((s,i)=>s+i.qty,0)} แก้ว</span></div>
+      <div className="soft-scroll min-h-0 flex-1 overflow-auto">{cart.items.length===0?<div className="grid h-full place-items-center text-sm text-slate-400">เลือกเมนูเพื่อเริ่มออเดอร์</div>:cart.items.map(i=><div key={i.key} className="mb-3 rounded-[18px] border border-slate-200 bg-slate-100/70 p-4"><div className="flex gap-3"><div className="flex-1"><b className="text-sm">{i.name}</b><small className="mt-1 block text-slate-500">{orderOptionLabel(i.variant)}</small></div><button onClick={()=>cart.removeItem(i.key)} className="text-slate-500 hover:text-red-600"><Trash2 size={16}/></button></div><div className="mt-3 flex items-center justify-between"><div className="flex items-center gap-2"><button onClick={()=>updateCartQuantity(i.key,i.qty-1)} className="grid h-9 w-9 place-items-center rounded-xl border border-slate-300 bg-white"><Minus size={13}/></button><span className="w-5 text-center">{i.qty}</span><button onClick={()=>updateCartQuantity(i.key,i.qty+1)} className="grid h-9 w-9 place-items-center rounded-xl border border-slate-300 bg-white"><Plus size={13}/></button></div><b className="text-[#765b08]">฿{formatMoney((i.price*i.qty))}</b></div></div>)}</div>
+      <div className="border-t border-slate-300 pt-4"><div className="mb-2 flex justify-between text-sm text-slate-600"><span>ยอดสินค้า</span><span>฿{formatMoney(cart.getSubtotal())}</span></div><div className="mb-4 flex justify-between text-xl font-semibold"><span>ยอดรวม</span><span className="text-[#765b08]">฿{formatMoney(cart.getTotal())}</span></div><div className="grid grid-cols-[auto_1fr] gap-2"><button disabled={!cart.items.length} onClick={holdCurrentBill} className="flex min-h-12 items-center justify-center gap-2 rounded-2xl border border-slate-300 bg-white px-4 text-sm font-bold text-slate-700 disabled:opacity-30"><Clock3 size={17}/>พักบิล</button><button disabled={!cart.items.length} onClick={openPayment} className="flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-[#d4af37] px-4 font-bold text-black disabled:opacity-30"><WalletCards size={18}/>ตรวจรายการ / ชำระเงิน</button></div></div>
     </aside>
 
-    {heldOpen&&<div className="fixed inset-0 z-[85] grid place-items-center bg-black/55 p-3" onMouseDown={()=>setHeldOpen(false)}><div className="card soft-scroll max-h-[85dvh] w-full max-w-lg overflow-auto border border-slate-300 bg-white p-4 shadow-2xl sm:p-5" onMouseDown={e=>e.stopPropagation()}><div className="flex items-start justify-between gap-3"><div><p className="gold text-[10px] font-bold tracking-[.25em]">HOLD BILL</p><h3 className="mt-1 text-xl font-semibold">บิลที่พักไว้ · {heldBills.held.length}</h3><p className="mt-1 text-xs text-slate-500">ยังไม่สร้างยอดขาย ไม่ตัด Stock และไม่เข้าคิวจนกว่าจะชำระจริง</p></div><button onClick={()=>setHeldOpen(false)} className="grid h-9 w-9 place-items-center rounded-xl hover:bg-slate-100"><X size={18}/></button></div>{heldBills.held.length===0?<div className="mt-5 rounded-2xl border border-dashed border-slate-300 p-8 text-center text-sm text-slate-400">ยังไม่มีบิลพัก</div>:<div className="mt-4 space-y-2">{heldBills.held.map(h=>{const qty=h.items.reduce((s,i)=>s+i.qty,0),amount=h.items.reduce((s,i)=>s+i.price*i.qty,0);return <div key={h.id} className="rounded-[20px] border border-slate-200 bg-slate-50 p-3 sm:p-4"><div className="flex items-start justify-between gap-3"><div><b className="text-sm">พักเวลา {localTime(h.createdAt)}</b><p className="mt-1 text-xs text-slate-500">{qty} แก้ว · {h.items.length} เมนู · ฿{amount.toFixed(0)}</p><p className="mt-1 line-clamp-2 text-[11px] text-slate-500">{h.items.map(i=>i.name+" ×"+i.qty).join(" · ")}</p></div><button onClick={()=>{if(window.confirm("ยกเลิกบิลพักนี้?"))heldBills.removeHeld(h.id)}} className="grid h-9 w-9 shrink-0 place-items-center rounded-xl text-slate-400 hover:bg-red-50 hover:text-red-600" aria-label="ลบบิลพัก"><Trash2 size={15}/></button></div><button onClick={()=>resumeHeldBill(h.id)} className="mt-3 min-h-11 w-full rounded-2xl bg-[#d4af37] px-4 text-sm font-bold text-black">เรียกบิลนี้กลับ</button></div>})}</div>}</div></div>}
+    {heldOpen&&<div className="fixed inset-0 z-[85] grid place-items-center bg-black/55 p-3" onMouseDown={()=>setHeldOpen(false)}><div className="card soft-scroll max-h-[85dvh] w-full max-w-lg overflow-auto border border-slate-300 bg-white p-4 shadow-2xl sm:p-5" onMouseDown={e=>e.stopPropagation()}><div className="flex items-start justify-between gap-3"><div><p className="gold text-[10px] font-bold tracking-[.25em]">พักบิล</p><h3 className="mt-1 text-xl font-semibold">บิลที่พักไว้ · {heldBills.held.length}</h3><p className="mt-1 text-xs text-slate-500">ยังไม่สร้างยอดขาย ไม่ตัด Stock และไม่เข้าคิวจนกว่าจะชำระจริง</p></div><button onClick={()=>setHeldOpen(false)} className="grid h-9 w-9 place-items-center rounded-xl hover:bg-slate-100"><X size={18}/></button></div>{heldBills.held.length===0?<div className="mt-5 rounded-2xl border border-dashed border-slate-300 p-8 text-center text-sm text-slate-400">ยังไม่มีบิลพัก</div>:<div className="mt-4 space-y-2">{heldBills.held.map(h=>{const qty=h.items.reduce((s,i)=>s+i.qty,0),amount=h.items.reduce((s,i)=>s+i.price*i.qty,0);return <div key={h.id} className="rounded-[20px] border border-slate-200 bg-slate-50 p-3 sm:p-4"><div className="flex items-start justify-between gap-3"><div><b className="text-sm">พักเวลา {localTime(h.createdAt)}</b><p className="mt-1 text-xs text-slate-500">{qty} แก้ว · {h.items.length} เมนู · ฿{formatMoney(amount)}</p><p className="mt-1 line-clamp-2 text-[11px] text-slate-500">{h.items.map(i=>i.name+" ×"+i.qty).join(" · ")}</p></div><button onClick={()=>{if(window.confirm("ยกเลิกบิลพักนี้?"))heldBills.removeHeld(h.id)}} className="grid h-9 w-9 shrink-0 place-items-center rounded-xl text-slate-400 hover:bg-red-50 hover:text-red-600" aria-label="ลบบิลพัก"><Trash2 size={15}/></button></div><button onClick={()=>resumeHeldBill(h.id)} className="mt-3 min-h-11 w-full rounded-2xl bg-[#d4af37] px-4 text-sm font-bold text-black">เรียกบิลนี้กลับ</button></div>})}</div>}</div></div>}
 
-    {selected&&<div className="fixed inset-0 z-50 grid place-items-center bg-black/55 p-3 sm:p-4" onMouseDown={()=>setSelected(null)}><div className="card w-full max-w-md border border-slate-300 bg-white p-4 shadow-2xl sm:p-6" onMouseDown={e=>e.stopPropagation()}><div className="flex items-start justify-between"><div><p className="gold text-[10px] tracking-[.25em]">{selected.category||"DRINK"}</p><h3 className="mt-1 text-lg sm:text-xl">{selected.name}</h3></div><button onClick={()=>setSelected(null)}><X/></button></div><p className="mt-5 text-xs uppercase tracking-widest text-slate-500">Choose variant</p><div className="mt-3 grid gap-2">{selected.variants.map(v=>{const remaining=additionalServingsAvailable({cart:cart.items,menu:data?.menu||[],stock:data?.availabilityStock||{},menuId:selected.id,variantLabel:v.label});const canAdd=!!v.available&&remaining>0;return <button key={v.label} disabled={!canAdd} onClick={()=>addVariant(selected,v)} className="min-h-11 rounded-2xl border border-slate-300 bg-slate-50 px-3 py-2.5 text-left hover:border-[#c59b19] sm:px-4 sm:py-3 disabled:bg-slate-100 disabled:text-slate-400"><span>{v.label||"Standard"}{!v.available&&<small className="ml-2 text-red-600">หมดชั่วคราว</small>}{v.available&&remaining>0&&<small className="ml-2 text-amber-700">เพิ่มได้อีกประมาณ {remaining} แก้ว</small>}{v.available&&remaining<1&&<small className="ml-2 text-red-600">เพิ่มไม่ได้ · ตะกร้าใช้สต๊อกที่เหลือแล้ว</small>}</span><span className="float-right font-semibold text-[#765b08]">฿{selected.price.toFixed(0)}</span>{!v.available&&v.missingIngredients?.length>0&&<small className="mt-1 block text-xs text-red-500">ขาด: {v.missingIngredients.map(i=>i.name).join(", ")}</small>}{v.available&&remaining<1&&<small className="mt-1 block text-xs text-slate-500">ลดจำนวนรายการในตะกร้า หรืออัปเดต Stock ก่อนเพิ่มเมนูนี้</small>}</button>})}</div></div></div>}
+    {selected&&<div className="fixed inset-0 z-50 grid place-items-center bg-black/55 p-3 sm:p-4" onMouseDown={()=>setSelected(null)}><div role="dialog" aria-modal="true" aria-labelledby="field-modifier-title" aria-describedby="field-modifier-help" className="card w-full max-w-md border border-slate-300 bg-white p-4 shadow-2xl sm:p-6" onMouseDown={e=>e.stopPropagation()}><div className="flex items-start justify-between"><div><p className="gold text-[10px] tracking-[.25em]">{selected.category||"DRINK"}</p><h3 id="field-modifier-title" className="mt-1 text-lg font-bold sm:text-xl">{selected.name}</h3></div><button aria-label="ปิดการเลือกสูตร" className="grid h-11 w-11 place-items-center rounded-xl hover:bg-slate-100" onClick={()=>setSelected(null)}><X/></button></div><div id="field-modifier-help" className="mt-4 rounded-2xl bg-[#fff8dc] p-3 text-sm text-[#6f5510]"><b>1. เลือกระดับความหวาน / สูตร</b><p className="mt-1 text-xs">แตะ 1 ตัวเลือก ระบบจะเพิ่มลงตะกร้าให้ทันที</p></div><div className="mt-3 grid gap-2">{selected.variants.map(v=>{const remaining=additionalServingsAvailable({cart:cart.items,menu:data?.menu||[],stock:data?.availabilityStock||{},menuId:selected.id,variantLabel:v.label});const canAdd=!!v.available&&remaining>0,preferred=isDefaultOrderOption(v.label);return <button key={v.label} aria-label={"เลือก "+orderOptionLabel(v.label)+" สำหรับ "+selected.name} disabled={!canAdd||salesClosed} onClick={()=>addVariant(selected,v)} className={"min-h-14 rounded-2xl border px-4 py-3 text-left transition disabled:bg-slate-100 disabled:text-slate-400 "+(preferred&&canAdd?"border-[#d4af37] bg-[#fffaf0] shadow-sm":"border-slate-300 bg-white hover:border-[#c59b19]")}><div className="flex items-center justify-between gap-3"><span className="font-semibold">{orderOptionLabel(v.label)}{preferred&&canAdd&&<small className="ml-2 rounded-full bg-[#d4af37]/20 px-2 py-1 text-[10px] font-black text-[#765b08]">แนะนำ</small>}</span><span className="shrink-0 font-semibold text-[#765b08]">฿{formatMoney(selected.price)}</span></div>{!v.available&&<small className="mt-1 block text-xs text-red-600">หมดชั่วคราว{v.missingIngredients?.length?" · ขาด "+v.missingIngredients.map(i=>i.name).join(", "):""}</small>}{v.available&&remaining>0&&<small className="mt-1 block text-xs text-slate-500">เพิ่มได้อีกประมาณ {remaining} แก้ว</small>}{v.available&&remaining<1&&<><small className="mt-1 block text-xs text-red-600">เพิ่มไม่ได้ · ตะกร้าใช้สต๊อกที่เหลือแล้ว</small><small className="mt-1 block text-xs text-slate-500">ลดจำนวนรายการในตะกร้า หรืออัปเดต Stock ก่อนเพิ่มเมนูนี้</small></>}</button>})}</div></div></div>}
 
-    {payOpen&&<div className="fixed inset-0 z-[90] grid place-items-center bg-black/55 p-2 sm:p-4"><div className="soft-scroll card max-h-[calc(100dvh-1rem)] w-full max-w-md overflow-auto border border-slate-300 bg-white p-4 shadow-2xl sm:max-h-[94vh] sm:p-6"><div className="flex justify-between gap-3"><div><p className="gold text-[10px] tracking-[.25em]">PAYMENT</p><h3 className="mt-1 text-2xl font-semibold">ยอดชำระ ฿{netPayable.toFixed(0)}</h3><p className="mt-1 text-xs text-slate-500">{splitBill?"บิลนี้ "+payableQty+" แก้ว · เหลือ "+remainingAfterBill+" แก้ว":payableQty+" แก้ว · "+cart.items.length+" เมนู"}</p></div><button disabled={busy} onClick={()=>setPayOpen(false)} className="disabled:cursor-not-allowed disabled:opacity-30"><X/></button></div>
+    {payOpen&&<div className="fixed inset-0 z-[90] grid place-items-center bg-black/55 p-2 sm:p-4"><div role="dialog" aria-modal="true" aria-labelledby="field-payment-title" className="field-payment-sheet soft-scroll card w-full max-w-md overflow-auto border border-slate-300 bg-white p-4 shadow-2xl sm:max-h-[94vh] sm:p-6"><div className="flex justify-between gap-3"><div><p className="gold text-[10px] tracking-[.25em]">ชำระเงิน</p><h3 id="field-payment-title" className="mt-1 text-2xl font-semibold">รับชำระเงิน ฿{formatMoney(netPayable)}</h3><p className="mt-1 text-xs text-slate-500">{splitBill?"บิลนี้ "+payableQty+" แก้ว · เหลือ "+remainingAfterBill+" แก้ว":payableQty+" แก้ว · "+cart.items.length+" เมนู"}</p></div><button aria-label="ปิดหน้าชำระเงิน" disabled={busy} onClick={()=>setPayOpen(false)} className="grid h-11 w-11 shrink-0 place-items-center rounded-xl disabled:cursor-not-allowed disabled:opacity-30"><X/></button></div><div className="mt-3 grid grid-cols-3 gap-1.5 text-center text-[10px] font-bold"><div className="rounded-xl bg-[#1F4D3A] px-2 py-2 text-white">1 · ทวนรายการ</div><div className="rounded-xl bg-[#fff8dc] px-2 py-2 text-[#765b08]">2 · เลือกวิธีจ่าย</div><div className="rounded-xl bg-slate-100 px-2 py-2 text-slate-600">3 · ยืนยันรับเงิน</div></div>
 
-      <button type="button" disabled={busy||!online||method==="delivery"||cart.items.reduce((s,i)=>s+i.qty,0)<2} onClick={()=>{setSplitBill(v=>!v);setSplitSelection({});setPointsRedeemed(0);setReceived("");setResult("")}} className={"mt-4 min-h-11 w-full rounded-2xl border px-4 text-sm font-semibold "+(splitBill?"border-[#d4af37] bg-[#fff8dc] text-[#765b08]":"border-slate-300 bg-white text-slate-700")+" disabled:opacity-40"}>{splitBill?"ยกเลิกแยกบิล":"แยกบิล / จ่ายแยกตามคน"}</button>
-      {splitBill&&<div className="mt-2 rounded-2xl border border-[#d4af37]/40 bg-[#fffaf0] px-3 py-2 text-xs text-slate-700">เลือกจำนวนแก้วของ <b>คนที่กำลังจ่าย</b> · หลังชำระ รายการที่เหลือยังอยู่ในตะกร้าเพื่อรับเงินคนถัดไป</div>}
-      {splitGroup&&<div className="mt-2 rounded-2xl border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs text-emerald-800"><b>กลุ่มเดียวกัน · คิว ${splitGroup.queueNo}</b> · การจ่ายคนถัดไปจะใช้คิวและบัตรเรียกเดิมอัตโนมัติ</div>}
+      <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-2">
+        <button type="button" aria-expanded={advancedPaymentOpen} onClick={()=>{if(advancedPaymentActive&&advancedPaymentOpen){setResult("มีตัวเลือกเพิ่มเติมที่กำลังใช้งานอยู่ · ยกเลิกสมาชิก/แต้ม/แยกบิลก่อนจึงจะซ่อนส่วนนี้ได้");return}setShowAdvancedPayment(v=>!v)}} className={"flex min-h-11 w-full items-center justify-between rounded-xl px-3 text-left text-sm font-semibold "+(advancedPaymentActive?"bg-[#fff8dc] text-[#765b08]":"bg-white text-slate-700")}><span>{advancedPaymentActive?"ตัวเลือกเพิ่มเติมกำลังใช้งาน":"ตัวเลือกเพิ่มเติม · สมาชิก / แยกบิล"}</span><span className="text-xs">{advancedPaymentOpen?"ซ่อน":"เปิด"}</span></button>
+        {advancedPaymentOpen&&<div className="mt-2 border-t border-slate-200 pt-2">
+          <button type="button" disabled={busy||!online||method==="delivery"||cart.items.reduce((s,i)=>s+i.qty,0)<2} onClick={()=>{setSplitBill(v=>!v);setSplitSelection({});setPointsRedeemed(0);setReceived("");setResult("")}} className={"min-h-11 w-full rounded-xl border px-3 text-sm font-semibold "+(splitBill?"border-[#d4af37] bg-[#fff8dc] text-[#765b08]":"border-slate-300 bg-white text-slate-700")+" disabled:opacity-40"}>{splitBill?"ยกเลิกแยกบิล":"แยกบิล / จ่ายแยกตามคน"}</button>
+          {splitBill&&<div className="mt-2 rounded-xl border border-[#d4af37]/40 bg-[#fffaf0] px-3 py-2 text-xs text-slate-700">เลือกจำนวนแก้วของ <b>คนที่กำลังจ่าย</b> · หลังชำระ รายการที่เหลือยังอยู่ในตะกร้าเพื่อรับเงินคนถัดไป</div>}
+          {splitGroup&&<div className="mt-2 rounded-xl border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs text-emerald-800"><b>กลุ่มเดียวกัน · คิว {splitGroup.queueNo}</b> · การจ่ายคนถัดไปจะใช้คิวและบัตรเรียกเดิมอัตโนมัติ</div>}
+          {customers.length>0&&<select disabled={!online} value={customerId} onChange={e=>{setCustomerId(e.target.value);setPointsRedeemed(0);setReceived("")}} className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-3 py-3 disabled:bg-slate-100 disabled:text-slate-400"><option value="">ลูกค้าทั่วไป / ไม่สะสมแต้ม</option>{customers.map(x=><option key={x.id} value={x.id}>{x.name} · {x.points||0} pts</option>)}</select>}
+          {selectedCustomer&&redeemValue>0&&<div className="mt-2 rounded-xl border border-[#d4af37]/40 bg-[#fffaf0] p-3"><div className="flex items-center justify-between gap-2 text-sm"><span><b>{selectedCustomer.name}</b> · มี {Number(selectedCustomer.points)||0} แต้ม</span><span className="text-xs text-slate-500">1 แต้ม = ฿{formatMoney(redeemValue)}</span></div><div className="mt-2 grid grid-cols-[1fr_auto] gap-2"><input type="number" inputMode="numeric" min="0" max={maxRedeemPoints} step="1" value={pointsRedeemed} onChange={e=>{setPointsRedeemed(Math.max(0,Math.min(maxRedeemPoints,Math.trunc(Number(e.target.value)||0))));setReceived("")}} className="min-h-11 rounded-xl border border-slate-300 bg-white px-3" placeholder="แต้มที่ใช้"/><button type="button" disabled={maxRedeemPoints<1} onClick={()=>{setPointsRedeemed(maxRedeemPoints);setReceived("")}} className="rounded-xl border border-[#d4af37] px-3 text-xs font-bold text-[#765b08] disabled:opacity-40">ใช้ได้สูงสุด {maxRedeemPoints}</button></div>{redeemPoints>0&&<div className="mt-3 space-y-1 border-t border-amber-200 pt-2 text-sm"><div className="flex justify-between"><span>ยอดก่อนส่วนลด</span><b>฿{formatMoney(payableTotal)}</b></div><div className="flex justify-between text-amber-800"><span>ใช้ {redeemPoints} แต้ม</span><b>−฿{formatMoney(crmDiscount)}</b></div><div className="flex justify-between text-base"><b>ยอดสุทธิ</b><b className="text-[#765b08]">฿{formatMoney(netPayable)}</b></div><p className="text-[11px] text-slate-500">บิลนี้คาดว่าจะได้ +{estimatedPointsAwarded} แต้ม จากยอดจ่ายจริง</p></div>}</div>}
+        </div>}
+      </div>
 
       <div className="mt-3 rounded-[20px] border border-slate-200 bg-slate-50 p-3">
-        <div className="flex items-center justify-between gap-3"><div><b className="text-sm">{splitBill?"เลือกสำหรับบิลนี้":"รายการที่สั่ง"}</b><p className="mt-0.5 text-[11px] text-slate-500">{splitBill?"เลือกได้แม้เมนูเดียวกันมีหลายแก้ว":"ทวนเมนู ราคา และระดับหวานก่อนรับเงิน"}</p></div><b className="shrink-0 text-lg text-[#765b08]">฿{payableTotal.toFixed(0)}</b></div>
+        <div className="flex items-center justify-between gap-3"><div><b className="text-sm">{splitBill?"เลือกสำหรับบิลนี้":"รายการที่สั่ง"}</b><p className="mt-0.5 text-[11px] text-slate-500">{splitBill?"เลือกได้แม้เมนูเดียวกันมีหลายแก้ว":"ทวนเมนู ราคา และระดับหวานก่อนรับเงิน"}</p></div><b className="shrink-0 text-lg text-[#765b08]">฿{formatMoney(payableTotal)}</b></div>
         <div className="soft-scroll mt-3 max-h-[230px] space-y-2 overflow-auto pr-1">
           {cart.items.map(i=>{const selectedQty=splitBill?Math.min(i.qty,Math.max(0,Number(splitSelection[i.key])||0)):i.qty;return <div key={i.key} className={"rounded-2xl border bg-white p-3 "+(splitBill&&selectedQty>0?"border-[#d4af37]":"border-slate-200")}>
             <div className="flex items-start justify-between gap-3"><div className="min-w-0 flex-1"><b className="block text-sm">{i.name}</b><span className="mt-1 inline-block rounded-full bg-[#f4ecd0] px-2 py-1 text-[10px] font-semibold text-[#765b08]">{orderOptionLabel(i.variant)}</span></div>{!splitBill&&<button disabled={busy} onClick={()=>cart.removeItem(i.key)} className="grid h-9 w-9 shrink-0 place-items-center rounded-xl text-slate-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-30" aria-label={"ลบ "+i.name}><Trash2 size={15}/></button>}</div>
-            <div className="mt-3 flex items-center justify-between gap-3">{splitBill?<div className="flex items-center gap-2"><button disabled={busy||selectedQty<=0} onClick={()=>setSplitSelection(s=>({...s,[i.key]:Math.max(0,selectedQty-1)}))} className="grid h-9 w-9 place-items-center rounded-xl border border-slate-300 bg-white disabled:opacity-30"><Minus size={13}/></button><span className="min-w-[68px] text-center text-xs font-semibold">บิลนี้ {selectedQty}/{i.qty}</span><button disabled={busy||selectedQty>=i.qty} onClick={()=>setSplitSelection(s=>({...s,[i.key]:Math.min(i.qty,selectedQty+1)}))} className="grid h-9 w-9 place-items-center rounded-xl border border-slate-300 bg-white disabled:opacity-30"><Plus size={13}/></button></div>:<div className="flex items-center gap-2"><button disabled={busy} onClick={()=>updateCartQuantity(i.key,i.qty-1)} className="grid h-9 w-9 place-items-center rounded-xl border border-slate-300 bg-white disabled:opacity-30"><Minus size={13}/></button><span className="min-w-6 text-center text-sm font-semibold">{i.qty}</span><button disabled={busy} onClick={()=>updateCartQuantity(i.key,i.qty+1)} className="grid h-9 w-9 place-items-center rounded-xl border border-slate-300 bg-white disabled:opacity-30"><Plus size={13}/></button></div>}<div className="text-right"><small className="block text-[10px] text-slate-500">{selectedQty} × ฿{i.price.toFixed(0)}</small><b className="text-sm text-[#765b08]">฿{(selectedQty*i.price).toFixed(0)}</b></div></div>
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-3">{splitBill?<div className="flex items-center gap-2"><button disabled={busy||selectedQty<=0} onClick={()=>setSplitSelection(s=>({...s,[i.key]:Math.max(0,selectedQty-1)}))} className="grid h-9 w-9 place-items-center rounded-xl border border-slate-300 bg-white disabled:opacity-30"><Minus size={13}/></button><span className="min-w-[68px] text-center text-xs font-semibold">บิลนี้ {selectedQty}/{i.qty}</span><button disabled={busy||selectedQty>=i.qty} onClick={()=>setSplitSelection(s=>({...s,[i.key]:Math.min(i.qty,selectedQty+1)}))} className="grid h-9 w-9 place-items-center rounded-xl border border-slate-300 bg-white disabled:opacity-30"><Plus size={13}/></button></div>:<div className="flex items-center gap-2"><button disabled={busy} onClick={()=>updateCartQuantity(i.key,i.qty-1)} className="grid h-9 w-9 place-items-center rounded-xl border border-slate-300 bg-white disabled:opacity-30"><Minus size={13}/></button><span className="min-w-6 text-center text-sm font-semibold">{i.qty}</span><button disabled={busy} onClick={()=>updateCartQuantity(i.key,i.qty+1)} className="grid h-9 w-9 place-items-center rounded-xl border border-slate-300 bg-white disabled:opacity-30"><Plus size={13}/></button></div>}<div className="text-right"><small className="block text-[10px] text-slate-500">{selectedQty} × ฿{formatMoney(i.price)}</small><b className="text-sm text-[#765b08]">฿{formatMoney((selectedQty*i.price))}</b></div></div>
           </div>})}
         </div>
-        <div className="mt-3 border-t border-slate-200 pt-3">{crmDiscount>0&&<div className="mb-1 flex items-center justify-between text-xs text-slate-500"><span>ยอดก่อนส่วนลด</span><span>฿{payableTotal.toFixed(0)}</span></div>}{crmDiscount>0&&<div className="mb-1 flex items-center justify-between text-xs text-amber-700"><span>ส่วนลดสมาชิก</span><span>−฿{crmDiscount.toFixed(0)}</span></div>}<div className="flex items-center justify-between"><span className="text-sm font-semibold">{splitBill?"บิลนี้":"รวม"} {payableQty} แก้ว</span><b className="text-xl text-[#765b08]">฿{netPayable.toFixed(0)}</b></div></div>
+        <div className="mt-3 border-t border-slate-200 pt-3">{crmDiscount>0&&<div className="mb-1 flex items-center justify-between text-xs text-slate-500"><span>ยอดก่อนส่วนลด</span><span>฿{formatMoney(payableTotal)}</span></div>}{crmDiscount>0&&<div className="mb-1 flex items-center justify-between text-xs text-amber-700"><span>ส่วนลดสมาชิก</span><span>−฿{formatMoney(crmDiscount)}</span></div>}<div className="flex items-center justify-between"><span className="text-sm font-semibold">{splitBill?"บิลนี้":"รวม"} {payableQty} แก้ว</span><b className="text-xl text-[#765b08]">฿{formatMoney(netPayable)}</b></div></div>
+      </div>
+
+      <div className={"mt-4 rounded-2xl border-2 p-3 "+(reviewConfirmed?"border-emerald-300 bg-emerald-50":"border-[#d4af37] bg-[#fffaf0]")}>
+        <div className="flex items-start gap-3">
+          <div className={"mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-full "+(reviewConfirmed?"bg-emerald-600 text-white":"bg-[#d4af37] text-black")}><CheckCircle2 size={16}/></div>
+          <div className="min-w-0 flex-1"><b className="text-sm">ทวนบิลกับลูกค้าก่อนรับเงิน</b><p className="mt-1 text-xs text-slate-600">เช็กชื่อเมนู · จำนวน · ความหวาน/สูตร · ยอดสุทธิ ฿{formatMoney(netPayable)}</p></div>
+        </div>
+        <button type="button" disabled={busy} onClick={()=>{setReviewConfirmed(true);setResult("")}} className={"mt-3 min-h-12 w-full rounded-xl px-4 text-sm font-black "+(reviewConfirmed?"bg-emerald-600 text-white":"bg-[#d4af37] text-black")+" disabled:opacity-40"}>{reviewConfirmed?"ทวนแล้ว · พร้อมรับเงิน":"กดหลังทวนบิลกับลูกค้าแล้ว"}</button>
+        {!reviewConfirmed&&<p className="mt-2 text-center text-[11px] font-semibold text-amber-800">ระบบยังไม่เปิดรับเงิน · ต้องทวนบิลกับลูกค้าก่อน</p>}
       </div>
 
       {!online&&<div className="mt-4 rounded-2xl border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900"><b>Offline Mode</b> · รับเงินสดได้ตามปกติ บิลจะเก็บในเครื่องและ Sync อัตโนมัติเมื่อเน็ตกลับ · QR / แยกบิล / แต้มถูกปิดชั่วคราว</div>}
-      <div className="mt-4 grid grid-cols-3 gap-2 rounded-2xl bg-slate-100 p-1"><button onClick={()=>{setMethod("cash");setManualPaymentReference("")}} className={"rounded-xl p-3 text-xs sm:text-sm "+(method==="cash"?"bg-[#d4af37] font-semibold text-black shadow-sm":"text-slate-700")}>Cash</button><button disabled={!online||promptConfig?.ready!==true||netPayable<=0} onClick={()=>{setMethod("promptpay");setManualPaymentReference("")}} title={!online?"PromptPay ต้องใช้อินเทอร์เน็ต":promptConfig?.ready===true?"PromptPay พร้อมใช้งาน":"รอ Beam อนุมัติ / ตั้งค่า API และ Webhook"} className={"rounded-xl p-3 text-xs sm:text-sm disabled:cursor-not-allowed disabled:opacity-45 "+(method==="promptpay"?"bg-[#d4af37] font-semibold text-black shadow-sm":"text-slate-700")}>PromptPay{promptConfig?.selectedProvider==="beam"&&promptConfig?.mode==="test"?" · TEST":""}</button><button disabled={!online} onClick={()=>{setMethod("bank");setReceived("")}} className={"rounded-xl p-3 text-xs sm:text-sm disabled:opacity-45 "+(method==="bank"?"bg-[#d4af37] font-semibold text-black shadow-sm":"text-slate-700")}>โอนธนาคาร</button><button disabled={!online} onClick={()=>{setMethod("card");setReceived("")}} className={"rounded-xl p-3 text-xs sm:text-sm disabled:opacity-45 "+(method==="card"?"bg-[#d4af37] font-semibold text-black shadow-sm":"text-slate-700")}>บัตร</button><button disabled={!online} onClick={()=>{setMethod("delivery");setSplitBill(false);setSplitSelection({});setReceived("");setManualPaymentReference("")}} className={"rounded-xl p-3 text-xs sm:text-sm disabled:opacity-45 "+(method==="delivery"?"bg-[#d4af37] font-semibold text-black shadow-sm":"text-slate-700")}>Delivery</button></div>
+      <div className="mt-4 rounded-2xl bg-slate-100 p-1">
+        <div className="grid grid-cols-3 gap-1.5">
+          <button onClick={()=>{setMethod("cash");setManualPaymentReference("")}} className={"min-h-12 rounded-xl px-2 py-2 text-xs sm:text-sm "+(method==="cash"?"bg-[#d4af37] font-semibold text-black shadow-sm":"bg-white text-slate-700")}>เงินสด</button>
+          <button disabled={!online||promptConfig?.ready!==true||netPayable<=0} onClick={()=>{setMethod("promptpay");setManualPaymentReference("")}} title={!online?"PromptPay ต้องใช้อินเทอร์เน็ต":promptConfig?.ready===true?"PromptPay พร้อมใช้งาน":"รอ Beam อนุมัติ / ตั้งค่า API และ Webhook"} className={"min-h-12 rounded-xl px-2 py-2 text-xs sm:text-sm disabled:cursor-not-allowed disabled:opacity-45 "+(method==="promptpay"?"bg-[#d4af37] font-semibold text-black shadow-sm":"bg-white text-slate-700")}>QR พร้อมเพย์{promptConfig?.selectedProvider==="beam"&&promptConfig?.mode==="test"?" · TEST":""}</button>
+          <button disabled={!online} onClick={()=>{setMethod("bank");setReceived("")}} className={"min-h-12 rounded-xl px-2 py-2 text-xs sm:text-sm disabled:opacity-45 "+(method==="bank"?"bg-[#d4af37] font-semibold text-black shadow-sm":"bg-white text-slate-700")}>โอนธนาคาร</button>
+        </div>
+        <button type="button" disabled={!online} aria-expanded={showMorePaymentMethods} onClick={()=>{if(showMorePaymentMethods){if(method==="card"||method==="delivery")setMethod("cash");setShowMorePaymentMethods(false)}else setShowMorePaymentMethods(true)}} className="mt-1.5 min-h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 disabled:opacity-45">{showMorePaymentMethods?"ซ่อนช่องทางอื่น":"ช่องทางอื่น · บัตร / เดลิเวอรี"}</button>
+        {showMorePaymentMethods&&<div className="mt-1.5 grid grid-cols-2 gap-1.5">
+          <button disabled={!online} onClick={()=>{setMethod("card");setReceived("")}} className={"min-h-11 rounded-xl px-2 py-2 text-xs sm:text-sm disabled:opacity-45 "+(method==="card"?"bg-[#d4af37] font-semibold text-black shadow-sm":"bg-white text-slate-700")}>บัตร</button>
+          <button disabled={!online} onClick={()=>{setMethod("delivery");setSplitBill(false);setSplitSelection({});setReceived("");setManualPaymentReference("")}} className={"min-h-11 rounded-xl px-2 py-2 text-xs sm:text-sm disabled:opacity-45 "+(method==="delivery"?"bg-[#d4af37] font-semibold text-black shadow-sm":"bg-white text-slate-700")}>เดลิเวอรี</button>
+        </div>}
+      </div>
       {online&&promptConfig?.ready!==true&&<div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">PromptPay ยังไม่เปิดรับเงินจริง · ระบบกำลังรอ Beam Merchant/API/Webhook ให้พร้อม</div>}
       {["bank","card"].includes(method)&&<div className="mt-3 rounded-[20px] border border-slate-200 bg-slate-50 p-3"><label className="text-xs font-semibold text-slate-700">{method==="bank"?"เลขอ้างอิงโอน / หมายเหตุ":"เลขอ้างอิงบัตร / Terminal"}</label><input value={manualPaymentReference} onChange={e=>setManualPaymentReference(e.target.value)} placeholder={method==="bank"?"เช่น เลขท้ายรายการโอน (ใส่ได้ถ้ามี)":"เช่น Slip/Terminal ref (ใส่ได้ถ้ามี)"} className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-3 py-3"/><p className="mt-2 text-[11px] text-slate-500">ระบบบันทึกเป็นช่องทางรับเงินแยกสำหรับรายงานและ Export บัญชี · ไม่กระทบเงินสดในลิ้นชัก</p></div>}
-      {method==="delivery"&&<div className="mt-3 rounded-[20px] border border-slate-200 bg-slate-50 p-3"><label className="text-xs font-semibold text-slate-700">แพลตฟอร์ม Delivery</label><select value={deliveryPlatform} onChange={e=>setDeliveryPlatform(e.target.value as any)} className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-3 py-3"><option value="grab">Grab</option><option value="lineman">LINE MAN</option><option value="other_delivery">Delivery อื่น</option></select><div className="mt-3 grid grid-cols-3 gap-2 text-center text-xs"><div className="rounded-xl bg-white p-2"><span className="text-slate-500">ยอดขาย</span><b className="mt-1 block">฿{netPayable.toFixed(0)}</b></div><div className="rounded-xl bg-white p-2"><span className="text-slate-500">GP {(deliveryGpRate*100).toFixed(1)}%</span><b className="mt-1 block text-red-600">−฿{deliveryGpFee.toFixed(2)}</b></div><div className="rounded-xl bg-white p-2"><span className="text-slate-500">รับสุทธิ</span><b className="mt-1 block text-emerald-700">฿{deliveryNetSettlement.toFixed(2)}</b></div></div><p className="mt-2 text-[11px] text-slate-500">ยอดขายยังบันทึกเต็มจำนวน ส่วน GP แยกเป็นค่าธรรมเนียมเพื่อให้รายงานกระแสเงินสดตรงกับเงินที่จะได้รับจริง</p></div>}
-      {customers.length>0&&<select disabled={!online} value={customerId} onChange={e=>{setCustomerId(e.target.value);setPointsRedeemed(0);setReceived("")}} className="mt-4 w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 disabled:bg-slate-100 disabled:text-slate-400"><option value="">ลูกค้าทั่วไป / ไม่สะสมแต้ม</option>{customers.map(x=><option key={x.id} value={x.id}>{x.name} · {x.points||0} pts</option>)}</select>}
-      {selectedCustomer&&redeemValue>0&&<div className="mt-3 rounded-2xl border border-[#d4af37]/40 bg-[#fffaf0] p-3"><div className="flex items-center justify-between text-sm"><span><b>{selectedCustomer.name}</b> · มี {Number(selectedCustomer.points)||0} แต้ม</span><span className="text-xs text-slate-500">1 แต้ม = ฿{redeemValue.toFixed(2)}</span></div><div className="mt-2 grid grid-cols-[1fr_auto] gap-2"><input type="number" inputMode="numeric" min="0" max={maxRedeemPoints} step="1" value={pointsRedeemed} onChange={e=>{setPointsRedeemed(Math.max(0,Math.min(maxRedeemPoints,Math.trunc(Number(e.target.value)||0))));setReceived("")}} className="min-h-11 rounded-xl border border-slate-300 bg-white px-3" placeholder="แต้มที่ใช้"/><button type="button" disabled={maxRedeemPoints<1} onClick={()=>{setPointsRedeemed(maxRedeemPoints);setReceived("")}} className="rounded-xl border border-[#d4af37] px-3 text-xs font-bold text-[#765b08] disabled:opacity-40">ใช้ได้สูงสุด {maxRedeemPoints}</button></div>{redeemPoints>0&&<div className="mt-3 space-y-1 border-t border-amber-200 pt-2 text-sm"><div className="flex justify-between"><span>ยอดก่อนส่วนลด</span><b>฿{payableTotal.toFixed(0)}</b></div><div className="flex justify-between text-amber-800"><span>ใช้ {redeemPoints} แต้ม</span><b>−฿{crmDiscount.toFixed(0)}</b></div><div className="flex justify-between text-base"><b>ยอดสุทธิ</b><b className="text-[#765b08]">฿{netPayable.toFixed(0)}</b></div><p className="text-[11px] text-slate-500">บิลนี้คาดว่าจะได้ +{estimatedPointsAwarded} แต้ม จากยอดจ่ายจริง</p></div>}</div>}
-      {method==="cash"&&<><div className="mt-4 grid grid-cols-[1fr_auto] gap-2"><input autoFocus inputMode="decimal" value={received} onChange={e=>setReceived(e.target.value)} placeholder="จำนวนเงินที่รับ" className="min-w-0 rounded-2xl border border-slate-300 bg-slate-100 px-4 py-3 text-lg outline-none focus:border-[#c59b19]"/><button type="button" disabled={busy||!payableItems.length} onClick={()=>setReceived(String(netPayable))} className="min-h-12 rounded-2xl border border-[#d4af37] bg-[#fff8dc] px-3 text-sm font-bold text-[#765b08] disabled:opacity-40">รับพอดี ฿{netPayable.toFixed(0)}</button></div>{received.trim()!==""&&Number.isFinite(cashDelta)&&<div className={"mt-3 flex items-center justify-between rounded-2xl border px-4 py-3 "+(cashDelta>=0?"border-emerald-300 bg-emerald-50 text-emerald-900":"border-red-300 bg-red-50 text-red-800")}><span>{cashDelta>=0?"เงินทอน":"ขาดอีก"}</span><b className="text-xl">฿{Math.abs(cashDelta).toFixed(0)}</b></div>}</>}
+      {method==="delivery"&&<div className="mt-3 rounded-[20px] border border-slate-200 bg-slate-50 p-3"><label className="text-xs font-semibold text-slate-700">แพลตฟอร์ม Delivery</label><select value={deliveryPlatform} onChange={e=>setDeliveryPlatform(e.target.value as any)} className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-3 py-3"><option value="grab">Grab</option><option value="lineman">LINE MAN</option><option value="other_delivery">Delivery อื่น</option></select><div className="mt-3 grid grid-cols-3 gap-2 text-center text-xs"><div className="rounded-xl bg-white p-2"><span className="text-slate-500">ยอดขาย</span><b className="mt-1 block">฿{formatMoney(netPayable)}</b></div><div className="rounded-xl bg-white p-2"><span className="text-slate-500">GP {(deliveryGpRate*100).toFixed(1)}%</span><b className="mt-1 block text-red-600">−฿{formatMoney(deliveryGpFee)}</b></div><div className="rounded-xl bg-white p-2"><span className="text-slate-500">รับสุทธิ</span><b className="mt-1 block text-emerald-700">฿{formatMoney(deliveryNetSettlement)}</b></div></div><p className="mt-2 text-[11px] text-slate-500">ยอดขายยังบันทึกเต็มจำนวน ส่วน GP แยกเป็นค่าธรรมเนียมเพื่อให้รายงานกระแสเงินสดตรงกับเงินที่จะได้รับจริง</p></div>}
+      {method==="cash"&&<><div className="mt-4 grid grid-cols-[1fr_auto] gap-2"><input autoFocus inputMode="decimal" aria-label="จำนวนเงินสดที่รับจากลูกค้า" value={received} onChange={e=>setReceived(e.target.value)} placeholder="จำนวนเงินที่รับ" className="min-w-0 rounded-2xl border border-slate-300 bg-slate-100 px-4 py-3 text-lg outline-none focus:border-[#c59b19]"/><button type="button" disabled={busy||!payableItems.length} onClick={()=>setReceived(String(netPayable))} className="min-h-12 rounded-2xl border border-[#d4af37] bg-[#fff8dc] px-3 text-sm font-bold text-[#765b08] disabled:opacity-40">รับพอดี ฿{formatMoney(netPayable)}</button></div><div className="mt-2"><p className="mb-1.5 text-[11px] font-semibold text-slate-500">แตะจำนวนเงินที่ลูกค้าจ่าย</p><div className="grid grid-cols-4 gap-1.5">{quickCashAmounts.map(amount=><button key={amount} type="button" disabled={busy||!payableItems.length} onClick={()=>setReceived(String(amount))} aria-label={"รับเงินสด "+amount+" บาท"} className={"min-h-11 rounded-xl border px-2 text-sm font-bold disabled:opacity-40 "+(cashReceived===amount?"border-[#d4af37] bg-[#fff8dc] text-[#765b08]":"border-slate-300 bg-white text-slate-700")}>฿{formatMoney(amount)}</button>)}</div></div>{received.trim()!==""&&Number.isFinite(cashDelta)&&<div className={"mt-3 flex items-center justify-between rounded-2xl border px-4 py-3 "+(cashDelta>=0?"border-emerald-300 bg-emerald-50 text-emerald-900":"border-red-300 bg-red-50 text-red-800")}><span>{cashDelta>=0?"เงินทอน":"ขาดอีก"}</span><b className="text-xl">฿{formatMoney(Math.abs(cashDelta))}</b></div>}</>}
       {method==="promptpay"&&prompt?.qrUrl&&<div className="mt-4 rounded-[20px] border border-slate-300 bg-white p-4 text-center"><img src={prompt.qrUrl} alt="PromptPay QR" className="mx-auto max-h-56 w-auto"/><p className="mt-2 text-xs font-semibold text-black">{prompt.paid?"ชำระเงินแล้ว":"สแกน QR แล้วระบบจะตรวจสอบอัตโนมัติ"}</p></div>}
       <div className="sticky bottom-0 z-10 -mx-4 mt-4 border-t border-slate-200 bg-white/95 px-4 pb-[max(.5rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur sm:-mx-6 sm:px-6">
-        <button disabled={busy||!payableItems.length||(method==="cash"&&(!Number.isFinite(cashReceived)||cashReceived<netPayable))} onClick={checkout} className="w-full rounded-2xl bg-[#d4af37] py-3.5 font-bold text-black shadow-sm disabled:opacity-40">{busy?(method==="promptpay"&&prompt?"WAITING FOR PAYMENT...":"กำลังบันทึกบิล..."):(method==="promptpay"?"CREATE QR / PAY":method==="delivery"?"CONFIRM DELIVERY ORDER":method==="bank"?"ยืนยันรับโอน":method==="card"?"ยืนยันรับบัตร":!online?"SAVE OFFLINE CASH":"CONFIRM PAYMENT")}</button>
+        <button disabled={busy||!reviewConfirmed||salesClosed||!payableItems.length||(method==="cash"&&(!Number.isFinite(cashReceived)||cashReceived<netPayable))} onClick={checkout} className="w-full rounded-2xl bg-[#d4af37] py-3.5 font-bold text-black shadow-sm disabled:opacity-40">{busy?(method==="promptpay"&&prompt?"กำลังรอยืนยันการชำระ…":"กำลังบันทึกบิล…"):(method==="promptpay"?"สร้าง QR พร้อมเพย์":method==="delivery"?"ยืนยันออเดอร์เดลิเวอรี":method==="bank"?"ยืนยันรับโอน":method==="card"?"ยืนยันรับบัตร":!online?"บันทึกเงินสดออฟไลน์":"ยืนยันรับเงิน")}</button>
         {method==="cash"&&Number.isFinite(cashReceived)&&cashReceived===netPayable&&<p className="mt-2 text-center text-xs font-semibold text-emerald-700">รับเงินพอดียอด · กดยืนยันชำระได้เลย</p>}
         {result&&<p className="mt-2 rounded-xl bg-slate-100 px-3 py-2 text-center text-sm text-slate-700">{result}</p>}
       </div>
     </div></div>}
 
-    {lastSale&&<div className={"fixed bottom-[92px] right-4 z-[70] w-[min(460px,calc(100vw-2rem))] rounded-[26px] border bg-white p-5 shadow-2xl md:bottom-6 md:right-6 "+(lastSale.offline?"border-amber-300":"border-emerald-300")}><div className="flex items-start gap-3"><div className={"grid h-10 w-10 shrink-0 place-items-center rounded-full "+(lastSale.offline?"bg-amber-100 text-amber-700":"bg-emerald-100 text-emerald-700")}><CheckCircle2 size={22}/></div><div className="min-w-0 flex-1"><div className="flex items-start justify-between gap-2"><div><b className="text-lg">{lastSale.offline?"บันทึกเงินสด Offline แล้ว":"ชำระเงินสำเร็จ"}</b><p className="mt-1 text-sm text-slate-600">{lastSale.offline?"เลขชั่วคราว "+lastSale.queueNo+" · รอ Sync Cloud":"คิว "+lastSale.queueNo+(lastSale.recovered?" · กู้คืนรายการเดิม":"")}</p></div><button onClick={()=>setLastSale(null)}><X size={18}/></button></div>{lastSale.offline?<div className="mt-3 rounded-[20px] border-2 border-amber-300 bg-amber-50 p-4 text-center"><div className="text-xs font-bold tracking-[.12em] text-amber-800">OFFLINE ORDER</div><div className="mt-1 text-3xl font-black leading-none text-amber-900">{lastSale.queueNo}</div><p className="mt-2 text-xs text-amber-800">ทำและส่งมอบออเดอร์นี้ตามลำดับที่รับ · เมื่อเน็ตกลับระบบจะลงบัญชี/Stock โดยไม่สร้างคิวผลิตซ้ำ</p></div>:<div className="mt-3 rounded-[20px] border-2 border-[#d4af37] bg-[#fff8dc] p-4 text-center"><div className="text-xs font-bold tracking-[.18em] text-[#765b08]">หยิบบัตรให้ลูกค้า</div><div className="mt-1 text-4xl font-black leading-none text-[#6f5510] md:text-5xl">บัตร {lastSale.pager||"—"}</div></div>}{lastSale.payment==="cash"&&<div className="mt-3 flex items-center justify-between rounded-2xl bg-emerald-50 p-3"><span className="text-sm font-semibold text-emerald-800">เงินทอน</span><div className="text-2xl font-bold text-emerald-800">฿{lastSale.change.toFixed(0)}</div></div>}<div className={"mt-3 grid gap-2 "+(lastSale.offline?"grid-cols-1":"grid-cols-2")}><button onClick={startNextOrder} className="flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-[#d4af37] px-3 text-sm font-bold text-black"><Plus size={16}/>รับออเดอร์ถัดไป</button>{!lastSale.offline&&<button onClick={()=>router.push("/queue")} className="flex min-h-12 items-center justify-center gap-2 rounded-2xl border border-slate-300 bg-white px-3 text-xs font-semibold text-slate-700">ไปทำคิว {lastSale.queueNo} <ArrowRight size={15}/></button>}</div><p className="mt-2 text-center text-[11px] text-slate-500">{lastSale.offline?"ยอดถูกเก็บในเครื่องแล้ว ห้ามล้างข้อมูล Browser จนกว่าจะ Sync สำเร็จ":"รับออเดอร์ถัดไปได้ทันทีโดยไม่ออกจากหน้า POS"}</p></div></div></div>}
+    {lastSale?.receipt&&<SaleReceipt sale={lastSale.receipt} paperWidth={receiptPaperWidth}/>}
+    {lastSale&&<div className={"fixed bottom-[92px] right-4 z-[70] w-[min(460px,calc(100vw-2rem))] rounded-[26px] border bg-white p-5 shadow-2xl md:bottom-6 md:right-6 "+(lastSale.offline?"border-amber-300":"border-emerald-300")}><div className="flex items-start gap-3"><div className={"grid h-10 w-10 shrink-0 place-items-center rounded-full "+(lastSale.offline?"bg-amber-100 text-amber-700":"bg-emerald-100 text-emerald-700")}><CheckCircle2 size={22}/></div><div className="min-w-0 flex-1"><div className="flex items-start justify-between gap-2"><div><b className="text-lg">{lastSale.offline?"บันทึกเงินสดออฟไลน์แล้ว":"ชำระเงินสำเร็จ"}</b><p className="mt-1 text-sm text-slate-600">{lastSale.offline?"เลขชั่วคราว "+lastSale.queueNo+" · รอซิงก์ขึ้นระบบ":"คิว "+lastSale.queueNo+(lastSale.recovered?" · กู้คืนรายการเดิม":"")}</p></div><button onClick={()=>setLastSale(null)}><X size={18}/></button></div>{lastSale.offline?<div className="mt-3 rounded-[20px] border-2 border-amber-300 bg-amber-50 p-4 text-center"><div className="text-xs font-bold tracking-[.12em] text-amber-800">ออเดอร์ออฟไลน์</div><div className="mt-1 text-3xl font-black leading-none text-amber-900">{lastSale.queueNo}</div><p className="mt-2 text-xs text-amber-800">ทำและส่งมอบออเดอร์นี้ตามลำดับที่รับ · เมื่ออินเทอร์เน็ตกลับ ระบบจะลงบัญชีและสต็อกโดยไม่สร้างคิวผลิตซ้ำ</p></div>:<div className="mt-3 rounded-[20px] border-2 border-[#d4af37] bg-[#fff8dc] p-4 text-center"><div className="text-xs font-bold tracking-[.18em] text-[#765b08]">หยิบบัตรให้ลูกค้า</div><div className="mt-1 text-4xl font-black leading-none text-[#6f5510] md:text-5xl">บัตร {lastSale.pager||"—"}</div></div>}{lastSale.payment==="cash"&&<div className="mt-3 flex items-center justify-between rounded-2xl bg-emerald-50 p-3"><span className="text-sm font-semibold text-emerald-800">เงินทอน</span><div className="text-2xl font-bold text-emerald-800">฿{formatMoney(lastSale.change)}</div></div>}<div className="mt-3 space-y-2"><button onClick={startNextOrder} className="flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl bg-[#d4af37] px-3 text-sm font-bold text-black"><Plus size={16}/>รับออเดอร์ถัดไป</button>{!lastSale.offline&&<div className={"grid gap-2 "+(lastSale.receipt&&canQueueOps?"grid-cols-2":"grid-cols-1")}>{lastSale.receipt&&<button onClick={()=>window.print()} className="flex min-h-11 items-center justify-center gap-2 rounded-2xl border border-slate-300 bg-white px-3 text-xs font-semibold text-slate-700"><Printer size={15}/>พิมพ์ใบเสร็จ</button>}{canQueueOps&&<button onClick={()=>{setOpsInitialTab("queue");setLastSale(null);setOpsOpen(true)}} className="flex min-h-11 items-center justify-center gap-2 rounded-2xl border border-slate-300 bg-white px-3 text-xs font-semibold text-slate-700">ดูคิว {lastSale.queueNo} ในงานร้าน <ArrowRight size={15}/></button>}</div>}</div><p className="mt-2 text-center text-[11px] text-slate-500">{lastSale.offline?"ยอดถูกเก็บในเครื่องแล้ว · ใบเสร็จจริงจะพิมพ์ได้หลังซิงก์สำเร็จ":"รับออเดอร์ถัดไปได้ทันทีโดยไม่ออกจากหน้า POS"}</p></div></div></div>}
+    <PosOperationsHub session={session} bootstrap={data} open={opsOpen} onClose={()=>setOpsOpen(false)} onRefreshStock={()=>load(true)} networkOnline={online} initialTab={opsInitialTab}/>
   </section>;
 }

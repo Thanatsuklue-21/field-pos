@@ -16,7 +16,7 @@ Checkout and queue operations have durable request keys stored in `field_pos_req
 ## Setup and validation
 
 - Node.js 20 or newer; use `npm ci`, `npm test`, `npm run build`, then `npm run dev` or `npm start`.
-- Set `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN`, and `PUBLIC_ORIGIN` to the exact application origin. Keep credentials server-side. Schema installation is additive and runs before API handling.
+- Set `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN`, and `PUBLIC_ORIGIN` to the exact application origin. Keep credentials server-side. Set `FIELD_DB_SCOPE=uat` on Vercel Preview/UAT; Preview API traffic fails closed without that marker so a copied Production database credential cannot be used accidentally. Production may use `FIELD_DB_SCOPE=production`; an explicitly `uat`-scoped Production deployment is rejected. Schema installation is additive and runs before API handling.
 - Provision the first API admin with `npm run bootstrap -- admin`; the bootstrap prompts securely for a password. Do not initialize another admin when using an existing configured database.
 - Configure Beam PromptPay with `PROMPTPAY_PROVIDER=beam`, `BEAM_ENV=playground`, `BEAM_MERCHANT_ID`, `BEAM_API_KEY` and `BEAM_WEBHOOK_HMAC_KEY`. Keep all credentials server-side and test in Playground before Production. Legacy Omise/Opn remains available as a migration fallback when `PROMPTPAY_PROVIDER=opn`.
 - Session cookies are HttpOnly/Secure/SameSite=Strict; writes validate origin, CSRF and server action permissions.
@@ -33,6 +33,12 @@ The server remains authoritative for shared transactions. IndexedDB caches POS b
 Use the full backup page for state plus stock, purchase, recipe, cost and durable request ledgers. Version 2 backups include request keys; version 1 backups remain readable. Export reads all tables in a consistent transaction. Restore requires an owner confirmation and matching revision. Test recovery on a separate database before using it for an emergency.
 
 `public/index.html` and `public/online*.js` are legacy migration/reference fixtures, not the primary application. Their public entry routes are quarantined to `/pos` in production. Do not use their local state as the source of truth for current shared sales or assume that legacy JSON exports contain the full accounting ledgers. Obsolete standalone telemetry/insights/root-HTML assets were removed from the active repository.
+
+## PWA operating model
+
+The current app is installable as **FIELD POS** from supported browsers. The manifest launches at `/pos` in standalone mode, while the service worker caches only the app shell/static assets and same-origin images. Requests under `/api/` are deliberately never cached by the service worker; checkout, payment, stock, queue, refund, void, expenses and close-day semantics remain server-authoritative.
+
+PWA updates are staged. A waiting service worker does not force-reload the POS while the cart, payment recovery, split-payment state, queue action or offline sync is active. The operator can install or inspect PWA/device readiness from Settings. IndexedDB schema remains version 2; the PWA layer reuses the existing bootstrap cache and durable offline cash outbox rather than creating a second offline database. Split-payment continuation and edit-cash recovery metadata use durable local storage (with migration from older session storage). After a successful online sign-in, the device stores only a non-secret operator identity snapshot for up to seven days; if the app cold-starts offline and a safe cached catalog exists, it can enter a restricted staff session for offline cash only. Passwords, CSRF tokens and server secrets are never stored for offline unlock, and reconnecting requires server session revalidation before any online write or outbox sync. The current PWA release candidate is `8.0.0-pwa.2`; it also tracks Android `VisualViewport` height so the payment confirm area stays reachable when the on-screen keyboard opens.
 
 ## Deployment and practical limits
 

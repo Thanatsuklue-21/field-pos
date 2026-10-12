@@ -27,11 +27,21 @@ test('POS captures only cash offline and syncs the same idempotent request later
   assert.match(sync,/needs_review/);
 });
 
+test('offline cash refuses a stock snapshot from a different Bangkok business date',async()=>{
+  const db=await read('lib/offline-db.ts'),pos=await read('app/pos/page.tsx');
+  assert.match(db,/bangkokDate\(Number\(cached\.savedAt\)\)!==billDate/);
+  assert.match(db,/offline_catalog_stale_day/);
+  assert.match(db,/projectionError=error instanceof Error/);
+  assert.match(db,/if\(projectionError\)throw projectionError/);
+  assert.match(pos,/offline_catalog_stale_day/);
+});
+
 test('offline local stock projection prevents the cart from forgetting already-sold ingredients',async()=>{
   const sync=await read('lib/offline-sales.ts'),pos=await read('app/pos/page.tsx');
   assert.match(sync,/applyOfflineCashToBootstrap/);
   assert.match(sync,/Number\(stock\[ingredientId\]\.qty\)-qty/);
-  assert.match(pos,/cachePut\(\"\/api\/pos\/bootstrap\",projected\)/);
+  assert.match(pos,/queueOfflineCashSale\(body,\{projectStock:true\}\)/);
+  assert.match(pos,/bootstrap:queued\.bootstrap/);
 });
 
 test('server marks synced offline orders returned so they never re-enter production FIFO',async()=>{
@@ -43,3 +53,23 @@ test('server marks synced offline orders returned so they never re-enter product
   assert.match(api,/offline_price_changed/);
   assert.match(api,/pos_checkout_offline_sync/);
 });
+
+test('cloud bootstrap cannot overwrite projected stock while offline outbox remains unresolved',async()=>{
+  const pos=await read('app/pos/page.tsx');
+  const loadStart=pos.indexOf('const load=async(force=false)');
+  const loadEnd=pos.indexOf('const loadCustomers=',loadStart);
+  const load=pos.slice(loadStart,loadEnd);
+  assert.ok(loadStart>=0&&loadEnd>loadStart);
+  assert.ok(load.includes('getOfflineCashSummary().catch(()=>null)'));
+  const guardIndex=Math.max(load.indexOf('if(outbox&&outbox.total>0)'),load.indexOf('if(outbox?.total>0)'));
+  assert.ok(guardIndex>=0);
+  assert.ok(guardIndex<load.indexOf('acceptBootstrap(next)'));
+
+  const syncStart=pos.indexOf('async function syncOfflineQueue()');
+  const syncEnd=pos.indexOf('function finishOfflineSale',syncStart);
+  const sync=pos.slice(syncStart,syncEnd);
+  assert.ok(sync.includes('if(sync.total===0)'));
+  assert.ok(sync.includes('await load(true).catch(()=>{})'));
+  assert.ok(sync.includes('ระบบคง Stock projection ในเครื่องไว้จนกว่าจะจัดการครบ'));
+});
+

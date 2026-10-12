@@ -1,34 +1,116 @@
 "use client";
-import {useEffect,useMemo,useState} from "react";
+import {formatMoney} from "@/lib/money-format.mjs";
+import {useEffect,useMemo,useRef,useState} from "react";
 import {CheckCircle2,RefreshCw,RotateCcw,TriangleAlert,X} from "lucide-react";
 import AuthGate from "@/components/auth-gate";
 import {api,type Session} from "@/lib/api-client";
+import {SETTLEMENT_PENDING_KEY,shouldRetainSettlementPending,validatePendingSettlement,validateSettlementAck} from "@/lib/settlement-recovery.mjs";
 
 type Pending={key:string;saleDate:string;platform:string;gross:number;gpFees:number;expectedAmount:number;orders:number;saleIds:string[]};
-type Rec={id:string;saleDate:string;platform:string;orders:number;gross:number;gpFees:number;expectedAmount:number;receivedAmount:number;receivedDate:string;variance:number;status:"matched"|"variance";note?:string;createdAt:number;createdBy:string;cancelledAt?:number;cancelReason?:string};
+type Rec={id:string;requestKey?:string;saleDate:string;platform:string;orders:number;gross:number;gpFees:number;expectedAmount:number;receivedAmount:number;receivedDate:string;variance:number;status:"matched"|"variance";note?:string;createdAt:number;createdBy:string;cancelledAt?:number;cancelReason?:string};
+type SettlementBody={requestKey:string;saleDate:string;platform:string;receivedAmount:number;receivedDate:string;note:string};
+type PendingSettlement={body:SettlementBody;createdAt:number};
 type Data={revision:number;pending:Pending[];history:Rec[];summary:{records:number;matched:number;variance:number;expected:number;received:number;netVariance:number}};
 const today=()=>new Date().toLocaleDateString("en-CA",{timeZone:"Asia/Bangkok"});
 const platformLabel=(v:string)=>v==="grab"?"Grab":v==="lineman"?"LINE MAN":"Delivery อื่น";
-const money=(v:number)=>Number(v||0).toLocaleString("th-TH",{minimumFractionDigits:0,maximumFractionDigits:2});
+const money=formatMoney;
+function settlementPendingRead():PendingSettlement|null{
+  let raw:string|null=null;
+  try{raw=localStorage.getItem(SETTLEMENT_PENDING_KEY)}catch{throw new Error("settlement_recovery_storage_unavailable")}
+  if(!raw)return null;
+  try{return validatePendingSettlement(JSON.parse(raw)) as PendingSettlement}catch{throw new Error("settlement_recovery_corrupt")}
+}
+function settlementPendingWrite(body:SettlementBody){
+  try{localStorage.setItem(SETTLEMENT_PENDING_KEY,JSON.stringify({body,createdAt:Date.now()}))}
+  catch{throw new Error("settlement_recovery_storage_unavailable")}
+}
+function settlementPendingClear(){
+  try{localStorage.removeItem(SETTLEMENT_PENDING_KEY)}
+  catch{throw new Error("settlement_recovery_storage_unavailable")}
+}
 
 export default function Settlements(){return <AuthGate>{s=><View session={s}/>}</AuthGate>}
 function View({session}:{session:Session}){
   const [data,setData]=useState<Data|null>(null),[selected,setSelected]=useState<Pending|null>(null),[received,setReceived]=useState(""),[receivedDate,setReceivedDate]=useState(today()),[note,setNote]=useState(""),[busy,setBusy]=useState(false),[msg,setMsg]=useState("");
+  const settlementRecoveryRef=useRef(false);
   const load=()=>api<Data>("/api/accounting/settlements").then(setData);
-  useEffect(()=>{load().catch((e:any)=>setMsg(e.message||"โหลดข้อมูลไม่สำเร็จ"))},[]);
+  function settlementError(code:string){
+    const map:Record<string,string>={
+      delivery_settlement_group_not_found:"ยอดชุดนี้ถูกกระทบไปแล้ว กรุณารีเฟรช",
+      invalid_received_amount:"ยอดรับจริงไม่ถูกต้อง · รองรับสูงสุด 2 ตำแหน่งทศนิยม (สตางค์)",
+      invalid_settlement_date:"วันที่ไม่ถูกต้อง",
+      request_key_conflict:"Request เดิมไม่ตรงกับข้อมูลเดิม · ระบบหยุดเพื่อป้องกันยอดซ้ำ",
+      settlement_pending:"มีรายการกระทบยอดเดิมที่ยังไม่ทราบผล · ระบบจะตรวจ request เดิมก่อน",
+      settlement_unconfirmed:"Server ยังไม่ยืนยันรายการเดิมครบถ้วน · ระบบเก็บ request เดิมไว้เพื่อป้องกันยอดซ้ำ",
+      settlement_recovery_corrupt:"ข้อมูล recovery กระทบยอดในเครื่องเสีย · ห้ามบันทึกรายการใหม่จนกว่าจะตรวจสอบ",
+      settlement_recovery_storage_unavailable:"เครื่องนี้เก็บ recovery กระทบยอดไม่ได้ · ระบบไม่ส่งรายการเพื่อป้องกันยอดซ้ำ"
+    };
+    return map[code]||code;
+  }
+
+  async function sendSettlement(body:SettlementBody){
+    let pending=settlementPendingRead();
+    if(pending&&pending.body.requestKey!==body.requestKey)throw Object.assign(new Error("settlement_pending"),{status:409});
+    if(!pending){settlementPendingWrite(body);pending={body,createdAt:Date.now()}}
+    try{
+      const r=await api<any>("/api/accounting/settlements",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify(pending.body)});
+      validateSettlementAck(r,pending.body);
+      settlementPendingClear();
+      return r;
+    }catch(e:any){
+      if(!shouldRetainSettlementPending(e))settlementPendingClear();
+      throw e;
+    }
+  }
+
+  useEffect(()=>{
+    load().catch((e:any)=>setMsg(e.message||"โหลดข้อมูลไม่สำเร็จ"));
+    let disposed=false;
+    const recover=async()=>{
+      if(disposed||settlementRecoveryRef.current||session.offline)return;
+      let pending:PendingSettlement|null=null;
+      try{pending=settlementPendingRead()}catch(e:any){if(!disposed)setMsg(settlementError(e.message));return}
+      if(!pending)return;
+      settlementRecoveryRef.current=true;setBusy(true);setMsg("");
+      try{
+        const r=await sendSettlement(pending.body);
+        if(!disposed){
+          const v=Number(r.reconciliation?.variance||0);
+          setSelected(null);
+          setMsg("กู้คืนรายการกระทบยอดเดิมสำเร็จ · ใช้ request key เดิม · ส่วนต่าง "+(v>0?"+":"")+"฿"+money(v));
+          await load().catch(()=>{});
+        }
+      }catch(e:any){
+        if(!disposed){
+          setMsg(shouldRetainSettlementPending(e)?"รายการกระทบยอดเดิมยังไม่ทราบผล · ระบบเก็บ request เดิมไว้และจะตรวจซ้ำเมื่อเชื่อมต่อ":settlementError(e.message));
+          await load().catch(()=>{});
+        }
+      }finally{
+        settlementRecoveryRef.current=false;
+        if(!disposed)setBusy(false);
+      }
+    };
+    const onOnline=()=>recover(),onFocus=()=>recover(),onVisible=()=>{if(document.visibilityState==="visible")recover()};
+    recover();
+    window.addEventListener("online",onOnline);
+    window.addEventListener("focus",onFocus);
+    document.addEventListener("visibilitychange",onVisible);
+    return()=>{disposed=true;window.removeEventListener("online",onOnline);window.removeEventListener("focus",onFocus);document.removeEventListener("visibilitychange",onVisible)};
+  },[session.csrf,session.offline]);
   const pendingTotal=useMemo(()=>(data?.pending||[]).reduce((s,x)=>s+x.expectedAmount,0),[data]);
   function open(row:Pending){setSelected(row);setReceived(String(row.expectedAmount));setReceivedDate(today());setNote("");setMsg("")}
   async function save(){
-    if(!selected)return;setBusy(true);setMsg("");
+    if(!selected)return;
+    const amount=Number(received),normalizedAmount=Number.isFinite(amount)?Math.round((amount+Number.EPSILON)*100)/100:amount;
+    const body:SettlementBody={requestKey:crypto.randomUUID(),saleDate:selected.saleDate,platform:selected.platform,receivedAmount:normalizedAmount,receivedDate,note:note.trim().slice(0,300)};
+    setBusy(true);setMsg("");
     try{
-      const r=await api<any>("/api/accounting/settlements",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({saleDate:selected.saleDate,platform:selected.platform,receivedAmount:Number(received),receivedDate,note})});
+      const r=await sendSettlement(body);
       const v=Number(r.reconciliation?.variance||0);
       setMsg(v===0?"กระทบยอดตรงพอดี":"บันทึกแล้ว · ส่วนต่าง "+(v>0?"+":"")+"฿"+money(v));
       setSelected(null);await load();
-    }catch(e:any){
-      const map:Record<string,string>={delivery_settlement_group_not_found:"ยอดชุดนี้ถูกกระทบไปแล้ว กรุณารีเฟรช",invalid_received_amount:"ยอดรับจริงไม่ถูกต้อง",invalid_settlement_date:"วันที่ไม่ถูกต้อง"};
-      setMsg(map[e.message]||e.message);
-    }finally{setBusy(false)}
+    }catch(e:any){setMsg(settlementError(e.message))}
+    finally{setBusy(false)}
   }
   async function cancel(row:Rec){
     if(session.user.role!=="admin"||row.cancelledAt)return;

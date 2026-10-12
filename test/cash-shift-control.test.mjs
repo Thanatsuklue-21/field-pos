@@ -20,7 +20,8 @@ test('close day UI records opening float before count and cannot edit it after s
   assert.match(ui,/เปิดร้านวันนี้/);
   assert.match(ui,/เงินตั้งต้นที่ล็อก/);
   assert.match(ui,/กรุณาเปิดร้านและล็อกเงินตั้งต้นก่อนปิดวัน/);
-  assert.match(ui,/JSON\.stringify\(\{countedCash:counted\}\)/);
-  assert.doesNotMatch(ui,/body:JSON\.stringify\(\{openingCash:opening,countedCash:counted\}\)/);
+  assert.match(ui,/const body:CloseDayBody=\{requestKey:crypto\.randomUUID\(\),date:businessDate\|\|shift\.date,countedCash:counted\}/);
+  assert.match(ui,/sendCloseDay\(body\)/);
+  assert.doesNotMatch(ui,/openingCash:opening,countedCash:counted/);
   assert.match(ui,/Expected Cash = เงินตั้งต้น \+ ยอดขายเงินสด \+ เงินเติมเข้า − ค่าใช้จ่ายเงินสด − เงินนำออก/);
 });

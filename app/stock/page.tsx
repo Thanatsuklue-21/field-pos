@@ -1,8 +1,11 @@
 "use client";
-import {useEffect,useMemo,useState} from "react";
+import {formatMoney} from "@/lib/money-format.mjs";
+import {useEffect,useMemo,useRef,useState} from "react";
 import {AlertTriangle,Archive,ArrowDownCircle,ArrowUpCircle,Edit3,Plus,RotateCcw,Search,Trash2,X} from "lucide-react";
 import AuthGate from "@/components/auth-gate";
 import {api,type Session} from "@/lib/api-client";
+import {STOCK_TX_PENDING_KEY,shouldRetainStockPending,validatePendingStockTransaction,validateStockTransactionAck} from "@/lib/stock-transaction-recovery.mjs";
+import {CYCLE_COUNT_PENDING_KEY,shouldRetainCycleCountPending,validateCycleCountAck,validatePendingCycleCount} from "@/lib/cycle-count-recovery.mjs";
 
 type Purchase={
   id:string;stockTransactionId:string;supplier:string;purchaseDate:string;packageQty:number|null;packageUnit:string;packSize:number|null;packSizeUnit:string;
@@ -15,6 +18,40 @@ type Tx={id:string;ingredientId:string;type:string;qtyDelta:number;unit:string;r
 type Overview={revision:number;ingredients:Ingredient[];transactions:Tx[]};
 type CountInput={packs:string;loose:string;base:string};
 type MasterDraft=Partial<Ingredient>&{originalUnit?:string;loadedAt?:number};
+type StockTxBody=Record<string,any>&{requestKey:string;ingredientId:string;type:"PURCHASE"|"WASTE";unit:string};
+type PendingStockTx={body:StockTxBody;createdAt:number};
+type CycleCountBody={requestKey:string;confirm:true;counts:{ingredientId:string;countedQty:number}[]};
+type PendingCycleCount={body:CycleCountBody;createdAt:number};
+
+function stockPendingRead():PendingStockTx|null{
+  let raw:string|null=null;
+  try{raw=localStorage.getItem(STOCK_TX_PENDING_KEY)}catch{throw new Error("stock_recovery_storage_unavailable")}
+  if(!raw)return null;
+  try{return validatePendingStockTransaction(JSON.parse(raw)) as PendingStockTx}catch{throw new Error("stock_recovery_corrupt")}
+}
+function stockPendingWrite(body:StockTxBody){
+  try{localStorage.setItem(STOCK_TX_PENDING_KEY,JSON.stringify({body,createdAt:Date.now()}))}
+  catch{throw new Error("stock_recovery_storage_unavailable")}
+}
+function stockPendingClear(){
+  try{localStorage.removeItem(STOCK_TX_PENDING_KEY)}
+  catch{throw new Error("stock_recovery_storage_unavailable")}
+}
+
+function cycleCountPendingRead():PendingCycleCount|null{
+  let raw:string|null=null;
+  try{raw=localStorage.getItem(CYCLE_COUNT_PENDING_KEY)}catch{throw new Error("cycle_count_recovery_storage_unavailable")}
+  if(!raw)return null;
+  try{return validatePendingCycleCount(JSON.parse(raw)) as PendingCycleCount}catch{throw new Error("cycle_count_recovery_corrupt")}
+}
+function cycleCountPendingWrite(body:CycleCountBody){
+  try{localStorage.setItem(CYCLE_COUNT_PENDING_KEY,JSON.stringify({body,createdAt:Date.now()}))}
+  catch{throw new Error("cycle_count_recovery_storage_unavailable")}
+}
+function cycleCountPendingClear(){
+  try{localStorage.removeItem(CYCLE_COUNT_PENDING_KEY)}
+  catch{throw new Error("cycle_count_recovery_storage_unavailable")}
+}
 
 const today=()=>new Date().toLocaleDateString("en-CA",{timeZone:"Asia/Bangkok"});
 const packageUnits=["ขวด","ถุง","ถัง","แกลลอน","กล่อง","แพ็ก","ลัง","ชิ้น"];
@@ -35,7 +72,7 @@ function previewReceived(packageQty:string,packSize:string,fromUnit:string,toUni
   if(each===undefined)return {qty:0,label:"หน่วยไม่เข้ากัน",approximate:false};
   const qty=packs*each;return {qty,label:qty.toLocaleString()+" "+toUnit,approximate};
 }
-function compactMoney(v:number){return Number(v||0).toLocaleString("th-TH",{minimumFractionDigits:0,maximumFractionDigits:2})}
+const compactMoney=formatMoney;
 function latestPurchase(x:Ingredient){return x.recentPurchases?.find(p=>!p.cancelled)||null}
 
 function StockView({session}:{session:Session}){
@@ -46,9 +83,133 @@ function StockView({session}:{session:Session}){
   const [packageQty,setPackageQty]=useState("1"),[packageUnit,setPackageUnit]=useState("ขวด"),[packSize,setPackSize]=useState(""),[packSizeUnit,setPackSizeUnit]=useState("g"),[presetId,setPresetId]=useState("");
   const [master,setMaster]=useState<MasterDraft|null>(null),[masterMsg,setMasterMsg]=useState(""),[purchaseEdit,setPurchaseEdit]=useState<{ingredient:Ingredient;purchase:Purchase}|null>(null);
   const [countOpen,setCountOpen]=useState(false),[counts,setCounts]=useState<Record<string,CountInput>>({});
+  const stockRecoveryRef=useRef(false);
+  const cycleCountRecoveryRef=useRef(false);
 
   const load=()=>api<Overview>("/api/stock/overview").then(setData);
-  useEffect(()=>{load().catch(()=>{})},[]);
+
+  function stockErrorText(code:string){
+    const map:Record<string,string>={
+      invalid_purchase_url:"ลิงก์ไม่ถูกต้อง · ใส่ได้ทั้ง https://... หรือโดเมน เช่น shopee.co.th/...",
+      future_purchase_date:"วันที่ซื้อห้ามเป็นอนาคต",
+      purchase_date_closed:"วันที่ซื้อถูก Close Day แล้ว",
+      stock_shortage:"จำนวนคงเหลือไม่พอ",
+      incompatible_stock_unit:"หน่วยต่อบรรจุภัณฑ์ไม่เข้ากับหน่วยที่สูตรใช้",
+      stock_transaction_pending:"มี Stock transaction เดิมที่ยังไม่ทราบผล · ระบบจะตรวจ request เดิมก่อน",
+      stock_transaction_unconfirmed:"Server ยังไม่ยืนยัน Stock transaction เดิมครบถ้วน · ระบบเก็บ request เดิมไว้เพื่อป้องกัน Stock/ต้นทุนซ้ำ",
+      stock_recovery_corrupt:"ข้อมูล Stock recovery ในเครื่องเสีย · ห้ามบันทึกรายการใหม่จนกว่าจะตรวจสถานะ Stock",
+      stock_recovery_storage_unavailable:"เครื่องนี้เก็บ Stock recovery ไม่ได้ · ระบบไม่ส่งรายการเพื่อป้องกันตัด/เพิ่ม Stock ซ้ำ",
+      cycle_count_pending:"มี Cycle Count เดิมที่ยังไม่ทราบผล · ระบบจะตรวจ request เดิมก่อน",
+      cycle_count_unconfirmed:"Server ยังไม่ยืนยัน Cycle Count เดิมครบถ้วน · ระบบเก็บ request เดิมไว้เพื่อป้องกันบันทึกซ้ำ",
+      cycle_count_recovery_corrupt:"ข้อมูล Cycle Count recovery ในเครื่องเสีย · ห้ามแก้ Stock ใหม่จนกว่าจะตรวจสอบ",
+      cycle_count_recovery_storage_unavailable:"เครื่องนี้เก็บ Cycle Count recovery ไม่ได้ · ระบบไม่ส่งผลตรวจนับเพื่อป้องกันข้อมูลซ้ำ"
+    };
+    return map[code]||code;
+  }
+
+  async function sendStockTransaction(body:StockTxBody){
+    const cyclePending=cycleCountPendingRead();
+    if(cyclePending)throw Object.assign(new Error("cycle_count_pending"),{status:409});
+    let pending=stockPendingRead();
+    if(pending&&pending.body.requestKey!==body.requestKey)throw Object.assign(new Error("stock_transaction_pending"),{status:409});
+    if(!pending){stockPendingWrite(body);pending={body,createdAt:Date.now()}}
+    try{
+      const r=await api<any>("/api/stock/transactions",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify(pending.body)});
+      validateStockTransactionAck(r,pending.body);
+      stockPendingClear();
+      return r;
+    }catch(e:any){
+      if(!shouldRetainStockPending(e))stockPendingClear();
+      throw e;
+    }
+  }
+
+  useEffect(()=>{
+    load().catch(()=>{});
+    let disposed=false;
+    const recover=async()=>{
+      if(disposed||stockRecoveryRef.current)return;
+      let pending:PendingStockTx|null=null;
+      try{pending=stockPendingRead()}catch(e:any){if(!disposed)setMsg(stockErrorText(e.message));return}
+      if(!pending)return;
+      stockRecoveryRef.current=true;setBusy(true);setMsg("");
+      try{
+        await sendStockTransaction(pending.body);
+        if(!disposed){
+          setTxOpen(null);setWasteQty("");
+          setMsg("กู้คืน Stock transaction เดิมสำเร็จ · ใช้ request key เดิมและไม่บันทึกซ้ำ");
+          await load().catch(()=>{});
+        }
+      }catch(e:any){
+        if(!disposed){
+          setMsg(shouldRetainStockPending(e)?"Stock transaction เดิมยังไม่ทราบผล · ระบบเก็บ request เดิมไว้และจะตรวจซ้ำเมื่อเชื่อมต่อ":stockErrorText(e.message));
+          await load().catch(()=>{});
+        }
+      }finally{
+        stockRecoveryRef.current=false;
+        if(!disposed)setBusy(false);
+      }
+    };
+    const onOnline=()=>recover(),onFocus=()=>recover(),onVisible=()=>{if(document.visibilityState==="visible")recover()};
+    recover();
+    window.addEventListener("online",onOnline);
+    window.addEventListener("focus",onFocus);
+    document.addEventListener("visibilitychange",onVisible);
+    return()=>{disposed=true;window.removeEventListener("online",onOnline);window.removeEventListener("focus",onFocus);document.removeEventListener("visibilitychange",onVisible)};
+  },[]);
+
+  async function sendCycleCount(body:CycleCountBody){
+    const stockPending=stockPendingRead();
+    if(stockPending)throw Object.assign(new Error("stock_transaction_pending"),{status:409});
+    let pending=cycleCountPendingRead();
+    if(pending&&pending.body.requestKey!==body.requestKey)throw Object.assign(new Error("cycle_count_pending"),{status:409});
+    if(!pending){cycleCountPendingWrite(body);pending={body,createdAt:Date.now()}}
+    try{
+      const r=await api<any>("/api/stock/cycle-count",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify(pending.body)});
+      validateCycleCountAck(r,pending.body);
+      cycleCountPendingClear();
+      return r;
+    }catch(e:any){
+      if(!shouldRetainCycleCountPending(e))cycleCountPendingClear();
+      throw e;
+    }
+  }
+
+  useEffect(()=>{
+    let disposed=false;
+    const recover=async()=>{
+      if(disposed||cycleCountRecoveryRef.current)return;
+      let pending:PendingCycleCount|null=null;
+      try{
+        if(stockPendingRead())return;
+        pending=cycleCountPendingRead();
+      }catch(e:any){if(!disposed)setMsg(stockErrorText(e.message));return}
+      if(!pending)return;
+      cycleCountRecoveryRef.current=true;setBusy(true);setMsg("");
+      try{
+        await sendCycleCount(pending.body);
+        if(!disposed){
+          setCountOpen(false);
+          setMsg("กู้คืน Cycle Count เดิมสำเร็จ · ใช้ request key เดิมและไม่บันทึกซ้ำ");
+          await load().catch(()=>{});
+        }
+      }catch(e:any){
+        if(!disposed){
+          setMsg(shouldRetainCycleCountPending(e)?"Cycle Count เดิมยังไม่ทราบผล · ระบบเก็บ request เดิมไว้และจะตรวจซ้ำเมื่อเชื่อมต่อ":stockErrorText(e.message));
+          await load().catch(()=>{});
+        }
+      }finally{
+        cycleCountRecoveryRef.current=false;
+        if(!disposed)setBusy(false);
+      }
+    };
+    const onOnline=()=>recover(),onFocus=()=>recover(),onVisible=()=>{if(document.visibilityState==="visible")recover()};
+    recover();
+    window.addEventListener("online",onOnline);
+    window.addEventListener("focus",onFocus);
+    document.addEventListener("visibilitychange",onVisible);
+    return()=>{disposed=true;window.removeEventListener("online",onOnline);window.removeEventListener("focus",onFocus);document.removeEventListener("visibilitychange",onVisible)};
+  },[]);
   const rows=useMemo(()=>(data?.ingredients||[]).filter(x=>x.archived===(tab==="archived")&&(x.name+" "+x.id).toLowerCase().includes(q.toLowerCase())),[data,q,tab]);
   const active=(data?.ingredients||[]).filter(x=>!x.archived),low=active.filter(x=>x.lowStock);
   const purchaseHistory=useMemo(()=>(data?.ingredients||[]).flatMap(i=>(i.recentPurchases||[]).map(p=>({ingredient:i,p}))).sort((a,b)=>b.p.createdAt-a.p.createdAt).slice(0,60),[data]);
@@ -93,18 +254,17 @@ function StockView({session}:{session:Session}){
     if(!txOpen)return;setBusy(true);setMsg("");
     try{
       const packs=Number(packageQty),size=Number(packSize),waste=Number(wasteQty);
-      const body=type==="PURCHASE"?{
-        requestKey:crypto.randomUUID(),ingredientId:txOpen.id,type:"PURCHASE",unit:txOpen.unit,referenceType:"purchase",referenceId:"manual-"+Date.now(),reason:note||"รับเข้าสินค้า",
-        purchaseCost:Number(purchaseCost),purchaseDate,supplier,packageQty:packs,packageUnit,packSize:size,packSizeUnit,sourceUrl,imageUrl,purchaseNote:note,purchasePaymentMethod
+      const requestKey=crypto.randomUUID(),referenceId="manual-"+requestKey;
+      const body:StockTxBody=type==="PURCHASE"?{
+        requestKey,ingredientId:txOpen.id,type:"PURCHASE",unit:txOpen.unit,referenceType:"purchase",referenceId,reason:(note||"รับเข้าสินค้า").trim(),
+        purchaseCost:Number(purchaseCost),purchaseDate,supplier:supplier.trim(),packageQty:packs,packageUnit,packSize:size,packSizeUnit,sourceUrl:sourceUrl.trim(),imageUrl:imageUrl.trim(),purchaseNote:note.trim(),purchasePaymentMethod
       }:{
-        requestKey:crypto.randomUUID(),ingredientId:txOpen.id,type:"WASTE",qtyDelta:-waste,unit:txOpen.unit,referenceType:"waste",referenceId:"manual-"+Date.now(),reason:note||"ของเสีย"
+        requestKey,ingredientId:txOpen.id,type:"WASTE",qtyDelta:-waste,unit:txOpen.unit,referenceType:"waste",referenceId,reason:(note||"ของเสีย").trim()
       };
-      await api("/api/stock/transactions",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify(body)});
+      await sendStockTransaction(body);
       setTxOpen(null);setWasteQty("");setMsg("บันทึก Stock แล้ว");await load();
-    }catch(e:any){
-      const map:Record<string,string>={invalid_purchase_url:"ลิงก์ไม่ถูกต้อง · ใส่ได้ทั้ง https://... หรือโดเมน เช่น shopee.co.th/...",future_purchase_date:"วันที่ซื้อห้ามเป็นอนาคต",purchase_date_closed:"วันที่ซื้อถูก Close Day แล้ว",stock_shortage:"จำนวนคงเหลือไม่พอ",incompatible_stock_unit:"หน่วยต่อบรรจุภัณฑ์ไม่เข้ากับหน่วยที่สูตรใช้"};
-      setMsg(map[e.message]||e.message)
-    }finally{setBusy(false)}
+    }catch(e:any){setMsg(stockErrorText(e.message))}
+    finally{setBusy(false)}
   }
 
   async function saveMaster(){
@@ -149,9 +309,10 @@ function StockView({session}:{session:Session}){
     if(!data)return;setBusy(true);setMsg("");
     try{
       const payload=active.map(x=>{const row=counts[x.id]||{packs:"0",loose:"0",base:String(x.qty)},per=Number(x.purchaseProfile?.quantityPerPackage)||0;return {ingredientId:x.id,countedQty:per>0?Number(row.packs||0)*per+Number(row.loose||0):Number(row.base||0)}});
-      await api("/api/stock/cycle-count",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({requestKey:crypto.randomUUID(),confirm:true,counts:payload})});
+      const body:CycleCountBody={requestKey:crypto.randomUUID(),confirm:true,counts:payload};
+      await sendCycleCount(body);
       setCountOpen(false);setMsg("บันทึกยอดนับจริงแล้ว");await load();
-    }catch(e:any){setMsg(e.message)}finally{setBusy(false)}
+    }catch(e:any){setMsg(stockErrorText(e.message))}finally{setBusy(false)}
   }
 
   async function savePurchaseEdit(){
@@ -160,7 +321,7 @@ function StockView({session}:{session:Session}){
       const p=purchaseEdit.purchase;
       await api("/api/stock/purchases/"+encodeURIComponent(p.id),{method:"PATCH",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({totalCost:p.totalCost,purchaseDate:p.purchaseDate,supplier:p.supplier,sourceUrl:p.sourceUrl,imageUrl:p.imageUrl,note:p.note,packageQty:p.packageQty,packageUnit:p.packageUnit,packSize:p.packSize,packSizeUnit:p.packSizeUnit,paymentMethod:p.paymentMethod||"bank"})});
       setPurchaseEdit(null);setMsg("แก้ข้อมูลซื้อแล้ว");await load();
-    }catch(e:any){setMsg(e.message==="purchase_before_reset_read_only"?"รายการนี้อยู่ก่อนจุดล้างข้อมูลทดลอง จึงเก็บไว้อ่านอย่างเดียว":e.message==="invalid_purchase_url"?"ลิงก์ไม่ถูกต้อง":e.message)}finally{setBusy(false)}
+    }catch(e:any){setMsg(e.message==="purchase_before_reset_read_only"?"รายการนี้อยู่ก่อนจุดล้างข้อมูลทดลอง จึงเก็บไว้อ่านอย่างเดียว":e.message==="invalid_purchase_url"?"ลิงก์ไม่ถูกต้อง":e.message==="invalid_purchase_cost"?"ยอดซื้อรวมต้องไม่ติดลบและไม่เกิน 2 ตำแหน่งทศนิยม":e.message)}finally{setBusy(false)}
   }
 
   async function cancelPurchase(x:Ingredient,p:Purchase){

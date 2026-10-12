@@ -1,4 +1,8 @@
 import test from 'node:test';import assert from 'node:assert/strict';import {reconcileCash} from '../lib/domain/cash-reconciliation.mjs';
+test('satang reconciliation does not create a false variance from floating point addition',()=>{
+  const result=reconcileCash({openingCash:0.1,cashSales:0.2,countedCash:0.3});
+  assert.equal(result.expectedCash,0.3);assert.equal(result.cashVariance,0);
+});
 test('cash reconciliation includes opening float, sales, drawer in/out and cash paid out',()=>{assert.deepEqual(reconcileCash({openingCash:500,cashSales:1250,cashIn:200,cashPaidOut:110,cashOut:300,countedCash:1550}),{openingCash:500,cashSales:1250,cashIn:200,cashPaidOut:110,cashOut:300,expectedCash:1540,countedCash:1550,cashVariance:10})});
 test('cash reconciliation reports shortage without mutating sales',()=>{assert.deepEqual(reconcileCash({openingCash:0,cashSales:800,cashPaidOut:20,countedCash:770}),{openingCash:0,cashSales:800,cashIn:0,cashPaidOut:20,cashOut:0,expectedCash:780,countedCash:770,cashVariance:-10})});
 test('cash reconciliation requires non-negative inputs and a real count',()=>{assert.throws(()=>reconcileCash({cashSales:100,countedCash:undefined}),/counted_cash_required/);assert.throws(()=>reconcileCash({openingCash:-1,cashSales:100,countedCash:100}),/invalid_opening_cash/);assert.throws(()=>reconcileCash({cashSales:100,cashPaidOut:-1,countedCash:100}),/invalid_cash_paid_out/);assert.throws(()=>reconcileCash({cashSales:100,cashIn:-1,countedCash:100}),/invalid_cash_in/);assert.throws(()=>reconcileCash({cashSales:100,cashOut:-1,countedCash:100}),/invalid_cash_out/)});

@@ -53,7 +53,7 @@ test('real libSQL: checkout → grouped preparation → early/full call → hand
   await act(db,sale.orderId,'call');await act(db,sale.orderId,'return');
   const closed=await close(210);assert.equal(closed.status,201);assert.equal(closed.body.close.cashVariance,0);
   const expenseRes={writeHead(status){this.status=status},end(body){this.body=JSON.parse(body)}};
-  await handler({method:'POST',query:{route:'expenses'},headers:{origin:'https://field.test',cookie:'field_session='+token,'x-csrf-token':'csrf'},body:{amount:10,category:'OTHER'}},expenseRes);
+  await handler({method:'POST',query:{route:'expenses'},headers:{origin:'https://field.test',cookie:'field_session='+token,'x-csrf-token':'csrf'},body:{requestKey:'expense-after-close-0001',amount:10,category:'OTHER'}},expenseRes);
   assert.equal(expenseRes.body.error,'day_closed');
   await assert.rejects(sell(db,'closed-checkout'),/day_closed/);
 });
@@ -91,6 +91,41 @@ test('real libSQL: durable checkout retry survives 100 newer queue mutations',as
   assert.equal((await state(db)).posRequestKeys['original-request'],undefined);
   const replay=await sell(db,'original-request');assert.equal(replay.replayed,true);assert.equal(replay.orderId,first.orderId);
   assert.equal((await state(db)).sales.length,1);assert.equal((await state(db)).ingredients.matcha.qty,990);
+});
+
+test('real libSQL: two stale devices race across 30 queues without double completion or stock drift',async t=>{
+  const db=await setup(t);
+  let conflicts=0;
+  for(let i=1;i<=30;i++){
+    const paid=await sell(db,'two-device-checkout-'+String(i).padStart(2,'0'));
+    const snapshot=await getQueueSnapshot({db});
+    const order=snapshot.orders.find(x=>x.id===paid.orderId);
+    assert.ok(order);
+    const expectedReadyQty=Number(order.items[0].readyQty)||0;
+    const results=await Promise.allSettled([
+      queuePosAction({db,user,body:{requestKey:'device-a-complete-'+i,orderId:paid.orderId,action:'complete_item',itemIndex:0,expectedReadyQty}}),
+      queuePosAction({db,user,body:{requestKey:'device-b-complete-'+i,orderId:paid.orderId,action:'complete_item',itemIndex:0,expectedReadyQty}})
+    ]);
+    const fulfilled=results.filter(x=>x.status==='fulfilled');
+    const rejected=results.filter(x=>x.status==='rejected');
+    assert.equal(fulfilled.length,1);
+    assert.equal(rejected.length,1);
+    assert.match(String(rejected[0].reason?.message||rejected[0].reason),/queue_state_changed/);
+    conflicts++;
+    let doc=await state(db);
+    const saved=doc.orders.find(x=>x.id===paid.orderId);
+    assert.equal(saved.items[0].readyQty,2);
+    await act(db,paid.orderId,'call');
+    await act(db,paid.orderId,'return');
+  }
+  const doc=await state(db);
+  assert.equal(conflicts,30);
+  assert.equal(doc.sales.length,30);
+  assert.equal(doc.orders.length,30);
+  assert.ok(doc.orders.every(x=>x.status==='returned'));
+  assert.equal(doc.ingredients.matcha.qty,1000-(30*10));
+  assert.equal(doc.ingredients.milk.qty,30000-(30*220));
+  assert.equal((await getQueueSnapshot({db})).orders.length,0);
 });
 
 test('real libSQL: split rejects repeated indexes and fractional quantities without modifying stock/payments',async t=>{
@@ -474,4 +509,35 @@ test('real libSQL: pre-production bank and card refunds require external referen
     assert.equal(refunded.stockRestored,true);
     const after=await state(db);assert.equal(after.sales[0].status,'refunded');assert.equal(after.sales[0].refundMethod,method==='bank'?'manual_bank':'manual_card');assert.equal(after.sales[0].refundReference,method+'-refund-ref');assert.equal(after.ingredients.matcha.qty,1000);assert.equal(after.ingredients.milk.qty,30000);
   }
+});
+
+
+test('real libSQL: expense request replay is idempotent and conflicting key reuse is rejected',async t=>{
+  const db=await setup(t);
+  const token='expense-idempotency-token';
+  await db.execute({sql:'INSERT INTO field_sessions VALUES(?,?,?,?)',args:[digest(token),user.id,'csrf',Date.now()+60000]});
+  const handler=createApi({db,origin:'https://field.test'});
+  const headers={origin:'https://field.test',cookie:'field_session='+token,'x-csrf-token':'csrf'};
+  const send=async body=>{
+    const res={writeHead(status){this.status=status},end(payload){this.body=JSON.parse(payload)}};
+    await handler({method:'POST',query:{route:'expenses'},headers,body},res);
+    return res;
+  };
+  const body={requestKey:'expense-replay-0001',date:bangkokDate(),amount:35,category:'UTILITY',description:'water',paymentMethod:'cash'};
+  const first=await send(body);
+  assert.equal(first.status,201);
+  assert.equal(first.body.replayed,false);
+  const replay=await send(body);
+  assert.equal(replay.status,200);
+  assert.equal(replay.body.replayed,true);
+  assert.equal(replay.body.expense.id,first.body.expense.id);
+  let doc=await state(db);
+  assert.equal(doc.expenses.length,1);
+  const conflict=await send({...body,amount:36});
+  assert.equal(conflict.status,409);
+  assert.equal(conflict.body.error,'request_key_conflict');
+  doc=await state(db);
+  assert.equal(doc.expenses.length,1);
+  const audits=(await db.execute("SELECT action,details FROM field_audit WHERE action='expense_create'")).rows;
+  assert.equal(audits.length,1);
 });

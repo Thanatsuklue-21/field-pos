@@ -1,4 +1,5 @@
 "use client";
+import {formatMoney} from "@/lib/money-format.mjs";
 
 // FIELD pager-first production flow: pager → items/base → complete → call → handoff.
 
@@ -8,6 +9,8 @@ import {ArrowLeft,BellRing,CheckCircle2,RotateCcw,X} from "lucide-react";
 import AuthGate from "@/components/auth-gate";
 import {api,type RevisionUnchanged,type Session} from "@/lib/api-client";
 import {readQueueSnapshotCache,writeQueueSnapshotCache} from "@/lib/queue-cache";
+import {shouldRetainQueuePending} from "@/lib/queue-action-recovery.mjs";
+import {readPendingQueueAction,sendQueueActionDurably,type PendingQueueAction,type QueueActionBody} from "@/lib/queue-client";
 
 type BatchMode="NONE"|"SEQUENTIAL"|"COMBINED";
 type PrepGroup={id:string;label:string;batchMode:BatchMode;qty:number;pendingQty?:number;items:{id:string;name:string;variant:string;qty:number;pendingQty?:number;compatibilityKey:string}[]};
@@ -77,8 +80,10 @@ function QueueView({session}:{session:Session}){
   const [toast,setToast]=useState("");
   const [pickupReviewId,setPickupReviewId]=useState("");
   const busyRef=useRef(false);
+  const queueRecoveryRef=useRef(false);
   const revisionRef=useRef<number|null>(null);
   busyRef.current=busy!=="";
+  useEffect(()=>{window.dispatchEvent(new CustomEvent("field:transaction-busy",{detail:{busy:busy!=="" ,source:"queue"}}));return()=>{window.dispatchEvent(new CustomEvent("field:transaction-busy",{detail:{busy:false,source:"queue"}}));}},[busy]);
   useEffect(()=>{if(!toast)return;const timer=window.setTimeout(()=>setToast(""),2600);return()=>window.clearTimeout(timer)},[toast]);
   const pulse=(message:string)=>{setToast(message);try{navigator.vibrate?.(35)}catch{}};
   const optimistic=(mutate:(orders:QOrder[])=>QOrder[])=>setData(prev=>prev?{...prev,orders:mutate(prev.orders)}:prev);
@@ -107,7 +112,7 @@ function QueueView({session}:{session:Session}){
       finally{inFlight=false;if(!disposed)setSyncing(false)}
     };
     refresh();
-    const timer=window.setInterval(refresh,5000);
+    const timer=window.setInterval(refresh,2000);
     window.addEventListener("focus",refresh);
     document.addEventListener("visibilitychange",refresh);
     return()=>{disposed=true;window.clearInterval(timer);window.removeEventListener("focus",refresh);document.removeEventListener("visibilitychange",refresh)};
@@ -126,6 +131,53 @@ function QueueView({session}:{session:Session}){
     return true;
   };
 
+  async function sendQueueAction(body:QueueActionBody){
+    return sendQueueActionDurably(session.csrf,body);
+  }
+
+  useEffect(()=>{
+    let disposed=false;
+    const recover=async()=>{
+      if(disposed||queueRecoveryRef.current)return;
+      let pending:PendingQueueAction|null=null;
+      try{pending=readPendingQueueAction()}
+      catch(e:any){if(!disposed)setMsg(errorText(e.message));return}
+      if(!pending)return;
+      queueRecoveryRef.current=true;
+      busyRef.current=true;setBusy("recover:"+pending.body.requestKey);setMsg("");
+      try{
+        const r=await sendQueueAction(pending.body);
+        if(!disposed){
+          if(!applyState(r))await load().catch(()=>{});
+          setNotice("กู้คืน Queue action เดิมสำเร็จ · ใช้ request key เดิมและไม่ทำรายการซ้ำ");
+        }
+      }catch(e:any){
+        if(!disposed){
+          setMsg(shouldRetainQueuePending(e)
+            ?"Queue action เดิมยังไม่ทราบผล · ระบบเก็บ request เดิมไว้ ห้ามกด action ซ้ำจนกว่าจะเชื่อมต่อและตรวจซ้ำ"
+            :errorText(e.message));
+          await load().catch(()=>{});
+        }
+      }finally{
+        queueRecoveryRef.current=false;
+        if(!disposed){busyRef.current=false;setBusy("")}
+      }
+    };
+    const onOnline=()=>recover();
+    const onFocus=()=>recover();
+    const onVisible=()=>{if(document.visibilityState==="visible")recover()};
+    recover();
+    window.addEventListener("online",onOnline);
+    window.addEventListener("focus",onFocus);
+    document.addEventListener("visibilitychange",onVisible);
+    return()=>{
+      disposed=true;
+      window.removeEventListener("online",onOnline);
+      window.removeEventListener("focus",onFocus);
+      document.removeEventListener("visibilitychange",onVisible);
+    };
+  },[]);
+
   const orders=useMemo(()=>((data?.orders||[]) as QOrder[]).slice().sort((a,b)=>n(a.time)-n(b.time)),[data]);
   const task=useMemo(()=>nextTask(orders),[orders]);
 
@@ -138,7 +190,11 @@ function QueueView({session}:{session:Session}){
       code==="recipe_unavailable"?"ไม่พบสูตรที่ใช้ตอนขาย จึงบันทึกชงเสียอัตโนมัติไม่ได้":
       code.startsWith("stock_shortage:")?"วัตถุดิบไม่พอสำหรับทำใหม่ 1 แก้ว · กรุณาตรวจ Stock":
       code.startsWith("ingredient_missing:")?"สูตรอ้างวัตถุดิบที่ไม่มีใน Stock Master":
-      code==="queue_state_changed"?"สถานะคิวเปลี่ยนแล้ว ระบบกำลังอัปเดต":code;
+      code==="queue_state_changed"?"สถานะคิวเปลี่ยนแล้ว ระบบกำลังอัปเดต":
+      code==="queue_action_pending"?"มี Queue action เดิมที่ยังไม่ทราบผล · ระบบจะตรวจ request เดิมก่อน":
+      code==="queue_action_unconfirmed"?"Server ยังไม่ยืนยัน Queue action เดิมอย่างครบถ้วน · ระบบเก็บ request เดิมไว้เพื่อป้องกันทำซ้ำ":
+      code==="queue_recovery_corrupt"?"ข้อมูล Queue recovery ในเครื่องเสีย · ห้ามทำ action ใหม่จนกว่าจะตรวจสถานะคิว/ข้อมูลเครื่อง":
+      code==="queue_recovery_storage_unavailable"?"เครื่องนี้บันทึก Queue recovery ไม่ได้ · ระบบไม่ส่ง action เพื่อป้องกันตัด Stock/เปลี่ยนคิวซ้ำ":code;
   }
 
   async function completeNext(order:QOrder,item:QItem,itemIndex:number){
@@ -148,7 +204,7 @@ function QueueView({session}:{session:Session}){
     optimistic(list=>list.map(o=>o.id!==order.id?o:{...o,status:"making",items:o.items.map((x,index)=>index===itemIndex?{...x,readyQty:x.qty,prepSelected:false}:x)}));
     pulse("บันทึกว่าทำ "+item.name+" ครบแล้ว");
     try{
-      const r=await api<any>("/api/pos/queue",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({requestKey:crypto.randomUUID(),orderId:order.id,itemIndex,action:"complete_item",expectedReadyQty})});
+      const r=await sendQueueAction({requestKey:crypto.randomUUID(),orderId:order.id,itemIndex,action:"complete_item",expectedReadyQty});
       if(!applyState(r))load().catch(()=>{});
       const updated=(r?.orders||[]).find((x:any)=>x.id===order.id);
       const updatedItem=updated?.items?.[itemIndex];
@@ -168,9 +224,9 @@ function QueueView({session}:{session:Session}){
     optimistic(list=>list.map(o=>o.id!==order.id?o:{...o,status:"making",items:o.items.map((x,index)=>index===itemIndex?{...x,readyQty:n(x.readyQty)>n(x.calledQty)?n(x.readyQty)-1:n(x.readyQty),prepSelected:true,wasteCount:n(x.wasteCount)+1}:x)}));
     pulse("บันทึกชงเสีย · เตรียมทำใหม่ 1 แก้ว");
     try{
-      const r=await api<any>("/api/pos/queue",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({requestKey:crypto.randomUUID(),orderId:order.id,itemIndex,action:"waste_remake",reason:"ชงเสีย / ทำใหม่"})});
+      const r=await sendQueueAction({requestKey:crypto.randomUUID(),orderId:order.id,itemIndex,action:"waste_remake",reason:"ชงเสีย / ทำใหม่"});
       if(!applyState(r))load().catch(()=>{});
-      setNotice("บันทึก WASTE "+item.name+" 1 แก้วแล้ว · หัก Stock เพิ่มตามสูตร"+(Number(r?.wasteCost)>0?" · ต้นทุนของเสีย ฿"+Number(r.wasteCost).toFixed(2):"")+" · ทำใหม่ต่อในคิวเดิม");
+      setNotice("บันทึก WASTE "+item.name+" 1 แก้วแล้ว · หัก Stock เพิ่มตามสูตร"+(Number(r?.wasteCost)>0?" · ต้นทุนของเสีย ฿"+formatMoney(Number(r.wasteCost)):"")+" · ทำใหม่ต่อในคิวเดิม");
     }catch(e:any){if(snapshot)setData(snapshot);setMsg(errorText(e.message));await load().catch(()=>{})}finally{busyRef.current=false;setBusy("")}
   }
 
@@ -180,7 +236,7 @@ function QueueView({session}:{session:Session}){
     optimistic(list=>list.map(o=>o.id!==order.id?o:{...o,status:"ready",items:o.items.map(x=>({...x,calledQty:x.qty,prepSelected:false}))}));
     setToast("");setNotice("");
     try{
-      const r=await api<any>("/api/pos/queue",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({requestKey:crypto.randomUUID(),orderId:order.id,action:"call"})});
+      const r=await sendQueueAction({requestKey:crypto.randomUUID(),orderId:order.id,action:"call"});
       if(!applyState(r))load().catch(()=>{});
 
     }catch(e:any){if(snapshot)setData(snapshot);setMsg(errorText(e.message));await load().catch(()=>{})}finally{busyRef.current=false;setBusy("")}
@@ -196,7 +252,7 @@ function QueueView({session}:{session:Session}){
     try{
       let latest:any=null;
       for(const target of targets){
-        latest=await api<any>("/api/pos/queue",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({requestKey:crypto.randomUUID(),orderId:order.id,itemIndex:target.index,action:"call_item"})});
+        latest=await sendQueueAction({requestKey:crypto.randomUUID(),orderId:order.id,itemIndex:target.index,action:"call_item"});
         applyState(latest);
       }
       setNotice("เรียกลูกค้าแล้ว · "+category.label+" "+category.qty+" แก้ว");
@@ -207,11 +263,17 @@ function QueueView({session}:{session:Session}){
 
   async function deliver(orderId:string){
     if(busyRef.current)return;
-    const snapshot=data,order=orders.find(x=>x.id===orderId),key="return:"+orderId;busyRef.current=true;setBusy(key);setMsg("");
+    const order=orders.find(x=>x.id===orderId);
+    if(pickupReviewId!==orderId){
+      setPickupReviewId(orderId);
+      setMsg("ต้องตรวจเลขบัตร จำนวนแก้ว และรายการก่อนส่งมอบ");
+      return;
+    }
+    const snapshot=data,key="return:"+orderId;busyRef.current=true;setBusy(key);setMsg("");
     optimistic(list=>list.filter(o=>o.id!==orderId));
     pulse("กำลังส่งมอบ "+(order?.queueNo||"คิว")+"…");
     try{
-      const r=await api<any>("/api/pos/queue",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({requestKey:crypto.randomUUID(),orderId,action:"return"})});
+      const r=await sendQueueAction({requestKey:crypto.randomUUID(),orderId,action:"return"});
       if(!applyState(r))load().catch(()=>{});
       setNotice("ลูกค้ารับสินค้าแล้ว");
       pulse("✓ ส่งมอบ "+(order?.queueNo||"คิว")+" เรียบร้อยแล้ว");
@@ -297,12 +359,13 @@ function QueueView({session}:{session:Session}){
         <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">{waitingPickup.map(order=>{const reviewOpen=pickupReviewId===order.id;return <div key={order.id} className="rounded-2xl border-2 border-emerald-400 bg-emerald-50 p-3 text-center">
           <small className="block text-[9px] font-bold text-emerald-700">บัตร</small><div className="mt-1 text-3xl font-black text-emerald-800">{order.pagerNo}</div><div className="mt-1 text-[10px] text-slate-500">{(order.items||[]).reduce((sum,item)=>sum+n(item.qty),0)} แก้ว</div>
           <button type="button" aria-expanded={reviewOpen} onClick={()=>setPickupReviewId(reviewOpen?"":order.id)} className="mt-2 min-h-10 w-full rounded-xl border border-emerald-300 bg-white px-2 text-xs font-bold text-emerald-800">{reviewOpen?"ซ่อนรายการ":"ดูรายการ"}</button>
+          {reviewOpen&&<p className="mt-2 rounded-lg bg-emerald-100 px-2 py-1.5 text-[10px] font-semibold text-emerald-900">เทียบ “บัตร {order.pagerNo}” + จำนวนแก้ว + รายการให้ตรง ก่อนกดส่งมอบ</p>}
           {reviewOpen&&<div className="mt-2 space-y-1.5 rounded-xl border border-emerald-200 bg-white p-2 text-left">
             {(order.items||[]).map((item,index)=><div key={item.id+"|"+item.variant+"|pickup|"+index} className="flex items-start justify-between gap-2 rounded-lg bg-slate-50 px-2.5 py-2">
               <div className="min-w-0"><b className="block text-[11px] text-slate-800">{item.name}</b>{item.variant&&item.variant!=="Standard"&&<span className="mt-0.5 block text-[10px] text-slate-500">{item.variant}</span>}</div><b className="shrink-0 text-[11px] text-slate-700">×{item.qty}</b>
             </div>)}
           </div>}
-          <button disabled={busy!==""} onClick={()=>deliver(order.id)} className="mt-2 min-h-12 w-full rounded-xl bg-emerald-600 px-2 text-sm font-bold text-white disabled:opacity-50">ลูกค้ารับแล้ว</button>
+          <button disabled={busy!==""} onClick={()=>reviewOpen?deliver(order.id):setPickupReviewId(order.id)} className={"mt-2 min-h-12 w-full rounded-xl px-2 text-sm font-bold text-white disabled:opacity-50 "+(reviewOpen?"bg-emerald-600":"bg-slate-700")}>{reviewOpen?"ตรวจครบแล้ว · ลูกค้ารับแล้ว":"ดูรายการก่อนส่งมอบ"}</button>
         </div>})}</div>
       </section>}
     </div>
