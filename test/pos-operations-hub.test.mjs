@@ -250,3 +250,26 @@ test("next quick Queue tap reconciles an ambiguous existing request instead of c
   assert.match(block,/if\(readPendingQueueAction\(\)\)\{await recoverQueueAction\(\);return\}/);
   assert.ok(block.indexOf("readPendingQueueAction()")<block.indexOf("crypto.randomUUID()"));
 });
+
+
+test("quick Queue shows the current menu recipe per cup without aggregating grams across menus",async()=>{
+  const hub=await read("components/pos-operations-hub.tsx");
+  assert.match(hub,/type QueueRecipeUse=/);
+  assert.match(hub,/prepGroups\?:QueuePrepGroup\[\]/);
+  assert.match(hub,/recipeUsage\?:QueueRecipeUse\[\]/);
+  assert.match(hub,/หมวดเบส:/);
+  assert.match(hub,/สูตรต่อแก้ว:/);
+  assert.match(hub,/row\.name\+" "\+row\.perCup\+" "\+row\.unit/);
+  const recipeStart=hub.indexOf("สูตรต่อแก้ว:");
+  const recipeBlock=hub.slice(recipeStart,recipeStart+700);
+  assert.ok(recipeStart>=0);
+  assert.doesNotMatch(recipeBlock,/reduce\(/);
+});
+
+
+test("quick Queue action labels the remaining cups rather than the original item quantity",async()=>{
+  const hub=await read("components/pos-operations-hub.tsx");
+  assert.match(hub,/remaining=Math\.max\(0,n\(item\.qty\)-n\(item\.readyQty\)\)/);
+  assert.match(hub,/remaining>1\?" · อีก "\+remaining\+" แก้ว"/);
+  assert.doesNotMatch(hub,/n\(item\.qty\)>1\?" ×"\+n\(item\.qty\)/);
+});
