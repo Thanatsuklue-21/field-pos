@@ -6,8 +6,8 @@ test('AI supervisor elevates payment, cash and stock risks without mutating stat
   const doc={
     settings:{aiSupervisor:{expenseReviewThreshold:500}},
     ingredients:{matcha:{name:'Matcha',qty:0,unit:'g',minStock:20},milk:{name:'Milk',qty:10,unit:'g',minStock:30}},
-    sales:[{date:'2026-10-13',status:'paid',total:100},{date:'2026-10-13',status:'refunded',total:20}],
-    orders:[{date:'2026-10-13',status:'making'}],
+    sales:[{id:'s1',date:'2026-10-13',status:'paid',total:100},{id:'s2',date:'2026-10-13',status:'refunded',total:20}],
+    orders:[{saleId:'s1',status:'making'}],
     expenses:[{date:'2026-10-13',amount:700}],
     paymentSessions:[{status:'pending'}],
     closes:[{date:'2026-10-13',cashVariance:-80}],
