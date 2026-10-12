@@ -262,3 +262,11 @@ test("quick Queue shows the current menu recipe per cup without aggregating gram
   assert.match(hub,/row\.name\+" "\+row\.perCup\+" "\+row\.unit/);
   assert.doesNotMatch(hub,/recipeUsage.*reduce\(/s);
 });
+
+
+test("quick Queue action labels the remaining cups rather than the original item quantity",async()=>{
+  const hub=await read("components/pos-operations-hub.tsx");
+  assert.match(hub,/remaining=Math\.max\(0,n\(item\.qty\)-n\(item\.readyQty\)\)/);
+  assert.match(hub,/remaining>1\?" · อีก "\+remaining\+" แก้ว"/);
+  assert.doesNotMatch(hub,/n\(item\.qty\)>1\?" ×"\+n\(item\.qty\)/);
+});
