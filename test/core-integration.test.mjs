@@ -479,6 +479,8 @@ test('real libSQL: pre-production bank and card refunds require external referen
 
 test('real libSQL: close day forces blind recount then explicit variance approval',async t=>{
   const db=await setup(t),sale=await sell(db,'recount-control-sale');
+  await act(db,sale.orderId,'select',{itemIndex:0,selected:true});
+  await act(db,sale.orderId,'complete_item',{itemIndex:0,expectedReadyQty:0});
   await act(db,sale.orderId,'call');await act(db,sale.orderId,'return');
   const token='recount-control-token';
   await db.execute({sql:'INSERT INTO field_sessions VALUES(?,?,?,?)',args:[digest(token),user.id,'csrf',Date.now()+60000]});
