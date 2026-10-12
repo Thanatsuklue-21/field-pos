@@ -70,6 +70,7 @@ function runtime({storageFails=false,newCartDuringLookup=false,cartAlreadyChange
       if(path==="@/lib/offline-db")return {clientStorageStatus:async()=>({})};
       if(path==="@/lib/client-telemetry")return {captureClientTelemetry(){}};
       if(path==="@/lib/recovery-diagnostics")return {readRecoveryDiagnostics:()=>({})};
+      if(path==="@/lib/device-uat-diagnostics")return {readDeviceUatDiagnostics:()=>({viewportWidth:390,viewportHeight:844,visualViewportSupported:true,visualViewportWidth:390,visualViewportHeight:844,touchCapable:true,orientation:"portrait",targetClass:"phone"})};
       if(path==="@/lib/pwa-meta")return {};
       if(path==="@/lib/recovery-storage")return {hasRecovery:()=>false};
       if(path==="@/lib/pwa-update-safety")return exports;

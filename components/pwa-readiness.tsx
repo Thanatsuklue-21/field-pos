@@ -34,6 +34,9 @@ export default function PwaReadiness({serverRevision,promptPayReady}:{serverRevi
   },[refresh]);
 
   const shortSha=build.buildSha?build.buildSha.slice(0,10):"—";
+  const viewportLabel=state?.viewportWidth&&state?.viewportHeight?state.viewportWidth+"×"+state.viewportHeight:"—";
+  const visualViewportLabel=state?.visualViewportSupported?(state.visualViewportWidth&&state.visualViewportHeight?state.visualViewportWidth+"×"+state.visualViewportHeight:"SUPPORTED"):"UNSUPPORTED";
+  const targetLabel=state?.targetClass==="phone"?"PHONE MATRIX":state?.targetClass==="tablet"?"TABLET MATRIX":"OTHER";
   const uatReady=build.environment==="preview"&&build.databaseScope==="uat"&&backend.ready===true;
   const uatLabel=build.environment==="preview"?(uatReady?"UAT READY":"UAT BLOCKED"):"N/A";
   const recoveryParts=[
@@ -54,6 +57,11 @@ export default function PwaReadiness({serverRevision,promptPayReady}:{serverRevi
 
     <div className="mt-4 grid grid-cols-2 gap-2 text-sm sm:grid-cols-3">{[
       ["Mode",state?.installed?"INSTALLED / STANDALONE":"BROWSER",state?.installed===true],
+      ["Viewport",viewportLabel,Boolean(state?.viewportWidth&&state?.viewportHeight)],
+      ["VisualViewport",visualViewportLabel,state?.visualViewportSupported===true],
+      ["Touch",state?.touchCapable?"YES":"NO",state?.touchCapable===true],
+      ["Orientation",state?.orientation||"—",Boolean(state?.orientation)],
+      ["UAT Target",targetLabel,state?.targetClass==="phone"||state?.targetClass==="tablet"],
       ["PWA Installable",state?.installed?"INSTALLED":state?.installable?"READY":"NOT AVAILABLE",state?.installed===true||state?.installable===true],
       ["Service Worker",state?.serviceWorkerActive?"ACTIVE":"NOT ACTIVE",state?.serviceWorkerActive===true],
       ["App Update",state?.updateAvailable?"AVAILABLE":"CURRENT",state?.updateAvailable!==true],
@@ -81,6 +89,7 @@ export default function PwaReadiness({serverRevision,promptPayReady}:{serverRevi
       {state?.updateAvailable&&<button onClick={()=>window.dispatchEvent(new Event(PWA_UPDATE_REQUEST_EVENT))} className="min-h-11 rounded-full border border-amber-300 bg-amber-50 px-4 text-xs font-bold text-amber-800">อัปเดตเวอร์ชันเมื่อปลอดภัย</button>}
     </div>
     {backend.ready===false&&<p className="mt-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-800">{build.environment==="preview"&&backend.error==="turso_not_configured"?"Preview ยังไม่มี Turso UAT แยก · ห้ามใช้ Production DB กับ Preview · Transaction UAT ต้องรอ Preview/UAT database":build.environment==="preview"&&backend.error==="database_scope_invalid"?"Preview มี Database credential แล้ว แต่ยังไม่ยืนยันว่าเป็น UAT · ตั้ง FIELD_DB_SCOPE=uat ก่อนทดสอบ Transaction · ห้ามใช้ Production DB":backend.error==="database_scope_invalid"?"Database scope safety check ไม่ผ่าน · ตรวจ FIELD_DB_SCOPE ก่อนใช้งาน":backend.status===0?"ติดต่อ Backend ไม่ได้ · ตรวจ Network ก่อนทดสอบ Transaction":"Backend ยังไม่พร้อม · "+String(backend.error||("HTTP "+backend.status))}</p>}
+    <p className="mt-2 text-[11px] text-slate-500">Device diagnostics ใช้เฉพาะขนาด viewport / touch / orientation เพื่อช่วย UAT และไม่เก็บ device model, user agent หรือ hardware fingerprint · ค่าเหล่านี้เป็นหลักฐานประกอบ ไม่ถือว่า Android acceptance ผ่านอัตโนมัติ</p>
     {state?.storageQuota&&<p className="mt-2 text-[11px] text-slate-500">Browser storage ใช้ประมาณ {(Number(state.storageUsage||0)/1048576).toFixed(1)} MB จาก quota {(Number(state.storageQuota)/1048576).toFixed(0)} MB · Persistent ช่วยลดความเสี่ยงที่ข้อมูล Offline ถูกล้างอัตโนมัติเมื่อพื้นที่เครื่องตึง</p>}
   </div>
 }
