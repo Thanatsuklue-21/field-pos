@@ -93,7 +93,12 @@ test("auth session probe stays fastest while ordinary GET and only recoverable w
   const allowStart=client.indexOf("const RECOVERABLE_WRITE_PATHS");
   const allowEnd=client.indexOf("]);",allowStart);
   const allow=client.slice(allowStart,allowEnd);
-  assert.ok(!allow.includes("/api/close-day"));
+  assert.ok(allow.includes("/api/close-day"));
+  const closeUi=await read("app/close/page.tsx");
+  const closeRecovery=await read("lib/close-day-recovery.mjs");
+  assert.match(closeUi,/closeDayPendingWrite\(body\)/);
+  assert.match(closeUi,/validateCloseDayAck\(r,pending\.body\)/);
+  assert.match(closeRecovery,/shouldRetainCloseDayPending/);
   assert.ok(allow.includes("/api/pos/void"));
   assert.ok(allow.includes("/api/pos/refund"));
   assert.ok(allow.includes("/api/expenses"));
