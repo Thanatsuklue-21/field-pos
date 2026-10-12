@@ -76,6 +76,7 @@ function PosView({session}:{session:Session}){
   const [opsOpen,setOpsOpen]=useState(false);
   const [opsInitialTab,setOpsInitialTab]=useState<HubTab|undefined>(undefined);
   const [method,setMethod]=useState<"cash"|"promptpay"|"bank"|"card"|"delivery">("cash");
+  const [showMorePaymentMethods,setShowMorePaymentMethods]=useState(false);
   const [deliveryPlatform,setDeliveryPlatform]=useState<"grab"|"lineman"|"other_delivery">("grab");
   const [received,setReceived]=useState("");
   const [manualPaymentReference,setManualPaymentReference]=useState("");
@@ -171,6 +172,7 @@ function PosView({session}:{session:Session}){
   useEffect(()=>{
     if(online)return;
     setMethod("cash");
+    setShowMorePaymentMethods(false);
     setSplitBill(false);
     setSplitSelection({});
     setCustomerId("");
@@ -330,6 +332,7 @@ function PosView({session}:{session:Session}){
   function finishOfflineSale(localNo:string,opts:{total:number;received:number;bootstrap:Bootstrap}){
     setData(opts.bootstrap);
     setPayOpen(false);
+    setShowMorePaymentMethods(false);
     setResult("");
     setPrompt(null);
     cart.clearCart();
@@ -350,6 +353,7 @@ function PosView({session}:{session:Session}){
     const serverReceived=Number(r?.received??opts.received);
     const serverChange=Number(r?.change??(opts.payment==="cash"?Math.max(0,serverReceived-serverTotal):0));
     setPayOpen(false);
+    setShowMorePaymentMethods(false);
     setResult("");
     setPrompt(null);
     const remaining=opts.splitBill&&opts.paidCart?subtractPaidCart(opts.paidCart):(cart.clearCart(),[]);
@@ -472,6 +476,7 @@ function PosView({session}:{session:Session}){
     setPrompt(null);
     setReceived("");
     setMethod("cash");
+    setShowMorePaymentMethods(false);
     setSelected(null);
     setQ("");
     setCat("ทั้งหมด");
@@ -883,6 +888,7 @@ function PosView({session}:{session:Session}){
     const current=cartAvailability({cart:cart.items,menu:data?.menu||[],stock:data?.availabilityStock||{}});
     if(!current.available){setNotice(availabilityMessage(current));load().catch(()=>{});return}
     setResult("");
+    setShowMorePaymentMethods(method==="card"||method==="delivery");
     setSplitBill(false);
     setSplitSelection({});
     setPayOpen(true);
@@ -977,7 +983,18 @@ function PosView({session}:{session:Session}){
       </div>
 
       {!online&&<div className="mt-4 rounded-2xl border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900"><b>Offline Mode</b> · รับเงินสดได้ตามปกติ บิลจะเก็บในเครื่องและ Sync อัตโนมัติเมื่อเน็ตกลับ · QR / แยกบิล / แต้มถูกปิดชั่วคราว</div>}
-      <div className="mt-4 grid grid-cols-3 gap-2 rounded-2xl bg-slate-100 p-1"><button onClick={()=>{setMethod("cash");setManualPaymentReference("")}} className={"rounded-xl p-3 text-xs sm:text-sm "+(method==="cash"?"bg-[#d4af37] font-semibold text-black shadow-sm":"text-slate-700")}>Cash</button><button disabled={!online||promptConfig?.ready!==true||netPayable<=0} onClick={()=>{setMethod("promptpay");setManualPaymentReference("")}} title={!online?"PromptPay ต้องใช้อินเทอร์เน็ต":promptConfig?.ready===true?"PromptPay พร้อมใช้งาน":"รอ Beam อนุมัติ / ตั้งค่า API และ Webhook"} className={"rounded-xl p-3 text-xs sm:text-sm disabled:cursor-not-allowed disabled:opacity-45 "+(method==="promptpay"?"bg-[#d4af37] font-semibold text-black shadow-sm":"text-slate-700")}>PromptPay{promptConfig?.selectedProvider==="beam"&&promptConfig?.mode==="test"?" · TEST":""}</button><button disabled={!online} onClick={()=>{setMethod("bank");setReceived("")}} className={"rounded-xl p-3 text-xs sm:text-sm disabled:opacity-45 "+(method==="bank"?"bg-[#d4af37] font-semibold text-black shadow-sm":"text-slate-700")}>โอนธนาคาร</button><button disabled={!online} onClick={()=>{setMethod("card");setReceived("")}} className={"rounded-xl p-3 text-xs sm:text-sm disabled:opacity-45 "+(method==="card"?"bg-[#d4af37] font-semibold text-black shadow-sm":"text-slate-700")}>บัตร</button><button disabled={!online} onClick={()=>{setMethod("delivery");setSplitBill(false);setSplitSelection({});setReceived("");setManualPaymentReference("")}} className={"rounded-xl p-3 text-xs sm:text-sm disabled:opacity-45 "+(method==="delivery"?"bg-[#d4af37] font-semibold text-black shadow-sm":"text-slate-700")}>Delivery</button></div>
+      <div className="mt-4 rounded-2xl bg-slate-100 p-1">
+        <div className="grid grid-cols-3 gap-1.5">
+          <button onClick={()=>{setMethod("cash");setManualPaymentReference("")}} className={"min-h-12 rounded-xl px-2 py-2 text-xs sm:text-sm "+(method==="cash"?"bg-[#d4af37] font-semibold text-black shadow-sm":"bg-white text-slate-700")}>เงินสด</button>
+          <button disabled={!online||promptConfig?.ready!==true||netPayable<=0} onClick={()=>{setMethod("promptpay");setManualPaymentReference("")}} title={!online?"PromptPay ต้องใช้อินเทอร์เน็ต":promptConfig?.ready===true?"PromptPay พร้อมใช้งาน":"รอ Beam อนุมัติ / ตั้งค่า API และ Webhook"} className={"min-h-12 rounded-xl px-2 py-2 text-xs sm:text-sm disabled:cursor-not-allowed disabled:opacity-45 "+(method==="promptpay"?"bg-[#d4af37] font-semibold text-black shadow-sm":"bg-white text-slate-700")}>QR พร้อมเพย์{promptConfig?.selectedProvider==="beam"&&promptConfig?.mode==="test"?" · TEST":""}</button>
+          <button disabled={!online} onClick={()=>{setMethod("bank");setReceived("")}} className={"min-h-12 rounded-xl px-2 py-2 text-xs sm:text-sm disabled:opacity-45 "+(method==="bank"?"bg-[#d4af37] font-semibold text-black shadow-sm":"bg-white text-slate-700")}>โอนธนาคาร</button>
+        </div>
+        <button type="button" disabled={!online} aria-expanded={showMorePaymentMethods} onClick={()=>{if(showMorePaymentMethods){if(method==="card"||method==="delivery")setMethod("cash");setShowMorePaymentMethods(false)}else setShowMorePaymentMethods(true)}} className="mt-1.5 min-h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 disabled:opacity-45">{showMorePaymentMethods?"ซ่อนช่องทางอื่น":"ช่องทางอื่น · บัตร / เดลิเวอรี"}</button>
+        {showMorePaymentMethods&&<div className="mt-1.5 grid grid-cols-2 gap-1.5">
+          <button disabled={!online} onClick={()=>{setMethod("card");setReceived("")}} className={"min-h-11 rounded-xl px-2 py-2 text-xs sm:text-sm disabled:opacity-45 "+(method==="card"?"bg-[#d4af37] font-semibold text-black shadow-sm":"bg-white text-slate-700")}>บัตร</button>
+          <button disabled={!online} onClick={()=>{setMethod("delivery");setSplitBill(false);setSplitSelection({});setReceived("");setManualPaymentReference("")}} className={"min-h-11 rounded-xl px-2 py-2 text-xs sm:text-sm disabled:opacity-45 "+(method==="delivery"?"bg-[#d4af37] font-semibold text-black shadow-sm":"bg-white text-slate-700")}>เดลิเวอรี</button>
+        </div>}
+      </div>
       {online&&promptConfig?.ready!==true&&<div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">PromptPay ยังไม่เปิดรับเงินจริง · ระบบกำลังรอ Beam Merchant/API/Webhook ให้พร้อม</div>}
       {["bank","card"].includes(method)&&<div className="mt-3 rounded-[20px] border border-slate-200 bg-slate-50 p-3"><label className="text-xs font-semibold text-slate-700">{method==="bank"?"เลขอ้างอิงโอน / หมายเหตุ":"เลขอ้างอิงบัตร / Terminal"}</label><input value={manualPaymentReference} onChange={e=>setManualPaymentReference(e.target.value)} placeholder={method==="bank"?"เช่น เลขท้ายรายการโอน (ใส่ได้ถ้ามี)":"เช่น Slip/Terminal ref (ใส่ได้ถ้ามี)"} className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-3 py-3"/><p className="mt-2 text-[11px] text-slate-500">ระบบบันทึกเป็นช่องทางรับเงินแยกสำหรับรายงานและ Export บัญชี · ไม่กระทบเงินสดในลิ้นชัก</p></div>}
       {method==="delivery"&&<div className="mt-3 rounded-[20px] border border-slate-200 bg-slate-50 p-3"><label className="text-xs font-semibold text-slate-700">แพลตฟอร์ม Delivery</label><select value={deliveryPlatform} onChange={e=>setDeliveryPlatform(e.target.value as any)} className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-3 py-3"><option value="grab">Grab</option><option value="lineman">LINE MAN</option><option value="other_delivery">Delivery อื่น</option></select><div className="mt-3 grid grid-cols-3 gap-2 text-center text-xs"><div className="rounded-xl bg-white p-2"><span className="text-slate-500">ยอดขาย</span><b className="mt-1 block">฿{formatMoney(netPayable)}</b></div><div className="rounded-xl bg-white p-2"><span className="text-slate-500">GP {(deliveryGpRate*100).toFixed(1)}%</span><b className="mt-1 block text-red-600">−฿{formatMoney(deliveryGpFee)}</b></div><div className="rounded-xl bg-white p-2"><span className="text-slate-500">รับสุทธิ</span><b className="mt-1 block text-emerald-700">฿{formatMoney(deliveryNetSettlement)}</b></div></div><p className="mt-2 text-[11px] text-slate-500">ยอดขายยังบันทึกเต็มจำนวน ส่วน GP แยกเป็นค่าธรรมเนียมเพื่อให้รายงานกระแสเงินสดตรงกับเงินที่จะได้รับจริง</p></div>}
