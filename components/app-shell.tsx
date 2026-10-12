@@ -74,8 +74,8 @@ export default function AppShell({children}:{children:React.ReactNode}){
     </div>
 
     {mobileMore.length>0&&moreOpen&&<div className="fixed inset-0 z-[48] bg-black/20 md:hidden" onClick={closeMore}>
-      <div ref={moreDialogRef} id="field-mobile-more" role="dialog" aria-modal="true" aria-label="เมนูเพิ่มเติม" tabIndex={-1} className="frosted max-h-[calc(100dvh-110px)] overflow-y-auto overscroll-contain absolute bottom-[calc(70px+env(safe-area-inset-bottom))] left-2 right-2 rounded-[20px] p-2 shadow-2xl" onClick={e=>e.stopPropagation()}>
-        <div className="mb-1 flex items-center justify-between px-2"><b className="text-xs">เมนูอื่น</b><button onClick={closeMore} className="grid h-11 w-11 place-items-center rounded-xl" aria-label="ปิดเมนูเพิ่มเติม"><X size={17}/></button></div>
+      <div ref={moreDialogRef} id="field-mobile-more" role="dialog" aria-modal="true" aria-label="เมนูอื่น" tabIndex={-1} className="frosted max-h-[calc(100dvh-110px)] overflow-y-auto overscroll-contain absolute bottom-[calc(70px+env(safe-area-inset-bottom))] left-2 right-2 rounded-[20px] p-2 shadow-2xl" onClick={e=>e.stopPropagation()}>
+        <div className="mb-1 flex items-center justify-between px-2"><b className="text-xs">เมนูอื่น</b><button onClick={closeMore} className="grid h-11 w-11 place-items-center rounded-xl" aria-label="ปิดเมนูอื่น"><X size={17}/></button></div>
         <div className="grid gap-1">{mobileMore.map(([href,key,Icon])=><Link key={href} href={href} aria-label={t[key]} aria-current={path===href?"page":undefined} className={"flex min-h-11 items-center gap-3 rounded-xl px-3 py-2 text-sm "+(path===href?"bg-[#d4af37]/18 font-bold text-[#6f5510]":"text-slate-700")}><Icon size={18}/><span>{t[key]}</span></Link>)}</div>
       </div>
     </div>}
