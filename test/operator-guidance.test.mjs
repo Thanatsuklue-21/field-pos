@@ -61,7 +61,8 @@ test('checkout handler itself refuses unreviewed payment',async()=>{
 
 test('handoff handler itself refuses delivery until the visible pickup review is open',async()=>{
   const queue=await read('app/queue/page.tsx');
-  const deliver=queue.slice(queue.indexOf('async function deliver('),queue.indexOf('const first='));
+  const start=queue.indexOf('async function deliver(');
+  const deliver=queue.slice(start,queue.indexOf('const first=',start));
   assert.match(deliver,/pickupReviewId!==orderId/);
   assert.match(deliver,/ต้องตรวจเลขบัตร จำนวนแก้ว และรายการก่อนส่งมอบ/);
 });
