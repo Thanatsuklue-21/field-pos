@@ -214,10 +214,12 @@ test("Queue tab offers one-state-at-a-time quick actions without leaving POS",as
   assert.match(hub,/expectedReadyQty:n\(item\.readyQty\)/);
   assert.match(hub,/action:"call"/);
   assert.match(hub,/action:"return"/);
-  assert.match(hub,/const quick=index===0\?quickQueueStep\(order\):null/);
-  assert.match(hub,/คิวปัจจุบัน/);
-  assert.match(hub,/Server ตรวจ FIFO และสถานะจริงทุกครั้ง/);
-  assert.match(hub,/เปิดหน้าคิวเต็ม \/ รายละเอียดการชง/);
+  assert.match(hub,/const productionHead=queueSorted\.find\(order=>\(order\.items\|\|\[\]\)\.some\(item=>n\(item\.calledQty\)<n\(item\.qty\)\)\)\|\|null/);
+  assert.match(hub,/const allCalled=total>0&&called>=total,isProduction=productionHead\?\.id===order\.id/);
+  assert.match(hub,/const quick=\(isProduction\|\|allCalled\)\?quickQueueStep\(order\):null/);
+  assert.match(hub,/Server บังคับ FIFO/);
+  assert.match(hub,/รอลูกค้ารับ/);
+  assert.match(hub,/เปิดหน้าคิวเต็ม \/ งานผลิตละเอียด/);
 });
 
 test("Operations Hub recovers queue mutations from either Queue page or POS using the same pending key",async()=>{
