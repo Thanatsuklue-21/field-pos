@@ -39,6 +39,7 @@ export default function PwaReadiness({serverRevision,promptPayReady}:{serverRevi
     Number(state?.recoveryHeldBills||0)>0?"Held "+state?.recoveryHeldBills:null,
     state?.recoveryPromptPay?"PromptPay":null,
     state?.recoveryCash?"Cash":null,
+    state?.recoveryCloseDay?"Close Day":null,
     state?.recoverySplit?"Split":null,
     state?.recoveryEditCash?"Edit":null
   ].filter(Boolean);
