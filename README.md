@@ -16,7 +16,7 @@ Checkout and queue operations have durable request keys stored in `field_pos_req
 ## Setup and validation
 
 - Node.js 20 or newer; use `npm ci`, `npm test`, `npm run build`, then `npm run dev` or `npm start`.
-- Set `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN`, and `PUBLIC_ORIGIN` to the exact application origin. Keep credentials server-side. Schema installation is additive and runs before API handling.
+- Set `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN`, and `PUBLIC_ORIGIN` to the exact application origin. Keep credentials server-side. Set `FIELD_DB_SCOPE=uat` on Vercel Preview/UAT; Preview API traffic fails closed without that marker so a copied Production database credential cannot be used accidentally. Production may use `FIELD_DB_SCOPE=production`; an explicitly `uat`-scoped Production deployment is rejected. Schema installation is additive and runs before API handling.
 - Provision the first API admin with `npm run bootstrap -- admin`; the bootstrap prompts securely for a password. Do not initialize another admin when using an existing configured database.
 - Configure Beam PromptPay with `PROMPTPAY_PROVIDER=beam`, `BEAM_ENV=playground`, `BEAM_MERCHANT_ID`, `BEAM_API_KEY` and `BEAM_WEBHOOK_HMAC_KEY`. Keep all credentials server-side and test in Playground before Production. Legacy Omise/Opn remains available as a migration fallback when `PROMPTPAY_PROVIDER=opn`.
 - Session cookies are HttpOnly/Secure/SameSite=Strict; writes validate origin, CSRF and server action permissions.
