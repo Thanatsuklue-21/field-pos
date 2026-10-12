@@ -6,12 +6,15 @@ import AuthGate from "@/components/auth-gate";
 import {api,type Session} from "@/lib/api-client";
 import {getOfflineCashSummary,type OfflineCashSummary} from "@/lib/offline-sales";
 import {CASH_MOVEMENT_PENDING_KEY,shouldRetainCashMovementPending,validateCashMovementAck,validatePendingCashMovement} from "@/lib/cash-movement-recovery.mjs";
+import {CLOSE_DAY_PENDING_KEY,shouldRetainCloseDayPending,validateCloseDayAck,validatePendingCloseDay} from "@/lib/close-day-recovery.mjs";
 
-type Close={id:string;date:string;revenue:number;cogs:number;expenses:number;purchaseSpend?:number;totalCashOut?:number;grossProfit:number;operatingProfit:number;deliveryFees?:number;cash:number;promptpay:number;bank?:number;card?:number;other:number;openingCash?:number;cashIn?:number;cashPaidOut?:number;cashOut?:number;expectedCash?:number;countedCash?:number;cashVariance?:number;orders:number;cups:number;time:number};
+type Close={id:string;requestKey?:string|null;date:string;revenue:number;cogs:number;expenses:number;purchaseSpend?:number;totalCashOut?:number;grossProfit:number;operatingProfit:number;deliveryFees?:number;cash:number;promptpay:number;bank?:number;card?:number;other:number;openingCash?:number;cashIn?:number;cashPaidOut?:number;cashOut?:number;expectedCash?:number;countedCash?:number;cashVariance?:number;orders:number;cups:number;time:number};
 type Shift={id:string;date:string;status:"open"|"closed";openingCash:number;openedAt:number;openedBy:string;closedAt?:number;cashVariance?:number};
 type Movement={id:string;requestKey?:string;shiftId:string;date:string;type:"CASH_IN"|"CASH_OUT";amount:number;reason:string;time:number;createdBy:string};
 type CashMovementBody={requestKey:string;type:"CASH_IN"|"CASH_OUT";amount:number;reason:string};
 type PendingCashMovement={body:CashMovementBody;createdAt:number};
+type CloseDayBody={requestKey:string;date:string;countedCash:number};
+type PendingCloseDay={body:CloseDayBody;createdAt:number};
 type PaymentBlocker={id:string;status:"collecting"|"requires_resolution";mode:string;total:number;pager:number;createdAt:number;expiresAt:number;chargeId:string;provider:string;providerStatus:string;payments:number};
 type OrderBlocker={id:string;queueNo:string;pagerNo:number;status:string;time:number;cups:number;ready:number;called:number;remainingPrep:number;remainingHandoff:number;items:{name:string;qty:number;readyQty:number;calledQty:number}[]};
 type CloseData={closes:Close[];shift:Shift|null;businessDate:string;cashMovements:Movement[];paymentBlockers?:PaymentBlocker[];orderBlockers?:OrderBlocker[];closeBlockedByPayments?:boolean;closeBlockedByOrders?:boolean};
@@ -30,6 +33,20 @@ function cashMovementPendingClear(){
   try{localStorage.removeItem(CASH_MOVEMENT_PENDING_KEY)}
   catch{throw new Error("cash_movement_recovery_storage_unavailable")}
 }
+function closeDayPendingRead():PendingCloseDay|null{
+  let raw:string|null=null;
+  try{raw=localStorage.getItem(CLOSE_DAY_PENDING_KEY)}catch{throw new Error("close_day_recovery_storage_unavailable")}
+  if(!raw)return null;
+  try{return validatePendingCloseDay(JSON.parse(raw)) as PendingCloseDay}catch{throw new Error("close_day_recovery_corrupt")}
+}
+function closeDayPendingWrite(body:CloseDayBody){
+  try{localStorage.setItem(CLOSE_DAY_PENDING_KEY,JSON.stringify({body,createdAt:Date.now()}))}
+  catch{throw new Error("close_day_recovery_storage_unavailable")}
+}
+function closeDayPendingClear(){
+  try{localStorage.removeItem(CLOSE_DAY_PENDING_KEY)}
+  catch{throw new Error("close_day_recovery_storage_unavailable")}
+}
 
 export default function CloseDay(){return <AuthGate>{s=><View session={s}/>}</AuthGate>}
 
@@ -37,6 +54,7 @@ function View({session}:{session:Session}){
   const router=useRouter();
   const [rows,setRows]=useState<Close[]>([]),[shift,setShift]=useState<Shift|null>(null),[businessDate,setBusinessDate]=useState(""),[movements,setMovements]=useState<Movement[]>([]),[paymentBlockers,setPaymentBlockers]=useState<PaymentBlocker[]>([]),[orderBlockers,setOrderBlockers]=useState<OrderBlocker[]>([]),[offlineOutbox,setOfflineOutbox]=useState<OfflineCashSummary|null>(null),[offlineOutboxError,setOfflineOutboxError]=useState(false),[msg,setMsg]=useState(""),[busy,setBusy]=useState(false),[openingCash,setOpeningCash]=useState("0"),[countedCash,setCountedCash]=useState(""),[movementType,setMovementType]=useState<"CASH_IN"|"CASH_OUT">("CASH_OUT"),[movementAmount,setMovementAmount]=useState(""),[movementReason,setMovementReason]=useState("");
   const movementRecoveryRef=useRef(false);
+  const closeRecoveryRef=useRef(false);
   const load=()=>api<CloseData>("/api/close-day").then(x=>{setRows(x.closes||[]);setShift(x.shift||null);setBusinessDate(x.businessDate||"");setMovements(x.cashMovements||[]);setPaymentBlockers(Array.isArray(x.paymentBlockers)?x.paymentBlockers:[]);setOrderBlockers(Array.isArray(x.orderBlockers)?x.orderBlockers:[]) });
   const refreshOfflineOutbox=async()=>{
     try{
@@ -77,6 +95,34 @@ function View({session}:{session:Session}){
     }
   }
 
+  function closeError(code:string){
+    return code==="day_already_closed"?"วันนี้ถูกปิดวันแล้ว":
+      code==="close_day_pending_payments"?"ยังมี Split/Payment ที่ค้างอยู่ กรุณาจัดการให้เสร็จก่อนปิดวัน":
+      code==="close_day_open_orders"?"ยังมีออเดอร์ที่ยังไม่ได้ส่งมอบ กรุณาปิดคิวให้ครบก่อนปิดวัน":
+      code==="counted_cash_required"?"กรุณากรอกเงินสดที่นับได้จริง โดยไม่เกิน 2 ตำแหน่งทศนิยม":
+      code==="request_key_conflict"?"คำขอปิดวันเดิมไม่ตรงกับข้อมูลล่าสุด · กรุณาตรวจประวัติปิดวันก่อนดำเนินการต่อ":
+      code==="close_day_pending"?"มีคำขอปิดวันเดิมที่ยังไม่ทราบผล · ระบบจะตรวจ request เดิมก่อน":
+      code==="close_day_unconfirmed"?"Server ตอบกลับแต่ยืนยันข้อมูลปิดวันเดิมไม่ครบ · ระบบเก็บ request เดิมไว้เพื่อป้องกันการปิดซ้ำ":
+      code==="close_day_recovery_corrupt"?"ข้อมูล recovery การปิดวันในเครื่องเสีย · กรุณาตรวจประวัติปิดวันก่อน":
+      code==="close_day_recovery_storage_unavailable"?"เครื่องนี้เก็บ recovery การปิดวันไม่ได้ · ระบบไม่ส่งคำขอใหม่เพื่อป้องกันการปิดซ้ำ":
+      code;
+  }
+
+  async function sendCloseDay(body:CloseDayBody){
+    let pending=closeDayPendingRead();
+    if(pending&&pending.body.requestKey!==body.requestKey)throw Object.assign(new Error("close_day_pending"),{status:409});
+    if(!pending){closeDayPendingWrite(body);pending={body,createdAt:Date.now()}}
+    try{
+      const r=await api<any>("/api/close-day",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify(pending.body)});
+      validateCloseDayAck(r,pending.body);
+      closeDayPendingClear();
+      return r;
+    }catch(e:any){
+      if(!shouldRetainCloseDayPending(e))closeDayPendingClear();
+      throw e;
+    }
+  }
+
   useEffect(()=>{
     let disposed=false;
     const recover=async()=>{
@@ -109,6 +155,40 @@ function View({session}:{session:Session}){
     document.addEventListener("visibilitychange",onVisible);
     return()=>{disposed=true;window.removeEventListener("online",onOnline);window.removeEventListener("focus",onFocus);document.removeEventListener("visibilitychange",onVisible)};
   },[session.csrf,session.offline]);
+
+  useEffect(()=>{
+    let disposed=false;
+    const recover=async()=>{
+      if(disposed||closeRecoveryRef.current||session.offline||session.user.role!=="admin")return;
+      let pending:PendingCloseDay|null=null;
+      try{pending=closeDayPendingRead()}catch(e:any){if(!disposed)setMsg(closeError(e.message));return}
+      if(!pending)return;
+      closeRecoveryRef.current=true;setBusy(true);setMsg("");
+      try{
+        const r=await sendCloseDay(pending.body);
+        if(!disposed){
+          const v=Number(r.close?.cashVariance||0);
+          setCountedCash("");
+          setMsg("กู้คืนการปิดวันเดิมสำเร็จ · ไม่ปิดซ้ำ · เงินสด "+(v===0?"ตรงพอดี":v>0?"เกิน ฿"+formatMoney(v):"ขาด ฿"+formatMoney(Math.abs(v))));
+          await load().catch(()=>{});
+        }
+      }catch(e:any){
+        if(!disposed){
+          setMsg(shouldRetainCloseDayPending(e)?"ผลการปิดวันเดิมยังไม่ชัดเจน · ระบบเก็บ request เดิมไว้และจะตรวจซ้ำเมื่อเชื่อมต่อ":closeError(e.message));
+          await load().catch(()=>{});
+        }
+      }finally{
+        closeRecoveryRef.current=false;
+        if(!disposed)setBusy(false);
+      }
+    };
+    const onOnline=()=>recover(),onFocus=()=>recover(),onVisible=()=>{if(document.visibilityState==="visible")recover()};
+    recover().catch(()=>{});
+    window.addEventListener("online",onOnline);
+    window.addEventListener("focus",onFocus);
+    document.addEventListener("visibilitychange",onVisible);
+    return()=>{disposed=true;window.removeEventListener("online",onOnline);window.removeEventListener("focus",onFocus);document.removeEventListener("visibilitychange",onVisible)};
+  },[session.offline,session.user.role,session.csrf]);
 
   async function openShift(){
     const opening=Number(openingCash||0);
@@ -151,8 +231,9 @@ function View({session}:{session:Session}){
     if(!countedCash.trim()||!Number.isFinite(counted)||counted<0){setMsg("กรุณากรอกเงินสดที่นับได้จริง");return}
     if(!window.confirm("ยืนยันปิดวัน? ระบบจะใช้เงินตั้งต้นที่ล็อกไว้ ฿"+formatMoney(Number(shift.openingCash))+" และคำนวณเงินสดขาด/เกิน"))return;
     setBusy(true);setMsg("");
-    try{const r=await api<any>("/api/close-day",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({countedCash:counted})});const v=Number(r.close.cashVariance||0);setMsg("ปิดวันสำเร็จ · เงินสด "+(v===0?"ตรงพอดี":v>0?"เกิน ฿"+formatMoney(v):"ขาด ฿"+formatMoney(Math.abs(v))));setCountedCash("");await load()}
-    catch(e:any){setMsg(e.message==="day_already_closed"?"วันนี้ถูกปิดวันแล้ว":e.message==="close_day_pending_payments"?"ยังมี Split/Payment ที่ค้างอยู่ กรุณาจัดการให้เสร็จก่อนปิดวัน":e.message==="close_day_open_orders"?"ยังมีออเดอร์ที่ยังไม่ได้ส่งมอบ กรุณาปิดคิวให้ครบก่อนปิดวัน":e.message==="counted_cash_required"?"กรุณากรอกเงินสดที่นับได้จริง โดยไม่เกิน 2 ตำแหน่งทศนิยม":e.message)}
+    const body:CloseDayBody={requestKey:crypto.randomUUID(),date:businessDate||shift.date,countedCash:counted};
+    try{const r=await sendCloseDay(body);const v=Number(r.close.cashVariance||0);setMsg("ปิดวันสำเร็จ · เงินสด "+(v===0?"ตรงพอดี":v>0?"เกิน ฿"+formatMoney(v):"ขาด ฿"+formatMoney(Math.abs(v))));setCountedCash("");await load()}
+    catch(e:any){setMsg(shouldRetainCloseDayPending(e)?"ผลการปิดวันยังไม่ชัดเจน · ระบบเก็บ request เดิมไว้และจะตรวจซ้ำอัตโนมัติ ห้ามกดปิดวันซ้ำด้วย request ใหม่":closeError(e.message))}
     finally{setBusy(false)}
   }
 
