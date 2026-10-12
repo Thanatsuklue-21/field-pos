@@ -228,7 +228,9 @@ export default function PosOperationsHub({session,bootstrap,open,onClose,onRefre
     finally{setExpenseBusy(false)}
   }
 
-  const queueRows=queue.slice().sort((a,b)=>n(a.time)-n(b.time)).slice(0,6);
+  const queueSorted=queue.slice().sort((a,b)=>n(a.time)-n(b.time));
+  const queueRows=queueSorted.slice(0,6);
+  const productionHead=queueSorted.find(order=>(order.items||[]).some(item=>n(item.calledQty)<n(item.qty)))||null;
   const latestSales=sales.slice(0,7);
   const latestExpenses=expenses.slice(0,5);
   const stockHealth=useMemo(()=>{
@@ -284,18 +286,20 @@ export default function PosOperationsHub({session,bootstrap,open,onClose,onRefre
 
       <div role="tabpanel" id={"field-operations-panel-"+tab} aria-labelledby={"field-operations-tab-"+tab} className="soft-scroll min-h-0 flex-1 overflow-auto p-3 sm:p-4">
         {tab==="queue"&&canQueue&&<div className="space-y-2">
-          {queueRows.length===0?<Empty text={!cloudAvailable?"ออฟไลน์ · ยังไม่ดึงคิวจาก Server":"ไม่มีคิวที่กำลังทำ"}/>:queueRows.map((order,index)=>{
+          {queueRows.length===0?<Empty text={!cloudAvailable?"ออฟไลน์ · ยังไม่ดึงคิวจาก Server":"ไม่มีคิวที่กำลังทำ"}/>:queueRows.map(order=>{
             const total=(order.items||[]).reduce((s,x)=>s+n(x.qty),0),ready=(order.items||[]).reduce((s,x)=>s+Math.min(n(x.qty),n(x.readyQty)),0),called=(order.items||[]).reduce((s,x)=>s+Math.min(n(x.qty),n(x.calledQty)),0);
-            const quick=index===0?quickQueueStep(order):null,QuickIcon=quick?.icon;
-            return <div key={order.id} className={"rounded-2xl border bg-white p-3 "+(index===0?"border-[#d4af37] shadow-sm":"border-slate-200")}>
-              <div className="flex items-center justify-between gap-3"><div><b className="text-base">{order.queueNo}</b><span className="ml-2 text-xs text-slate-500">บัตร {order.pagerNo||"—"}</span>{index===0&&<span className="ml-2 rounded-full bg-[#fff3bf] px-2 py-1 text-[9px] font-black text-[#765b08]">คิวปัจจุบัน</span>}</div><span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-bold uppercase">{order.status}</span></div>
+            const allCalled=total>0&&called>=total,isProduction=productionHead?.id===order.id;
+            const quick=(isProduction||allCalled)?quickQueueStep(order):null,QuickIcon=quick?.icon;
+            return <div key={order.id} className={"rounded-2xl border bg-white p-3 "+(isProduction?"border-[#d4af37] shadow-sm":allCalled?"border-emerald-200":"border-slate-200")}>
+              <div className="flex items-center justify-between gap-3"><div><b className="text-base">{order.queueNo}</b><span className="ml-2 text-xs text-slate-500">บัตร {order.pagerNo||"—"}</span>{isProduction&&<span className="ml-2 rounded-full bg-[#fff3bf] px-2 py-1 text-[9px] font-black text-[#765b08]">ทำตอนนี้</span>}{allCalled&&<span className="ml-2 rounded-full bg-emerald-100 px-2 py-1 text-[9px] font-black text-emerald-800">รอลูกค้ารับ</span>}</div><span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-bold uppercase">{order.status}</span></div>
               <div className="mt-2 grid grid-cols-3 gap-2 text-center text-xs"><Metric label="ทั้งหมด" value={total}/><Metric label="ทำแล้ว" value={ready}/><Metric label="เรียกแล้ว" value={called}/></div>
               <p className="mt-2 line-clamp-2 text-xs text-slate-500">{(order.items||[]).map(x=>x.name+" ×"+x.qty).join(" · ")}</p>
-              {quick&&QuickIcon&&<button disabled={queueBusy||!cloudAvailable} onClick={()=>runQuickQueueAction(order)} className="mt-3 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#1F4D3A] px-4 text-sm font-black text-white disabled:opacity-40"><QuickIcon size={17}/>{queueBusy?"กำลังยืนยันคิวเดิม…":quick.label}</button>}
+              {quick&&QuickIcon&&<button disabled={queueBusy||!cloudAvailable} onClick={()=>runQuickQueueAction(order)} className={"mt-3 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl px-4 text-sm font-black disabled:opacity-40 "+(allCalled?"bg-emerald-600 text-white":"bg-[#1F4D3A] text-white")}><QuickIcon size={17}/>{queueBusy?"กำลังยืนยันคิวเดิม…":quick.label}</button>}
+              {!isProduction&&!allCalled&&<p className="mt-2 rounded-xl bg-slate-50 px-3 py-2 text-[10px] font-semibold text-slate-500">รอคิวก่อนหน้า · Server บังคับ FIFO</p>}
             </div>
           })}
-          <p className="px-1 text-[10px] text-slate-500">ปุ่มด่วนทำงานได้เฉพาะคิวแรก · Server ตรวจ FIFO และสถานะจริงทุกครั้ง</p>
-          <FullLink href="/queue" label="เปิดหน้าคิวเต็ม / รายละเอียดการชง"/>
+          <p className="rounded-xl bg-blue-50 px-3 py-2 text-[10px] text-blue-800">ปุ่มด่วนรองรับ flow ปกติ: ทำเมนูถัดไป → เรียกคิว → ส่งมอบ · ชงเสีย/ทำใหม่/เรียกแยกหมวด/ดูเบสละเอียด ให้เปิดหน้าคิวเต็ม</p>
+          <FullLink href="/queue" label="เปิดหน้าคิวเต็ม / งานผลิตละเอียด"/>
         </div>}
 
         {tab==="orders"&&canOrder&&<div className="space-y-2">
