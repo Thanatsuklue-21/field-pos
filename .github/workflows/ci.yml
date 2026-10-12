@@ -7,6 +7,7 @@ on:
   pull_request:
     branches:
       - main
+      - feat/pwa-app-shell
 
 concurrency:
   group: field-pos-ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
