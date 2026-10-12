@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       base_url:
-        description: Exact Vercel Preview URL
+        description: Exact Vercel Preview URL (must report databaseScope=uat)
         required: true
         type: string
       expected_sha:
