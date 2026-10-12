@@ -4,19 +4,19 @@ import {Download,HardDrive,RefreshCw,Smartphone,Wifi,WifiOff} from "lucide-react
 import {PWA_INSTALL_REQUEST_EVENT,PWA_PERSIST_STORAGE_REQUEST_EVENT,PWA_REFRESH_EVENT,PWA_STATUS_EVENT,PWA_UPDATE_REQUEST_EVENT,type PwaSnapshot} from "@/lib/pwa-meta";
 
 const badge=(ok:boolean)=>ok?"text-emerald-700":"text-amber-700";
-type BuildInfo={buildSha:string|null;environment:string|null};
+type BuildInfo={buildSha:string|null;environment:string|null;databaseScope:string|null};
 type BackendInfo={ready:boolean|null;status:number|null;error:string|null};
 
 export default function PwaReadiness({serverRevision,promptPayReady}:{serverRevision?:number;promptPayReady?:boolean}){
   const [state,setState]=useState<PwaSnapshot|null>(null);
-  const [build,setBuild]=useState<BuildInfo>({buildSha:null,environment:null});
+  const [build,setBuild]=useState<BuildInfo>({buildSha:null,environment:null,databaseScope:null});
   const [backend,setBackend]=useState<BackendInfo>({ready:null,status:null,error:null});
 
   const refresh=useCallback(()=>{
     window.dispatchEvent(new Event(PWA_REFRESH_EVENT));
     fetch("/api/build",{credentials:"same-origin",cache:"no-store"})
       .then(async res=>res.ok?await res.json():null)
-      .then(data=>{if(data)setBuild({buildSha:typeof data.buildSha==="string"?data.buildSha:null,environment:typeof data.environment==="string"?data.environment:null})})
+      .then(data=>{if(data)setBuild({buildSha:typeof data.buildSha==="string"?data.buildSha:null,environment:typeof data.environment==="string"?data.environment:null,databaseScope:typeof data.databaseScope==="string"?data.databaseScope:null})})
       .catch(()=>{});
     fetch("/api/health",{credentials:"same-origin",cache:"no-store"})
       .then(async res=>{
@@ -34,6 +34,8 @@ export default function PwaReadiness({serverRevision,promptPayReady}:{serverRevi
   },[refresh]);
 
   const shortSha=build.buildSha?build.buildSha.slice(0,10):"—";
+  const uatReady=build.environment==="preview"&&build.databaseScope==="uat"&&backend.ready===true;
+  const uatLabel=build.environment==="preview"?(uatReady?"UAT READY":"UAT BLOCKED"):"N/A";
   const recoveryParts=[
     Number(state?.recoveryCartItems||0)>0?"Cart "+state?.recoveryCartItems:null,
     Number(state?.recoveryHeldBills||0)>0?"Held "+state?.recoveryHeldBills:null,
@@ -63,6 +65,8 @@ export default function PwaReadiness({serverRevision,promptPayReady}:{serverRevi
       ["App Version",state?.appVersion||"—",true],
       ["Build SHA",shortSha,Boolean(build.buildSha)],
       ["Environment",build.environment||"—",Boolean(build.environment)],
+      ["Database Scope",build.databaseScope||"—",build.environment==="preview"?build.databaseScope==="uat":build.environment==="production"?build.databaseScope!=="uat":Boolean(build.databaseScope)],
+      ["Transaction UAT",uatLabel,build.environment!=="preview"||uatReady],
       ["Backend / Turso",backend.ready===true?"READY":backend.ready===false?(build.environment==="preview"?"UAT BLOCKED":"NOT READY"):"CHECKING",backend.ready===true],
       ["Server Revision",String(serverRevision||0),true],
       ["PromptPay",promptPayReady?"READY":"NOT READY",promptPayReady===true]
