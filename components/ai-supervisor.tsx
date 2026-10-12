@@ -44,7 +44,7 @@ export default function AiSupervisor({session}:{session:Session|null}){
     <button type="button" onClick={()=>setOpen(v=>!v)} aria-label="FIELD AI Supervisor" className={"fixed bottom-[78px] right-3 z-[70] grid h-12 w-12 place-items-center rounded-full border shadow-lg md:bottom-6 md:right-6 "+(critical?"border-red-300 bg-red-50 text-red-700":review?"border-amber-300 bg-amber-50 text-amber-700":"border-emerald-200 bg-white text-emerald-700")}>
       <Bot size={21}/>{badge>0&&<span className="absolute -right-1 -top-1 min-w-5 rounded-full bg-red-600 px-1.5 py-0.5 text-center text-[10px] font-bold text-white">{badge}</span>}
     </button>
-    {open&&<div className="fixed inset-0 z-[80] bg-slate-950/20 p-2 backdrop-blur-[2px] md:flex md:items-end md:justify-end" onClick={e=>{if(e.currentTarget===e.target)setOpen(false)}}>
+    {open&&<div className="fixed inset-0 z-[120] bg-slate-950/20 p-2 backdrop-blur-[2px] md:flex md:items-end md:justify-end" onClick={e=>{if(e.currentTarget===e.target)setOpen(false)}}>
       <section className="ml-auto flex h-[min(760px,calc(100dvh-1rem))] w-full max-w-[430px] flex-col overflow-hidden rounded-[28px] border border-slate-200 bg-[#f8fafc] shadow-2xl">
         <header className="flex items-center justify-between border-b border-slate-200 bg-white px-4 py-3">
           <div className="flex items-center gap-2"><div className="grid h-9 w-9 place-items-center rounded-full bg-[#d4af37]/15 text-[#765b08]"><Sparkles size={17}/></div><div><b className="text-sm">FIELD AI Supervisor</b><div className="text-[10px] text-slate-500">เฝ้าเงิน · สต๊อก · Flow · ความผิดปกติ</div></div></div>
