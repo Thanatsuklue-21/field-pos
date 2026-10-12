@@ -240,3 +240,13 @@ test("quick Queue action is disabled when cloud is unavailable or another queue 
   assert.match(hub,/disabled=\{queueBusy\|\|!cloudAvailable\}/);
   assert.match(hub,/queueRecoveryRef\.current/);
 });
+
+
+test("next quick Queue tap reconciles an ambiguous existing request instead of creating a new key",async()=>{
+  const hub=await read("components/pos-operations-hub.tsx");
+  const start=hub.indexOf("async function runQuickQueueAction");
+  const end=hub.indexOf("function quickQueueStep",start);
+  const block=hub.slice(start,end);
+  assert.match(block,/if\(readPendingQueueAction\(\)\)\{await recoverQueueAction\(\);return\}/);
+  assert.ok(block.indexOf("readPendingQueueAction()")<block.indexOf("crypto.randomUUID()"));
+});
