@@ -4,9 +4,9 @@ import {readFile} from "node:fs/promises";
 
 const read=p=>readFile(new URL("../"+p,import.meta.url),"utf8");
 
-test("phone app shell uses bounded primary nav plus overflow menu",async()=>{
+test("phone app shell keeps selling persistent and moves detail destinations into overflow",async()=>{
   const shell=await read("components/app-shell.tsx");
-  assert.ok(shell.includes('const primaryMobile=["/pos","/queue"]'));
+  assert.ok(shell.includes('const primaryMobile=["/pos"]'));
   assert.ok(shell.includes('mobileOverflow(allowed)'));
   assert.ok(shell.includes("MoreHorizontal"));
   assert.ok(shell.includes("overflow-hidden"));
