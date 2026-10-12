@@ -23,5 +23,5 @@ test("mobile More backdrop and close affordance share focus-restoring dismissal"
   const shell=await read("components/app-shell.tsx");
   assert.match(shell,/const closeMore=\(\)=>\{/);
   assert.match(shell,/onClick=\{closeMore\}/);
-  assert.match(shell,/aria-label="ปิดเมนูเพิ่มเติม"/);
+  assert.match(shell,/aria-label="ปิดเมนูอื่น"/);
 });
