@@ -67,10 +67,10 @@ export async function runDayFlow({extraBankExpense=0,countedCash=514.25,received
   assert.equal((await call('pos/queue')).orders.length,0);
   const pendingSettlements=await call('accounting/settlements');
   near(pendingSettlements.pending[0].expectedAmount,77.34);
-  const {reconciliation}=await call('accounting/settlements','POST',{saleDate:date,platform:'grab',receivedAmount:receivedDeliveryAmount,receivedDate:date,note:'Synthetic settlement evidence only'},201);
+  const {reconciliation}=await call('accounting/settlements','POST',{requestKey:'day-flow-settlement-grab',saleDate:date,platform:'grab',receivedAmount:receivedDeliveryAmount,receivedDate:date,note:'Synthetic settlement evidence only'},201);
   near(reconciliation.variance,receivedDeliveryAmount-77.34);
   assert.equal(reconciliation.status,receivedDeliveryAmount===77.34?'matched':'variance');
-  await call('accounting/settlements','POST',{saleDate:date,platform:'grab',receivedAmount:receivedDeliveryAmount,receivedDate:date},409);
+  await call('accounting/settlements','POST',{requestKey:'day-flow-settlement-grab-repeat',saleDate:date,platform:'grab',receivedAmount:receivedDeliveryAmount,receivedDate:date,note:''},409);
   await call('close-day','POST',{countedCash},409);
   await call('pos/checkout','POST',{requestKey:'after-day-close',date,cart:[{id:'qa-latte',variant:'100%',qty:1}],payment:'cash',received:100},409);
   await call('expenses','POST',{requestKey:'day-flow-expense-after-close',amount:1,category:'OTHER',paymentMethod:'cash',date},409);
