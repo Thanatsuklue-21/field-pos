@@ -120,7 +120,7 @@ test("auth session probe stays fastest while ordinary GET and only recoverable w
 test("cold-start offline navigation exposes only POS and readiness",async()=>{
   const shell=await read("components/app-shell.tsx");
   assert.ok(shell.includes('session.offline?["/pos","/settings"].includes(href)'));
-  assert.ok(shell.includes('primaryMobile=["/pos","/queue"]'));
+  assert.ok(shell.includes('primaryMobile=["/pos"]'));
   assert.ok(shell.includes('mobileOverflow(allowed)'));
 });
 
