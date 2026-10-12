@@ -60,6 +60,7 @@ function PosView({session}:{session:Session}){
   const [cat,setCat]=useState("ทั้งหมด");
   const [selected,setSelected]=useState<MenuItem|null>(null);
   const [payOpen,setPayOpen]=useState(false);
+  const [reviewConfirmed,setReviewConfirmed]=useState(false);
   const [heldOpen,setHeldOpen]=useState(false);
   const [method,setMethod]=useState<"cash"|"promptpay"|"bank"|"card"|"delivery">("cash");
   const [deliveryPlatform,setDeliveryPlatform]=useState<"grab"|"lineman"|"other_delivery">("grab");
@@ -210,6 +211,7 @@ function PosView({session}:{session:Session}){
   const deliveryNetSettlement=Math.round((netPayable-deliveryGpFee)*100)/100;
 
   useEffect(()=>{if(pointsRedeemed>maxRedeemPoints)setPointsRedeemed(maxRedeemPoints)},[pointsRedeemed,maxRedeemPoints]);
+  useEffect(()=>{if(payOpen)setReviewConfirmed(false)},[payOpen,payableQty,payableTotal,splitBill,pointsRedeemed,customerId,method]);
 
   function applyServerState(r:any){
     const revision=Number(r?.revision)||0;
@@ -680,6 +682,7 @@ function PosView({session}:{session:Session}){
     const current=cartAvailability({cart:cart.items,menu:data?.menu||[],stock:data?.availabilityStock||{}});
     if(!current.available){setNotice(availabilityMessage(current));load().catch(()=>{});return}
     setResult("");
+    setReviewConfirmed(false);
     setSplitBill(false);
     setSplitSelection({});
     setPayOpen(true);
@@ -751,7 +754,9 @@ function PosView({session}:{session:Session}){
       {method==="cash"&&<><div className="mt-4 grid grid-cols-[1fr_auto] gap-2"><input autoFocus inputMode="decimal" value={received} onChange={e=>setReceived(e.target.value)} placeholder="จำนวนเงินที่รับ" className="min-w-0 rounded-2xl border border-slate-300 bg-slate-100 px-4 py-3 text-lg outline-none focus:border-[#c59b19]"/><button type="button" disabled={busy||!payableItems.length} onClick={()=>setReceived(String(netPayable))} className="min-h-12 rounded-2xl border border-[#d4af37] bg-[#fff8dc] px-3 text-sm font-bold text-[#765b08] disabled:opacity-40">รับพอดี ฿{netPayable.toFixed(0)}</button></div>{received.trim()!==""&&Number.isFinite(cashDelta)&&<div className={"mt-3 flex items-center justify-between rounded-2xl border px-4 py-3 "+(cashDelta>=0?"border-emerald-300 bg-emerald-50 text-emerald-900":"border-red-300 bg-red-50 text-red-800")}><span>{cashDelta>=0?"เงินทอน":"ขาดอีก"}</span><b className="text-xl">฿{Math.abs(cashDelta).toFixed(0)}</b></div>}</>}
       {method==="promptpay"&&prompt?.qrUrl&&<div className="mt-4 rounded-[20px] border border-slate-300 bg-white p-4 text-center"><img src={prompt.qrUrl} alt="PromptPay QR" className="mx-auto max-h-56 w-auto"/><p className="mt-2 text-xs font-semibold text-black">{prompt.paid?"ชำระเงินแล้ว":"สแกน QR แล้วระบบจะตรวจสอบอัตโนมัติ"}</p></div>}
       <div className="sticky bottom-0 z-10 -mx-4 mt-4 border-t border-slate-200 bg-white/95 px-4 pb-[max(.5rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur sm:-mx-6 sm:px-6">
-        <button disabled={busy||!payableItems.length||(method==="cash"&&(!Number.isFinite(cashReceived)||cashReceived<netPayable))} onClick={checkout} className="w-full rounded-2xl bg-[#d4af37] py-3.5 font-bold text-black shadow-sm disabled:opacity-40">{busy?(method==="promptpay"&&prompt?"WAITING FOR PAYMENT...":"กำลังบันทึกบิล..."):(method==="promptpay"?"CREATE QR / PAY":method==="delivery"?"CONFIRM DELIVERY ORDER":method==="bank"?"ยืนยันรับโอน":method==="card"?"ยืนยันรับบัตร":!online?"SAVE OFFLINE CASH":"CONFIRM PAYMENT")}</button>
+        <button type="button" disabled={busy||!payableItems.length} onClick={()=>setReviewConfirmed(v=>!v)} className={"mb-2 flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl border px-3 text-sm font-black "+(reviewConfirmed?"border-emerald-300 bg-emerald-50 text-emerald-800":"border-[#d4af37] bg-[#fffaf0] text-[#765b08]")+" disabled:opacity-40"}><CheckCircle2 size={18}/>{reviewConfirmed?"ทวนกับลูกค้าแล้ว ✓":"กดหลังทวน: เมนู · จำนวน · ความหวาน · ยอด"}</button>
+        <button disabled={busy||!payableItems.length||!reviewConfirmed||(method==="cash"&&(!Number.isFinite(cashReceived)||cashReceived<netPayable))} onClick={checkout} className="w-full rounded-2xl bg-[#d4af37] py-3.5 font-bold text-black shadow-sm disabled:opacity-40">{busy?(method==="promptpay"&&prompt?"WAITING FOR PAYMENT...":"กำลังบันทึกบิล..."):(method==="promptpay"?"CREATE QR / PAY":method==="delivery"?"CONFIRM DELIVERY ORDER":method==="bank"?"ยืนยันรับโอน":method==="card"?"ยืนยันรับบัตร":!online?"SAVE OFFLINE CASH":"CONFIRM PAYMENT")}</button>
+        {!reviewConfirmed&&<p className="mt-2 text-center text-xs font-semibold text-amber-700">ระบบยังไม่เปิดรับเงิน · ต้องทวนบิลกับลูกค้าก่อน</p>}
         {method==="cash"&&Number.isFinite(cashReceived)&&cashReceived===netPayable&&<p className="mt-2 text-center text-xs font-semibold text-emerald-700">รับเงินพอดียอด · กดยืนยันชำระได้เลย</p>}
         {result&&<p className="mt-2 rounded-xl bg-slate-100 px-3 py-2 text-center text-sm text-slate-700">{result}</p>}
       </div>
