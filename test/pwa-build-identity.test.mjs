@@ -12,7 +12,7 @@ test("build endpoint exposes only non-sensitive release identity",async()=>{
   const api=await read("lib/api.mjs");
   const start=api.indexOf("path==='/api/build'");
   assert.ok(start>=0);
-  const block=api.slice(start,start+520);
+  const end=api.indexOf('routePath==="/api/health"',start);\n  const block=api.slice(start,end);
   assert.ok(block.includes("VERCEL_GIT_COMMIT_SHA"));
   assert.ok(block.includes("VERCEL_ENV"));
   assert.ok(block.includes("buildSha"));
