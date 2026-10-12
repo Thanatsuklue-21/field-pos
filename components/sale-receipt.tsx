@@ -1,11 +1,15 @@
 "use client";
+import {useEffect,useState} from "react";
 import {createPortal} from "react-dom";
 export type ReceiptSale={billNo:string;queueNo:string;time:number;subtotal?:number;discountTotal?:number;crmDiscount?:number;pointsRedeemed?:number;pointsAwarded?:number;total:number;payment:string;status:string;received?:number;change?:number;items:{name:string;variant:string;qty:number;price:number}[]};
 const money=(value:number)=>value.toLocaleString("th-TH",{minimumFractionDigits:2,maximumFractionDigits:2});
 export default function SaleReceipt({sale,paperWidth=80}:{sale:ReceiptSale;paperWidth?:58|80}){
+  const [mounted,setMounted]=useState(false);
+  useEffect(()=>setMounted(true),[]);
   const pageMargin=paperWidth===58?3:5;
   const contentWidth=paperWidth===58?52:70;
   const paymentLabel=sale.payment==="cash"?"เงินสด":sale.payment==="promptpay"?"PromptPay":sale.payment==="bank"?"โอนธนาคาร":sale.payment==="card"?"บัตร":sale.payment==="delivery"||sale.payment==="other"?"เดลิเวอรี":sale.payment==="split"?"แบ่งชำระ":sale.payment;
+  if(!mounted||typeof document==="undefined")return null;
   return createPortal(<div className="field-receipt">
     <style>{`.field-receipt{display:none}@media print{@page{size:${paperWidth}mm auto;margin:${pageMargin}mm}body> *{display:none!important}body>.field-receipt{display:block!important;width:${contentWidth}mm;font:12px/1.6 sans-serif;color:#000;background:#fff}.field-receipt h1{text-align:center;font-size:22px;margin:0}.field-receipt p{margin:3px 0}.field-receipt table{width:100%;border-collapse:collapse}.field-receipt td{vertical-align:top;padding:4px 0}.field-receipt td:last-child{text-align:right}.field-receipt footer{border-top:1px dashed #000;padding-top:8px;text-align:center}}`}</style>
     <h1>FIELD</h1><p style={{textAlign:"center"}}>ใบเสร็จรับเงิน</p>
