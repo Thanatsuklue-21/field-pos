@@ -727,6 +727,7 @@ function PosView({session}:{session:Session}){
 
   function errorText(code:string){
     return code==="cash_insufficient"?"จำนวนเงินรับไม่พอ":
+      code==="invalid_money_precision"?"จำนวนเงินต้องไม่เกิน 2 ตำแหน่งทศนิยม (หน่วยสตางค์)":
       code==="menu_unavailable"?"มีเมนูในตะกร้าที่ปิดขาย ราคาเป็น 0 หรือยังไม่พร้อมขาย กรุณาตรวจตะกร้าใหม่":
       code==="request_key_conflict"?"รายการเดิมถูกเปลี่ยน กรุณาตรวจประวัติออเดอร์ก่อนชำระอีกครั้ง":
       code==="recipe_unavailable"?"สูตรเมนูยังไม่ครบหรือมีปริมาณผิด กรุณาตรวจสูตรก่อนขาย":
