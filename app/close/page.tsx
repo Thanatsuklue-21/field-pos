@@ -7,6 +7,7 @@ import {api,type Session} from "@/lib/api-client";
 import {getOfflineCashSummary,type OfflineCashSummary} from "@/lib/offline-sales";
 import {CASH_MOVEMENT_PENDING_KEY,shouldRetainCashMovementPending,validateCashMovementAck,validatePendingCashMovement} from "@/lib/cash-movement-recovery.mjs";
 import {CLOSE_DAY_PENDING_KEY,shouldRetainCloseDayPending,validateCloseDayAck,validatePendingCloseDay} from "@/lib/close-day-recovery.mjs";
+import {findCloseDayLocalRecoveryBlockers} from "@/lib/close-day-local-recovery.mjs";
 
 type Close={id:string;requestKey?:string|null;date:string;revenue:number;cogs:number;expenses:number;purchaseSpend?:number;totalCashOut?:number;grossProfit:number;operatingProfit:number;deliveryFees?:number;cash:number;promptpay:number;bank?:number;card?:number;other:number;openingCash?:number;cashIn?:number;cashPaidOut?:number;cashOut?:number;expectedCash?:number;countedCash?:number;cashVariance?:number;orders:number;cups:number;time:number};
 type Shift={id:string;date:string;status:"open"|"closed";openingCash:number;openedAt:number;openedBy:string;closedAt?:number;cashVariance?:number};
@@ -15,6 +16,7 @@ type CashMovementBody={requestKey:string;type:"CASH_IN"|"CASH_OUT";amount:number
 type PendingCashMovement={body:CashMovementBody;createdAt:number};
 type CloseDayBody={requestKey:string;date:string;countedCash:number};
 type PendingCloseDay={body:CloseDayBody;createdAt:number};
+type LocalRecoveryBlocker={key:string;label:string;route:string};
 type PaymentBlocker={id:string;status:"collecting"|"requires_resolution";mode:string;total:number;pager:number;createdAt:number;expiresAt:number;chargeId:string;provider:string;providerStatus:string;payments:number};
 type OrderBlocker={id:string;queueNo:string;pagerNo:number;status:string;time:number;cups:number;ready:number;called:number;remainingPrep:number;remainingHandoff:number;items:{name:string;qty:number;readyQty:number;calledQty:number}[]};
 type CloseData={closes:Close[];shift:Shift|null;businessDate:string;cashMovements:Movement[];paymentBlockers?:PaymentBlocker[];orderBlockers?:OrderBlocker[];closeBlockedByPayments?:boolean;closeBlockedByOrders?:boolean};
@@ -52,7 +54,7 @@ export default function CloseDay(){return <AuthGate>{s=><View session={s}/>}</Au
 
 function View({session}:{session:Session}){
   const router=useRouter();
-  const [rows,setRows]=useState<Close[]>([]),[shift,setShift]=useState<Shift|null>(null),[businessDate,setBusinessDate]=useState(""),[movements,setMovements]=useState<Movement[]>([]),[paymentBlockers,setPaymentBlockers]=useState<PaymentBlocker[]>([]),[orderBlockers,setOrderBlockers]=useState<OrderBlocker[]>([]),[offlineOutbox,setOfflineOutbox]=useState<OfflineCashSummary|null>(null),[offlineOutboxError,setOfflineOutboxError]=useState(false),[msg,setMsg]=useState(""),[busy,setBusy]=useState(false),[openingCash,setOpeningCash]=useState("0"),[countedCash,setCountedCash]=useState(""),[movementType,setMovementType]=useState<"CASH_IN"|"CASH_OUT">("CASH_OUT"),[movementAmount,setMovementAmount]=useState(""),[movementReason,setMovementReason]=useState("");
+  const [rows,setRows]=useState<Close[]>([]),[shift,setShift]=useState<Shift|null>(null),[businessDate,setBusinessDate]=useState(""),[movements,setMovements]=useState<Movement[]>([]),[paymentBlockers,setPaymentBlockers]=useState<PaymentBlocker[]>([]),[orderBlockers,setOrderBlockers]=useState<OrderBlocker[]>([]),[offlineOutbox,setOfflineOutbox]=useState<OfflineCashSummary|null>(null),[offlineOutboxError,setOfflineOutboxError]=useState(false),[localRecoveryBlockers,setLocalRecoveryBlockers]=useState<LocalRecoveryBlocker[]>([]),[localRecoveryError,setLocalRecoveryError]=useState(false),[msg,setMsg]=useState(""),[busy,setBusy]=useState(false),[openingCash,setOpeningCash]=useState("0"),[countedCash,setCountedCash]=useState(""),[movementType,setMovementType]=useState<"CASH_IN"|"CASH_OUT">("CASH_OUT"),[movementAmount,setMovementAmount]=useState(""),[movementReason,setMovementReason]=useState("");
   const movementRecoveryRef=useRef(false);
   const closeRecoveryRef=useRef(false);
   const load=()=>api<CloseData>("/api/close-day").then(x=>{setRows(x.closes||[]);setShift(x.shift||null);setBusinessDate(x.businessDate||"");setMovements(x.cashMovements||[]);setPaymentBlockers(Array.isArray(x.paymentBlockers)?x.paymentBlockers:[]);setOrderBlockers(Array.isArray(x.orderBlockers)?x.orderBlockers:[]) });
@@ -66,7 +68,22 @@ function View({session}:{session:Session}){
       throw new Error("offline_outbox_unavailable");
     }
   };
-  useEffect(()=>{load().catch(()=>{});refreshOfflineOutbox().catch(()=>{})},[]);
+  const refreshLocalRecoveryBlockers=async()=>{
+    try{
+      const blockers=findCloseDayLocalRecoveryBlockers({readLocal:(key:string)=>localStorage.getItem(key),readSession:(key:string)=>sessionStorage.getItem(key)}) as LocalRecoveryBlocker[];
+      setLocalRecoveryBlockers(blockers);setLocalRecoveryError(false);
+      return blockers;
+    }catch{
+      setLocalRecoveryBlockers([]);setLocalRecoveryError(true);
+      throw new Error("close_day_local_recovery_storage_unavailable");
+    }
+  };
+  useEffect(()=>{
+    load().catch(()=>{});refreshOfflineOutbox().catch(()=>{});refreshLocalRecoveryBlockers().catch(()=>{});
+    const refresh=()=>refreshLocalRecoveryBlockers().catch(()=>{}),visible=()=>{if(document.visibilityState==="visible")refresh()};
+    window.addEventListener("focus",refresh);window.addEventListener("storage",refresh);window.addEventListener("online",refresh);document.addEventListener("visibilitychange",visible);
+    return()=>{window.removeEventListener("focus",refresh);window.removeEventListener("storage",refresh);window.removeEventListener("online",refresh);document.removeEventListener("visibilitychange",visible)};
+  },[]);
 
   function movementError(code:string){
     return code==="drawer_cash_shortage"?"เงินสดตามระบบไม่พอสำหรับนำออกจำนวนนี้":
@@ -145,7 +162,7 @@ function View({session}:{session:Session}){
         }
       }finally{
         movementRecoveryRef.current=false;
-        if(!disposed)setBusy(false);
+        if(!disposed){setBusy(false);refreshLocalRecoveryBlockers().catch(()=>{})}
       }
     };
     const onOnline=()=>recover(),onFocus=()=>recover(),onVisible=()=>{if(document.visibilityState==="visible")recover()};
@@ -179,7 +196,7 @@ function View({session}:{session:Session}){
         }
       }finally{
         closeRecoveryRef.current=false;
-        if(!disposed)setBusy(false);
+        if(!disposed){setBusy(false);refreshLocalRecoveryBlockers().catch(()=>{})}
       }
     };
     const onOnline=()=>recover(),onFocus=()=>recover(),onVisible=()=>{if(document.visibilityState==="visible")recover()};
@@ -211,7 +228,7 @@ function View({session}:{session:Session}){
       await sendCashMovement(body);
       setMovementAmount("");setMovementReason("");setMsg(movementType==="CASH_IN"?"บันทึกเติมเงินสดเข้าลิ้นชักแล้ว":"บันทึกนำเงินสดออกจากลิ้นชักแล้ว");await load();
     }catch(e:any){setMsg(movementError(e.message))}
-    finally{setBusy(false)}
+    finally{setBusy(false);refreshLocalRecoveryBlockers().catch(()=>{})}
   }
 
   async function close(){
@@ -226,6 +243,15 @@ function View({session}:{session:Session}){
       setMsg("ปิดวันไม่ได้ · มีบิล Offline ในเครื่อง "+outbox.total+" รายการ (รอ Sync "+outbox.pending+" · ต้องตรวจ "+outbox.needsReview+") กรุณาจัดการให้เหลือ 0 ก่อน");
       return;
     }
+    let localBlockers:LocalRecoveryBlocker[];
+    try{localBlockers=await refreshLocalRecoveryBlockers()}catch{
+      setMsg("ปิดวันไม่ได้ · ตรวจรายการ Recovery ในเครื่องไม่สำเร็จ กรุณาตรวจพื้นที่เก็บข้อมูลก่อน");
+      return;
+    }
+    if(localBlockers.length){
+      setMsg("ปิดวันไม่ได้ · มี Recovery ค้าง "+localBlockers.length+" รายการ: "+localBlockers.map(x=>x.label).join(", ")+" · ต้องยืนยันผลรายการเดิมก่อน");
+      return;
+    }
     if(paymentBlockers.length){setMsg("ยังมี Payment ที่ค้างอยู่ "+paymentBlockers.length+" รายการ · กรุณาตรวจและจัดการก่อนปิดวัน");return}
     if(orderBlockers.length){setMsg("ยังมีออเดอร์ที่ยังไม่ส่งมอบ "+orderBlockers.length+" คิว · กรุณาทำ/เรียก/ส่งมอบให้ครบก่อนปิดวัน");return}
     if(!countedCash.trim()||!Number.isFinite(counted)||counted<0){setMsg("กรุณากรอกเงินสดที่นับได้จริง");return}
@@ -238,13 +264,21 @@ function View({session}:{session:Session}){
   }
 
   return <section className="soft-scroll h-full overflow-auto p-3 sm:p-5 md:p-7">
-    <header className="flex flex-wrap items-end justify-between gap-3"><div><p className="gold m-0 text-[10px] font-bold tracking-[.3em]">DAILY CONTROL</p><h1 className="mt-1 text-xl font-semibold sm:text-2xl">OPEN / CLOSE DAY</h1><p className="mt-1 text-xs text-slate-500">{businessDate||"วันนี้"} · เปิดร้านด้วยเงินทอนตั้งต้น แล้วนับเงินจริงก่อนปิดร้าน</p></div>{session.user.role==="admin"&&<button disabled={busy||!shift||shift.status!=="open"||offlineOutbox===null||offlineOutboxError||offlineOutbox.total>0||paymentBlockers.length>0||orderBlockers.length>0} onClick={close} className="min-h-11 rounded-full bg-[#d4af37] px-5 text-sm font-bold text-black disabled:opacity-40">{busy?"กำลังบันทึก...":offlineOutboxError?"ตรวจ Offline ไม่ได้":offlineOutbox===null?"กำลังตรวจ Offline...":offlineOutbox.total>0?"มีบิล Offline "+offlineOutbox.total+" รายการ":paymentBlockers.length>0?"มี Payment ค้าง "+paymentBlockers.length+" รายการ":orderBlockers.length>0?"มีคิวค้าง "+orderBlockers.length+" คิว":"ปิดร้านวันนี้"}</button>}</header>
+    <header className="flex flex-wrap items-end justify-between gap-3"><div><p className="gold m-0 text-[10px] font-bold tracking-[.3em]">DAILY CONTROL</p><h1 className="mt-1 text-xl font-semibold sm:text-2xl">OPEN / CLOSE DAY</h1><p className="mt-1 text-xs text-slate-500">{businessDate||"วันนี้"} · เปิดร้านด้วยเงินทอนตั้งต้น แล้วนับเงินจริงก่อนปิดร้าน</p></div>{session.user.role==="admin"&&<button disabled={busy||!shift||shift.status!=="open"||offlineOutbox===null||offlineOutboxError||offlineOutbox.total>0||localRecoveryError||localRecoveryBlockers.length>0||paymentBlockers.length>0||orderBlockers.length>0} onClick={close} className="min-h-11 rounded-full bg-[#d4af37] px-5 text-sm font-bold text-black disabled:opacity-40">{busy?"กำลังบันทึก...":offlineOutboxError?"ตรวจ Offline ไม่ได้":offlineOutbox===null?"กำลังตรวจ Offline...":offlineOutbox.total>0?"มีบิล Offline "+offlineOutbox.total+" รายการ":localRecoveryError?"ตรวจ Recovery ไม่ได้":localRecoveryBlockers.length>0?"มี Recovery ค้าง "+localRecoveryBlockers.length+" รายการ":paymentBlockers.length>0?"มี Payment ค้าง "+paymentBlockers.length+" รายการ":orderBlockers.length>0?"มีคิวค้าง "+orderBlockers.length+" คิว":"ปิดร้านวันนี้"}</button>}</header>
 
     {session.user.role==="admin"&&(offlineOutboxError||offlineOutbox===null||offlineOutbox.total>0)&&<div className="mt-4 rounded-2xl border border-red-300 bg-red-50 p-4 sm:p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div><b className="text-red-900">ปิดวันไม่ได้ · Offline outbox ยังไม่พร้อม</b><p className="mt-1 text-xs text-red-700">{offlineOutboxError?"อ่านข้อมูลบิล Offline ในเครื่องไม่ได้ ต้องแก้ storage/เปิดหน้า POS ให้พร้อมก่อน":offlineOutbox===null?"กำลังตรวจบิล Offline ในเครื่อง…":"รอ Sync "+offlineOutbox.pending+" · ต้องตรวจ "+offlineOutbox.needsReview+" · รวม "+offlineOutbox.total+" รายการ"}</p></div>
         <button onClick={()=>router.push("/pos")} className="min-h-11 rounded-xl bg-red-800 px-4 text-xs font-bold text-white">ไป POS / Sync Offline</button>
       </div>
+    </div>}
+
+    {session.user.role==="admin"&&(localRecoveryError||localRecoveryBlockers.length>0)&&<div className="mt-4 rounded-2xl border border-red-300 bg-red-50 p-4 sm:p-5">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div><b className="text-red-900">ปิดวันไม่ได้ · Local Recovery ยังไม่เคลียร์</b><p className="mt-1 text-xs text-red-700">{localRecoveryError?"อ่าน local/session recovery ไม่ได้ · เพื่อความปลอดภัยระบบจะไม่ปิดวัน":"มีรายการที่ผลยังไม่แน่นอน "+localRecoveryBlockers.length+" รายการ · ต้องกู้คืน/ยืนยันผลเดิมก่อนกระทบยอด"}</p></div>
+        <button type="button" onClick={()=>refreshLocalRecoveryBlockers().catch(()=>{})} className="min-h-11 rounded-xl border border-red-300 bg-white px-4 text-xs font-bold text-red-900">ตรวจ Recovery อีกครั้ง</button>
+      </div>
+      {localRecoveryBlockers.length>0&&<div className="mt-3 space-y-2">{localRecoveryBlockers.map(x=><div key={x.key} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-red-200 bg-white p-3 text-xs"><div><b>{x.label}</b><div className="mt-1 text-slate-500">{x.key}</div></div>{x.route==="/close"?<span className="text-[11px] font-semibold text-red-700">หน้านี้จะกู้คืนอัตโนมัติ</span>:<button type="button" onClick={()=>router.push(x.route)} className="min-h-11 rounded-xl bg-red-800 px-3 text-[11px] font-bold text-white">ไปจัดการ</button>}</div>)}</div>}
     </div>}
 
     {session.user.role==="admin"&&paymentBlockers.length>0&&<div className="mt-4 rounded-2xl border border-red-300 bg-red-50 p-4 sm:p-5">
