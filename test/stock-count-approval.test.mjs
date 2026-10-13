@@ -84,3 +84,32 @@ test('stock UI explains employee count proposal versus owner commit',async()=>{
   assert.match(ui,/cycle-count\/proposals/);
   assert.match(ui,/cycle_count_proposal_stale/);
 });
+
+
+test('close-day review blocks while a same-day stock count proposal is pending',async t=>{
+  const db=await setup(t),api=handler(db);
+  const opened=await call(api,{token:'owner-token',csrf:'owner-csrf',route:'cash-shift/open',body:{openingCash:100}});
+  assert.equal(opened.status,201);
+  const proposed=await call(api,{token:'staff-token',csrf:'staff-csrf',route:'stock/cycle-count/proposals',body:{requestKey:'count-proposal-close-gate',counts:[{ingredientId:'matcha',countedQty:95}]}});
+  assert.equal(proposed.status,201);
+  const review=await call(api,{token:'owner-token',csrf:'owner-csrf',route:'close-day/review',body:{firstCount:100,secondCount:100}});
+  assert.equal(review.status,409);
+  assert.equal(review.body.error,'close_day_pending_stock_count_approval');
+  assert.equal(review.body.count,1);
+});
+
+test('stock count approval and direct count cannot mutate stock after day is closed',async t=>{
+  const db=await setup(t),api=handler(db);
+  const proposed=await call(api,{token:'staff-token',csrf:'staff-csrf',route:'stock/cycle-count/proposals',body:{requestKey:'count-proposal-closed-day',counts:[{ingredientId:'matcha',countedQty:90}]}});
+  const id=proposed.body.proposal.id;
+  const state=await doc(db);
+  const date=proposed.body.proposal.date;
+  state.closes=[{id:'close-1',date}];
+  await db.execute({sql:'UPDATE field_state SET revision=revision+1,document=? WHERE singleton=1',args:[JSON.stringify(state)]});
+  const approval=await call(api,{token:'owner-token',csrf:'owner-csrf',route:'stock/cycle-count/proposals/'+encodeURIComponent(id)+'/approve',body:{confirm:true}});
+  assert.equal(approval.status,409);assert.equal(approval.body.error,'cycle_count_proposal_day_closed');
+  const direct=await call(api,{token:'owner-token',csrf:'owner-csrf',route:'stock/cycle-count',body:{requestKey:'direct-count-closed',confirm:true,counts:[{ingredientId:'matcha',countedQty:80}]}});
+  assert.equal(direct.status,409);assert.equal(direct.body.error,'day_closed');
+  assert.equal((await doc(db)).ingredients.matcha.qty,100);
+  assert.equal((await db.execute('SELECT COUNT(*) AS n FROM field_stock_transactions')).rows[0].n,0);
+});
