@@ -76,7 +76,7 @@ test("Orders UI replays pending mutation on reconnect focus and visible resume",
   assert.match(ui,/window\.addEventListener\("focus",onFocus\)/);
   assert.match(ui,/document\.addEventListener\("visibilitychange",onVisible\)/);
   assert.match(ui,/มี \{pendingOrderMutation\.operation===\"void\"\?\"VOID\":\"Refund\"\} เดิมที่ยังไม่ทราบผล/);
-  assert.match(ui,/ตรวจผล Request เดิม/);
+  assert.match(ui,/ตรวจรายการเดิม/);
   assert.doesNotMatch(ui,/\/api\/pos\/refund"[\s\S]{0,180}requestKey:crypto\.randomUUID\(\)/);
   assert.doesNotMatch(ui,/\/api\/pos\/void"[\s\S]{0,180}requestKey:crypto\.randomUUID\(\)/);
 });
