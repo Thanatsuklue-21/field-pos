@@ -36,20 +36,21 @@ export default function ModalFocus({
         escapeRef.current();
         return;
       }
-      if(event.key!=="Tab")return;
-      const items=focusables();
-      if(items.length===0){
-        event.preventDefault();
-        node.focus({preventScroll:true});
-        return;
-      }
-      const firstItem=items[0],lastItem=items[items.length-1];
-      if(event.shiftKey&&document.activeElement===firstItem){
-        event.preventDefault();
-        lastItem.focus();
-      }else if(!event.shiftKey&&document.activeElement===lastItem){
-        event.preventDefault();
-        firstItem.focus();
+      if(event.key==="Tab"){
+        const items=focusables();
+        if(items.length===0){
+          event.preventDefault();
+          node.focus({preventScroll:true});
+          return;
+        }
+        const firstItem=items[0],lastItem=items[items.length-1];
+        if(event.shiftKey&&document.activeElement===firstItem){
+          event.preventDefault();
+          lastItem.focus();
+        }else if(!event.shiftKey&&document.activeElement===lastItem){
+          event.preventDefault();
+          firstItem.focus();
+        }
       }
     };
 
