@@ -74,6 +74,7 @@ function StockView({session}:{session:Session}){
       cycle_count_approval_confirmation_required:"ต้องยืนยันการอนุมัติผลนับก่อนปรับ Stock",
       cycle_count_reject_reason_required:"กรุณาระบุเหตุผลที่ตีกลับผลนับ",
       cycle_count_proposal_not_found:"ไม่พบผลนับที่ต้องการตรวจ · ระบบยังไม่ได้ปรับ Stock จาก Request นี้",
+      cycle_count_proposal_id_mismatch:"รหัสผลนับใน Request ไม่ตรงกับรายการที่เปิดอยู่ · ระบบยังไม่เปลี่ยน Stock",
       cycle_count_proposal_not_pending:"ผลนับนี้ถูกตรวจไปแล้ว · ระบบจะตรวจ Request เดิมก่อน ห้ามกดซ้ำด้วย Request ใหม่",
       cycle_count_proposal_day_closed:"วันที่ของผลนับถูก Close Day แล้ว · ไม่อนุญาตให้ปรับ Stock ย้อนหลัง",
       cycle_count_proposal_expired:"ผลนับหมดอายุ · Server บันทึกสถานะหมดอายุแล้ว ระบบเก็บ Request เดิมไว้เพื่อยืนยัน ACK เดิม",
@@ -107,8 +108,8 @@ function StockView({session}:{session:Session}){
       "invalid_purchase_url","invalid_cost_status","confirmed_cost_required","invalid_purchase_payment_method","stock_shortage","day_closed","purchase_date_closed",
       "high_risk_confirmation_required","high_risk_reason_required"
     ]);
-    if(operation==="cycleCountProposalApprove")return new Set(["invalid_request_key","cycle_count_approval_confirmation_required","cycle_count_proposal_not_found","cycle_count_proposal_not_pending","cycle_count_proposal_day_closed","request_key_conflict","admin_required"]);
-    if(operation==="cycleCountProposalReject")return new Set(["invalid_request_key","cycle_count_reject_reason_required","cycle_count_proposal_not_found","cycle_count_proposal_not_pending","request_key_conflict","admin_required"]);
+    if(operation==="cycleCountProposalApprove")return new Set(["invalid_request_key","cycle_count_approval_confirmation_required","cycle_count_proposal_id_mismatch","cycle_count_proposal_not_found","cycle_count_proposal_not_pending","cycle_count_proposal_day_closed","request_key_conflict","admin_required"]);
+    if(operation==="cycleCountProposalReject")return new Set(["invalid_request_key","cycle_count_reject_reason_required","cycle_count_proposal_id_mismatch","cycle_count_proposal_not_found","cycle_count_proposal_not_pending","request_key_conflict","admin_required"]);
     return new Set(["invalid_cycle_count","cycle_count_requires_confirmation","day_closed"]);
   }
   function stockSuccessMessage(intent:StockWriteIntent,result:any,recovery:boolean){
