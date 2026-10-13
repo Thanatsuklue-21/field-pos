@@ -24,16 +24,26 @@ function getRequestKey(path:string,init:RequestInit){
 }
 
 async function fetchWithPolicy(path:string,init:RequestInit,method:string){
+  const headers=new Headers(init.headers);
+  if(!headers.has("Content-Type"))headers.set("Content-Type","application/json");
   const controller=method==="GET"&&!init.signal?new AbortController():null;
   const timer=controller?setTimeout(()=>controller.abort("field_get_timeout"),GET_TIMEOUT_MS):null;
   try{
-    return await fetch(path,{
+    const res=await fetch(path,{
       ...init,
-      headers:{"Content-Type":"application/json",...(init.headers||{})},
+      headers,
       credentials:"same-origin",
       cache:"no-store",
       signal:controller?.signal||init.signal,
     });
+    const data=await res.json().catch((cause)=>{
+      // Keep body consumption inside the GET timeout. A lost successful body is
+      // still an ambiguous write/read acknowledgement, not a successful empty object.
+      if(controller?.signal.aborted||init.signal?.aborted)throw cause;
+      if(res.ok)throw Object.assign(new Error("network_unavailable"),{status:0,cause,responseStatus:res.status});
+      return {};
+    });
+    return {res,data};
   }finally{
     if(timer)clearTimeout(timer);
   }
@@ -59,13 +69,7 @@ export async function getSessionCached(force=false){
 
 async function executeApi<T>(path:string,init:RequestInit,method:string){
   try{
-    const res=await fetchWithPolicy(path,init,method);
-    const data=await res.json().catch((cause)=>{
-      // A successful HTTP status is not an acknowledgement if its body was lost.
-      // Preserve status 0 so critical flows retain their existing recovery key.
-      if(res.ok)throw Object.assign(new Error("network_unavailable"),{status:0,cause,responseStatus:res.status});
-      return {};
-    });
+    const {res,data}=await fetchWithPolicy(path,init,method);
     if(res.ok&&(!data||typeof data!=="object"||(method!=="GET"&&(Array.isArray(data)||Object.keys(data).length===0))))throw Object.assign(new Error("network_unavailable"),{status:0,responseStatus:res.status});
     if(res.ok&&path==="/api/pos/checkout"&&method==="POST"){
       const complete=data.ok===true&&typeof data.orderId==="string"&&data.orderId.length>0&&typeof data.queueNo==="string"&&Array.isArray(data.saleIds)&&data.saleIds.length>0&&data.saleIds.every((id:unknown)=>typeof id==="string"&&id.length>0)&&[data.total,data.received,data.change].every((value:unknown)=>typeof value==="number"&&Number.isFinite(value)&&value>=0);
@@ -82,9 +86,12 @@ async function executeApi<T>(path:string,init:RequestInit,method:string){
     emit("online");
     return data as T;
   }catch(error:any){
+    // Caller cancellation is not an offline/network failure and must never
+    // fall back to stale cache for that canceled caller.
+    if(init.signal?.aborted)throw init.signal.reason??error;
     if(error?.status===undefined){
       if(method==="GET"&&SAFE_GET_CACHE.has(path)){
-        const cached=await cacheGet<T>(path);
+        const cached=await cacheGet<T>(path).catch(()=>null);
         if(cached){emit("cached");return cached}
       }
       emit("offline");
@@ -101,6 +108,8 @@ export async function api<T>(path:string,init:RequestInit={}){
   // Reads are safe to coalesce. Writes are never deduplicated or retried here:
   // transaction endpoints own their idempotency semantics server-side.
   if(method==="GET"){
+    // A caller-owned signal must only cancel that caller, never a shared GET.
+    if(init.signal)return executeApi<T>(path,init,method);
     const key=getRequestKey(path,init),existing=getInFlight.get(key);
     if(existing)return existing as Promise<T>;
     const request=executeApi<T>(path,init,method).finally(()=>getInFlight.delete(key));
