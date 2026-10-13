@@ -1,12 +1,13 @@
 import {offlineCashListStrict,type OfflineCashRecord} from "@/lib/offline-db";
 import {listExpenseIntents,type ExpenseIntent} from "@/lib/expense-recovery";
+import {listCriticalWriteIntents,type CriticalWriteIntent} from "@/lib/critical-write-recovery";
 
-export type CloseDayDeviceBlockerKind="offline_cash"|"cash_unknown"|"promptpay_unknown"|"expense_unknown"|"storage_unreadable";
+export type CloseDayDeviceBlockerKind="offline_cash"|"cash_unknown"|"promptpay_unknown"|"expense_unknown"|"critical_write_unknown"|"storage_unreadable";
 export type CloseDayDeviceBlocker={
   kind:CloseDayDeviceBlockerKind;
   title:string;
   detail:string;
-  route?:"/pos"|"/orders"|"/expenses";
+  route?:"/pos"|"/orders"|"/expenses"|"/close"|"/stock";
   date?:string;
   actorId?:string;
   count?:number;
@@ -48,6 +49,7 @@ export function buildCloseDayDevicePreflight(input:{
   cashPending:CashPending|null;
   promptPending:PromptPending|null;
   expenseIntents:ExpenseIntent[];
+  criticalIntents:CriticalWriteIntent[];
   checkedAt?:number;
 }):CloseDayDevicePreflight{
   const {actorId,businessDate}=input;
@@ -84,6 +86,24 @@ export function buildCloseDayDevicePreflight(input:{
       route:intent.actorId===actorId?"/expenses":undefined,date:businessDate,actorId:intent.actorId,count:1
     });
   }
+  const criticalMeta:Record<string,{title:string;route:"/close"|"/stock"}>={
+    cashMovement:{title:"มีรายการเงินสดเข้า/ออกที่ยังไม่ทราบผล",route:"/close"},
+    stockTransaction:{title:"มีรายการ Stock ที่ยังไม่ทราบผล",route:"/stock"},
+    cycleCountCommit:{title:"มีผลนับ Stock ของ Owner ที่ยังไม่ทราบผล",route:"/stock"},
+    cycleCountProposal:{title:"มีผลนับ Stock ที่ส่ง Owner แล้วแต่ยังไม่ทราบผล",route:"/stock"}
+  };
+  for(const intent of input.criticalIntents){
+    const meta=criticalMeta[intent.operation];
+    if(!meta)continue;
+    const intentDate=String(intent.body?.date||intent.body?.purchaseDate||"");
+    if(intent.operation==="cashMovement"&&intentDate&&intentDate!==businessDate)continue;
+    blockers.push({
+      kind:"critical_write_unknown",
+      title:intent.actorId===actorId?meta.title:"มี Critical Write ค้างจากผู้ใช้อื่นบนเครื่องนี้",
+      detail:(intent.actorId===actorId?"ผู้ใช้ปัจจุบัน":"ผู้ใช้ "+intent.actorId)+" · "+intent.operation+" · Request …"+String(intent.body.requestKey).slice(-8)+" · ห้ามสร้างรายการใหม่แทนจนกว่าจะยืนยันผลเดิม",
+      route:intent.actorId===actorId?meta.route:undefined,date:intentDate||businessDate,actorId:intent.actorId,count:1
+    });
+  }
   return {ok:blockers.length===0,checkedAt:input.checkedAt??Date.now(),businessDate,blockers};
 }
 
@@ -91,19 +111,21 @@ export async function readCloseDayDevicePreflight(actorId:string,businessDate:st
   storage?:DeviceStorage;
   listOffline?:()=>Promise<OfflineCashRecord[]>;
   listExpenses?:(storage?:any)=>ExpenseIntent[];
+  listCritical?:(storage?:any)=>CriticalWriteIntent[];
   now?:()=>number;
 }):Promise<CloseDayDevicePreflight>{
   try{
     const storage=deps?.storage||(localStorage as DeviceStorage);
     // Force a storage read before treating missing keys as an empty recovery state.
     storage.getItem("__field_close_day_probe__");
-    const [offlineRows,cashPending,promptPending,expenseIntents]=await Promise.all([
+    const [offlineRows,cashPending,promptPending,expenseIntents,criticalIntents]=await Promise.all([
       (deps?.listOffline||offlineCashListStrict)(),
       Promise.resolve(parseCashPending(storage.getItem(CASH_PENDING_KEY))),
       Promise.resolve(parsePromptPending(storage.getItem(PROMPT_PENDING_KEY))),
-      Promise.resolve((deps?.listExpenses||listExpenseIntents)(storage as any))
+      Promise.resolve((deps?.listExpenses||listExpenseIntents)(storage as any)),
+      Promise.resolve((deps?.listCritical||listCriticalWriteIntents)(storage as any))
     ]);
-    return buildCloseDayDevicePreflight({actorId,businessDate,offlineRows,cashPending,promptPending,expenseIntents,checkedAt:(deps?.now||Date.now)()});
+    return buildCloseDayDevicePreflight({actorId,businessDate,offlineRows,cashPending,promptPending,expenseIntents,criticalIntents,checkedAt:(deps?.now||Date.now)()});
   }catch{
     return {
       ok:false,checkedAt:(deps?.now||Date.now)(),businessDate,
