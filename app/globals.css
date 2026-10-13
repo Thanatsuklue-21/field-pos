@@ -199,3 +199,12 @@ html,body{overscroll-behavior:none}
 }
 
 .field-app-root :is(a,button,input,select,textarea):focus-visible{outline:3px solid #1F4D3A;outline-offset:3px}
+
+
+/* Operator-first rendering: keep long menu grids cheap without changing interaction semantics. */
+.pos-menu-card{content-visibility:auto;contain-intrinsic-size:190px}
+@media (max-width:767px){
+  .field-app-root input,
+  .field-app-root select,
+  .field-app-root textarea{font-size:16px}
+}
