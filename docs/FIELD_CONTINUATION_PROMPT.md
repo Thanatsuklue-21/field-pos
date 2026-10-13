@@ -1,5 +1,8 @@
 # Prompt ส่งต่อให้ FIELD
 
+> Current checkpoint (2026-10-13): exact main baseline ก่อนงาน shared-client/offline รอบนี้คือ `4844a0a34f5fc1e83744e30173b3db5965ad7c0b` หลัง PR #269. PR #255 ยัง stale/open จึงห้าม merge ทั้ง PR; port เฉพาะ GET timeout/cancellation/header safety และ IndexedDB write-failure acknowledgement ที่ main ยังขาด. PR #266 ยัง draft/open สำหรับ Purchase Edit/Cancel และต้อง rebase/re-audit ก่อนรวม.
+
+
 > Current checkpoint (2026-10-13): main baseline สำหรับรอบล่าสุดคือ `6e05d6a98edb017b77972e9962a427829e6d5671`. Close Day device preflight/TOCTOU, cash drawer, expense delete, stock critical writes และ VOID/refund durability ถูก merge บน main แล้วตาม PR หลัง #256. PR #266 ยัง draft/open สำหรับ Purchase Edit/Cancel. งาน P0 ที่รอบล่าสุดตรวจพบและกำลังแก้แยกคือ Cycle Count Proposal approve/reject durable recovery; ต้องตรวจสถานะ PR ล่าสุดก่อนทำซ้ำ.
 
 
