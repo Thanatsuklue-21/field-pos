@@ -1,4 +1,4 @@
-const PRIMARY=["/pos"];
+const PRIMARY=["/pos","/queue","/orders"];
 const PRIORITY=["/queue","/orders","/stock","/expenses","/close","/settings"];
 
 // Input is already permission-filtered; never invent destinations for an operator.

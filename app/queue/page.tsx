@@ -79,6 +79,7 @@ function QueueView({session}:{session:Session}){
   const [notice,setNotice]=useState("");
   const [toast,setToast]=useState("");
   const [pickupReviewId,setPickupReviewId]=useState("");
+  const [showQueueDetails,setShowQueueDetails]=useState(false);
   const busyRef=useRef(false);
   const queueRecoveryRef=useRef(false);
   const revisionRef=useRef<number|null>(null);
@@ -283,6 +284,7 @@ function QueueView({session}:{session:Session}){
   const first=orders.find(order=>!orderCalled(order));
   const firstReady=first?orderReady(first):false;
   const firstCalled=first?orderCalled(first):false;
+  useEffect(()=>{setShowQueueDetails(false)},[first?.id]);
   const firstCupCount=first?(first.items||[]).reduce((sum,item)=>sum+n(item.qty),0):0;
   const firstRemaining=first?(first.items||[]).reduce((sum,item)=>sum+Math.max(0,n(item.qty)-n(item.readyQty)),0):0;
   const categoryFlow=first?buildCategoryFlow(first):[];
@@ -329,9 +331,9 @@ function QueueView({session}:{session:Session}){
             <div className="mt-2 text-[10px] font-semibold text-[#765b08]">ลำดับ {first.queueNo}</div>
           </div>
           <div className="min-w-0">
-            <div className="flex flex-wrap items-center justify-between gap-2"><div><p className="text-[9px] font-bold tracking-[.18em] text-slate-400">บัตรผลิตปัจจุบัน</p><h2 className="mt-0.5 text-base font-black">{firstCupCount} แก้ว · เหลือทำ {firstRemaining}</h2></div>{activeCategory&&<span className="rounded-full bg-[#fff8dc] px-2.5 py-1 text-[10px] font-bold text-[#765b08]">หมวด {activeCategoryIndex+1}/{categoryFlow.length} · {activeCategory.label}</span>}</div>
+            <div className="flex flex-wrap items-center justify-between gap-2"><div><p className="text-[9px] font-bold tracking-[.18em] text-slate-400">บัตรผลิตปัจจุบัน</p><h2 className="mt-0.5 text-base font-black">{firstCupCount} แก้ว · เหลือทำ {firstRemaining}</h2></div><button type="button" aria-expanded={showQueueDetails} onClick={()=>setShowQueueDetails(v=>!v)} className="min-h-11 rounded-xl border border-slate-200 bg-white px-3 text-[10px] font-bold text-slate-600">{showQueueDetails?"ซ่อนรายละเอียด":"ดูรายละเอียดบัตร"}</button></div>
 
-            <div className="mt-3">
+            {showQueueDetails&&<div className="mt-3">
               <p className="text-[10px] font-bold tracking-[.14em] text-slate-500">รายการรวมในบัตรนี้</p>
               <div className="mt-2 grid gap-1.5 sm:grid-cols-2">{first.items.map((item,index)=>{
                 const done=itemDone(item),current=index===task?.index;
@@ -339,11 +341,11 @@ function QueueView({session}:{session:Session}){
                   <div className="flex items-center justify-between gap-2"><div className="min-w-0"><b className="block truncate text-[12px]">{item.name}</b><span className="text-[10px] text-slate-500">{item.variant&&item.variant!=="Standard"?item.variant+" · ":""}×{item.qty}</span></div><span className={"shrink-0 rounded-full px-2 py-1 text-[9px] font-bold "+(current?"bg-[#d4af37] text-black":done?"bg-emerald-100 text-emerald-700":"bg-white text-slate-500")}>{current?"ทำตอนนี้":done?"ครบแล้ว":"รอ"}</span></div>
                 </div>;
               })}</div>
-            </div>
+            </div>}
           </div>
         </div>
 
-        {categoryFlow.length>0&&<div className="mt-3 border-t border-slate-200 pt-3">
+        {showQueueDetails&&categoryFlow.length>0&&<div className="mt-3 border-t border-slate-200 pt-3">
           <div className="flex items-center justify-between gap-2"><div><p className="text-[10px] font-bold tracking-[.14em] text-slate-500">สรุปตามหมวดเมนู</p><p className="mt-0.5 text-[10px] text-slate-400">รวมเมนูชื่อเดียวกันและ Variant เดียวกัน พร้อมจำนวนในบัตรนี้</p></div><span className="text-[10px] font-semibold text-slate-500">{categoryFlow.length} หมวด</span></div>
           <div className="mt-2 space-y-2">{categoryFlow.map((category,categoryIndex)=>{const called=category.calledQty>=category.qty&&category.qty>0,ready=category.pendingQty<=0;return <div key={category.id} className={"rounded-2xl border p-2.5 "+(called?"border-sky-200 bg-sky-50":category.id===activeCategoryId?"border-[#d4af37] bg-[#fffaf0]":ready?"border-emerald-200 bg-emerald-50":"border-slate-200 bg-slate-50")}>
             <div className="flex items-center justify-between gap-2"><b className="text-[11px]">{categoryIndex+1}. {category.label} · {category.qty} แก้ว</b><span className={"text-[9px] font-bold "+(called?"text-sky-700":ready?"text-emerald-700":"text-slate-500")}>{called?"เรียกแล้ว ✓":ready?"ครบแล้ว":"เหลือ "+category.pendingQty}</span></div>

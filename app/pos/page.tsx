@@ -91,6 +91,7 @@ function PosView({session}:{session:Session}){
   const [busy,setBusy]=useState(false);
   const [result,setResult]=useState("");
   const [notice,setNotice]=useState("");
+  const [cartToast,setCartToast]=useState("");
   const [cashRecoveryReview,setCashRecoveryReview]=useState<CashRecoveryReview|null>(null);
   const [recoveryIntegrityIssue,setRecoveryIntegrityIssue]=useState<RecoveryIntegrityIssue|null>(null);
   const [lastSale,setLastSale]=useState<LastSale|null>(null);
@@ -117,7 +118,8 @@ function PosView({session}:{session:Session}){
   const cart=useCartStore();
   const heldBills=useHeldCartStore();
 
-  useEffect(()=>{router.prefetch("/queue")},[router]);
+  useEffect(()=>{router.prefetch("/queue");router.prefetch("/orders")},[router]);
+  useEffect(()=>{if(!cartToast)return;const timer=window.setTimeout(()=>setCartToast(""),1400);return()=>window.clearTimeout(timer)},[cartToast]);
   useEffect(()=>{window.dispatchEvent(new CustomEvent("field:transaction-busy",{detail:{busy:busy||payOpen,source:"pos"}}));return()=>{window.dispatchEvent(new CustomEvent("field:transaction-busy",{detail:{busy:false,source:"pos"}}));}},[busy,payOpen]);
 
   const acceptBootstrap=(next:Bootstrap|RevisionUnchanged)=>{
@@ -489,7 +491,7 @@ function PosView({session}:{session:Session}){
   function addVariant(product:MenuItem,variant:MenuItem["variants"][number]){
     const remaining=additionalServingsAvailable({cart:cart.items,menu:data?.menu||[],stock:data?.availabilityStock||{},menuId:product.id,variantLabel:variant.label});
     if(!variant.available||remaining<1){setNotice("วัตถุดิบเพียงพออีก 0 แก้วเท่านั้น"+(variant.missingIngredients?.length?" · ขาด: "+variant.missingIngredients.map(x=>x.name).join(", "):""));return}
-    cart.addItem({id:product.id,name:product.name,variant:variant.label,price:product.price});setSelected(null);
+    cart.addItem({id:product.id,name:product.name,variant:variant.label,price:product.price});setSelected(null);setCartToast("เพิ่ม "+product.name+" · "+orderOptionLabel(variant.label));try{navigator.vibrate?.(20)}catch{}
   }
 
   function updateCartQuantity(key:string,nextQty:number){
@@ -1006,7 +1008,7 @@ function PosView({session}:{session:Session}){
         <div className="flex items-center gap-1.5 sm:gap-2">
           {(!online||offlineStats.total>0)&&<div className={"hidden rounded-full border px-2.5 py-1.5 text-[10px] font-bold sm:block sm:text-xs "+(!online?"border-amber-300 bg-amber-50 text-amber-800":offlineStats.needsReview>0?"border-red-300 bg-red-50 text-red-700":"border-emerald-300 bg-emerald-50 text-emerald-700")}>{!online?"ออฟไลน์ · เงินสดเท่านั้น":offlineStats.needsReview>0?"ออฟไลน์ ต้องตรวจ "+offlineStats.needsReview:"ออฟไลน์ รอซิงก์ "+offlineStats.pending}</div>}
           <button disabled={busy||payOpen} onClick={()=>{setOpsInitialTab(undefined);setOpsOpen(true)}} className="flex min-h-11 items-center gap-1.5 rounded-full border border-[#d4af37]/50 bg-[#fff8dc] px-2.5 text-[11px] font-bold text-[#6f5510] disabled:opacity-40 sm:px-3 sm:text-xs"><ClipboardList size={14}/>งานร้าน</button>
-          <button onClick={()=>setHeldOpen(true)} className="relative flex min-h-11 items-center gap-1.5 rounded-full border border-slate-300 bg-white px-2.5 text-[11px] font-semibold text-slate-700 sm:px-3 sm:text-xs"><Clock3 size={14}/>พักบิล{heldBills.held.length>0&&<span className="grid h-5 min-w-5 place-items-center rounded-full bg-[#d4af37] px-1 text-[10px] font-black text-black">{heldBills.held.length}</span>}</button>
+          {heldBills.held.length>0&&<button onClick={()=>setHeldOpen(true)} className="relative flex min-h-11 items-center gap-1.5 rounded-full border border-slate-300 bg-white px-2.5 text-[11px] font-semibold text-slate-700 sm:px-3 sm:text-xs"><Clock3 size={14}/>บิลพัก <span className="grid h-5 min-w-5 place-items-center rounded-full bg-[#d4af37] px-1 text-[10px] font-black text-black">{heldBills.held.length}</span></button>}
           <div className="hidden rounded-full border border-slate-300 bg-white px-3 py-1.5 text-[11px] text-slate-600 sm:block sm:px-4 sm:py-2 sm:text-xs">{session.user.username}</div>
         </div>
       </div>
@@ -1070,17 +1072,18 @@ function PosView({session}:{session:Session}){
 
       <div className="soft-scroll mb-3 flex gap-1.5 overflow-x-auto sm:mb-4 sm:gap-2">{cats.map(x=><button key={x} onClick={()=>setCat(x)} className={"shrink-0 rounded-full border px-3 py-1.5 text-[11px] font-semibold sm:px-4 sm:py-2 sm:text-xs "+(cat===x?"border-[#c59b19] bg-[#d4af37] text-black shadow-sm":"border-slate-300 bg-white text-slate-700")}>{x}</button>)}</div>
 
-      <div className="soft-scroll min-h-0 flex-1 overflow-auto pb-28 lg:pb-0">
+      <div className={"soft-scroll min-h-0 flex-1 overflow-auto lg:pb-0 "+(cart.items.length?"pb-28":"pb-4")}>
         {menu.length===0&&<div className="grid min-h-[240px] place-items-center rounded-[24px] border border-dashed border-slate-300 bg-white/70 p-6 text-center"><div><Search size={28} className="mx-auto text-slate-300"/><b className="mt-3 block text-base">{q.trim()||cat!=="ทั้งหมด"?"ไม่พบเมนูตามที่ค้นหา":"ยังไม่มีเมนูพร้อมขาย"}</b><p className="mt-1 text-xs text-slate-500">{q.trim()||cat!=="ทั้งหมด"?"ล้างคำค้นหาหรือกลับไปดูทุกหมวด":"ตรวจสถานะเมนู สูตร และ Stock ก่อนรับออเดอร์"}</p>{(q.trim()||cat!=="ทั้งหมด")&&<button type="button" onClick={()=>{setQ("");setCat("ทั้งหมด")}} className="mt-4 min-h-11 rounded-xl bg-slate-900 px-4 text-xs font-bold text-white">ดูเมนูทั้งหมด</button>}</div></div>}
         <div className="grid grid-cols-2 items-stretch gap-2 sm:gap-3 lg:grid-cols-3 2xl:grid-cols-4">{menu.map(x=><button key={x.id} disabled={!x.available||salesClosed} onClick={()=>selectMenu(x)} className="pos-menu-card glass group flex min-h-[154px] flex-col overflow-hidden rounded-[20px] text-left sm:min-h-[190px] sm:rounded-[24px] hover:border-[#c59b19] disabled:border-slate-200 disabled:bg-slate-100 disabled:opacity-65"><div className="relative h-20 shrink-0 bg-[#f4ecd0] sm:h-24">{x.image?<img src={x.image} alt={x.name} loading="lazy" decoding="async" fetchPriority="low" className="h-full w-full object-cover"/>:<div className="grid h-full place-items-center text-2xl font-bold text-[#765b08]">{x.name.slice(0,1)}</div>}<div className="absolute right-2 top-2">{!x.available?<span className="rounded-full bg-red-100 px-2 py-1 text-[10px] font-bold text-red-700">หมดชั่วคราว</span>:x.lowStock?<span className="rounded-full bg-amber-100 px-2 py-1 text-[10px] font-bold text-amber-800">เหลือประมาณ {x.maxServings} แก้ว</span>:null}</div></div><div className="flex flex-1 flex-col p-3 sm:p-4"><div className="text-[9px] uppercase tracking-widest text-slate-500 sm:text-[10px]">{x.category||"DRINK"}</div><b className="mt-1 block line-clamp-2 text-sm sm:text-base">{x.name}</b><div className="mt-auto pt-2 text-base font-semibold text-[#765b08] sm:pt-3 sm:text-lg">฿{formatMoney(x.price)}</div>{!x.available&&<small className="mt-2 block text-xs text-red-600">{Array.from(new Set(x.variants.flatMap(v=>v.missingIngredients||[]).map(i=>i.name))).slice(0,2).join(", ")||"สูตรยังไม่พร้อม"}</small>}</div></button>)}</div>
       </div>
     </div>
 
-    <div className="fixed bottom-[70px] left-2 right-2 z-30 flex items-center justify-between gap-2 rounded-[18px] border border-slate-300 bg-white/95 p-1.5 pl-3 shadow-lg backdrop-blur sm:bottom-[78px] sm:left-4 sm:right-4 sm:rounded-[22px] sm:p-2 sm:pl-5 lg:hidden">
+    {cartToast&&<div role="status" aria-live="polite" className="pointer-events-none fixed bottom-[142px] left-1/2 z-[72] -translate-x-1/2 rounded-full border border-emerald-300 bg-emerald-50/95 px-4 py-2 text-xs font-bold text-emerald-800 shadow-lg backdrop-blur lg:bottom-5">✓ {cartToast}</div>}
+    {cart.items.length>0&&<div className="fixed bottom-[70px] left-2 right-2 z-30 flex items-center justify-between gap-2 rounded-[18px] border border-slate-300 bg-white/95 p-1.5 pl-3 shadow-lg backdrop-blur sm:bottom-[78px] sm:left-4 sm:right-4 sm:rounded-[22px] sm:p-2 sm:pl-5 lg:hidden">
       <div className="min-w-0 flex-1"><small className="block text-[10px] tracking-widest text-slate-500">{cart.items.reduce((s,i)=>s+i.qty,0)} แก้ว</small><b className="text-lg text-[#765b08]">฿{formatMoney(cart.getTotal())}</b></div>
-      <button disabled={!cart.items.length} onClick={holdCurrentBill} className="min-h-11 shrink-0 rounded-2xl border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 disabled:opacity-30"><Clock3 size={14} className="mx-auto mb-0.5"/>พักบิล</button>
-      <button disabled={!cart.items.length||salesClosed} onClick={openPayment} className="min-h-11 shrink-0 rounded-2xl bg-[#d4af37] px-4 py-2.5 text-sm font-bold text-black disabled:opacity-30 sm:px-5 sm:py-3">ตรวจรายการ / ชำระเงิน</button>
-    </div>
+      <button onClick={holdCurrentBill} className="min-h-11 shrink-0 rounded-2xl border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700"><Clock3 size={14} className="mx-auto mb-0.5"/>พักบิล</button>
+      <button disabled={salesClosed} onClick={openPayment} className="min-h-11 shrink-0 rounded-2xl bg-[#d4af37] px-4 py-2.5 text-sm font-bold text-black disabled:opacity-30 sm:px-5 sm:py-3">ตรวจรายการ / ชำระเงิน</button>
+    </div>}
 
     <aside className="glass m-3 ml-0 hidden w-[360px] shrink-0 flex-col rounded-[24px] p-5 lg:flex">
       <div className="mb-4 flex items-center justify-between"><div><p className="m-0 text-[10px] tracking-[.25em] text-slate-500">รายการที่กำลังขาย</p><h2 className="m-0 mt-1 text-lg">ออเดอร์ปัจจุบัน</h2></div><span className="rounded-full border border-slate-200 bg-slate-100 px-3 py-1 text-xs">{cart.items.reduce((s,i)=>s+i.qty,0)} แก้ว</span></div>

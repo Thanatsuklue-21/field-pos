@@ -219,7 +219,7 @@ test('PWA runtime synchronizes modal height to the visual viewport for software 
 
 test('mobile operational pages use compact density while preserving touch actions',async()=>{
   const shell=await read('components/app-shell.tsx'),pos=await read('app/pos/page.tsx'),queue=await read('app/queue/page.tsx'),stock=await read('app/stock/page.tsx'),orders=await read('app/orders/page.tsx');
-  assert.match(shell,/const primaryMobile=\["\/pos"\]/);
+  assert.match(shell,/const primaryMobile=\["\/pos","\/queue","\/orders"\]/);
   assert.match(shell,/MoreHorizontal/);
   assert.doesNotMatch(shell,/overflow-x-auto rounded-\[20px\] p-1 md:hidden/);
   assert.match(pos,/min-h-\[154px\]/);
@@ -603,4 +603,30 @@ test('cash checkout exposes bill-aware tender shortcuts without bypassing confir
   assert.match(pos,/รับพอดี ฿\{formatMoney\(netPayable\)\}/);
   assert.match(pos,/onClick=\{checkout\}/);
   assert.doesNotMatch(pos,/setReceived\(String\(amount\)\).*checkout\(/s);
+});
+
+test('novice operator UX exposes routine mobile destinations without opening More',async()=>{
+  const shell=await read('components/app-shell.tsx'),mobile=await read('lib/mobile-navigation.ts');
+  assert.match(shell,/const primaryMobile=\["\/pos","\/queue","\/orders"\]/);
+  assert.match(mobile,/const PRIMARY=\["\/pos","\/queue","\/orders"\]/);
+});
+
+test('POS gives immediate non-blocking feedback and hides empty mobile cart chrome',async()=>{
+  const pos=await read('app/pos/page.tsx');
+  assert.match(pos,/const \[cartToast,setCartToast\]=useState\(""\)/);
+  assert.match(pos,/setCartToast\("เพิ่ม "\+product\.name/);
+  assert.match(pos,/navigator\.vibrate\?\.\(20\)/);
+  assert.match(pos,/cart\.items\.length>0&&<div className="fixed bottom-\[70px\]/);
+  assert.match(pos,/heldBills\.held\.length>0&&<button/);
+  assert.match(pos,/router\.prefetch\("\/orders"\)/);
+});
+
+test('queue keeps novice focus on the primary action and progressively reveals detail',async()=>{
+  const queue=await read('app/queue/page.tsx');
+  assert.match(queue,/const \[showQueueDetails,setShowQueueDetails\]=useState\(false\)/);
+  assert.match(queue,/aria-expanded=\{showQueueDetails\}/);
+  assert.match(queue,/ดูรายละเอียดบัตร/);
+  assert.match(queue,/ซ่อนรายละเอียด/);
+  assert.match(queue,/showQueueDetails&&categoryFlow\.length>0/);
+  assert.match(queue,/showQueueDetails&&<div className="mt-3"/);
 });

@@ -13,7 +13,7 @@ import {mobileOverflow} from "@/lib/mobile-navigation";
 import {splitNavigation} from "@/lib/navigation-groups";
 
 const items=[["/dashboard","dashboard",LayoutDashboard,"report"],["/pos","pos",ShoppingBag,"order"],["/queue","queue",ListOrdered,"queue"],["/products","products",Package2,"admin"],["/stock","stock",Boxes,"stock"],["/costs","costs",Calculator,"admin"],["/expenses","expenses",ReceiptText,"report"],["/customers","customers",Users,"admin"],["/recipes","recipes",BookOpenCheck,"admin"],["/close","close",CalendarCheck2,"report"],["/orders","orders",ClipboardList,"order"],["/reports","reports",BarChart3,"report"],["/backup","backup",DatabaseBackup,"admin"],["/users","users",UserCog,"admin"],["/audit","audit",ScrollText,"admin"],["/settings","settings",Settings,"any"]] as const;
-const primaryMobile=["/pos"];
+const primaryMobile=["/pos","/queue","/orders"];
 
 export default function AppShell({children}:{children:React.ReactNode}){
   const path=usePathname(),lang=useAppStore(s=>s.language),t=dict[lang],[session,setSession]=useState<Session|null>(null),[moreOpen,setMoreOpen]=useState(false),[manageOpen,setManageOpen]=useState(false);
