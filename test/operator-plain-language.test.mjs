@@ -29,7 +29,15 @@ test("critical operator recovery copy explains the action without engineering ja
     "Server ยังไม่ยืนยัน VOID/Refund",
     "ยังไม่ดึงคิวจาก Server",
     "Server บังคับ FIFO",
-    "รายการจาก Server ที่อาจไม่อัปเดต"
+    "รายการจาก Server ที่อาจไม่อัปเดต",
+    "รอ Beam อนุมัติ / ตั้งค่า API และ Webhook",
+    "ระบบกำลังรอ Beam Merchant/API/Webhook",
+    "บัญชีมี Critical mismatch",
+    "ไม่พบคิวหรือ payment blocker",
+    "รายการ Blocked/Stale",
+    "รอ Retry",
+    "แจ้ง Admin ให้กด Retry",
+    "บันทึก WASTE"
   ]) assert.equal(combined.includes(oldCopy),false,oldCopy);
 
   assert.match(pos,/ข้อมูลติดตามรายการชำระก่อนหน้าในเครื่องมีปัญหา/);
@@ -40,6 +48,11 @@ test("critical operator recovery copy explains the action without engineering ja
   assert.match(queueClient,/เก็บข้อมูลเดิมไว้เพื่อป้องกันตัดสต็อกหรือเปลี่ยนคิวซ้ำ/);
   assert.match(hub,/ระบบไม่อนุญาตให้ข้ามคิว/);
   assert.match(shell,/ข้อมูลคิวหรือรายการเก่าที่ยังไม่อัปเดต/);
+  assert.match(pos,/QR พร้อมเพย์ยังไม่พร้อมรับเงินจริง/);
+  assert.match(hub,/ยอดบัญชีไม่ตรง · ระบบหยุดปิดวันอัตโนมัติ/);
+  assert.match(hub,/LINE แจ้งบาร์/);
+  assert.match(hub,/รอลองส่งใหม่/);
+  assert.match(hub,/บันทึกชงเสีย/);
 });
 
 test("plain-language copy keeps the safety instruction explicit",async()=>{
