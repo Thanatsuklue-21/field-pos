@@ -8,9 +8,10 @@ import {getOfflineCashSummary,type OfflineCashSummary} from "@/lib/offline-sales
 import {CASH_MOVEMENT_PENDING_KEY,shouldRetainCashMovementPending,validateCashMovementAck,validatePendingCashMovement} from "@/lib/cash-movement-recovery.mjs";
 import {CLOSE_DAY_PENDING_KEY,shouldRetainCloseDayPending,validateCloseDayAck,validatePendingCloseDay} from "@/lib/close-day-recovery.mjs";
 import {findCloseDayLocalRecoveryBlockers} from "@/lib/close-day-local-recovery.mjs";
+import {cashShiftOpenErrorText,readPendingCashShiftOpen,sendCashShiftOpenDurably,type PendingCashShiftOpen} from "@/lib/cash-shift-client";
 
 type Close={id:string;requestKey?:string|null;date:string;revenue:number;cogs:number;expenses:number;purchaseSpend?:number;totalCashOut?:number;grossProfit:number;operatingProfit:number;deliveryFees?:number;cash:number;promptpay:number;bank?:number;card?:number;other:number;openingCash?:number;cashIn?:number;cashPaidOut?:number;cashOut?:number;expectedCash?:number;countedCash?:number;cashVariance?:number;orders:number;cups:number;time:number};
-type Shift={id:string;date:string;status:"open"|"closed";openingCash:number;openedAt:number;openedBy:string;closedAt?:number;cashVariance?:number};
+type Shift={id:string;requestKey?:string;date:string;status:"open"|"closed";openingCash:number;openedAt:number;openedBy:string;closedAt?:number;cashVariance?:number};
 type Movement={id:string;requestKey?:string;shiftId:string;date:string;type:"CASH_IN"|"CASH_OUT";amount:number;reason:string;time:number;createdBy:string};
 type CashMovementBody={requestKey:string;type:"CASH_IN"|"CASH_OUT";amount:number;reason:string};
 type PendingCashMovement={body:CashMovementBody;createdAt:number};
@@ -55,6 +56,7 @@ export default function CloseDay(){return <AuthGate>{s=><View session={s}/>}</Au
 function View({session}:{session:Session}){
   const router=useRouter();
   const [rows,setRows]=useState<Close[]>([]),[shift,setShift]=useState<Shift|null>(null),[businessDate,setBusinessDate]=useState(""),[movements,setMovements]=useState<Movement[]>([]),[paymentBlockers,setPaymentBlockers]=useState<PaymentBlocker[]>([]),[orderBlockers,setOrderBlockers]=useState<OrderBlocker[]>([]),[offlineOutbox,setOfflineOutbox]=useState<OfflineCashSummary|null>(null),[offlineOutboxError,setOfflineOutboxError]=useState(false),[localRecoveryBlockers,setLocalRecoveryBlockers]=useState<LocalRecoveryBlocker[]>([]),[localRecoveryError,setLocalRecoveryError]=useState(false),[msg,setMsg]=useState(""),[busy,setBusy]=useState(false),[openingCash,setOpeningCash]=useState("0"),[countedCash,setCountedCash]=useState(""),[movementType,setMovementType]=useState<"CASH_IN"|"CASH_OUT">("CASH_OUT"),[movementAmount,setMovementAmount]=useState(""),[movementReason,setMovementReason]=useState("");
+  const openShiftRecoveryRef=useRef(false);
   const movementRecoveryRef=useRef(false);
   const closeRecoveryRef=useRef(false);
   const load=()=>api<CloseData>("/api/close-day").then(x=>{setRows(x.closes||[]);setShift(x.shift||null);setBusinessDate(x.businessDate||"");setMovements(x.cashMovements||[]);setPaymentBlockers(Array.isArray(x.paymentBlockers)?x.paymentBlockers:[]);setOrderBlockers(Array.isArray(x.orderBlockers)?x.orderBlockers:[]) });
@@ -145,6 +147,39 @@ function View({session}:{session:Session}){
   useEffect(()=>{
     let disposed=false;
     const recover=async()=>{
+      if(disposed||openShiftRecoveryRef.current||session.offline||session.user.role!=="admin")return;
+      let pending:PendingCashShiftOpen|null=null;
+      try{pending=readPendingCashShiftOpen()}catch(e:any){if(!disposed)setMsg(cashShiftOpenErrorText(e.message));return}
+      if(!pending)return;
+      openShiftRecoveryRef.current=true;setBusy(true);setMsg("");
+      try{
+        const r=await sendCashShiftOpenDurably(session.csrf,pending.body);
+        if(!disposed){
+          setShift(r.shift);
+          setMsg("ตรวจสอบการเปิดร้านก่อนหน้าสำเร็จ · เงินตั้งต้น ฿"+formatMoney(Number(r.shift.openingCash))+" ถูกล็อกแล้ว");
+          await load().catch(()=>{});
+        }
+      }catch(e:any){
+        if(!disposed){
+          setMsg(cashShiftOpenErrorText(e.message));
+          await load().catch(()=>{});
+        }
+      }finally{
+        openShiftRecoveryRef.current=false;
+        if(!disposed){setBusy(false);refreshLocalRecoveryBlockers().catch(()=>{})}
+      }
+    };
+    const onOnline=()=>recover(),onFocus=()=>recover(),onVisible=()=>{if(document.visibilityState==="visible")recover()};
+    recover().catch(()=>{});
+    window.addEventListener("online",onOnline);
+    window.addEventListener("focus",onFocus);
+    document.addEventListener("visibilitychange",onVisible);
+    return()=>{disposed=true;window.removeEventListener("online",onOnline);window.removeEventListener("focus",onFocus);document.removeEventListener("visibilitychange",onVisible)};
+  },[session.csrf,session.offline,session.user.role]);
+
+  useEffect(()=>{
+    let disposed=false;
+    const recover=async()=>{
       if(disposed||movementRecoveryRef.current||session.offline)return;
       let pending:PendingCashMovement|null=null;
       try{pending=cashMovementPendingRead()}catch(e:any){if(!disposed)setMsg(movementError(e.message));return}
@@ -214,9 +249,12 @@ function View({session}:{session:Session}){
     if(!Number.isFinite(opening)||opening<0){setMsg("เงินตั้งต้นต้องไม่ติดลบ");return}
     if(!window.confirm("ยืนยันเปิดร้านด้วยเงินตั้งต้น ฿"+formatMoney(opening)+" ? หลังเปิดแล้วจำนวนนี้จะถูกล็อกสำหรับการกระทบยอดวันนี้"))return;
     setBusy(true);setMsg("");
-    try{const r=await api<any>("/api/cash-shift/open",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({openingCash:opening})});setShift(r.shift);setMsg("เปิดร้านแล้ว · เงินตั้งต้น ฿"+formatMoney(Number(r.shift.openingCash))+" ถูกล็อกแล้ว");await load()}
-    catch(e:any){setMsg(e.message==="cash_shift_already_opened"?"วันนี้เปิดร้านไปแล้ว กรุณารีเฟรช":e.message==="day_already_closed"?"วันนี้ถูกปิดวันแล้ว":e.message==="invalid_opening_cash"?"เงินตั้งต้นต้องเป็นจำนวนไม่ติดลบและไม่เกิน 2 ตำแหน่งทศนิยม":e.message)}
-    finally{setBusy(false)}
+    const body={requestKey:crypto.randomUUID(),openingCash:opening};
+    try{
+      const r=await sendCashShiftOpenDurably(session.csrf,body);
+      setShift(r.shift);setMsg("เปิดร้านแล้ว · เงินตั้งต้น ฿"+formatMoney(Number(r.shift.openingCash))+" ถูกล็อกแล้ว");await load();
+    }catch(e:any){setMsg(cashShiftOpenErrorText(e.message))}
+    finally{setBusy(false);refreshLocalRecoveryBlockers().catch(()=>{})}
   }
 
   async function addMovement(){

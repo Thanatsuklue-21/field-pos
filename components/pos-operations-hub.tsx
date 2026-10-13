@@ -9,6 +9,7 @@ import {shouldRetainExpensePending} from "@/lib/expense-recovery.mjs";
 import {currentBusinessDate,expenseErrorText,readPendingExpense,sendExpenseDurably,type ExpenseBody,type PendingExpense} from "@/lib/expense-client";
 import {queueActionErrorText,readPendingQueueAction,sendQueueActionDurably,type QueueActionBody,type PendingQueueAction} from "@/lib/queue-client";
 import {shouldRetainQueuePending} from "@/lib/queue-action-recovery.mjs";
+import {cashShiftOpenErrorText,readPendingCashShiftOpen,sendCashShiftOpenDurably,type PendingCashShiftOpen} from "@/lib/cash-shift-client";
 
 export type HubTab="today"|"queue"|"orders"|"stock"|"expenses";
 type QueueRecipeUse={id:string;name:string;perCup:number;unit:string};
@@ -58,10 +59,13 @@ export default function PosOperationsHub({session,bootstrap,open,onClose,onRefre
   const [queueBusy,setQueueBusy]=useState(false);
   const [kitchenBusy,setKitchenBusy]=useState(false);
   const [kitchenRetryBusy,setKitchenRetryBusy]=useState(false);
+  const [startDayBusy,setStartDayBusy]=useState(false);
+  const [openingCash,setOpeningCash]=useState("0");
   const [expenseAmount,setExpenseAmount]=useState("");
   const [expenseCategory,setExpenseCategory]=useState("OTHER");
   const [expenseDescription,setExpenseDescription]=useState("");
   const [expensePayment,setExpensePayment]=useState("cash");
+  const startDayRecoveryRef=useRef(false);
   const expenseRecoveryRef=useRef(false);
   const queueRecoveryRef=useRef(false);
   const activeTabRef=useRef<HubTab>(tab);
@@ -140,6 +144,39 @@ export default function PosOperationsHub({session,bootstrap,open,onClose,onRefre
       });
       if(settled.some(x=>x.status==="rejected"))setMessage("บางข้อมูลยังโหลดไม่ได้ · หน้าขายยังใช้งานต่อได้ตามปกติ");
     }finally{if(!quiet)setLoading(false)}
+  }
+
+  async function recoverStartDay(){
+    if(!canReadiness||!cloudAvailable||startDayRecoveryRef.current)return;
+    let pending:PendingCashShiftOpen|null=null;
+    try{pending=readPendingCashShiftOpen()}catch(e:any){setMessage(cashShiftOpenErrorText(e.message));return}
+    if(!pending)return;
+    startDayRecoveryRef.current=true;setStartDayBusy(true);
+    try{
+      const result=await sendCashShiftOpenDurably(session.csrf,pending.body);
+      setMessage("ตรวจสอบการเปิดร้านก่อนหน้าสำเร็จ · เงินตั้งต้น ฿"+formatMoney(Number(result.shift?.openingCash))+" ถูกล็อกแล้ว");
+      await refresh("today",true);
+    }catch(e:any){
+      setMessage(cashShiftOpenErrorText(e.message));
+      await refresh("today",true).catch(()=>{});
+    }finally{startDayRecoveryRef.current=false;setStartDayBusy(false)}
+  }
+
+  async function openStartDay(){
+    if(!canReadiness||!cloudAvailable||startDayBusy)return;
+    try{
+      if(readPendingCashShiftOpen()){await recoverStartDay();return}
+    }catch(e:any){setMessage(cashShiftOpenErrorText(e.message));return}
+    const opening=Number(openingCash);
+    if(!Number.isFinite(opening)||opening<0||Math.abs(opening*100-Math.round(opening*100))>1e-7){setMessage("เงินตั้งต้นต้องไม่ติดลบและไม่เกิน 2 ตำแหน่งทศนิยม");return}
+    if(!window.confirm("ยืนยันเปิดร้านด้วยเงินตั้งต้น ฿"+formatMoney(opening)+" ? หลังยืนยันจำนวนนี้จะถูกล็อกสำหรับการกระทบยอดวันนี้"))return;
+    setStartDayBusy(true);setMessage("");
+    try{
+      const result=await sendCashShiftOpenDurably(session.csrf,{requestKey:crypto.randomUUID(),openingCash:opening});
+      setMessage("เปิดร้านแล้ว · เงินตั้งต้น ฿"+formatMoney(Number(result.shift?.openingCash))+" ถูกล็อกแล้ว");
+      await refresh("today",true);
+    }catch(e:any){setMessage(cashShiftOpenErrorText(e.message))}
+    finally{setStartDayBusy(false)}
   }
 
   async function recoverExpense(){
@@ -250,6 +287,7 @@ export default function PosOperationsHub({session,bootstrap,open,onClose,onRefre
     if(!open)return;
     const sync=(quiet=true)=>{
       refresh("all",quiet).catch(()=>setMessage("โหลดข้อมูลร้านไม่สำเร็จ · หน้าขายยังใช้งานต่อได้"));
+      recoverStartDay().catch(()=>{});
       recoverExpense().catch(()=>{});
       recoverQueueAction().catch(()=>{});
     };
@@ -368,6 +406,14 @@ export default function PosOperationsHub({session,bootstrap,open,onClose,onRefre
 
       <div role="tabpanel" id={"field-operations-panel-"+tab} aria-labelledby={"field-operations-tab-"+tab} className="soft-scroll min-h-0 flex-1 overflow-auto p-3 sm:p-4">
         {tab==="today"&&canReport&&<div className="space-y-3">
+          {canReadiness&&(!closeStatus?.shift||closeStatus.shift.status==="open")&&<div className={"rounded-2xl border p-4 "+(closeStatus?.shift?.status==="open"?"border-emerald-200 bg-emerald-50":"border-[#d4af37]/50 bg-[#fff8dc]")}>
+            {closeStatus?.shift?.status==="open"?<div className="flex items-start justify-between gap-3"><div><b>ร้านเปิดแล้ว</b><p className="mt-1 text-xs text-slate-600">เงินตั้งต้น ฿{formatMoney(Number(closeStatus.shift.openingCash)||0)} ถูกล็อกสำหรับการกระทบยอดวันนี้</p></div><span className="rounded-full bg-emerald-200 px-2 py-1 text-[10px] font-black text-emerald-900">พร้อมขาย</span></div>:<>
+              <div><b>เริ่มงานวันนี้</b><p className="mt-1 text-xs text-slate-600">ใส่เงินสดตั้งต้นในลิ้นชักครั้งเดียวก่อนเริ่มขาย</p></div>
+              <div className="mt-3 grid grid-cols-[1fr_auto] gap-2"><input inputMode="decimal" aria-label="เงินสดตั้งต้น" value={openingCash} onChange={e=>setOpeningCash(e.target.value)} placeholder="เช่น 500" className="min-h-12 rounded-xl border border-slate-300 bg-white px-3 text-base font-bold outline-none"/><button disabled={startDayBusy||!cloudAvailable} onClick={openStartDay} className="min-h-12 rounded-xl bg-[#1F4D3A] px-4 text-sm font-black text-white disabled:opacity-40">{startDayBusy?"กำลังตรวจรายการเดิม…":"เปิดร้านวันนี้"}</button></div>
+              <p className="mt-2 text-[10px] text-[#765b08]">หลังเปิดแล้วเงินตั้งต้นจะถูกล็อก · หากกรอกผิดให้ตรวจจากหน้าปิดวัน ไม่ต้องกดเปิดซ้ำ</p>
+            </>}
+          </div>}
+          {canReadiness&&closeStatus?.shift?.status==="closed"&&<div className="rounded-2xl border border-slate-200 bg-slate-100 p-4"><b>วันนี้ปิดร้านแล้ว</b><p className="mt-1 text-xs text-slate-600">วันธุรกิจนี้ปิดยอดแล้ว ระบบไม่อนุญาตให้เปิดซ้ำ</p></div>}
           <div className="grid grid-cols-2 gap-2">
             <div className="rounded-2xl border border-slate-200 bg-white p-4"><p className="text-[10px] font-bold text-slate-500">ยอดขายวันนี้</p><b className="mt-1 block text-2xl text-[#765b08]">฿{formatMoney(n(todaySummary?.todayRevenue))}</b></div>
             <div className="rounded-2xl border border-slate-200 bg-white p-4"><p className="text-[10px] font-bold text-slate-500">ออเดอร์วันนี้</p><b className="mt-1 block text-2xl">{n(todaySummary?.todayOrders)}</b></div>

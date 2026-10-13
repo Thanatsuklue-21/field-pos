@@ -28,8 +28,8 @@ export async function runDayFlow({extraBankExpense=0,countedCash=514.25,received
   };
   await call('pos/bootstrap','GET',undefined,401);
   await call('auth/login','POST',{username:'qaoperator',password:'LocalQaOnly2026!'});
-  await call('cash-shift/open','POST',{openingCash:500.10},201);
-  await call('cash-shift/open','POST',{openingCash:999},409);
+  await call('cash-shift/open','POST',{requestKey:'day-flow-open',openingCash:500.10},201);
+  await call('cash-shift/open','POST',{requestKey:'day-flow-open-second',openingCash:999},409);
   await call('cash-shift/movements','POST',{requestKey:'day-flow-cash-in',type:'CASH_IN',amount:100.20,reason:'QA float'},201);
   const methods=['cash','cash','cash','bank','bank','bank','card','card','other','other','cash','cash'];
   for(let i=0;i<methods.length;i++){

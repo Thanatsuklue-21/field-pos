@@ -35,7 +35,7 @@ async function send(handler,token,route,body){
 
 test("Close Day requestKey replays the committed close after a lost response",async t=>{
   const {db,token,handler}=await setup(t);
-  const opened=await send(handler,token,"cash-shift/open",{openingCash:500});
+  const opened=await send(handler,token,"cash-shift/open",{requestKey:"open-before-close-1",openingCash:500});
   assert.equal(opened.status,201);
   const body={requestKey:"close-day-0001",countedCash:500};
   const first=await send(handler,token,"close-day",body);
@@ -55,7 +55,7 @@ test("Close Day requestKey replays the committed close after a lost response",as
 
 test("Close Day requestKey conflict fails closed when counted cash changes",async t=>{
   const {token,handler}=await setup(t);
-  await send(handler,token,"cash-shift/open",{openingCash:500});
+  await send(handler,token,"cash-shift/open",{requestKey:"open-before-close-2",openingCash:500});
   await send(handler,token,"close-day",{requestKey:"close-day-0002",countedCash:500});
   const conflict=await send(handler,token,"close-day",{requestKey:"close-day-0002",countedCash:499});
   assert.equal(conflict.status,409);
@@ -64,7 +64,7 @@ test("Close Day requestKey conflict fails closed when counted cash changes",asyn
 
 test("legacy Close Day clients without requestKey remain compatible",async t=>{
   const {token,handler}=await setup(t);
-  await send(handler,token,"cash-shift/open",{openingCash:500});
+  await send(handler,token,"cash-shift/open",{requestKey:"open-before-close-legacy",openingCash:500});
   const first=await send(handler,token,"close-day",{countedCash:500});
   assert.equal(first.status,201);
   assert.equal(first.body.close.requestKey,null);
