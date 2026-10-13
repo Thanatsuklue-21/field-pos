@@ -87,7 +87,7 @@ export default function PosDailyWorkspace({
       window.removeEventListener("focus",refreshOnFocus);
       window.removeEventListener("online",refreshOnFocus);
     };
-  },[open,!online,session.csrf]);
+  },[open,online,session.csrf]);
 
   const stockRows=useMemo(()=>{
     const rows:Array<{key:string;name:string;variant:string;level:"out"|"low";detail:string}>=[];
