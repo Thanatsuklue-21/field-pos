@@ -49,6 +49,24 @@ test("same-day device-local money and expense intents block Close Day",async()=>
   assert.match(movement?.title||"",/เงินเข้า\/ออกลิ้นชัก/);
 });
 
+test("same-day unresolved cycle count approve and reject block Close Day",async()=>{
+  const api=await loadPreflight("stock-review"),date="2026-10-13";
+  const result=api.buildCloseDayDevicePreflight({
+    actorId:"owner",businessDate:date,
+    offlineRows:[],cashPending:null,promptPending:null,expenseIntents:[],cashMovementIntents:[],expenseDeleteIntents:[],
+    stockWriteIntents:[
+      {version:1,actorId:"owner",operation:"cycleCountProposalApprove",businessDate:date,createdAt:1,body:{requestKey:"review-approve-01",proposalId:"p1",confirm:true}},
+      {version:1,actorId:"owner-2",operation:"cycleCountProposalReject",businessDate:date,createdAt:2,body:{requestKey:"review-reject-001",proposalId:"p2",reason:"recount"}}
+    ]
+  });
+  assert.equal(result.ok,false);
+  assert.equal(result.blockers.length,2);
+  assert.match(result.blockers[0].title,/อนุมัติผลนับ Stock/);
+  assert.equal(result.blockers[0].route,"/stock");
+  assert.match(result.blockers[1].title,/ผู้ใช้อื่น/);
+  assert.equal(result.blockers[1].route,undefined);
+});
+
 test("resolved context from another business date does not block the current close",async()=>{
   const api=await loadPreflight("other-day"),today="2026-10-13",old="2026-10-12";
   const result=api.buildCloseDayDevicePreflight({
