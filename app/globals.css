@@ -97,6 +97,6 @@ html{-webkit-text-size-adjust:100%}
 html,body{overscroll-behavior:none}
 .pos-menu-card{content-visibility:auto;contain-intrinsic-size:190px}
 @media (max-width:767px){
-  .field-app-root button{min-block-size:44px}
+  .field-app-root button{min-block-size:44px;min-inline-size:44px}
   input,select,textarea{font-size:16px}
 }
