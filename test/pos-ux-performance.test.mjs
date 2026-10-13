@@ -358,7 +358,7 @@ test('queue production view centers one pager card with order summary and menu-c
   assert.match(queue,/บัตรผลิตปัจจุบัน/);
   assert.match(queue,/รายการรวมในบัตรนี้/);
   assert.match(queue,/สรุปตามหมวดเมนู/);
-  assert.match(queue,/ขั้นตอนปัจจุบัน/);
+  assert.match(queue,/ตอนนี้ทำอะไร/);
   assert.match(queue,/บัตรถัดไป/);
   assert.match(queue,/รอลูกค้ารับ/);
   assert.match(queue,/activeMenu/);
@@ -409,7 +409,7 @@ test('solo operator daily flow keeps routine queue checks in POS with full produ
   assert.match(pos,/setOpsInitialTab\("queue"\);setLastSale\(null\);setOpsOpen\(true\)/);
   assert.match(pos,/รับออเดอร์ถัดไป/);
   assert.match(hub,/href="\/queue"/);
-  assert.match(queue,/PRODUCTION RUN/);
+  assert.match(queue,/คิวผลิต · FIFO/);
   assert.match(queue,/ทำออเดอร์ \/ รันบัตร/);
   assert.doesNotMatch(queue,/router\.push\("\/orders/);
   assert.doesNotMatch(queue,/router\.push\("\/pos/);
@@ -432,7 +432,7 @@ test('queue grouped menu progress remains visible while cache schema protects sn
 
 test('queue guides one production category and active menu inside the pager card',async()=>{
   const queue=await read('app/queue/page.tsx'),api=await read('lib/pos-api.mjs');
-  assert.match(queue,/ขั้นตอนปัจจุบัน/);
+  assert.match(queue,/ตอนนี้ทำอะไร/);
   assert.match(queue,/สรุปตามหมวดเมนู/);
   assert.match(queue,/activeCategory/);
   assert.match(queue,/activeMenu/);
@@ -510,7 +510,7 @@ test('called pickup cards can reveal ordered menu details before handoff',async(
   assert.match(queue,/item\.name/);
   assert.match(queue,/item\.variant/);
   assert.match(queue,/×\{item\.qty\}/);
-  const pickup=queue.slice(queue.indexOf('waitingPickup.length>0'));
+  const pickup=queue.slice(queue.indexOf('{waitingPickup.length>0&&<section'));
   assert.ok(pickup.indexOf('ดูรายการ')<pickup.indexOf('ลูกค้ารับแล้ว'));
   assert.doesNotMatch(pickup,/action:"call"/);
 });
