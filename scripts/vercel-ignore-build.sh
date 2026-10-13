@@ -3,16 +3,29 @@ set -u
 
 branch="${VERCEL_GIT_COMMIT_REF:-}"
 
-# Production must always build.
+marker_changed(){
+  local path="$1"
+  git rev-parse --verify HEAD^ >/dev/null 2>&1 || return 1
+  git diff --quiet HEAD^ HEAD -- "$path" >/dev/null 2>&1
+  [ "$?" -eq 1 ]
+}
+
+# Production deploys are explicit: only the commit that changes .vercel-release may build.
 if [ "$branch" = "main" ]; then
-  exit 1
+  if marker_changed ".vercel-release"; then
+    exit 1
+  fi
+  exit 0
 fi
 
-# FIELD PWA previews are intentionally opt-in while Hobby deployment quota is constrained.
-# Add .vercel-preview-release to the exact frozen release-candidate commit to allow one Preview.
-if [ "$branch" = "feat/pwa-app-shell" ] && [ -f ".vercel-preview-release" ]; then
-  exit 1
+# FIELD PWA previews are also exact-head opt-in.
+# Only the commit that changes .vercel-preview-release may build.
+if [ "$branch" = "feat/pwa-app-shell" ]; then
+  if marker_changed ".vercel-preview-release"; then
+    exit 1
+  fi
+  exit 0
 fi
 
-# Exit 0 tells Vercel to skip this Git deployment.
+# Other feature/integration branches never consume Vercel Hobby builds automatically.
 exit 0
