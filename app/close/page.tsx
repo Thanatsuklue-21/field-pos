@@ -69,7 +69,7 @@ function View({session}:{session:Session}){
     finally{setBusy(false)}
   }
 
-  const movementNotCommitted=new Set(["invalid_request_key","invalid_cash_movement_type","invalid_cash_movement_amount","cash_movement_reason_required","high_risk_confirmation_required","high_risk_reason_required","cash_shift_not_open","drawer_cash_shortage","day_already_closed"]);
+  const movementNotCommitted=new Set(["invalid_request_key","invalid_cash_movement_type","invalid_cash_movement_amount","cash_movement_reason_required","high_risk_confirmation_required","high_risk_reason_required","cash_shift_not_open","drawer_cash_shortage","day_already_closed","business_date_changed"]);
 
   async function sendMovementIntent(intent:CriticalWriteIntent<CashMovementBody>,recovered=false){
     const r=await sendCriticalWriteIntent(
@@ -130,6 +130,7 @@ function View({session}:{session:Session}){
           drawer_cash_shortage:"เงินสดตามระบบไม่พอ · Server ยืนยันว่าไม่ได้บันทึกรายการนี้",
           cash_shift_not_open:"กะเงินสดไม่เปิด · Server ยืนยันว่าไม่ได้บันทึกรายการนี้",
           day_already_closed:"วันนี้ถูกปิดวันแล้ว · Server ยืนยันว่าไม่ได้บันทึกรายการใหม่",
+          business_date_changed:"วันทำการเปลี่ยนแล้ว · Server ยืนยันว่าไม่ได้บันทึกรายการใหม่ กรุณาโหลดวันล่าสุดก่อนทำรายการ",
           high_risk_confirmation_required:"รายการนี้ต้องยืนยัน High-Risk Action ก่อน",
           high_risk_reason_required:"กรุณาระบุเหตุผลให้ชัดเจน",
           cash_movement_reason_required:"กรุณาระบุเหตุผลให้ชัดเจน",
