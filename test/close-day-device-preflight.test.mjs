@@ -8,6 +8,7 @@ const loadPreflight=id=>loadBrowserModule("lib/close-day-device-preflight.ts",{
   replace:source=>source
     .replace('import {offlineCashListStrict,type OfflineCashRecord} from "@/lib/offline-db";','type OfflineCashRecord=any; const offlineCashListStrict=async()=>[];')
     .replace('import {listExpenseIntents,type ExpenseIntent} from "@/lib/expense-recovery";','type ExpenseIntent=any; const listExpenseIntents=()=>[];')
+    .replace('import {listCriticalWriteIntents,type CriticalWriteIntent} from "@/lib/critical-write-recovery";','type CriticalWriteIntent=any; const listCriticalWriteIntents=()=>[];')
 });
 const storage=(entries={})=>{
   const data=new Map(Object.entries(entries));
@@ -109,4 +110,29 @@ test("strict offline outbox inspection distinguishes unreadable storage from an 
   assert.match(source,/r\.onblocked=finishError/);
   assert.match(source,/tx\.oncomplete=/);
   assert.match(source,/offline_storage_unavailable/);
+});
+
+
+test("unresolved drawer and stock critical writes block Close Day without requiring a new mutation",async()=>{
+  const api=await loadPreflight("critical-writes"),date="2026-10-13";
+  const intents=[
+    {version:1,actorId:"owner",operation:"cashMovement",createdAt:1,body:{requestKey:"cashmove-0001",date,type:"CASH_OUT",amount:100}},
+    {version:1,actorId:"owner",operation:"stockTransaction",createdAt:2,body:{requestKey:"stockwrite-001",type:"WASTE",ingredientId:"matcha"}},
+    {version:1,actorId:"staff-2",operation:"cycleCountProposal",createdAt:3,body:{requestKey:"cycleprop-001",counts:[]}}
+  ];
+  const result=api.buildCloseDayDevicePreflight({actorId:"owner",businessDate:date,offlineRows:[],cashPending:null,promptPending:null,expenseIntents:[],criticalIntents:intents});
+  assert.equal(result.ok,false);
+  assert.deepEqual(result.blockers.map(x=>x.kind),["critical_write_unknown","critical_write_unknown","critical_write_unknown"]);
+  assert.equal(result.blockers[0].route,"/close");
+  assert.equal(result.blockers[1].route,"/stock");
+  assert.equal(result.blockers[2].route,undefined);
+  assert.match(result.blockers[2].title,/ผู้ใช้อื่น/);
+});
+
+test("read preflight includes persisted critical-write recovery intents",async()=>{
+  const api=await loadPreflight("critical-read"),date="2026-10-13";
+  const critical=[{version:1,actorId:"owner",operation:"stockTransaction",createdAt:1,body:{requestKey:"stockwrite-002"}}];
+  const result=await api.readCloseDayDevicePreflight("owner",date,{storage:storage(),listOffline:async()=>[],listExpenses:()=>[],listCritical:()=>critical});
+  assert.equal(result.ok,false);
+  assert.equal(result.blockers[0].kind,"critical_write_unknown");
 });
