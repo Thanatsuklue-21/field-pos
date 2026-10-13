@@ -60,3 +60,11 @@ test("phone navigation shows four daily actions plus More without horizontal scr
   assert.ok(shell.includes("MoreHorizontal"));
   assert.ok(shell.includes("overflow-hidden rounded-[20px]"));
 });
+
+test("order history becomes card-based on phones while desktop keeps the table",async()=>{
+  const orders=await read("app/orders/page.tsx");
+  assert.ok(orders.includes('space-y-2 sm:hidden'));
+  assert.ok(orders.includes('hidden sm:block'));
+  assert.ok(orders.includes('h-11 w-11'));
+  assert.ok(orders.includes('aria-label="ปิดรายละเอียด"'));
+});
