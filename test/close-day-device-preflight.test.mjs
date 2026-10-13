@@ -11,6 +11,7 @@ const loadPreflight=id=>loadBrowserModule("lib/close-day-device-preflight.ts",{
     .replace('import {listCashMovementIntents,type CashMovementIntent} from "@/lib/cash-movement-recovery";','type CashMovementIntent=any; const listCashMovementIntents=()=>[];')
     .replace('import {listExpenseDeleteIntents,type ExpenseDeleteIntent} from "@/lib/expense-delete-recovery";','type ExpenseDeleteIntent=any; const listExpenseDeleteIntents=()=>[];')
     .replace('import {listStockWriteIntents,type StockWriteIntent} from "@/lib/stock-write-recovery";','type StockWriteIntent=any; const listStockWriteIntents=()=>[];')
+    .replace('import {listOrderMutationIntents,type OrderMutationIntent} from "@/lib/order-mutation-recovery";','type OrderMutationIntent=any; const listOrderMutationIntents=()=>[];')
 });
 const storage=(entries={})=>{
   const data=new Map(Object.entries(entries));
@@ -154,4 +155,39 @@ test("read preflight includes persisted stock write intents",async()=>{
   });
   assert.equal(result.ok,false);
   assert.equal(result.blockers[0].kind,"stock_write_unknown");
+});
+
+
+test("same-day unresolved VOID and Refund block Close Day with current-user recovery route",async()=>{
+  const api=await loadPreflight("order-mutations"),date="2026-10-13";
+  const result=api.buildCloseDayDevicePreflight({
+    actorId:"owner",businessDate:date,offlineRows:[],cashPending:null,promptPending:null,expenseIntents:[],cashMovementIntents:[],expenseDeleteIntents:[],stockWriteIntents:[],
+    orderMutationIntents:[
+      {version:1,actorId:"owner",operation:"void",businessDate:date,createdAt:1,body:{requestKey:"void-close-0001",saleId:"sale-1",reason:"mistake",riskConfirmed:true}},
+      {version:1,actorId:"staff-2",operation:"refund",businessDate:date,createdAt:2,body:{requestKey:"refund-close-0001",saleId:"sale-2",reason:"refund",riskConfirmed:true}}
+    ]
+  });
+  assert.equal(result.ok,false);
+  assert.deepEqual(result.blockers.map(x=>x.kind),["order_mutation_unknown","order_mutation_unknown"]);
+  assert.equal(result.blockers[0].route,"/orders");
+  assert.equal(result.blockers[1].route,undefined);
+  assert.match(result.blockers[0].detail,/เงิน\/Stock\/ประวัติอาจถูกเปลี่ยนแล้ว/);
+  assert.match(result.blockers[1].title,/ผู้ใช้อื่น/);
+});
+
+test("read preflight includes local order mutation intents",async()=>{
+  const api=await loadPreflight("order-read"),date="2026-10-13";
+  const result=await api.readCloseDayDevicePreflight("owner",date,{
+    storage:storage(),listOffline:async()=>[],listExpenses:()=>[],listCashMovements:()=>[],listExpenseDeletes:()=>[],listStockWrites:()=>[],
+    listOrderMutations:()=>[{version:1,actorId:"owner",operation:"refund",businessDate:date,createdAt:1,body:{requestKey:"refund-read-0001",saleId:"sale-1",reason:"refund",riskConfirmed:true}}]
+  });
+  assert.equal(result.ok,false);
+  assert.equal(result.blockers[0].kind,"order_mutation_unknown");
+  assert.equal(result.blockers[0].route,"/orders");
+});
+
+test("Close Day renders the correct Orders recovery action for unresolved VOID or Refund",async()=>{
+  const ui=await readFile(new URL("../app/close/page.tsx",import.meta.url),"utf8");
+  assert.match(ui,/order_mutation_unknown/);
+  assert.match(ui,/ไปหน้า Orders/);
 });
