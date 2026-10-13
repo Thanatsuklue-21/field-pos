@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
-import {buildAccountingReconciliation} from '../lib/domain/accounting-reconciliation.mjs';
+import {buildAccountingReconciliation,findAccountingCauses} from '../lib/domain/accounting-reconciliation.mjs';
 const read=p=>readFile(new URL('../'+p,import.meta.url),'utf8');
 
 test('reconciliation passes when paid sales equal payment totals',()=>{
@@ -41,4 +41,31 @@ test('close-day review and final close are both server-gated by accounting recon
   assert.match(control,/Accounting Reconciliation/);
   assert.match(control,/RECONCILED/);
   assert.match(control,/FAILED/);
+});
+
+
+test('cause finder points to evidence instead of guessing',()=>{
+  const doc={sales:[{id:'s1',date:'2026-10-13',status:'paid',total:100,payments:[{method:'cash',amount:80}]}]};
+  const reconciliation=buildAccountingReconciliation({doc,date:'2026-10-13'});
+  const causes=findAccountingCauses({doc,date:'2026-10-13',reconciliation});
+  assert.ok(causes.some(x=>x.code==='PAYMENT_AMOUNT_MISMATCH'&&x.confidence==='HIGH'));
+  const item=causes.find(x=>x.code==='PAYMENT_AMOUNT_MISMATCH');
+  assert.equal(item.evidence.saleId,'s1');
+  assert.equal(item.evidence.total,100);
+  assert.equal(item.evidence.paymentTotal,80);
+});
+
+test('cause finder explicitly says no cause when evidence is insufficient',()=>{
+  const doc={sales:[],expenses:[],cashMovements:[]};
+  const causes=findAccountingCauses({doc,date:'2026-10-13'});
+  assert.equal(causes[0].code,'NO_CAUSE_FOUND');
+  assert.match(causes[0].explanation,/ไม่ชี้สาเหตุ|ไม่เดา/);
+});
+
+test('control center exposes evidence-based accounting causes',async()=>{
+  const api=await read('lib/api.mjs'),control=await read('app/control/page.tsx');
+  assert.match(api,/findAccountingCauses/);
+  assert.match(api,/analysis\.accountingCauses=accountingCauses/);
+  assert.match(control,/accountingCauses/);
+  assert.match(control,/ให้ AI อธิบายเพิ่ม/);
 });
