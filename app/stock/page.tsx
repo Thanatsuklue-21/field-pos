@@ -75,8 +75,12 @@ function StockView({session}:{session:Session}){
     return map[code]||code;
   }
 
-  function stockEndpoint(operation:StockWriteOperation){
-    return operation==="stockTransaction"?"/api/stock/transactions":operation==="cycleCountCommit"?"/api/stock/cycle-count":"/api/stock/cycle-count/proposals";
+  function stockRequest(operation:StockWriteOperation,body:any){
+    if(operation==="stockTransaction")return {path:"/api/stock/transactions",method:"POST"};
+    if(operation==="cycleCountCommit")return {path:"/api/stock/cycle-count",method:"POST"};
+    if(operation==="cycleCountProposal")return {path:"/api/stock/cycle-count/proposals",method:"POST"};
+    if(operation==="purchaseEdit")return {path:"/api/stock/purchases/"+encodeURIComponent(String(body.purchaseId||"")),method:"PATCH"};
+    return {path:"/api/stock/purchases/"+encodeURIComponent(String(body.purchaseId||""))+"/cancel",method:"POST"};
   }
   function exactStockAck(result:any,body:any,intent:StockWriteIntent){
     if(intent.operation==="stockTransaction"){
@@ -84,7 +88,9 @@ function StockView({session}:{session:Session}){
       return result?.ok===true&&tx?.requestKey===body.requestKey&&tx?.createdBy===intent.actorId&&tx?.ingredientId===body.ingredientId&&tx?.type===body.type;
     }
     if(intent.operation==="cycleCountCommit")return result?.ok===true&&result?.requestKey===body.requestKey&&result?.cycleCount?.createdBy===intent.actorId;
-    return result?.ok===true&&result?.requestKey===body.requestKey&&result?.proposal?.requestKey===body.requestKey&&result?.proposal?.submittedBy===intent.actorId;
+    if(intent.operation==="cycleCountProposal")return result?.ok===true&&result?.requestKey===body.requestKey&&result?.proposal?.requestKey===body.requestKey&&result?.proposal?.submittedBy===intent.actorId;
+    if(intent.operation==="purchaseEdit")return result?.ok===true&&result?.requestKey===body.requestKey&&result?.performedBy===intent.actorId&&result?.id===body.purchaseId&&Number.isFinite(Number(result?.quantityReceived));
+    return result?.ok===true&&result?.requestKey===body.requestKey&&result?.performedBy===intent.actorId&&result?.id===body.purchaseId&&typeof result?.reversalId==="string";
   }
   function notCommittedErrors(operation:StockWriteOperation){
     if(operation==="stockTransaction")return new Set([
@@ -94,17 +100,31 @@ function StockView({session}:{session:Session}){
       "invalid_purchase_url","invalid_cost_status","confirmed_cost_required","invalid_purchase_payment_method","stock_shortage","day_closed","purchase_date_closed",
       "high_risk_confirmation_required","high_risk_reason_required"
     ]);
+    if(operation==="purchaseEdit")return new Set([
+      "invalid_request_key","purchase_not_found","purchase_already_cancelled","ingredient_missing","purchase_before_reset_read_only",
+      "invalid_purchase_date","future_purchase_date","purchase_date_closed","invalid_purchase_cost","incomplete_purchase_packaging",
+      "unsupported_stock_unit","incompatible_stock_unit","purchase_correction_stock_negative","invalid_purchase_url","invalid_purchase_payment_method"
+    ]);
+    if(operation==="purchaseCancel")return new Set([
+      "invalid_request_key","purchase_cancel_confirmation_required","purchase_cancel_reason_required","purchase_not_found","ingredient_missing",
+      "purchase_already_cancelled","purchase_before_reset_read_only","purchase_date_closed","purchase_stock_transaction_missing",
+      "purchase_cancel_has_later_movement","purchase_cancel_stock_negative","invalid_purchase_quantity"
+    ]);
     return new Set(["invalid_cycle_count","cycle_count_requires_confirmation","day_closed"]);
   }
 
   async function submitStockIntent(intent:StockWriteIntent,recovery=false){
     setBusy(true);setMsg("");
     try{
-      const result=await sendStockWriteIntent(intent,body=>api<any>(stockEndpoint(intent.operation),{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify(body)}),exactStockAck,notCommittedErrors(intent.operation));
+      const req=stockRequest(intent.operation,intent.body);
+      const result=await sendStockWriteIntent(intent,body=>api<any>(req.path,{method:req.method,headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify(body)}),exactStockAck,notCommittedErrors(intent.operation));
       setPendingStockIntent(null);setStockRecoveryBlocked(false);
       if(intent.operation==="stockTransaction"){setTxOpen(null);setWasteQty("")}
-      else setCountOpen(false);
-      setMsg((recovery?"กู้คืน Request เดิมสำเร็จ · ":"")+(intent.operation==="stockTransaction"?"บันทึก Stock แล้ว":intent.operation==="cycleCountCommit"?"Owner บันทึกยอดนับจริงแล้ว":"ส่งผลนับให้ Owner ตรวจแล้ว · Stock ยังไม่เปลี่ยนจนกว่า Owner อนุมัติ"));
+      else if(intent.operation==="cycleCountCommit"||intent.operation==="cycleCountProposal")setCountOpen(false);
+      else if(intent.operation==="purchaseEdit")setPurchaseEdit(null);
+      else if(intent.operation==="purchaseCancel"&&purchaseEdit?.purchase.id===intent.body.purchaseId)setPurchaseEdit(null);
+      const successText=intent.operation==="stockTransaction"?"บันทึก Stock แล้ว":intent.operation==="cycleCountCommit"?"Owner บันทึกยอดนับจริงแล้ว":intent.operation==="cycleCountProposal"?"ส่งผลนับให้ Owner ตรวจแล้ว · Stock ยังไม่เปลี่ยนจนกว่า Owner อนุมัติ":intent.operation==="purchaseEdit"?"แก้ข้อมูลรับเข้าแล้ว · Stock/ต้นทุน/รายจ่ายอัปเดตใน transaction เดียว":"ยกเลิกรับเข้าแล้ว · Stock และ Purchase Spend ถูกย้อนกลับ";
+      setMsg((recovery?"กู้คืน Request เดิมสำเร็จ · ":"")+successText);
       await load();
       return result;
     }catch(e:any){
@@ -272,24 +292,32 @@ function StockView({session}:{session:Session}){
   }
 
   async function savePurchaseEdit(){
-    if(!purchaseEdit)return;setBusy(true);setMsg("");
+    if(!purchaseEdit)return;
+    if(stockRecoveryBlocked){setMsg(stockError("stock_recovery_unavailable"));return}
+    if(pendingStockIntent){setMsg(stockError("pending_stock_write_exists"));return}
     try{
       const p=purchaseEdit.purchase;
-      await api("/api/stock/purchases/"+encodeURIComponent(p.id),{method:"PATCH",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({totalCost:p.totalCost,purchaseDate:p.purchaseDate,supplier:p.supplier,sourceUrl:p.sourceUrl,imageUrl:p.imageUrl,note:p.note,packageQty:p.packageQty,packageUnit:p.packageUnit,packSize:p.packSize,packSizeUnit:p.packSizeUnit,paymentMethod:p.paymentMethod||"bank"})});
-      setPurchaseEdit(null);setMsg("แก้ข้อมูลซื้อแล้ว");await load();
-    }catch(e:any){setMsg(e.message==="purchase_before_reset_read_only"?"รายการนี้อยู่ก่อนจุดล้างข้อมูลทดลอง จึงเก็บไว้อ่านอย่างเดียว":e.message==="invalid_purchase_url"?"ลิงก์ไม่ถูกต้อง":e.message)}finally{setBusy(false)}
+      const body:any={requestKey:crypto.randomUUID(),purchaseId:p.id,totalCost:p.totalCost,purchaseDate:p.purchaseDate,supplier:p.supplier,sourceUrl:p.sourceUrl,imageUrl:p.imageUrl,note:p.note,packageQty:p.packageQty,packageUnit:p.packageUnit,packSize:p.packSize,packSizeUnit:p.packSizeUnit,paymentMethod:p.paymentMethod||"bank"};
+      const intent=prepareStockWriteIntent(session.user.id,"purchaseEdit",today(),body);
+      setPendingStockIntent(intent);
+      await submitStockIntent(intent,false);
+    }catch(e:any){
+      setMsg(stockError(e.message==="purchase_before_reset_read_only"?"purchase_before_reset_read_only":e.message));
+      if(e.message==="stock_recovery_unavailable")setStockRecoveryBlocked(true);
+    }
   }
-
   async function cancelPurchase(x:Ingredient,p:Purchase){
     if(p.cancelled)return;
+    if(stockRecoveryBlocked){setMsg(stockError("stock_recovery_unavailable"));return}
+    if(pendingStockIntent){setMsg(stockError("pending_stock_write_exists"));return}
     const reason=window.prompt("เหตุผลที่ยกเลิกรับเข้า "+x.name+"\nเช่น กรอกวัตถุดิบผิด / รับเข้าซ้ำ","");
     if(!reason?.trim())return;
     if(!window.confirm("ยกเลิกรายการรับเข้า?\n\n"+x.name+"\n"+p.quantityReceived.toLocaleString()+" "+p.usageUnit+" · ฿"+compactMoney(p.totalCost)+"\n\nระบบจะหัก Stock และ Purchase Spend ของรายการนี้ พร้อมคืนราคาซื้อก่อนหน้า"))return;
-    setBusy(true);setMsg("");
     try{
-      await api("/api/stock/purchases/"+encodeURIComponent(p.id)+"/cancel",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({confirm:"CANCEL PURCHASE",reason:reason.trim()})});
-      if(purchaseEdit?.purchase.id===p.id)setPurchaseEdit(null);
-      setMsg("ยกเลิกรับเข้า "+x.name+" แล้ว · Stock และ Purchase Spend ถูกย้อนกลับ");await load();
+      const body:any={requestKey:crypto.randomUUID(),purchaseId:p.id,confirm:"CANCEL PURCHASE",reason:reason.trim()};
+      const intent=prepareStockWriteIntent(session.user.id,"purchaseCancel",today(),body);
+      setPendingStockIntent(intent);
+      await submitStockIntent(intent,false);
     }catch(e:any){
       const map:Record<string,string>={
         purchase_cancel_stock_negative:"ยกเลิกไม่ได้ เพราะ Stock คงเหลือน้อยกว่าจำนวนรับเข้าเดิม รายการนี้อาจถูกใช้ไปแล้ว กรุณาตรวจนับ Stock ก่อน",
@@ -301,8 +329,9 @@ function StockView({session}:{session:Session}){
         purchase_cancel_confirmation_required:"การยืนยันยกเลิกรายการไม่ถูกต้อง",
         purchase_cancel_reason_required:"กรุณาระบุเหตุผลที่ยกเลิก"
       };
-      setMsg(map[e.message]||e.message);
-    }finally{setBusy(false)}
+      setMsg(map[e.message]||stockError(e.message));
+      if(e.message==="stock_recovery_unavailable")setStockRecoveryBlocked(true);
+    }
   }
 
   async function purgeIngredient(x:Ingredient,detachRecipes=false){
