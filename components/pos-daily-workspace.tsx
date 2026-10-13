@@ -2,10 +2,11 @@
 
 import {useEffect,useMemo,useState} from "react";
 import Link from "next/link";
-import {Bot,Boxes,ClipboardList,ListOrdered,RefreshCw,ShieldCheck,X} from "lucide-react";
+import {Bot,Boxes,ClipboardList,ListOrdered,ReceiptText,RefreshCw,ShieldCheck,X} from "lucide-react";
 import {api,type Bootstrap,type Session} from "@/lib/api-client";
+import {prepareExpenseIntent,readExpenseIntent,sendExpenseIntent,type ExpenseIntent} from "@/lib/expense-recovery";
 
-type WorkspaceTab="queue"|"orders"|"stock"|"status";
+type WorkspaceTab="queue"|"orders"|"stock"|"expense"|"status";
 type QueueOrder={
   id:string;queueNo:string;pagerNo:number;status:string;time:number;
   items:Array<{name:string;qty:number;readyQty?:number;calledQty?:number}>;
@@ -21,6 +22,13 @@ type Readiness={
   nextActions:Array<{priority:"P0"|"P1"|"P2";checkId:string;label:string}>;
 };
 type ControlAnalysis={level:string;metrics?:Record<string,number>;readiness?:Readiness};
+type ExpenseRow={id:string;date:string;time:number;category:string;description:string;amount:number;paymentMethod?:string};
+type ExpenseData={
+  expenses:ExpenseRow[];businessDate:string;
+  shift:{id:string;date:string;status:"open"|"closed";openingCash:number}|null;
+  drawerSnapshot:{openingCash:number;cashSales:number;cashIn:number;cashPaidOut:number;cashOut:number;availableCash:number}|null;
+};
+const newExpenseRequestKey=()=>`expense:${typeof crypto!=="undefined"&&crypto.randomUUID?crypto.randomUUID():Date.now().toString(36)+"-"+Math.random().toString(36).slice(2)}`;
 
 const n=(value:any)=>Number(value)||0;
 const money=(value:any)=>new Intl.NumberFormat("th-TH",{minimumFractionDigits:0,maximumFractionDigits:2}).format(n(value));
@@ -33,15 +41,25 @@ export default function PosDailyWorkspace({
   const canQueue=session.user.role==="admin"||session.user.permissions?.queue===true;
   const canOrder=session.user.role==="admin"||session.user.permissions?.order===true;
   const canStock=session.user.role==="admin"||session.user.permissions?.stock===true;
+  const canExpense=session.user.role==="admin"||session.user.permissions?.report===true;
   const canStatus=session.user.role==="admin";
   const tabs=useMemo(()=>[
-    canQueue&&"queue",canOrder&&"orders",canStock&&"stock",canStatus&&"status"
-  ].filter(Boolean) as WorkspaceTab[],[canQueue,canOrder,canStock,canStatus]);
+    canQueue&&"queue",canOrder&&"orders",canStock&&"stock",canExpense&&"expense",canStatus&&"status"
+  ].filter(Boolean) as WorkspaceTab[],[canQueue,canOrder,canStock,canExpense,canStatus]);
 
   const [tab,setTab]=useState<WorkspaceTab>(tabs[0]||"orders");
   const [queue,setQueue]=useState<QueueOrder[]>([]);
   const [sales,setSales]=useState<Sale[]>([]);
   const [control,setControl]=useState<ControlAnalysis|null>(null);
+  const [expenseData,setExpenseData]=useState<ExpenseData|null>(null);
+  const [expenseAmount,setExpenseAmount]=useState("");
+  const [expenseCategory,setExpenseCategory]=useState("OTHER");
+  const [expenseDescription,setExpenseDescription]=useState("");
+  const [expensePaymentMethod,setExpensePaymentMethod]=useState("cash");
+  const [expenseRiskConfirmed,setExpenseRiskConfirmed]=useState(false);
+  const [pendingExpense,setPendingExpense]=useState<ExpenseIntent|null>(null);
+  const [expenseRecoveryBlocked,setExpenseRecoveryBlocked]=useState(false);
+  const [expenseFeedback,setExpenseFeedback]=useState("");
   const [busy,setBusy]=useState(false);
   const [message,setMessage]=useState("");
 
@@ -56,9 +74,10 @@ export default function PosDailyWorkspace({
     }
     setBusy(true);setMessage("");
     try{
-      const jobs:Array<{key:"queue"|"orders"|"status";promise:Promise<any>}>= [];
+      const jobs:Array<{key:"queue"|"orders"|"expense"|"status";promise:Promise<any>}>= [];
       if(canQueue)jobs.push({key:"queue",promise:api<any>("/api/pos/queue")});
       if(canOrder)jobs.push({key:"orders",promise:api<any>("/api/pos/history")});
+      if(canExpense)jobs.push({key:"expense",promise:api<any>("/api/expenses")});
       if(canStatus)jobs.push({key:"status",promise:api<any>("/api/control-center")});
       const results=await Promise.allSettled(jobs.map(x=>x.promise));
       results.forEach((result,index)=>{
@@ -66,6 +85,12 @@ export default function PosDailyWorkspace({
         const key=jobs[index].key,value=result.value;
         if(key==="queue")setQueue(Array.isArray(value.orders)?value.orders:[]);
         if(key==="orders")setSales(Array.isArray(value.sales)?value.sales:[]);
+        if(key==="expense")setExpenseData({
+          expenses:Array.isArray(value.expenses)?value.expenses:[],
+          businessDate:String(value.businessDate||""),
+          shift:value.shift||null,
+          drawerSnapshot:value.drawerSnapshot||null
+        });
         if(key==="status")setControl(value.analysis||null);
       });
       if(results.some(x=>x.status==="rejected"))setMessage("บางข้อมูลโหลดไม่ได้ แต่หน้า POS และตะกร้ายังใช้งานต่อได้ตามปกติ");
@@ -75,7 +100,17 @@ export default function PosDailyWorkspace({
   }
 
   useEffect(()=>{
-    if(open)refresh().catch(()=>{});
+    if(!open)return;
+    refresh().catch(()=>{});
+    if(canExpense){
+      try{
+        setPendingExpense(readExpenseIntent(session.user.id));
+        setExpenseRecoveryBlocked(false);
+      }catch{
+        setExpenseRecoveryBlocked(true);
+        setExpenseFeedback("อ่านรายการค่าใช้จ่ายค้างไม่ได้ · ระบบล็อก Quick Expense เพื่อป้องกันยอดซ้ำ");
+      }
+    }
   },[open]);
 
   useEffect(()=>{
@@ -88,6 +123,72 @@ export default function PosDailyWorkspace({
       window.removeEventListener("online",refreshOnFocus);
     };
   },[open,online,session.csrf]);
+
+  function quickExpenseError(code:string){
+    const map:Record<string,string>={
+      day_closed:"ปิดยอดวันนี้แล้ว ไม่สามารถเพิ่มค่าใช้จ่ายได้",
+      cash_shift_not_open:"ยังไม่ได้เปิดกะเงินสด · เปิดกะก่อนหรือเลือกโอน/อื่น ๆ",
+      drawer_cash_shortage:"เงินในลิ้นชักตามระบบไม่พอ · รีเฟรชและตรวจยอดจริง",
+      high_risk_confirmation_required:"รายจ่ายเงินสดตั้งแต่ ฿500 ต้องยืนยันรายการมูลค่าสูง",
+      expense_reason_required:"รายจ่ายเงินสดมูลค่าสูงต้องระบุเหตุผลอย่างน้อย 2 ตัวอักษร",
+      request_key_conflict:"Request เดิมไม่ตรงกัน · ระบบล็อกรายการไว้ ห้ามสร้างยอดใหม่",
+      network_unavailable:"ยังไม่ทราบผลจาก Server · ระบบเก็บ Request เดิมไว้และจะตรวจซ้ำ",
+      offline_write_blocked:"ออฟไลน์ · ระบบยังไม่ส่งรายการและเก็บ Request เดิมไว้",
+      expense_ack_unknown:"Server ยังไม่ยืนยัน exact ACK · ระบบเก็บ Request เดิมไว้",
+      expense_recovery_unavailable:"อ่าน/บันทึก Recovery ไม่ได้ · Quick Expense ถูกล็อก",
+      pending_expense_exists:"มีค่าใช้จ่ายเดิมที่ยังไม่ทราบผล · ตรวจรายการเดิมก่อน",
+      invalid_request_key:"รหัสกันรายการซ้ำไม่ถูกต้อง",
+      invalid_expense_payment_method:"ช่องทางการจ่ายไม่ถูกต้อง",
+      invalid_expense:"ข้อมูลค่าใช้จ่ายไม่ถูกต้อง"
+    };
+    return map[code]||"ยังยืนยันค่าใช้จ่ายไม่ได้ · ระบบเก็บรายการเดิมไว้ กรุณาตรวจรายการก่อน";
+  }
+
+  async function submitQuickExpense(recovered?:ExpenseIntent){
+    if(!canExpense||busy||expenseRecoveryBlocked)return;
+    const amount=Number(expenseAmount)||0;
+    if(!recovered&&!pendingExpense&&!canSaveExpense)return;
+    setBusy(true);setExpenseFeedback("");
+    try{
+      const intent=recovered||pendingExpense||prepareExpenseIntent(session.user.id,{
+        requestKey:newExpenseRequestKey(),date:String(expenseData?.businessDate||""),amount,
+        category:expenseCategory,description:expenseDescription.trim().slice(0,240),
+        paymentMethod:expensePaymentMethod,riskConfirmed:expenseRiskConfirmed
+      });
+      setPendingExpense(intent);
+      const result=await sendExpenseIntent(intent,body=>api<any>("/api/expenses",{
+        method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify(body)
+      }));
+      setPendingExpense(null);setExpenseRecoveryBlocked(false);
+      setExpenseAmount("");setExpenseDescription("");setExpensePaymentMethod("cash");setExpenseRiskConfirmed(false);
+      setExpenseFeedback((result.replayed?"ตรวจพบว่ารายการเดิมบันทึกแล้ว · ไม่สร้างซ้ำ":"บันทึกค่าใช้จ่ายแล้ว")+(result.availableCash!==null&&result.availableCash!==undefined?" · เงินในลิ้นชัก ฿"+money(result.availableCash):""));
+      await refresh();
+    }catch(error:any){
+      setExpenseFeedback(quickExpenseError(error?.message));
+      try{setPendingExpense(readExpenseIntent(session.user.id))}
+      catch{setExpenseRecoveryBlocked(true)}
+      await refresh().catch(()=>{});
+    }finally{setBusy(false)}
+  }
+
+  useEffect(()=>{
+    if(!open||!canExpense)return;
+    let active=true;
+    const recover=()=>{
+      if(!active||typeof navigator!=="undefined"&&!navigator.onLine)return;
+      try{
+        const intent=readExpenseIntent(session.user.id);
+        if(intent&&!busy)submitQuickExpense(intent).catch(()=>{});
+      }catch{
+        setExpenseRecoveryBlocked(true);
+        setExpenseFeedback("อ่านรายการค่าใช้จ่ายค้างไม่ได้ · Quick Expense ถูกล็อก");
+      }
+    };
+    const visible=()=>{if(document.visibilityState==="visible")recover()};
+    recover();
+    window.addEventListener("online",recover);window.addEventListener("focus",recover);document.addEventListener("visibilitychange",visible);
+    return()=>{active=false;window.removeEventListener("online",recover);window.removeEventListener("focus",recover);document.removeEventListener("visibilitychange",visible)};
+  },[open,canExpense,session.user.id,session.csrf]);
 
   const stockRows=useMemo(()=>{
     const rows:Array<{key:string;name:string;variant:string;level:"out"|"low";detail:string}>=[];
@@ -114,6 +215,15 @@ export default function PosDailyWorkspace({
 
   const queueRows=queue.slice().sort((a,b)=>n(a.time)-n(b.time)).slice(0,6);
   const orderRows=sales.slice(0,7);
+  const latestOrder=orderRows[0]||null;
+  const expenseRows=(expenseData?.expenses||[]).slice(0,5);
+  const expenseAmountNumber=Number(expenseAmount)||0;
+  const expenseIsCash=expensePaymentMethod==="cash";
+  const drawerCash=Number(expenseData?.drawerSnapshot?.availableCash||0);
+  const cashShiftReady=!!expenseData?.shift&&expenseData.shift.status==="open";
+  const cashTooLarge=expenseIsCash&&expenseAmountNumber>drawerCash;
+  const highRiskExpense=expenseIsCash&&expenseAmountNumber>=500;
+  const canSaveExpense=!!expenseData?.businessDate&&expenseAmountNumber>0&&(!expenseIsCash||(cashShiftReady&&!cashTooLarge))&&(!highRiskExpense||(expenseRiskConfirmed&&expenseDescription.trim().length>=2));
   const outCount=stockRows.filter(x=>x.level==="out").length;
   const lowCount=stockRows.filter(x=>x.level==="low").length;
   const readiness=control?.readiness||null;
@@ -122,6 +232,7 @@ export default function PosDailyWorkspace({
     {key:"queue",label:"คิว",icon:ListOrdered,allowed:canQueue,count:queue.length},
     {key:"orders",label:"ออเดอร์",icon:ClipboardList,allowed:canOrder,count:sales.length},
     {key:"stock",label:"สต็อก",icon:Boxes,allowed:canStock,count:outCount+lowCount},
+    {key:"expense",label:"รายจ่าย",icon:ReceiptText,allowed:canExpense,count:pendingExpense?1:0},
     {key:"status",label:"สถานะ",icon:ShieldCheck,allowed:canStatus,count:readiness?.summary.blocked||0}
   ];
 
@@ -155,7 +266,7 @@ export default function PosDailyWorkspace({
         </div>
       </header>
 
-      <div className="grid grid-cols-4 gap-1 border-b border-slate-200 bg-white p-2">
+      <div className={"grid gap-1 border-b border-slate-200 bg-white p-2 "+(meta.filter(x=>x.allowed).length>=5?"grid-cols-5":"grid-cols-4")}>
         {meta.filter(x=>x.allowed).map(({key,label,icon:Icon,count})=><button
           key={key}
           onClick={()=>setTab(key)}
@@ -189,6 +300,9 @@ export default function PosDailyWorkspace({
         </div>}
 
         {tab==="orders"&&canOrder&&<div className="space-y-2">
+          {latestOrder&&<Link href={latestOrder.queueNo?"/orders?queue="+encodeURIComponent(latestOrder.queueNo):"/orders"} className="flex min-h-12 items-center justify-between gap-3 rounded-2xl border border-[#d4af37]/40 bg-[#d4af37]/10 px-3 text-sm font-bold text-[#6f5510]">
+            <span>ดูใบเสร็จล่าสุด · {latestOrder.queueNo||latestOrder.billNo||"บิล"}</span><span>฿{money(latestOrder.total)}</span>
+          </Link>}
           {orderRows.length===0?<Empty text="ยังไม่มีออเดอร์ล่าสุด"/>:orderRows.map(sale=><div key={sale.id} className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-3">
             <div className="min-w-0">
               <div><b>{sale.queueNo||sale.billNo||"บิล"}</b><span className="ml-2 text-[10px] uppercase text-slate-500">{sale.payment}</span></div>
@@ -212,6 +326,32 @@ export default function PosDailyWorkspace({
             <p className="mt-2 text-xs text-slate-700">{row.detail}</p>
           </div>)}
           <FullLink href="/stock" label="เปิด Stock / รับเข้า / นับจริง"/>
+        </div>}
+
+        {tab==="expense"&&canExpense&&<div className="space-y-3">
+          {expenseFeedback&&<div role="status" className={"rounded-xl border p-3 text-xs font-semibold "+(pendingExpense||expenseRecoveryBlocked?"border-amber-200 bg-amber-50 text-amber-900":"border-emerald-200 bg-emerald-50 text-emerald-800")}>{expenseFeedback}</div>}
+          {pendingExpense&&<div className="rounded-2xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+            <b>มีค่าใช้จ่ายเดิมรอยืนยัน</b><p className="mt-1">ระบบจะใช้ Request เดิมเท่านั้น · ห้ามสร้างยอดใหม่จนกว่า Server จะตอบ exact ACK</p>
+          </div>}
+          <div className="rounded-2xl border border-slate-200 bg-white p-3">
+            <div className="flex items-center justify-between gap-3"><div><b className="text-sm">Quick Expense</b><p className="mt-1 text-[11px] text-slate-500">บันทึกรายจ่ายประจำวันด้วย API/Recovery เดียวกับหน้าค่าใช้จ่าย</p></div><Link href="/expenses" className="min-h-11 rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-600">หน้าเต็ม</Link></div>
+            <div className="mt-3 grid grid-cols-3 gap-1 rounded-2xl bg-slate-100 p-1">
+              {([["cash","เงินสด"],["bank","โอน"],["other","อื่น ๆ"]] as const).map(([value,label])=><button type="button" key={value} disabled={busy||!!pendingExpense||expenseRecoveryBlocked} onClick={()=>{setExpensePaymentMethod(value);setExpenseRiskConfirmed(false)}} className={"min-h-11 rounded-xl text-xs font-bold "+(expensePaymentMethod===value?"bg-white shadow-sm":"text-slate-600")}>{label}</button>)}
+            </div>
+            {expenseIsCash&&<div className="mt-3 grid grid-cols-2 gap-2 text-center text-xs"><Metric label="เงินในลิ้นชัก" value={drawerCash}/><div className={"rounded-xl p-2 "+(cashTooLarge?"bg-red-50 text-red-700":"bg-slate-50")}><b className="block text-base">฿{money(drawerCash-expenseAmountNumber)}</b><span className="text-[10px]">หลังจ่าย</span></div></div>}
+            {expenseIsCash&&!cashShiftReady&&<p className="mt-2 rounded-xl border border-amber-200 bg-amber-50 p-2 text-[11px] text-amber-800">ยังไม่เปิดกะเงินสด · เลือกโอน/อื่น ๆ หรือเปิดกะก่อน</p>}
+            <div className="mt-3 grid gap-2">
+              <select disabled={busy||!!pendingExpense||expenseRecoveryBlocked} aria-label="หมวดค่าใช้จ่ายด่วน" value={expenseCategory} onChange={e=>setExpenseCategory(e.target.value)} className="min-h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm">
+                <option value="OTHER">อื่น ๆ</option><option value="UTILITY">ค่าน้ำ/ไฟ</option><option value="MAINTENANCE">ซ่อมบำรุง</option><option value="PACKAGING">บรรจุภัณฑ์ฉุกเฉิน</option><option value="MARKETING">การตลาด</option><option value="TRANSPORT">เดินทาง/ขนส่ง</option>
+              </select>
+              <input disabled={busy||!!pendingExpense||expenseRecoveryBlocked} inputMode="decimal" aria-label="จำนวนเงินค่าใช้จ่ายด่วน" value={expenseAmount} onChange={e=>{setExpenseAmount(e.target.value);setExpenseRiskConfirmed(false)}} placeholder="จำนวนเงิน" className="min-h-11 rounded-xl border border-slate-200 px-3 text-base font-semibold"/>
+              <input disabled={busy||!!pendingExpense||expenseRecoveryBlocked} maxLength={240} aria-label="รายละเอียดค่าใช้จ่ายด่วน" value={expenseDescription} onChange={e=>setExpenseDescription(e.target.value)} placeholder="รายละเอียด / เหตุผล" className="min-h-11 rounded-xl border border-slate-200 px-3 text-sm"/>
+            </div>
+            {cashTooLarge&&<p className="mt-2 rounded-xl border border-red-200 bg-red-50 p-2 text-[11px] font-semibold text-red-700">เงินในลิ้นชักตามระบบไม่พอ · ระบบปิดปุ่มบันทึก</p>}
+            {highRiskExpense&&<label className="mt-2 flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 p-2 text-[11px] text-red-700"><input disabled={busy||!!pendingExpense} type="checkbox" checked={expenseRiskConfirmed} onChange={e=>setExpenseRiskConfirmed(e.target.checked)} className="mt-0.5 h-4 w-4"/><span>ยืนยันรายจ่ายเงินสดตั้งแต่ ฿500 และระบุเหตุผลอย่างน้อย 2 ตัวอักษร</span></label>}
+            <button type="button" disabled={busy||expenseRecoveryBlocked||(!pendingExpense&&!canSaveExpense)} onClick={()=>submitQuickExpense()} className="mt-3 min-h-12 w-full rounded-xl bg-[#d4af37] text-sm font-black text-black disabled:opacity-40">{busy?"กำลังตรวจ...":pendingExpense?"ตรวจผลรายการเดิม":"ยืนยันค่าใช้จ่าย"}</button>
+          </div>
+          <div className="rounded-2xl border border-slate-200 bg-white p-3"><b className="text-sm">ล่าสุดวันนี้</b><div className="mt-2 space-y-2">{expenseRows.length===0?<p className="text-xs text-slate-500">ยังไม่มีค่าใช้จ่าย</p>:expenseRows.map(row=><div key={row.id} className="flex items-center justify-between gap-3 border-t border-slate-100 pt-2 text-xs"><span className="min-w-0 truncate">{row.description||row.category}</span><b className="shrink-0 text-[#765b08]">฿{money(row.amount)}</b></div>)}</div></div>
         </div>}
 
         {tab==="status"&&canStatus&&<div className="space-y-3">
