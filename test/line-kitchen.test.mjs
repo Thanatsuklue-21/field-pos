@@ -77,20 +77,3 @@ test('LINE recovery health separates retryable, blocked and stale notifications'
  assert.equal(status.unresolved,3);
  assert.equal(status.oldestUnresolvedAt,cutoff-1000);
 });
-
-
-test('LINE outbox status distinguishes retryable blocked and stale jobs',async t=>{
- const db=createClient({url:':memory:'});t.after(()=>db.close());await db.batch(SCHEMA,'write');
- const oldToken=process.env.LINE_CHANNEL_ACCESS_TOKEN,oldTarget=process.env.LINE_KITCHEN_GROUP_ID;
- process.env.LINE_CHANNEL_ACCESS_TOKEN='test-token';process.env.LINE_KITCHEN_GROUP_ID='C'+'e'.repeat(32);
- t.after(()=>{if(oldToken===undefined)delete process.env.LINE_CHANNEL_ACCESS_TOKEN;else process.env.LINE_CHANNEL_ACCESS_TOKEN=oldToken;if(oldTarget===undefined)delete process.env.LINE_KITCHEN_GROUP_ID;else process.env.LINE_KITCHEN_GROUP_ID=oldTarget});
- await db.execute({sql:"INSERT INTO field_line_outbox(session_id,retry_key,target,message,state,attempts,next_at,created_at) VALUES(?,?,?,?,?,?,?,?)",args:['retryable','rk-1',process.env.LINE_KITCHEN_GROUP_ID,'a','pending',1,3_000_000,2_900_000]});
- await db.execute({sql:"INSERT INTO field_line_outbox(session_id,retry_key,target,message,state,attempts,next_at,created_at) VALUES(?,?,?,?,?,?,?,?)",args:['blocked','rk-2',process.env.LINE_KITCHEN_GROUP_ID,'b','blocked',1,0,2_900_000]});
- await db.execute({sql:"INSERT INTO field_line_outbox(session_id,retry_key,target,message,state,attempts,next_at,created_at) VALUES(?,?,?,?,?,?,?,?)",args:['stale','rk-3',process.env.LINE_KITCHEN_GROUP_ID,'c','pending',5,0,1]});
- const status=await getKitchenOutboxStatus(db,{now:3_000_000});
- assert.equal(status.configured,true);
- assert.equal(status.retryable,1);
- assert.equal(status.blocked,1);
- assert.equal(status.stale,1);
- assert.equal(status.unresolved,3);
-});
