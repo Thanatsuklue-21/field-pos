@@ -25,7 +25,7 @@ test("close-day fails closed when IndexedDB outbox cannot be read",async()=>{
 
 test("close-day surfaces a dedicated Offline blocker with a path back to POS sync",async()=>{
   const ui=await read("app/close/page.tsx");
-  assert.match(ui,/ปิดวันไม่ได้ · Offline outbox ยังไม่พร้อม/);
-  assert.match(ui,/ไป POS \/ Sync Offline/);
+  assert.match(ui,/ปิดวันไม่ได้ · ยังมีบิลออฟไลน์ที่ต้องจัดการ/);
+  assert.match(ui,/ไปหน้า POS จัดการบิลออฟไลน์/);
   assert.match(ui,/router\.push\("\/pos"\)/);
 });

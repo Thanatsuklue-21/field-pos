@@ -51,6 +51,6 @@ test("Close Day UI checks local recovery immediately before any close request an
   assert.match(block,/if\(localBlockers\.length\)/);
   assert.ok(block.indexOf("await refreshLocalRecoveryBlockers()")<block.indexOf("sendCloseDay(body)"));
   assert.match(ui,/localRecoveryError\|\|localRecoveryBlockers\.length>0/);
-  assert.match(ui,/ปิดวันไม่ได้ · Local Recovery ยังไม่เคลียร์/);
-  assert.match(ui,/ตรวจ Recovery อีกครั้ง/);
+  assert.match(ui,/ปิดวันไม่ได้ · ยังมีรายการเดิมที่ต้องตรวจสอบ/);
+  assert.match(ui,/ตรวจรายการค้างอีกครั้ง/);
 });

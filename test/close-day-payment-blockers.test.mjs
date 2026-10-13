@@ -32,7 +32,7 @@ test("Close Day shows blockers before operator submits, deep-links the exact pay
   const ui=await read("app/close/page.tsx");
   assert.match(ui,/type PaymentBlocker=/);
   assert.match(ui,/paymentBlockers\.length/);
-  assert.match(ui,/ปิดวันไม่ได้ · มี Payment ค้าง/);
+  assert.match(ui,/ปิดวันไม่ได้ · มีรายการรับชำระที่ต้องตรวจ/);
   assert.match(ui,/router\.push\("\/orders\?resolution="\+encodeURIComponent\(paymentBlockers\[0\]\.id\)\)/);
   assert.match(ui,/router\.push\("\/orders\?resolution="\+encodeURIComponent\(p\.id\)\)/);
   assert.match(ui,/paymentBlockers\.length>0/);
