@@ -18,7 +18,7 @@ test("terminal PromptPay checkout does not clear pending until server stock rele
 
 test("PromptPay recovery path and checkout path use the same release-confirmation invariant",async()=>{
   const pos=await read("app/pos/page.tsx");
-  assert.match(pos,/Provider แจ้งสถานะสิ้นสุดแล้ว แต่ Server ยังไม่ยืนยันการคืน Stock/);
+  assert.match(pos,/ระบบชำระเงินแจ้งว่ารายการสิ้นสุดแล้ว แต่ยังยืนยันการคืนสต็อกไม่ได้/);
   const matches=[...pos.matchAll(/promptpay_release_unconfirmed/g)];
   assert.ok(matches.length>=2);
 });
