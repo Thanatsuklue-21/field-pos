@@ -8,6 +8,7 @@ const loadPreflight=id=>loadBrowserModule("lib/close-day-device-preflight.ts",{
   replace:source=>source
     .replace('import {offlineCashListStrict,type OfflineCashRecord} from "@/lib/offline-db";','type OfflineCashRecord=any; const offlineCashListStrict=async()=>[];')
     .replace('import {listExpenseIntents,type ExpenseIntent} from "@/lib/expense-recovery";','type ExpenseIntent=any; const listExpenseIntents=()=>[];')
+    .replace('import {listCashMovementIntents,type CashMovementIntent} from "@/lib/cash-movement-recovery";','type CashMovementIntent=any; const listCashMovementIntents=()=>[];')
 });
 const storage=(entries={})=>{
   const data=new Map(Object.entries(entries));
@@ -30,13 +31,17 @@ test("same-day device-local money and expense intents block Close Day",async()=>
     expenseIntents:[
       {version:1,actorId:"owner",createdAt:4,body:{requestKey:"expense-0001",date,amount:30,category:"OTHER",description:"ice",paymentMethod:"cash",riskConfirmed:false}},
       {version:1,actorId:"staff-2",createdAt:5,body:{requestKey:"expense-0002",date,amount:20,category:"OTHER",description:"parking",paymentMethod:"cash",riskConfirmed:false}}
-    ]
+    ],
+    cashMovementIntents:[{version:1,actorId:"owner",createdAt:6,body:{requestKey:"cashmove-0001",date,type:"CASH_OUT",amount:100,reason:"เก็บเงิน",riskConfirmed:false}}]
   });
   assert.equal(result.ok,false);
   assert.equal(result.checkedAt,123);
-  assert.deepEqual(result.blockers.map(x=>x.kind),["offline_cash","cash_unknown","promptpay_unknown","expense_unknown","expense_unknown"]);
-  assert.equal(result.blockers.at(-1).route,undefined);
-  assert.match(result.blockers.at(-1).title,/ผู้ใช้อื่น/);
+  assert.deepEqual(result.blockers.map(x=>x.kind),["offline_cash","cash_unknown","promptpay_unknown","expense_unknown","expense_unknown","cash_movement_unknown"]);
+  const otherExpense=result.blockers.find(x=>x.kind==="expense_unknown"&&x.actorId==="staff-2");
+  assert.equal(otherExpense?.route,undefined);
+  assert.match(otherExpense?.title||"",/ผู้ใช้อื่น/);
+  const movement=result.blockers.find(x=>x.kind==="cash_movement_unknown");
+  assert.match(movement?.title||"",/เงินเข้า\/ออกลิ้นชัก/);
 });
 
 test("resolved context from another business date does not block the current close",async()=>{
@@ -46,7 +51,8 @@ test("resolved context from another business date does not block the current clo
     offlineRows:[{requestKey:"offline-old1",body:{date:old},createdAt:1,localNo:"OFF-1",status:"needs_review",attempts:1}],
     cashPending:{body:{requestKey:"cash-old01",date:old,total:50},createdAt:2},
     promptPending:{requestKey:"prompt-old1",date:old,total:55,createdAt:3},
-    expenseIntents:[{version:1,actorId:"owner",createdAt:4,body:{requestKey:"expense-old1",date:old,amount:30,category:"OTHER",description:"old",paymentMethod:"cash",riskConfirmed:false}}]
+    expenseIntents:[{version:1,actorId:"owner",createdAt:4,body:{requestKey:"expense-old1",date:old,amount:30,category:"OTHER",description:"old",paymentMethod:"cash",riskConfirmed:false}}],
+    cashMovementIntents:[{version:1,actorId:"owner",createdAt:5,body:{requestKey:"cashmove-old1",date:old,type:"CASH_IN",amount:20,reason:"old",riskConfirmed:false}}]
   });
   assert.equal(result.ok,true);
   assert.deepEqual(result.blockers,[]);
@@ -60,6 +66,7 @@ for(const scenario of ["local-storage-denied","indexeddb-unreadable"])test("devi
     storage:store,
     listOffline:scenario==="indexeddb-unreadable"?async()=>{throw new Error("idb failed")}:async()=>[],
     listExpenses:()=>[],
+    listCashMovements:()=>[],
     now:()=>99
   });
   assert.equal(result.ok,false);
@@ -73,7 +80,8 @@ test("malformed pending cash never becomes an empty recovery state",async()=>{
   const result=await api.readCloseDayDevicePreflight("owner",date,{
     storage:storage({"field-pos-pending-cash-v1":"{broken"}),
     listOffline:async()=>[],
-    listExpenses:()=>[]
+    listExpenses:()=>[],
+    listCashMovements:()=>[]
   });
   assert.equal(result.ok,false);
   assert.equal(result.blockers[0].kind,"storage_unreadable");

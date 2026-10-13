@@ -1,7 +1,8 @@
 import {offlineCashListStrict,type OfflineCashRecord} from "@/lib/offline-db";
 import {listExpenseIntents,type ExpenseIntent} from "@/lib/expense-recovery";
+import {listCashMovementIntents,type CashMovementIntent} from "@/lib/cash-movement-recovery";
 
-export type CloseDayDeviceBlockerKind="offline_cash"|"cash_unknown"|"promptpay_unknown"|"expense_unknown"|"storage_unreadable";
+export type CloseDayDeviceBlockerKind="offline_cash"|"cash_unknown"|"promptpay_unknown"|"expense_unknown"|"cash_movement_unknown"|"storage_unreadable";
 export type CloseDayDeviceBlocker={
   kind:CloseDayDeviceBlockerKind;
   title:string;
@@ -48,6 +49,7 @@ export function buildCloseDayDevicePreflight(input:{
   cashPending:CashPending|null;
   promptPending:PromptPending|null;
   expenseIntents:ExpenseIntent[];
+  cashMovementIntents:CashMovementIntent[];
   checkedAt?:number;
 }):CloseDayDevicePreflight{
   const {actorId,businessDate}=input;
@@ -84,6 +86,14 @@ export function buildCloseDayDevicePreflight(input:{
       route:intent.actorId===actorId?"/expenses":undefined,date:businessDate,actorId:intent.actorId,count:1
     });
   }
+  for(const intent of input.cashMovementIntents.filter(x=>x.body.date===businessDate)){
+    blockers.push({
+      kind:"cash_movement_unknown",
+      title:intent.actorId===actorId?"มีรายการเงินเข้า/ออกลิ้นชักที่ยังรอคำยืนยัน":"มีรายการลิ้นชักค้างจากผู้ใช้อื่นบนเครื่องนี้",
+      detail:(intent.body.type==="CASH_IN"?"เติมเงินเข้า ":"นำเงินออก ")+"฿"+Number(intent.body.amount).toLocaleString()+" · Request …"+intent.body.requestKey.slice(-8),
+      date:businessDate,actorId:intent.actorId,count:1
+    });
+  }
   return {ok:blockers.length===0,checkedAt:input.checkedAt??Date.now(),businessDate,blockers};
 }
 
@@ -91,19 +101,21 @@ export async function readCloseDayDevicePreflight(actorId:string,businessDate:st
   storage?:DeviceStorage;
   listOffline?:()=>Promise<OfflineCashRecord[]>;
   listExpenses?:(storage?:any)=>ExpenseIntent[];
+  listCashMovements?:(storage?:any)=>CashMovementIntent[];
   now?:()=>number;
 }):Promise<CloseDayDevicePreflight>{
   try{
     const storage=deps?.storage||(localStorage as DeviceStorage);
     // Force a storage read before treating missing keys as an empty recovery state.
     storage.getItem("__field_close_day_probe__");
-    const [offlineRows,cashPending,promptPending,expenseIntents]=await Promise.all([
+    const [offlineRows,cashPending,promptPending,expenseIntents,cashMovementIntents]=await Promise.all([
       (deps?.listOffline||offlineCashListStrict)(),
       Promise.resolve(parseCashPending(storage.getItem(CASH_PENDING_KEY))),
       Promise.resolve(parsePromptPending(storage.getItem(PROMPT_PENDING_KEY))),
-      Promise.resolve((deps?.listExpenses||listExpenseIntents)(storage as any))
+      Promise.resolve((deps?.listExpenses||listExpenseIntents)(storage as any)),
+      Promise.resolve((deps?.listCashMovements||listCashMovementIntents)(storage as any))
     ]);
-    return buildCloseDayDevicePreflight({actorId,businessDate,offlineRows,cashPending,promptPending,expenseIntents,checkedAt:(deps?.now||Date.now)()});
+    return buildCloseDayDevicePreflight({actorId,businessDate,offlineRows,cashPending,promptPending,expenseIntents,cashMovementIntents,checkedAt:(deps?.now||Date.now)()});
   }catch{
     return {
       ok:false,checkedAt:(deps?.now||Date.now)(),businessDate,
