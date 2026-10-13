@@ -74,3 +74,37 @@ export async function offlineCashPatch(requestKey:string,patch:Partial<OfflineCa
   };
   await txDone(tx);db.close();
 }
+
+
+function openDbStrict():Promise<IDBDatabase>{
+  if(typeof indexedDB==="undefined")return Promise.reject(new Error("offline_storage_unavailable"));
+  return new Promise((resolve,reject)=>{
+    let settled=false;
+    const finishError=()=>{if(!settled){settled=true;reject(new Error("offline_storage_unavailable"))}};
+    const r=indexedDB.open(DB_NAME,VERSION);
+    r.onupgradeneeded=()=>{
+      if(!r.result.objectStoreNames.contains(CACHE_STORE))r.result.createObjectStore(CACHE_STORE);
+      if(!r.result.objectStoreNames.contains(OUTBOX_STORE))r.result.createObjectStore(OUTBOX_STORE,{keyPath:"requestKey"});
+    };
+    r.onsuccess=()=>{
+      if(settled){r.result.close();return}
+      settled=true;resolve(r.result);
+    };
+    r.onerror=finishError;
+    r.onblocked=finishError;
+  });
+}
+
+// Close Day must distinguish an empty outbox from unreadable browser storage.
+export async function offlineCashListStrict():Promise<OfflineCashRecord[]>{
+  const db=await openDbStrict();
+  try{
+    return await new Promise<OfflineCashRecord[]>((resolve,reject)=>{
+      const tx=db.transaction(OUTBOX_STORE,"readonly"),request=tx.objectStore(OUTBOX_STORE).getAll();
+      let settled=false;
+      const fail=()=>{if(!settled){settled=true;reject(new Error("offline_storage_unavailable"))}};
+      request.onsuccess=()=>{if(!settled){settled=true;resolve(Array.isArray(request.result)?request.result:[])}};
+      request.onerror=fail;tx.onabort=fail;tx.onerror=fail;
+    }).then(rows=>rows.sort((a,b)=>Number(a.createdAt||0)-Number(b.createdAt||0)));
+  }finally{db.close()}
+}
