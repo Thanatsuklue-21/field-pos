@@ -1,5 +1,5 @@
 import {api,type Bootstrap,type Session} from "@/lib/api-client";
-import {offlineCashDelete,offlineCashList,offlineCashPatch,offlineCashPut,type OfflineCashRecord} from "@/lib/offline-db";
+import {offlineCashDelete,offlineCashList,offlineCashListStrict,offlineCashPatch,offlineCashPut,type OfflineCashRecord} from "@/lib/offline-db";
 
 type CartLine={id:string;variant:string;qty:number};
 export type OfflineCashSummary={pending:number;needsReview:number;total:number};
@@ -21,11 +21,20 @@ export async function queueOfflineCashSale(body:Record<string,any>){
   return record;
 }
 
-export async function getOfflineCashSummary():Promise<OfflineCashSummary>{
-  const rows=await offlineCashList();
+function summarizeOfflineCash(rows:OfflineCashRecord[]):OfflineCashSummary{
   const pending=rows.filter(x=>x.status==="pending").length;
   const needsReview=rows.filter(x=>x.status==="needs_review").length;
   return {pending,needsReview,total:rows.length};
+}
+
+export async function getOfflineCashSummary():Promise<OfflineCashSummary>{
+  return summarizeOfflineCash(await offlineCashList());
+}
+
+// Close Day must fail closed if this device's recovery store cannot be inspected.
+// The server cannot see unsynced local bills, so an unavailable read is not equivalent to an empty outbox.
+export async function getOfflineCashClosePreflight():Promise<OfflineCashSummary>{
+  return summarizeOfflineCash(await offlineCashListStrict());
 }
 
 function recalcVariant(v:any,stock:Bootstrap["availabilityStock"]){
