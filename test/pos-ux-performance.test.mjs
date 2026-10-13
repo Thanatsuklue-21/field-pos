@@ -638,3 +638,13 @@ test('payment method disclosure keeps novice choices bounded while preserving al
   for(const label of ['เงินสด','QR พร้อมเพย์','โอนธนาคาร','บัตร','เดลิเวอรี'])assert.ok(pos.includes(label),label);
   assert.match(pos,/method==="bank"\|\|method==="card"\|\|method==="delivery"/);
 });
+
+test('single-operator success card makes FIFO production the primary next action',async()=>{
+  const pos=await read('app/pos/page.tsx'),guide=await read('lib/pos-guidance.mjs');
+  assert.match(pos,/ไปทำคิว \{lastSale\.queueNo\}/);
+  assert.match(pos,/รับออเดอร์ถัดไปก่อน/);
+  assert.match(pos,/ทำคิวนี้ก่อนตาม FIFO/);
+  assert.match(pos,/คิว \/ งานร้าน/);
+  assert.match(guide,/ไปทำคิว /);
+  assert.doesNotMatch(guide,/ตรวจ Orders/);
+});
