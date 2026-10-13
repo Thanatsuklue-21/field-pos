@@ -61,12 +61,37 @@ export default function PosDailyWorkspace({
   const [expenseRecoveryBlocked,setExpenseRecoveryBlocked]=useState(false);
   const [expenseFeedback,setExpenseFeedback]=useState("");
   const expenseSavingRef=useRef(false);
+  const dialogRef=useRef<HTMLElement|null>(null);
+  const closeButtonRef=useRef<HTMLButtonElement|null>(null);
   const [busy,setBusy]=useState(false);
   const [message,setMessage]=useState("");
 
   useEffect(()=>{
     if(!tabs.includes(tab)&&tabs[0])setTab(tabs[0]);
   },[tabs.join("|"),tab]);
+
+  useEffect(()=>{
+    if(!open)return;
+    const previous=document.activeElement instanceof HTMLElement?document.activeElement:null;
+    const frame=requestAnimationFrame(()=>closeButtonRef.current?.focus());
+    const onKey=(event:KeyboardEvent)=>{
+      if(event.key==="Escape"){event.preventDefault();onClose();return}
+      if(event.key!=="Tab"||!dialogRef.current)return;
+      const focusable=Array.from(dialogRef.current.querySelectorAll<HTMLElement>(
+        'button:not([disabled]),a[href],input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])'
+      )).filter(node=>node.offsetParent!==null);
+      if(!focusable.length){event.preventDefault();return}
+      const first=focusable[0],last=focusable[focusable.length-1],active=document.activeElement;
+      if(event.shiftKey&&active===first){event.preventDefault();last.focus()}
+      else if(!event.shiftKey&&active===last){event.preventDefault();first.focus()}
+    };
+    document.addEventListener("keydown",onKey);
+    return()=>{
+      cancelAnimationFrame(frame);
+      document.removeEventListener("keydown",onKey);
+      previous?.focus();
+    };
+  },[open]);
 
   async function refresh(){
     if(!online){
@@ -229,6 +254,20 @@ export default function PosDailyWorkspace({
   const outCount=stockRows.filter(x=>x.level==="out").length;
   const lowCount=stockRows.filter(x=>x.level==="low").length;
   const readiness=control?.readiness||null;
+  const nextAction:{tab:WorkspaceTab|null;label:string;detail:string;tone:"critical"|"work"|"warn"|"ready"}=
+    canExpense&&(pendingExpense||expenseRecoveryBlocked)
+      ?{tab:"expense",label:"ตรวจค่าใช้จ่ายค้างก่อน",detail:expenseRecoveryBlocked?"อ่าน Recovery ไม่ได้ · ห้ามสร้างรายการใหม่จนกว่าจะตรวจ":"มีค่าใช้จ่ายที่ยังไม่ทราบผล · ใช้ Request เดิมตรวจซ้ำเพื่อป้องกันยอดซ้ำ",tone:"critical"}
+      :canQueue&&queueRows.length>0
+        ?{tab:"queue",label:"ทำ "+String(queueRows[0].queueNo||"คิวแรก")+" ก่อน",detail:"มีลูกค้ารอ "+queueRows.length+" คิว · ระบบเรียง FIFO ให้แล้ว ไม่ต้องเลือกคิวเอง",tone:"work"}
+        :canStock&&outCount>0
+          ?{tab:"stock",label:"เติมสต็อกที่ทำให้เมนูหยุดขาย",detail:"มี "+outCount+" รายการที่ทำไม่ได้ · ตรวจของจริงก่อนรับเมนูนั้น",tone:"critical"}
+          :canStatus&&Number(readiness?.summary.blocked||0)>0
+            ?{tab:"status",label:"แก้สถานะระบบที่ถูกบล็อก",detail:"มี "+Number(readiness?.summary.blocked||0)+" จุดที่ต้องแก้ก่อนใช้งานครบทุกส่วน",tone:"critical"}
+            :canStock&&lowCount>0
+              ?{tab:"stock",label:"วางแผนเติมสต็อก",detail:"มี "+lowCount+" รายการใกล้หมด แต่ยังขายได้",tone:"warn"}
+              :canOrder&&latestOrder
+                ?{tab:"orders",label:"พร้อมรับออเดอร์ถัดไป",detail:"บิลล่าสุด "+String(latestOrder.queueNo||latestOrder.billNo||"")+" ถูกบันทึกแล้ว · เปิดดูได้โดยไม่ออกจาก POS",tone:"ready"}
+                :{tab:null,label:"พร้อมรับออเดอร์",detail:"ยังไม่มีงานเร่งด่วนจากคิว สต็อก หรือรายการค้าง",tone:"ready"};
 
   const meta:Array<{key:WorkspaceTab;label:string;icon:any;allowed:boolean;count?:number}>=[
     {key:"queue",label:"คิว",icon:ListOrdered,allowed:canQueue,count:queue.length},
@@ -240,6 +279,7 @@ export default function PosDailyWorkspace({
 
   return <div className="fixed inset-0 z-[90] bg-black/25 backdrop-blur-[2px]" onClick={onClose}>
     <aside
+      ref={dialogRef}
       role="dialog"
       aria-modal="true"
       aria-label="งานร้าน FIELD"
@@ -262,7 +302,7 @@ export default function PosDailyWorkspace({
           <button disabled={busy||!online} onClick={()=>refresh()} aria-label="รีเฟรชงานร้าน" className="grid h-11 w-11 place-items-center rounded-xl border border-slate-200 bg-white disabled:opacity-40">
             <RefreshCw size={17} className={busy?"animate-spin":""}/>
           </button>
-          <button onClick={onClose} aria-label="ปิดงานร้าน" className="grid h-11 w-11 place-items-center rounded-xl border border-slate-200 bg-white">
+          <button ref={closeButtonRef} onClick={onClose} aria-label="ปิดงานร้าน" className="grid h-11 w-11 place-items-center rounded-xl border border-slate-200 bg-white">
             <X size={18}/>
           </button>
         </div>
@@ -280,6 +320,22 @@ export default function PosDailyWorkspace({
       </div>
 
       {message&&<div className="mx-3 mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-semibold text-amber-900">{message}</div>}
+
+      <div role="status" aria-live="polite" className={"mx-3 mt-3 rounded-2xl border p-3 "+(
+        nextAction.tone==="critical"?"border-red-200 bg-red-50":
+        nextAction.tone==="work"?"border-[#d4af37]/50 bg-[#fff8dc]":
+        nextAction.tone==="warn"?"border-amber-200 bg-amber-50":
+        "border-emerald-200 bg-emerald-50"
+      )}>
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="m-0 text-[10px] font-black tracking-[.14em] text-slate-500">แนะนำตอนนี้</p>
+            <b className="mt-1 block text-sm text-slate-900">{nextAction.label}</b>
+            <p className="mt-1 text-xs leading-5 text-slate-600">{nextAction.detail}</p>
+          </div>
+          {nextAction.tab&&<button type="button" onClick={()=>setTab(nextAction.tab as WorkspaceTab)} className="min-h-11 shrink-0 rounded-xl border border-slate-300 bg-white px-3 text-xs font-bold text-slate-800">เปิดดู</button>}
+        </div>
+      </div>
 
       <div className="soft-scroll min-h-0 flex-1 overflow-auto p-3 sm:p-4">
         {tab==="queue"&&canQueue&&<div className="space-y-2">
