@@ -467,7 +467,7 @@ test('called pickup cards can reveal ordered menu details before handoff',async(
   assert.match(queue,/item\.name/);
   assert.match(queue,/item\.variant/);
   assert.match(queue,/×\{item\.qty\}/);
-  const pickup=queue.slice(queue.indexOf('waitingPickup.length>0'));
+  const pickup=queue.slice(queue.lastIndexOf('waitingPickup.length>0'));
   assert.ok(pickup.indexOf('ดูรายการ')<pickup.indexOf('ลูกค้ารับแล้ว'));
   assert.doesNotMatch(pickup,/action:"call"/);
 });
