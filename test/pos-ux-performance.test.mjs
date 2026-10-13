@@ -319,7 +319,7 @@ test('queue production view centers one pager card with order summary and menu-c
   assert.match(queue,/บัตรผลิตปัจจุบัน/);
   assert.match(queue,/รายการรวมในบัตรนี้/);
   assert.match(queue,/สรุปตามหมวดเมนู/);
-  assert.match(queue,/ขั้นตอนปัจจุบัน/);
+  assert.match(queue,/ทำรายการนี้ก่อน/);
   assert.match(queue,/บัตรถัดไป/);
   assert.match(queue,/รอลูกค้ารับ/);
   assert.match(queue,/activeMenu/);
@@ -368,7 +368,7 @@ test('solo operator daily flow keeps sales and production as separate focused sc
   assert.match(shell,/moreMobile=\["\/expenses","\/close","\/control","\/settings"\]/);
   assert.match(pos,/ไปทำคิว \{lastSale\.queueNo\}/);
   assert.match(pos,/รับออเดอร์ถัดไป/);
-  assert.match(queue,/PRODUCTION RUN/);
+  assert.match(queue,/คิวผลิต · FIFO/);
   assert.match(queue,/ทำออเดอร์ \/ รันบัตร/);
   assert.doesNotMatch(queue,/router\.push\("\/orders/);
   assert.doesNotMatch(queue,/router\.push\("\/pos/);
@@ -391,7 +391,7 @@ test('queue grouped menu progress remains visible while cache schema protects sn
 
 test('queue guides one production category and active menu inside the pager card',async()=>{
   const queue=await read('app/queue/page.tsx'),api=await read('lib/pos-api.mjs');
-  assert.match(queue,/ขั้นตอนปัจจุบัน/);
+  assert.match(queue,/ทำรายการนี้ก่อน/);
   assert.match(queue,/สรุปตามหมวดเมนู/);
   assert.match(queue,/activeCategory/);
   assert.match(queue,/activeMenu/);
@@ -527,4 +527,15 @@ test('payment mapping v2 exposes bank and card as first-class channels',async()=
   assert.match(core,/\['cash','promptpay','bank','card','other'\]/);assert.match(core,/manual_bank/);assert.match(core,/manual_card/);
   assert.match(api,/paymentSummary=\{cash:0,promptpay:0,bank:0,card:0,other:0\}/);assert.match(api,/bankAmount:/);assert.match(api,/cardAmount:/);
   assert.match(close,/x\.bank/);assert.match(close,/x\.card/);assert.match(reports,/PAYMENT CHANNELS/);
+});
+
+
+test('queue tells a new operator exactly what to do next',async()=>{
+  const queue=await read('app/queue/page.tsx');
+  assert.match(queue,/ตอนนี้ทำอะไร/);
+  assert.match(queue,/queueInstruction/);
+  assert.match(queue,/queueStage/);
+  assert.match(queue,/1 ทำเครื่องดื่ม/);
+  assert.match(queue,/2 เรียกบัตร/);
+  assert.match(queue,/3 ส่งมอบ/);
 });
