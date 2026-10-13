@@ -11,7 +11,8 @@ test("critical operator recovery copy explains the action without engineering ja
   const hub=await read("components/pos-operations-hub.tsx");
   const expense=await read("lib/expense-client.ts");
   const queueClient=await read("lib/queue-client.ts");
-  const combined=[pos,queue,orders,hub,expense,queueClient].join("\n");
+  const shell=await read("components/app-shell.tsx");
+  const combined=[pos,queue,orders,hub,expense,queueClient,shell].join("\n");
 
   for(const oldCopy of [
     "ข้อมูล recovery การชำระ",
@@ -27,7 +28,8 @@ test("critical operator recovery copy explains the action without engineering ja
     "VOID/Refund เดิม",
     "Server ยังไม่ยืนยัน VOID/Refund",
     "ยังไม่ดึงคิวจาก Server",
-    "Server บังคับ FIFO"
+    "Server บังคับ FIFO",
+    "รายการจาก Server ที่อาจไม่อัปเดต"
   ]) assert.equal(combined.includes(oldCopy),false,oldCopy);
 
   assert.match(pos,/ข้อมูลติดตามรายการชำระก่อนหน้าในเครื่องมีปัญหา/);
@@ -37,6 +39,7 @@ test("critical operator recovery copy explains the action without engineering ja
   assert.match(expense,/ค่าใช้จ่ายรายการก่อนหน้าที่ยังตรวจสอบไม่เสร็จ/);
   assert.match(queueClient,/เก็บข้อมูลเดิมไว้เพื่อป้องกันตัดสต็อกหรือเปลี่ยนคิวซ้ำ/);
   assert.match(hub,/ระบบไม่อนุญาตให้ข้ามคิว/);
+  assert.match(shell,/ข้อมูลคิวหรือรายการเก่าที่ยังไม่อัปเดต/);
 });
 
 test("plain-language copy keeps the safety instruction explicit",async()=>{
