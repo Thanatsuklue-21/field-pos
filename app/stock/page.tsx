@@ -145,7 +145,7 @@ function StockView({session}:{session:Session}){
     }finally{setBusy(false)}
   }
 
-  useEffect(()=>{  useEffect(()=>{
+  useEffect(()=>{
     load().catch(()=>{});
     let disposed=false,recovering=false;
     const recover=async()=>{
@@ -305,7 +305,7 @@ function StockView({session}:{session:Session}){
     }
   }
 
-  async function savePurchaseEdit(){  async function savePurchaseEdit(){
+  async function savePurchaseEdit(){
     if(!purchaseEdit)return;setBusy(true);setMsg("");
     try{
       const p=purchaseEdit.purchase;
