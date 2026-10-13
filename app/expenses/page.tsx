@@ -100,7 +100,7 @@ function View({session}:{session:Session}){
       <div className="flex items-start justify-between gap-3"><div><p className="m-0 text-[10px] font-black tracking-[.2em] text-[#765b08]">GUIDED EXPENSE CONTROL</p><h2 id="expense-dialog-title" className="mt-1 text-xl font-bold">เพิ่มค่าใช้จ่าย</h2><p className="mt-1 text-xs text-slate-500">เลือกช่องทางให้ตรงกับเงินจริง · ถ้าเป็นเงินสด Server จะตรวจยอดลิ้นชักซ้ำตอนกดยืนยัน</p></div><button disabled={busy} aria-label="ปิดหน้าต่างค่าใช้จ่าย" onClick={closeCreate} className="grid h-11 w-11 shrink-0 place-items-center rounded-xl border border-slate-200 bg-white disabled:opacity-40"><X size={18}/></button></div>
 
       <div className="mt-4 grid grid-cols-3 gap-2 rounded-2xl bg-slate-100 p-1">
-        <button type="button" onClick={()=>{setPaymentMethod("cash");setRiskConfirmed(false)}} className={"min-h-11 rounded-xl text-xs font-bold "+(paymentMethod==="cash"?"bg-white text-red-600 shadow-sm":"text-slate-600")}>เงินสด</button>
+        <button type="button" onClick={()=>{setPaymentMethod("cash");setRiskConfirmed(false)}} className={"min-h-11 rounded-xl text-xs font-bold "+(paymentMethod==="cash"?"bg-white text-red-600 shadow-sm":"text-slate-600")}>เงินสดจากลิ้นชัก</button>
         <button type="button" onClick={()=>{setPaymentMethod("bank");setRiskConfirmed(false)}} className={"min-h-11 rounded-xl text-xs font-bold "+(paymentMethod==="bank"?"bg-white text-slate-900 shadow-sm":"text-slate-600")}>โอน/ธนาคาร</button>
         <button type="button" onClick={()=>{setPaymentMethod("other");setRiskConfirmed(false)}} className={"min-h-11 rounded-xl text-xs font-bold "+(paymentMethod==="other"?"bg-white text-slate-900 shadow-sm":"text-slate-600")}>อื่น ๆ</button>
       </div>
