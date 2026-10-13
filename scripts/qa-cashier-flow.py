@@ -1,0 +1,103 @@
+"""Cashier-flow metrics browser QA. All APIs are intercepted; no live financial writes.
+
+Measures the deterministic UI interaction path for a new cashier without claiming
+human training speed. Human time-to-learn must be measured separately on real hardware.
+"""
+import argparse
+import json
+import time
+from pathlib import Path
+from playwright.sync_api import sync_playwright, expect
+
+parser=argparse.ArgumentParser()
+parser.add_argument("--base-url",default="http://localhost:3000")
+parser.add_argument("--browser",default="/usr/bin/chromium")
+parser.add_argument("--output",default="/tmp/field-cashier-flow-qa")
+args=parser.parse_args()
+output=Path(args.output); output.mkdir(parents=True,exist_ok=True)
+
+with sync_playwright() as p:
+    browser=p.chromium.launch(executable_path=args.browser,args=["--no-sandbox"])
+    context=browser.new_context(viewport={"width":390,"height":844})
+    page=context.new_page(); page.set_default_timeout(30000)
+    writes=[]; errors=[]; checkout_bodies=[]; taps=0
+    page.on("pageerror",lambda error: errors.append(str(error)))
+
+    def handler(route):
+        path=route.request.url.split("/api/")[-1]
+        method=route.request.method
+        if method!="GET": writes.append({"method":method,"path":path})
+        if path=="auth/session":
+            data={"user":{"id":"owner","username":"owner","role":"admin","permissions":{}},"csrf":"test"}
+        elif path=="pos/bootstrap":
+            data={"revision":1,"menu":[{"id":"test-menu","name":"เมนูทดสอบ","category":"TEST","price":55,"enabled":True,"available":True,"maxServings":20,"lowStock":False,"variants":[
+                {"label":"50%","available":True,"maxServings":20,"lowStock":False,"recipeItems":{"matcha":5},"missingIngredients":[],"reason":None},
+                {"label":"100%","available":True,"maxServings":20,"lowStock":False,"recipeItems":{"matcha":5},"missingIngredients":[],"reason":None}
+            ]}],"availabilityStock":{"matcha":{"qty":100,"name":"Matcha"}},"settings":{}}
+        elif path=="customers": data={"customers":[],"loyalty":{}}
+        elif path=="payments/promptpay/config": data={"ready":False,"configured":False}
+        elif path=="pos/checkout" and method=="POST":
+            body=json.loads(route.request.post_data or "{}"); checkout_bodies.append(body)
+            data={"orderId":"order-test-1","queueNo":"Q001","pager":7,"billNo":"B001","total":55,"received":100,"change":45,"revision":2}
+        elif path=="queue":
+            data={"queue":[]}
+        else:
+            data={"health":"ok","metrics":{},"alerts":[],"policy":{"auto":[],"approval":[],"never":[]}}
+        route.fulfill(status=200,content_type="application/json",body=json.dumps(data))
+
+    page.route("**/api/**",handler)
+    started=time.perf_counter()
+    page.goto(args.base_url+"/pos",wait_until="domcontentloaded",timeout=60000)
+
+    def tap(locator):
+        nonlocal_taps[0]+=1
+        locator.click()
+
+    nonlocal_taps=[0]
+    tap(page.get_by_role("button",name="เมนูทดสอบ").first)
+    variant=page.get_by_role("dialog")
+    expect(variant).to_be_visible()
+    tap(variant.get_by_role("button",name="50%",exact=True))
+    tap(page.get_by_role("button",name="ชำระเงิน",exact=True))
+    payment=page.get_by_role("dialog",name="รับเงิน ฿55")
+    expect(payment).to_be_visible()
+    tap(payment.get_by_role("button",name="รับพอดี ฿55",exact=True))
+    # Use 100 to exercise the change path while keeping payment deterministic.
+    payment.get_by_role("textbox",name="จำนวนเงินที่รับจากลูกค้า").fill("100")
+    nonlocal_taps[0]+=1
+    expect(payment.get_by_text("เงินทอน",exact=True)).to_be_visible()
+    expect(payment.get_by_text("฿45",exact=True)).to_be_visible()
+    tap(payment.get_by_role("button",name="ยืนยันรับเงิน",exact=True))
+
+    success=page.get_by_text("ชำระเงินสำเร็จ",exact=True)
+    expect(success).to_be_visible()
+    expect(page.get_by_text("คิว Q001",exact=False)).to_be_visible()
+    expect(page.get_by_text("บัตร 7",exact=True)).to_be_visible()
+    expect(page.get_by_text("฿45",exact=True)).to_be_visible()
+
+    elapsed_ms=round((time.perf_counter()-started)*1000)
+    assert len(checkout_bodies)==1, checkout_bodies
+    body=checkout_bodies[0]
+    assert body["payment"]=="cash"
+    assert body["received"]==100
+    assert body["cart"]==[{"id":"test-menu","variant":"50%","qty":1}]
+    assert isinstance(body.get("requestKey"),str) and body["requestKey"]
+    assert not errors, errors
+    assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
+
+    result={
+        "viewport":"390x844",
+        "uiInteractions":nonlocal_taps[0],
+        "automationElapsedMs":elapsed_ms,
+        "checkoutRequests":len(checkout_bodies),
+        "durableRequestKeyPresent":True,
+        "cashChangeVerified":45,
+        "queueVerified":"Q001",
+        "pagerVerified":7,
+        "pageErrors":errors,
+        "note":"Automation timing is regression telemetry only; it is not a human training-time claim."
+    }
+    (output/"results.json").write_text(json.dumps(result,ensure_ascii=False,indent=2))
+    page.screenshot(path=str(output/"cashier-flow-390.png"),full_page=True)
+    print(json.dumps(result,ensure_ascii=False),flush=True)
+    context.close(); browser.close()
