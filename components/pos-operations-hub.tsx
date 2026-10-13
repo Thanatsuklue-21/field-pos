@@ -26,6 +26,7 @@ type AdminReadiness={
   readyForFullOperations:boolean;
   accounting?:{ok:boolean;level:string;blocking?:any[];totals?:Record<string,any>};
   accountingCauses?:{code:string;confidence:string;severity:string;title:string;explanation:string;nextAction:string}[];
+  notifications?:{lineKitchen?:{configured:boolean;pending:number;sending:number;retryable:number;blocked:number;stale:number;unresolved:number;oldestUnresolvedAt:number|null}};
   warnings?:{code:string;message:string}[];
 };
 const n=(v:any)=>Number(v)||0;
@@ -53,6 +54,7 @@ export default function PosOperationsHub({session,bootstrap,open,onClose,onRefre
   const [message,setMessage]=useState("");
   const [expenseBusy,setExpenseBusy]=useState(false);
   const [queueBusy,setQueueBusy]=useState(false);
+  const [kitchenRetryBusy,setKitchenRetryBusy]=useState(false);
   const [expenseAmount,setExpenseAmount]=useState("");
   const [expenseCategory,setExpenseCategory]=useState("OTHER");
   const [expenseDescription,setExpenseDescription]=useState("");
@@ -266,6 +268,24 @@ export default function PosOperationsHub({session,bootstrap,open,onClose,onRefre
     };
   },[open,session.csrf,cloudAvailable,canQueue,canOrder,canStock,canExpense,canReadiness]);
 
+  async function retryKitchenNotifications(){
+    if(!canReadiness||!cloudAvailable||kitchenRetryBusy)return;
+    setKitchenRetryBusy(true);setMessage("");
+    try{
+      const result=await api<any>("/api/pos/kitchen/retry",{method:"POST",headers:{"x-csrf-token":session.csrf},body:"{}"});
+      const status=result?.status||{};
+      if(Number(result?.accepted)>0)setMessage("ส่งแจ้งครัวสำเร็จ "+Number(result.accepted)+" รายการ");
+      else if(Number(status.blocked)>0)setMessage("LINE แจ้งครัวยังถูกบล็อก · ตรวจ Token, Group ID และสิทธิ์ Bot ก่อนลองใหม่");
+      else if(Number(status.stale)>0)setMessage("มีแจ้งครัวเกินช่วง retry 23 ชั่วโมง · ตรวจออเดอร์กับ LINE ด้วยคน ห้ามย้อนสถานะชำระเงิน");
+      else if(Number(status.unresolved)>0)setMessage("รายการแจ้งครัวยังอยู่ในช่วง backoff · รอให้ถึงเวลาลองใหม่แล้วกดอีกครั้ง");
+      else setMessage("ไม่พบรายการแจ้งครัวที่ค้าง");
+      await refresh("today",true);
+    }catch(e:any){
+      setMessage(e?.message==="network_unavailable"?"ติดต่อ Server ไม่ได้ · ยังไม่เปลี่ยนสถานะการชำระเงินหรือคิว":"ลองส่งแจ้งครัวไม่สำเร็จ · ตรวจการตั้งค่า LINE แล้วลองใหม่");
+      await refresh("today",true).catch(()=>{});
+    }finally{setKitchenRetryBusy(false)}
+  }
+
   async function saveExpense(){
     if(!(Number(expenseAmount)>0)||expenseBusy||!cloudAvailable)return;
     setExpenseBusy(true);setMessage("");
@@ -303,6 +323,7 @@ export default function PosOperationsHub({session,bootstrap,open,onClose,onRefre
 
   if(!open)return null;
   const todayBlockers=n(closeStatus?.paymentBlockers?.length)+n(closeStatus?.orderBlockers?.length)+(readiness?.accounting?.ok===false?1:0);
+  const kitchen=readiness?.notifications?.lineKitchen;
   const tabMeta:{key:HubTab;label:string;icon:any;count?:number;allowed:boolean}[]=[
     {key:"today",label:"วันนี้",icon:CalendarCheck2,count:todayBlockers,allowed:canReport},
     {key:"queue",label:"คิว",icon:ListOrdered,count:queue.length,allowed:canQueue},
@@ -362,6 +383,12 @@ export default function PosOperationsHub({session,bootstrap,open,onClose,onRefre
               {readiness.accountingCauses?.[0]&&<div className="mt-2 border-t border-red-100 pt-2"><b>{readiness.accountingCauses[0].title}</b><p className="mt-1 text-red-700">{readiness.accountingCauses[0].explanation}</p></div>}
               {canOrder&&<button type="button" onClick={()=>setTab("orders")} className="mt-3 min-h-11 w-full rounded-xl border border-red-200 bg-red-50 px-3 font-bold text-red-800">ตรวจออเดอร์ในงานร้าน</button>}
             </div>}
+          </div>}
+          {canReadiness&&kitchen?.configured&&<div className={"rounded-2xl border p-4 "+(n(kitchen.unresolved)>0?"border-amber-300 bg-amber-50":"border-emerald-200 bg-emerald-50")}>
+            <div className="flex items-start justify-between gap-3"><div><b>LINE แจ้งครัว</b><p className="mt-1 text-xs text-slate-600">{n(kitchen.unresolved)>0?"มี notification ที่ยังไม่จบ · Payment และยอดขายยังยึดสถานะจาก Server ตามเดิม":"ไม่พบแจ้งครัวค้าง"}</p></div><span className={"rounded-full px-2 py-1 text-[10px] font-black "+(n(kitchen.unresolved)>0?"bg-amber-200 text-amber-900":"bg-emerald-200 text-emerald-900")}>{n(kitchen.unresolved)>0?n(kitchen.unresolved)+" ค้าง":"OK"}</span></div>
+            {n(kitchen.unresolved)>0&&<div className="mt-3 grid grid-cols-3 gap-2 text-center"><Metric label="รอส่ง" value={n(kitchen.pending)+n(kitchen.sending)}/><Metric label="ถูกบล็อก" value={n(kitchen.blocked)}/><Metric label="เกิน 23ชม." value={n(kitchen.stale)}/></div>}
+            {n(kitchen.retryable)>0&&<button type="button" disabled={kitchenRetryBusy||!cloudAvailable} onClick={retryKitchenNotifications} className="mt-3 min-h-11 w-full rounded-xl bg-[#1F4D3A] px-3 text-xs font-bold text-white disabled:opacity-40">{kitchenRetryBusy?"กำลังลองส่งเดิม…":"ลองส่งแจ้งครัวอีกครั้ง · "+n(kitchen.retryable)+" รายการ"}</button>}
+            {(n(kitchen.blocked)>0||n(kitchen.stale)>0)&&<p className="mt-3 rounded-xl bg-white px-3 py-2 text-[10px] text-amber-900">รายการ Blocked/Stale ต้องตรวจ LINE configuration หรือออเดอร์จริงด้วยคน · ห้ามแก้ยอดขาย/Payment เพื่อให้ notification หาย</p>}
           </div>}
           {!!todaySummary?.lowStock?.length&&<div className="rounded-2xl border border-amber-200 bg-white p-4"><b className="text-sm">สต็อกที่ควรดูวันนี้</b><p className="mt-2 text-xs text-slate-600">{todaySummary.lowStock.slice(0,4).map(x=>x.name).join(" · ")}</p><button onClick={()=>setTab("stock")} className="mt-3 min-h-11 w-full rounded-xl border border-slate-300 bg-white text-xs font-bold">ดูสต็อกในหน้านี้</button></div>}
           {!!todaySummary?.recommendations?.length&&<div className="rounded-2xl border border-slate-200 bg-white p-4"><b className="text-sm">ระบบแนะนำ</b><p className="mt-2 text-xs font-semibold text-slate-800">{todaySummary.recommendations[0].title}</p><p className="mt-1 text-xs text-slate-500">{todaySummary.recommendations[0].detail}</p></div>}
