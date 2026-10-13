@@ -1,0 +1,100 @@
+name: FIELD Production Smoke
+
+on:
+  deployment_status:
+  schedule:
+    - cron: '17 * * * *'
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: Production URL to verify
+        required: false
+        default: https://field-pos.vercel.app
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.event.deployment_status.state == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      BASE_URL: ${{ github.event_name == 'workflow_dispatch' && inputs.base_url || 'https://field-pos.vercel.app' }}
+      EXPECTED_SHA: ${{ github.event_name == 'deployment_status' && github.event.deployment.sha || '' }}
+    steps:
+      - name: Verify public health and core routes
+        shell: bash
+        run: |
+          set -euo pipefail
+          base="${BASE_URL%/}"
+          echo "Checking $base"
+
+          : > /tmp/health-times.txt
+          for attempt in 1 2 3; do
+            code="$(curl --silent --show-error --output /tmp/health.json --dump-header /tmp/health.headers --write-out '%{http_code}' --retry 2 --retry-all-errors --retry-delay 2 "$base/api/health")"
+            test "$code" = "200" || { echo "::error::health attempt $attempt returned HTTP $code"; exit 1; }
+            total="$(curl --silent --show-error --output /dev/null --write-out '%{time_total}' "$base/api/health")"
+            echo "$total" >> /tmp/health-times.txt
+
+            node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const health=JSON.parse(fs.readFileSync('/tmp/health.json','utf8'));
+          if(health?.ok!==true) throw new Error('health_not_ok');
+          if(health?.storage!=='turso') throw new Error('storage_not_turso');
+          if(!health?.release || typeof health.release.commit!=='string') throw new Error('release_identity_missing');
+          if(!health.release.branch || !health.release.environment) throw new Error('release_context_missing');
+          console.log('health ok',health.release);
+          NODE
+
+            grep -qi '^strict-transport-security:' /tmp/health.headers || { echo "::error::HSTS header missing"; exit 1; }
+            grep -qi '^x-content-type-options:[[:space:]]*nosniff' /tmp/health.headers || { echo "::error::nosniff header missing"; exit 1; }
+            grep -qi '^x-frame-options:[[:space:]]*DENY' /tmp/health.headers || { echo "::error::frame protection header missing"; exit 1; }
+          done
+
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const values=fs.readFileSync('/tmp/health-times.txt','utf8').trim().split(/\s+/).map(Number).filter(Number.isFinite);
+          if(values.length!==3) throw new Error('health_latency_sample_missing');
+          const max=Math.max(...values),avg=values.reduce((a,b)=>a+b,0)/values.length;
+          console.log({healthLatencySeconds:{avg,max}});
+          if(max>5) throw new Error('health_latency_budget_exceeded');
+          NODE
+
+          for path in /pos /settings /close; do
+            code="$(curl --silent --show-error --output /tmp/page.html --dump-header /tmp/page.headers --write-out '%{http_code}' --retry 4 --retry-all-errors --retry-delay 5 "$base$path")"
+            test "$code" = "200" || { echo "::error::$path returned HTTP $code"; exit 1; }
+            grep -q "FIELD POS" /tmp/page.html || { echo "::error::$path did not render FIELD POS shell"; exit 1; }
+            grep -qi '^content-security-policy:' /tmp/page.headers || { echo "::error::$path missing CSP"; exit 1; }
+            echo "$path OK"
+          done
+
+      - name: Verify production commit matches expected main or deployment
+        if: env.EXPECTED_SHA != ''
+        shell: bash
+        run: |
+          set -euo pipefail
+          base="${BASE_URL%/}"
+          health="$(curl --fail --silent --show-error "$base/api/health")"
+          actual="$(printf '%s' "$health" | node --input-type=module -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>console.log(JSON.parse(s).release?.commit||''))")"
+          if [ -z "$actual" ]; then
+            echo "::error::Production health has no release commit"
+            exit 1
+          fi
+          if [ "$actual" != "$EXPECTED_SHA" ]; then
+            echo "::error::Stale release: expected SHA $EXPECTED_SHA but production reports $actual"
+            exit 1
+          fi
+          echo "Production commit matches expected release: $actual"
+
+      - name: Publish smoke summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "## FIELD Production Smoke"
+            echo "- URL: $BASE_URL"
+            echo "- Trigger: ${{ github.event_name }}"
+            echo "- Expected SHA: ${EXPECTED_SHA:-manual}"
+            echo "- Result: ${{ job.status }}"
+          } >> "$GITHUB_STEP_SUMMARY"

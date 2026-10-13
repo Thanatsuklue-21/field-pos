@@ -105,28 +105,25 @@ test('stock API rejects request-key reuse with a different payload', async () =>
   assert.equal(db.rows.length,1);
 });
 
-test('stock API maps domain validation failures to HTTP 400', async () => {
+test('human stock API blocks system-generated transaction types even for admin', async () => {
   const db=fakeDb();
   const user={id:'admin-1',role:'admin',permissions:{}};
-
-  const res=await handleStockApi({
-    path:'/api/stock/transactions',
-    method:'POST',
-    user,
-    db,
-    body:{
-      requestKey:'sale-10001',
-      ingredientId:'matcha',
-      type:'SALE',
-      qtyDelta:5,
-      unit:'g',
-    },
-    now:100,
-  });
-
-  assert.equal(res.status,400);
-  assert.equal(res.body.error,'sale_must_decrease_stock');
+  for(const type of ['SALE','ADJUSTMENT','VOID_REVERSAL','REFUND_REVERSAL']){
+    const res=await handleStockApi({
+      path:'/api/stock/transactions',method:'POST',user,db,
+      body:{requestKey:'blocked-'+type.toLowerCase(),ingredientId:'matcha',type,qtyDelta:type==='SALE'?-5:5,unit:'g',reason:'manual attempt'},
+      now:100,
+    });
+    assert.equal(res.status,403);
+    assert.equal(res.body.error,'system_stock_transaction_type');
+  }
   assert.equal(db.rows.length,0);
+});
+
+test('waste through human stock API requires an explicit reason', async()=>{
+  const db=fakeDb(),user={id:'staff-1',role:'staff',permissions:{stock:true}};
+  const res=await handleStockApi({path:'/api/stock/transactions',method:'POST',user,db,body:{requestKey:'waste-no-reason',ingredientId:'matcha',type:'WASTE',qtyDelta:-5,unit:'g',reason:''},now:100});
+  assert.equal(res.status,400);assert.equal(res.body.error,'waste_reason_required');assert.equal(db.rows.length,0);
 });
 
 test('non-stock route is ignored by stock handler', async () => {
@@ -159,4 +156,27 @@ test('stock API returns 409 for future purchase date',async()=>{
   const db=fakeDb();
   const res=await handleStockApi({path:'/api/stock/transactions',method:'POST',user:{id:'admin-1',role:'admin',permissions:{}},db,now:Date.parse('2026-10-03T03:00:00Z'),body:{requestKey:'purchase-future-api',ingredientId:'matcha',type:'PURCHASE',qtyDelta:100,unit:'g',purchaseCost:200,purchaseDate:'2026-10-04'}});
   assert.equal(res.status,409);assert.equal(res.body.error,'future_purchase_date');assert.equal(db.rows.length,0);
+});
+
+
+test('stock request key is bound to the original actor',async()=>{
+  const db=fakeDb(),body={requestKey:'purchase-actor-bound',ingredientId:'matcha',type:'PURCHASE',qtyDelta:100,unit:'g'};
+  const first=await handleStockApi({path:'/api/stock/transactions',method:'POST',user:{id:'staff-1',role:'staff',permissions:{stock:true}},db,body,now:100});
+  const other=await handleStockApi({path:'/api/stock/transactions',method:'POST',user:{id:'staff-2',role:'staff',permissions:{stock:true}},db,body,now:200});
+  assert.equal(first.status,201);
+  assert.equal(other.status,409);
+  assert.equal(other.body.error,'idempotency_conflict');
+  assert.equal(db.rows.length,1);
+  assert.equal(JSON.parse(db.storage.document).ingredients.matcha.qty,1100);
+});
+
+test('invalid purchase payment method is an explicit client validation error',async()=>{
+  const db=fakeDb();
+  const res=await handleStockApi({
+    path:'/api/stock/transactions',method:'POST',user:{id:'admin-1',role:'admin',permissions:{}},db,now:100,
+    body:{requestKey:'purchase-pay-method',ingredientId:'matcha',type:'PURCHASE',qtyDelta:100,unit:'g',purchaseCost:100,purchasePaymentMethod:'card'}
+  });
+  assert.equal(res.status,400);
+  assert.equal(res.body.error,'invalid_purchase_payment_method');
+  assert.equal(db.rows.length,0);
 });
