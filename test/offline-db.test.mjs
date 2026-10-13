@@ -12,7 +12,7 @@ async function storage(t){
   const code=ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText;
   return import('data:text/javascript;base64,'+Buffer.from(code+'\n// '+t.name).toString('base64'));
 }
-const record={requestKey:'offline-request-1',body:{total:50},createdAt:1,localNo:'OFF-1',status:'pending',attempts:0};
+const record={requestKey:'offline-request-1',body:{requestKey:'offline-request-1',date:'2026-10-13',total:50},createdAt:1,localNo:'OFF-1',status:'pending',attempts:0};
 
 test('offline outbox persists, patches and deletes only completed writes',async t=>{
   const db=await storage(t);
