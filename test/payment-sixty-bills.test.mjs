@@ -30,7 +30,7 @@ async function fixture(t){
 test('60 isolated API bills: cash/bank/card/Beam fixture reconcile, replay, handoff and close',async t=>{
   const {db,call}=await fixture(t);let checks=0;
   globalThis.fetch=async url=>{assert.match(String(url),/^https:\/\/playground\.api\.beamcheckout\.com\//);checks++;return new Response(JSON.stringify({chargeId:String(url).split('/').at(-1),status:'SUCCEEDED',amount:5500,currency:'THB'}))};
-  await call('cash-shift/open','POST',{openingCash:500},201);
+  await call('cash-shift/open','POST',{requestKey:'sixty-bills-open',openingCash:500},201);
   const ids=new Set();
   for(let i=0;i<60;i++){
     const payment=['cash','bank','card','promptpay'][i%4];
