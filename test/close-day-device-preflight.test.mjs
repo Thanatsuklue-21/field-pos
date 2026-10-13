@@ -10,6 +10,7 @@ const loadPreflight=id=>loadBrowserModule("lib/close-day-device-preflight.ts",{
     .replace('import {listExpenseIntents,type ExpenseIntent} from "@/lib/expense-recovery";','type ExpenseIntent=any; const listExpenseIntents=()=>[];')
     .replace('import {listCashMovementIntents,type CashMovementIntent} from "@/lib/cash-movement-recovery";','type CashMovementIntent=any; const listCashMovementIntents=()=>[];')
     .replace('import {listExpenseDeleteIntents,type ExpenseDeleteIntent} from "@/lib/expense-delete-recovery";','type ExpenseDeleteIntent=any; const listExpenseDeleteIntents=()=>[];')
+    .replace('import {listOrderMutationIntents,type OrderMutationIntent} from "@/lib/order-mutation-recovery";','type OrderMutationIntent=any; const listOrderMutationIntents=()=>[];')
 });
 const storage=(entries={})=>{
   const data=new Map(Object.entries(entries));
@@ -34,11 +35,12 @@ test("same-day device-local money and expense intents block Close Day",async()=>
       {version:1,actorId:"staff-2",createdAt:5,body:{requestKey:"expense-0002",date,amount:20,category:"OTHER",description:"parking",paymentMethod:"cash",riskConfirmed:false}}
     ],
     cashMovementIntents:[{version:1,actorId:"owner",createdAt:6,body:{requestKey:"cashmove-0001",date,type:"CASH_OUT",amount:100,reason:"เก็บเงิน",riskConfirmed:false}}],
-    expenseDeleteIntents:[{version:1,actorId:"owner",createdAt:7,body:{requestKey:"expdel-0001",expenseId:"exp-1",date,expectedAmount:30}}]
+    expenseDeleteIntents:[{version:1,actorId:"owner",createdAt:7,body:{requestKey:"expdel-0001",expenseId:"exp-1",date,expectedAmount:30}}],
+    orderMutationIntents:[{version:1,actorId:"owner",operation:"refund",createdAt:8,body:{requestKey:"refund-0001",saleId:"s-1",reason:"คืนเงิน",riskConfirmed:true,manualConfirmed:false,manualReference:"",expectedDate:date,expectedRefundAmount:55,expectedSaleIds:["s-1"]}}]
   });
   assert.equal(result.ok,false);
   assert.equal(result.checkedAt,123);
-  assert.deepEqual(result.blockers.map(x=>x.kind),["offline_cash","cash_unknown","promptpay_unknown","expense_unknown","expense_unknown","cash_movement_unknown","expense_delete_unknown"]);
+  assert.deepEqual(result.blockers.map(x=>x.kind),["offline_cash","cash_unknown","promptpay_unknown","expense_unknown","expense_unknown","cash_movement_unknown","expense_delete_unknown","order_mutation_unknown"]);
   const otherExpense=result.blockers.find(x=>x.kind==="expense_unknown"&&x.actorId==="staff-2");
   assert.equal(otherExpense?.route,undefined);
   assert.match(otherExpense?.title||"",/ผู้ใช้อื่น/);
@@ -55,7 +57,8 @@ test("resolved context from another business date does not block the current clo
     promptPending:{requestKey:"prompt-old1",date:old,total:55,createdAt:3},
     expenseIntents:[{version:1,actorId:"owner",createdAt:4,body:{requestKey:"expense-old1",date:old,amount:30,category:"OTHER",description:"old",paymentMethod:"cash",riskConfirmed:false}}],
     cashMovementIntents:[{version:1,actorId:"owner",createdAt:5,body:{requestKey:"cashmove-old1",date:old,type:"CASH_IN",amount:20,reason:"old",riskConfirmed:false}}],
-    expenseDeleteIntents:[{version:1,actorId:"owner",createdAt:6,body:{requestKey:"expdel-old1",expenseId:"exp-old",date:old,expectedAmount:30}}]
+    expenseDeleteIntents:[{version:1,actorId:"owner",createdAt:6,body:{requestKey:"expdel-old1",expenseId:"exp-old",date:old,expectedAmount:30}}],
+    orderMutationIntents:[{version:1,actorId:"owner",operation:"void",createdAt:7,body:{requestKey:"void-old01",saleId:"s-old",reason:"old",riskConfirmed:true,expectedDate:old,expectedAmount:50}}]
   });
   assert.equal(result.ok,true);
   assert.deepEqual(result.blockers,[]);
@@ -71,6 +74,7 @@ for(const scenario of ["local-storage-denied","indexeddb-unreadable"])test("devi
     listExpenses:()=>[],
     listCashMovements:()=>[],
     listExpenseDeletes:()=>[],
+    listOrderMutations:()=>[],
     now:()=>99
   });
   assert.equal(result.ok,false);
@@ -86,7 +90,8 @@ test("malformed pending cash never becomes an empty recovery state",async()=>{
     listOffline:async()=>[],
     listExpenses:()=>[],
     listCashMovements:()=>[],
-    listExpenseDeletes:()=>[]
+    listExpenseDeletes:()=>[],
+    listOrderMutations:()=>[]
   });
   assert.equal(result.ok,false);
   assert.equal(result.blockers[0].kind,"storage_unreadable");
