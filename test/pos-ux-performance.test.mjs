@@ -196,7 +196,9 @@ test('order items preserve sale-time price while production queue hides commerci
 
 test('mobile operational pages use compact density while preserving touch actions',async()=>{
   const shell=await read('components/app-shell.tsx'),pos=await read('app/pos/page.tsx'),queue=await read('app/queue/page.tsx'),stock=await read('app/stock/page.tsx'),orders=await read('app/orders/page.tsx');
-  assert.match(shell,/primaryMobile=\["\/pos","\/queue","\/orders","\/stock"\]/);\n  assert.match(shell,/moreMobile=\["\/expenses","\/close","\/control","\/settings"\]/);\n  assert.match(shell,/min-h-12 min-w-0 flex-1/);
+  assert.match(shell,/primaryMobile=\["\/pos","\/queue","\/orders","\/stock"\]/);
+  assert.match(shell,/moreMobile=\["\/expenses","\/close","\/control","\/settings"\]/);
+  assert.match(shell,/min-h-12 min-w-0 flex-1/);
   assert.match(pos,/min-h-\[154px\]/);
   assert.match(pos,/bottom-\[70px\]/);
   assert.match(queue,/h-full overflow-y-auto overscroll-contain p-2\.5 pb-28/);
@@ -362,7 +364,8 @@ test('payment success prioritizes queue prefetch before noncritical refreshes',a
 
 test('solo operator daily flow keeps sales and production as separate focused screens',async()=>{
   const shell=await read('components/app-shell.tsx'),pos=await read('app/pos/page.tsx'),queue=await read('app/queue/page.tsx'),close=await read('app/close/page.tsx');
-  assert.match(shell,/primaryMobile=\["\/pos","\/queue","\/orders","\/stock"\]/);\n  assert.match(shell,/moreMobile=\["\/expenses","\/close","\/control","\/settings"\]/);
+  assert.match(shell,/primaryMobile=\["\/pos","\/queue","\/orders","\/stock"\]/);
+  assert.match(shell,/moreMobile=\["\/expenses","\/close","\/control","\/settings"\]/);
   assert.match(pos,/ไปทำคิว \{lastSale\.queueNo\}/);
   assert.match(pos,/รับออเดอร์ถัดไป/);
   assert.match(queue,/PRODUCTION RUN/);
