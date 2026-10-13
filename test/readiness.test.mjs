@@ -128,3 +128,14 @@ test('Next route health fast path exposes the same release identity contract',as
   for(const field of ['VERCEL_GIT_COMMIT_SHA','VERCEL_GIT_COMMIT_REF','VERCEL_ENV','VERCEL_DEPLOYMENT_ID','commit','branch','environment','deploymentId']) assert.match(health,new RegExp(field));
   assert.match(health,/Response\.json\(\{ok:true,storage:"turso",release\}/);
 });
+
+
+test('Vercel production deploys are gated by an explicit release marker change',async()=>{
+  const raw=await read('vercel.json');
+  const config=JSON.parse(raw);
+  assert.match(config.ignoreCommand,/VERCEL_GIT_COMMIT_REF/);
+  assert.match(config.ignoreCommand,/main/);
+  assert.match(config.ignoreCommand,/\.vercel-release/);
+  assert.match(config.ignoreCommand,/git diff --quiet HEAD\^ HEAD/);
+  assert.doesNotMatch(config.ignoreCommand,/force|deploy --prod/);
+});
