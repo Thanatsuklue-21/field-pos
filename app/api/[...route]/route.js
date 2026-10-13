@@ -12,6 +12,15 @@ function databaseScopeError(){
   return null;
 }
 
+function releaseIdentity(){
+  return {
+    commit:String(process.env.VERCEL_GIT_COMMIT_SHA||process.env.GIT_COMMIT_SHA||"local").slice(0,40),
+    branch:String(process.env.VERCEL_GIT_COMMIT_REF||process.env.GIT_BRANCH||"local").slice(0,120),
+    environment:String(process.env.VERCEL_ENV||process.env.NODE_ENV||"development").slice(0,40),
+    deploymentId:String(process.env.VERCEL_DEPLOYMENT_ID||"").slice(0,120)
+  };
+}
+
 async function handle(request,{params}){
   const {route=[]}=await params;
   const headers=Object.fromEntries(request.headers.entries());
@@ -23,6 +32,7 @@ async function handle(request,{params}){
       try{body=JSON.parse(raw)}catch{return Response.json({error:"invalid_json"},{status:400})}
     }
   }
+
   const routePath="/api/"+route.join("/");
   if(routePath==="/api/build"&&request.method==="GET"){
     const buildSha=String(process.env.VERCEL_GIT_COMMIT_SHA||process.env.GIT_COMMIT_SHA||"").slice(0,40);
@@ -31,6 +41,7 @@ async function handle(request,{params}){
     const databaseScope=rawScope==="uat"||rawScope==="production"?rawScope:rawScope?"invalid":"unconfigured";
     return Response.json({buildSha:buildSha||null,environment,databaseScope},{status:200,headers:{"Cache-Control":"no-store"}});
   }
+
   if(routePath==="/api/health"&&request.method==="GET"){
     if(!process.env.TURSO_DATABASE_URL||!process.env.TURSO_AUTH_TOKEN){
       return Response.json({ok:false,storage:"turso",error:"turso_not_configured"},{status:503,headers:{"Cache-Control":"no-store"}});
@@ -41,11 +52,12 @@ async function handle(request,{params}){
     }
     try{
       await getDb().execute("SELECT 1 AS ok");
-      return Response.json({ok:true,storage:"turso"},{status:200,headers:{"Cache-Control":"no-store"}});
+      return Response.json({ok:true,storage:"turso",release:releaseIdentity()},{status:200,headers:{"Cache-Control":"no-store"}});
     }catch{
       return Response.json({ok:false,storage:"turso",error:"turso_unavailable"},{status:503,headers:{"Cache-Control":"no-store"}});
     }
   }
+
   const req={method:request.method,headers,query:{route},body,rawBody};
   let status=200,responseHeaders={},chunks=[];
   const res={
@@ -54,6 +66,7 @@ async function handle(request,{params}){
     status(code){status=code;return this;},
     json(value){responseHeaders["Content-Type"]="application/json; charset=utf-8";chunks=[JSON.stringify(value)];return this;}
   };
+
   if(!process.env.TURSO_DATABASE_URL||!process.env.TURSO_AUTH_TOKEN){
     return Response.json({error:"turso_not_configured"},{status:503,headers:{"Cache-Control":"no-store"}});
   }
@@ -63,6 +76,7 @@ async function handle(request,{params}){
   catch{
     return Response.json({error:"turso_unavailable"},{status:503,headers:{"Cache-Control":"no-store"}});
   }
+
   const origin=process.env.PUBLIC_ORIGIN;
   if(!origin||!origin.startsWith("https://"))return Response.json({error:"origin_not_configured"},{status:503});
   await createApi({db:getDb(),origin})(req,res);
