@@ -17,7 +17,7 @@ test("POS opens the daily workspace in-place and blocks it during payment mutati
 
 test("daily workspace covers queue orders stock quick expense and owner readiness",async()=>{
   const hub=await read("components/pos-daily-workspace.tsx");
-  assert.match(hub,/FIELD DAILY WORKSPACE/);
+  assert.match(hub,/FIELD · งานวันนี้/);
   for(const label of ["คิว","ออเดอร์","สต็อก","รายจ่าย","สถานะ"])assert.match(hub,new RegExp(label));
   assert.match(hub,/\/api\/pos\/queue/);
   assert.match(hub,/\/api\/pos\/history/);
@@ -50,16 +50,16 @@ test("workspace previews the latest receipt in-place and keeps deep actions on O
   assert.match(hub,/latestOrder\.items/);
   assert.match(hub,/latestOrder\.paymentMethods/);
   assert.match(hub,/ดูบิลได้ตรงนี้โดยไม่ออกจากหน้า POS/);
-  assert.match(hub,/FullLink href="\/orders" label="เปิดประวัติ\/Refund\/VOID"/);
+  assert.match(hub,/FullLink href="\/orders" label="เปิดประวัติ \/ คืนเงิน \/ ยกเลิกบิล"/);
   const receiptStart=hub.indexOf("ใบเสร็จล่าสุด");
-  const receiptEnd=hub.indexOf("เปิดประวัติ/Refund/VOID",receiptStart);
+  const receiptEnd=hub.indexOf("เปิดประวัติ / คืนเงิน / ยกเลิกบิล",receiptStart);
   const receiptBlock=hub.slice(receiptStart,receiptEnd);
   assert.doesNotMatch(receiptBlock,/href=\{latestOrder\.queueNo/);
 });
 
 test("workspace fails safe offline while still exposing cached stock signals",async()=>{
   const hub=await read("components/pos-daily-workspace.tsx");
-  assert.match(hub,/OFFLINE · ดูสัญญาณสต็อกจากข้อมูลล่าสุดได้/);
+  assert.match(hub,/เน็ตหลุด · ยังดูสัญญาณสต็อกจากข้อมูลล่าสุดได้/);
   assert.match(hub,/disabled=\{busy\|\|!online\}/);
   assert.match(hub,/เมนูที่เปิดขายยังไม่พบสัญญาณสต็อกต่ำ/);
 });
