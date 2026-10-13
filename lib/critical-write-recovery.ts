@@ -1,8 +1,9 @@
 export type CriticalWriteBody=Record<string,any>&{requestKey:string};
 export type CriticalWriteIntent<T extends CriticalWriteBody=CriticalWriteBody>={version:1;actorId:string;operation:string;createdAt:number;body:T};
 type StorageLike=Pick<Storage,"getItem"|"setItem"|"removeItem">;
+export const CRITICAL_WRITE_INTENT_PREFIX="field-critical-write-v1:";
 
-const keyFor=(actorId:string,operation:string)=>"field-critical-write-v1:"+encodeURIComponent(actorId)+":"+encodeURIComponent(operation);
+const keyFor=(actorId:string,operation:string)=>CRITICAL_WRITE_INTENT_PREFIX+encodeURIComponent(actorId)+":"+encodeURIComponent(operation);
 const recoveryError=(code:string,cause?:unknown)=>Object.assign(new Error(code),{status:0,cause});
 function storageOrThrow(storage?:StorageLike){
   try{return storage||localStorage}catch(cause){throw recoveryError("critical_recovery_unavailable",cause)}
@@ -60,4 +61,21 @@ export async function sendCriticalWriteIntent<T extends CriticalWriteBody>(
   if(!exactAck(result,intent.body,intent))throw recoveryError("critical_ack_unknown");
   try{clearCriticalWriteIntent(intent,store)}catch(cause){throw recoveryError("critical_recovery_unavailable",cause)}
   return result;
+}
+
+
+export function listCriticalWriteIntents(storage?:StorageLike&Pick<Storage,"length"|"key">):CriticalWriteIntent[]{
+  const store=(storageOrThrow(storage) as StorageLike&Pick<Storage,"length"|"key">),out:CriticalWriteIntent[]=[];
+  try{
+    for(let i=0;i<store.length;i++){
+      const key=store.key(i);
+      if(!key||!key.startsWith(CRITICAL_WRITE_INTENT_PREFIX))continue;
+      const suffix=key.slice(CRITICAL_WRITE_INTENT_PREFIX.length),separator=suffix.lastIndexOf(":");
+      if(separator<=0||separator===suffix.length-1)throw new Error("invalid_intent_key");
+      const actorId=decodeURIComponent(suffix.slice(0,separator)),operation=decodeURIComponent(suffix.slice(separator+1));
+      const intent=readCriticalWriteIntent(actorId,operation,store);
+      if(intent)out.push(intent);
+    }
+    return out;
+  }catch(cause){throw recoveryError("critical_recovery_unavailable",cause)}
 }
