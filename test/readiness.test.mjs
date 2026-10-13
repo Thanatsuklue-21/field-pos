@@ -98,12 +98,13 @@ test('production smoke workflow checks health routes and stale release without c
 });
 
 
-test('production smoke also monitors stale main release hourly without deploying',async()=>{
+test('scheduled production smoke checks health without comparing workflow revision to release SHA',async()=>{
   const yml=await read('.github/workflows/production-smoke.yml');
   assert.match(yml,/schedule:/);
   assert.match(yml,/cron: '17 \* \* \* \*'/);
   assert.match(yml,/github\.event_name == 'schedule'/);
-  assert.match(yml,/github\.sha/);
+  assert.match(yml,/EXPECTED_SHA: .*deployment_status.*deployment\.sha.*\|\| ''/);
+  assert.doesNotMatch(yml,/deployment_status.*deployment\.sha.*\|\| github\.sha/);
   assert.match(yml,/Stale release: expected SHA/);
   assert.doesNotMatch(yml,/vercel deploy|create_deployment|deploy --prod/);
 });
