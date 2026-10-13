@@ -149,14 +149,14 @@ test('deployment-status smoke uses the public production alias instead of protec
 });
 
 
-test('production build config is reproducible on Node 24 without legacy Vercel builds',async()=>{
+test('production keeps the proven Vercel routing path while pinning Node 24',async()=>{
   const pkg=JSON.parse(await read('package.json'));
   const lock=JSON.parse(await read('package-lock.json'));
   const vercel=JSON.parse(await read('vercel.json'));
   const route=await read('app/api/[...route]/route.js');
   assert.equal(pkg.engines?.node,'24.x');
   assert.equal(lock.packages?.['']?.engines?.node,'24.x');
-  assert.equal(Object.prototype.hasOwnProperty.call(vercel,'builds'),false);
-  assert.deepEqual(vercel.regions,['sin1']);
-  assert.doesNotMatch(route,/preferredRegion/);
+  assert.deepEqual(vercel.builds,[{src:'package.json',use:'@vercel/next'}]);
+  assert.equal(Object.prototype.hasOwnProperty.call(vercel,'regions'),false);
+  assert.match(route,/preferredRegion="sin1"/);
 });
