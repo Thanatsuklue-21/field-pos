@@ -100,3 +100,12 @@ test("PWA Today workspace surfaces admin accounting readiness without creating a
   assert.match(hub,/readiness\.accounting\?\.ok===false/);
   assert.doesNotMatch(hub,/method:"POST"[\s\S]{0,160}\/api\/admin\/readiness/);
 });
+
+
+test("Close Day UI translates accounting reconciliation failure into a clear operator action",async()=>{
+  const close=await read("app/close/page.tsx");
+  assert.match(close,/accounting_reconciliation_failed/);
+  assert.match(close,/ปิดวันไม่ได้ · ยอดบัญชียังไม่ตรงกัน/);
+  assert.match(close,/ตรวจยอดขายและยอดรับชำระ/);
+  assert.match(close,/closeError\(e\.message,e\.data\)/);
+});
