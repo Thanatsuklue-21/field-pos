@@ -24,13 +24,29 @@ function openDb():Promise<IDBDatabase|null>{
     r.onerror=()=>resolve(null);
   });
 }
-function txDone(tx:IDBTransaction){return new Promise<void>(resolve=>{tx.oncomplete=()=>resolve();tx.onerror=()=>resolve();tx.onabort=()=>resolve()})}
+function txDone(tx:IDBTransaction){
+  return new Promise<void>((resolve,reject)=>{
+    tx.oncomplete=()=>resolve();
+    const failed=()=>reject(Object.assign(new Error("offline_storage_write_failed"),{cause:tx.error}));
+    tx.onerror=failed;tx.onabort=failed;
+  });
+}
+async function writeStore(db:IDBDatabase,storeName:string,write:(store:IDBObjectStore)=>void){
+  try{
+    const tx=db.transaction(storeName,"readwrite"),done=txDone(tx);
+    try{write(tx.objectStore(storeName))}
+    catch(error){
+      tx.abort();
+      await done.catch(()=>{});
+      throw Object.assign(new Error("offline_storage_write_failed"),{cause:error});
+    }
+    await done;
+  }finally{db.close()}
+}
 
 export async function cachePut<T>(key:string,value:T){
   const db=await openDb();if(!db)return;
-  const tx=db.transaction(CACHE_STORE,"readwrite");
-  tx.objectStore(CACHE_STORE).put({value,savedAt:Date.now()},key);
-  await txDone(tx);db.close();
+  await writeStore(db,CACHE_STORE,store=>{store.put({value,savedAt:Date.now()},key)});
 }
 export async function cacheGet<T>(key:string,maxAgeMs=24*60*60*1000):Promise<T|null>{
   const db=await openDb();if(!db)return null;
@@ -45,9 +61,7 @@ export async function cacheGet<T>(key:string,maxAgeMs=24*60*60*1000):Promise<T|n
 
 export async function offlineCashPut(record:OfflineCashRecord){
   const db=await openDb();if(!db)throw new Error("offline_storage_unavailable");
-  const tx=db.transaction(OUTBOX_STORE,"readwrite");
-  tx.objectStore(OUTBOX_STORE).put(record);
-  await txDone(tx);db.close();
+  await writeStore(db,OUTBOX_STORE,store=>{store.put(record)});
 }
 export async function offlineCashList():Promise<OfflineCashRecord[]>{
   const db=await openDb();if(!db)return [];
@@ -59,20 +73,18 @@ export async function offlineCashList():Promise<OfflineCashRecord[]>{
   return rows.sort((a,b)=>Number(a.createdAt||0)-Number(b.createdAt||0));
 }
 export async function offlineCashDelete(requestKey:string){
-  const db=await openDb();if(!db)return;
-  const tx=db.transaction(OUTBOX_STORE,"readwrite");
-  tx.objectStore(OUTBOX_STORE).delete(requestKey);
-  await txDone(tx);db.close();
+  const db=await openDb();if(!db)throw new Error("offline_storage_unavailable");
+  await writeStore(db,OUTBOX_STORE,store=>{store.delete(requestKey)});
 }
 export async function offlineCashPatch(requestKey:string,patch:Partial<OfflineCashRecord>){
-  const db=await openDb();if(!db)return;
-  const tx=db.transaction(OUTBOX_STORE,"readwrite"),store=tx.objectStore(OUTBOX_STORE);
-  const r=store.get(requestKey);
-  r.onsuccess=()=>{
-    const row=r.result as OfflineCashRecord|undefined;
-    if(row)store.put({...row,...patch,requestKey:row.requestKey});
-  };
-  await txDone(tx);db.close();
+  const db=await openDb();if(!db)throw new Error("offline_storage_unavailable");
+  await writeStore(db,OUTBOX_STORE,store=>{
+    const r=store.get(requestKey);
+    r.onsuccess=()=>{
+      const row=r.result as OfflineCashRecord|undefined;
+      if(row)store.put({...row,...patch,requestKey:row.requestKey});
+    };
+  });
 }
 
 
