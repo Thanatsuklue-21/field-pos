@@ -45,7 +45,7 @@ test("shared queue client persists exact action body before sending and queue UI
   const recoverStart=queue.indexOf('setBusy("recover:"');
   const recoverBlock=queue.slice(recoverStart,recoverStart+1700);
   assert.match(recoverBlock,/sendQueueAction\(pending\.body\)/);
-  assert.match(recoverBlock,/ใช้ request key เดิมและไม่ทำรายการซ้ำ/);
+  assert.match(recoverBlock,/ตรวจสอบการกดคิวก่อนหน้าสำเร็จ · ระบบไม่ทำรายการซ้ำ/);
 });
 
 test("all operator queue mutations use durable sendQueueAction including WASTE and handoff",async()=>{

@@ -153,7 +153,7 @@ export default function PosOperationsHub({session,bootstrap,open,onClose,onRefre
       setMessage("กู้คืนค่าใช้จ่ายเดิมสำเร็จ · ไม่บันทึกซ้ำ");
       await refresh("expenses",true);
     }catch(e:any){
-      setMessage(shouldRetainExpensePending(e)?"ค่าใช้จ่ายเดิมยังไม่ทราบผล · ระบบเก็บ request เดิมไว้และจะตรวจซ้ำ":expenseErrorText(e.message));
+      setMessage(shouldRetainExpensePending(e)?"ค่าใช้จ่ายรายการก่อนหน้ายังตรวจสอบไม่เสร็จ · ระบบเก็บข้อมูลเดิมไว้และจะตรวจอีกครั้ง":expenseErrorText(e.message));
     }finally{expenseRecoveryRef.current=false;setExpenseBusy(false)}
   }
   async function recoverQueueAction(){
@@ -165,10 +165,10 @@ export default function PosOperationsHub({session,bootstrap,open,onClose,onRefre
     try{
       const result=await sendQueueActionDurably(session.csrf,pending.body);
       if(Array.isArray(result?.orders))setQueue(result.orders);
-      setMessage("กู้คืน Queue action เดิมสำเร็จ · ไม่ทำรายการซ้ำ");
+      setMessage("ตรวจสอบการกดคิวก่อนหน้าสำเร็จ · ระบบไม่ทำรายการซ้ำ");
     }catch(e:any){
       setMessage(shouldRetainQueuePending(e)
-        ?"Queue action เดิมยังไม่ทราบผล · ระบบเก็บ request เดิมไว้และจะตรวจซ้ำ"
+        ?"การกดคิวก่อนหน้ายังตรวจสอบไม่เสร็จ · ระบบเก็บข้อมูลเดิมไว้และจะตรวจอีกครั้ง"
         :queueActionErrorText(e.message));
       await refresh("queue",true).catch(()=>{});
     }finally{queueRecoveryRef.current=false;setQueueBusy(false)}
@@ -201,7 +201,7 @@ export default function PosOperationsHub({session,bootstrap,open,onClose,onRefre
       setMessage(successText);
     }catch(e:any){
       setMessage(shouldRetainQueuePending(e)
-        ?"ผล Queue action ยังไม่ชัดเจน · ระบบเก็บ request เดิมไว้ ห้ามกดซ้ำจนกว่าจะตรวจสำเร็จ"
+        ?"ผลการกดคิวครั้งก่อนยังไม่ชัดเจน · ระบบเก็บข้อมูลเดิมไว้ ห้ามกดซ้ำจนกว่าจะตรวจสำเร็จ"
         :queueActionErrorText(e.message));
       await refresh("queue",true).catch(()=>{});
     }finally{setQueueBusy(false)}
@@ -214,7 +214,7 @@ export default function PosOperationsHub({session,bootstrap,open,onClose,onRefre
     try{
       if(readPendingQueueAction()){await recoverQueueAction();return}
     }catch(e:any){setMessage(queueActionErrorText(e.message));return}
-    if(!window.confirm("บันทึก “ชงเสีย / ทำใหม่” "+item.name+" 1 แก้ว?\nระบบจะหักวัตถุดิบเพิ่มตามสูตรที่ใช้ตอนขาย และลงค่าใช้จ่าย WASTE อัตโนมัติ"))return;
+    if(!window.confirm("บันทึก “ชงเสีย / ทำใหม่” "+item.name+" 1 แก้ว?\nระบบจะหักวัตถุดิบเพิ่มตามสูตรที่ใช้ตอนขาย และบันทึกต้นทุนของเสียอัตโนมัติ"))return;
     setQueueBusy(true);setMessage("");
     try{
       const result=await sendQueueActionDurably(session.csrf,{
@@ -226,10 +226,10 @@ export default function PosOperationsHub({session,bootstrap,open,onClose,onRefre
       });
       if(Array.isArray(result?.orders))setQueue(result.orders);
       else await refresh("queue",true);
-      setMessage("บันทึก WASTE "+item.name+" 1 แก้วแล้ว · หัก Stock เพิ่มตามสูตร"+(Number(result?.wasteCost)>0?" · ต้นทุนของเสีย ฿"+formatMoney(Number(result.wasteCost)):"")+" · ทำใหม่ต่อในคิวเดิม");
+      setMessage("บันทึกชงเสีย "+item.name+" 1 แก้วแล้ว · หักสต็อกเพิ่มตามสูตร"+(Number(result?.wasteCost)>0?" · ต้นทุนของเสีย ฿"+formatMoney(Number(result.wasteCost)):"")+" · ทำใหม่ต่อในคิวเดิม");
     }catch(e:any){
       setMessage(shouldRetainQueuePending(e)
-        ?"ผล WASTE ยังไม่ชัดเจน · ระบบเก็บ request เดิมไว้ ห้ามกดซ้ำจนกว่าจะตรวจสำเร็จ"
+        ?"ผลการบันทึกชงเสียครั้งก่อนยังไม่ชัดเจน · ระบบเก็บข้อมูลเดิมไว้ ห้ามกดซ้ำจนกว่าจะตรวจสำเร็จ"
         :queueActionErrorText(e.message));
       await refresh("queue",true).catch(()=>{});
     }finally{setQueueBusy(false)}
@@ -279,13 +279,13 @@ export default function PosOperationsHub({session,bootstrap,open,onClose,onRefre
       const result=await api<any>("/api/pos/kitchen/retry",{method:"POST",headers:{"x-csrf-token":session.csrf},body:"{}"});
       const status=result?.status||{};
       if(Number(result?.accepted)>0)setMessage("ส่งแจ้งครัวสำเร็จ "+Number(result.accepted)+" รายการ");
-      else if(Number(status.blocked)>0)setMessage("LINE แจ้งครัวยังถูกบล็อก · ตรวจ Token, Group ID และสิทธิ์ Bot ก่อนลองใหม่");
-      else if(Number(status.stale)>0)setMessage("มีแจ้งครัวเกินช่วง retry 23 ชั่วโมง · ตรวจออเดอร์กับ LINE ด้วยคน ห้ามย้อนสถานะชำระเงิน");
+      else if(Number(status.blocked)>0)setMessage("LINE ยังส่งข้อความไปบาร์ไม่ได้ · ให้ผู้ดูแลตรวจการเชื่อมต่อและสิทธิ์ LINE ก่อนลองใหม่");
+      else if(Number(status.stale)>0)setMessage("มีข้อความแจ้งบาร์ค้างเกิน 23 ชั่วโมง · ตรวจออเดอร์กับ LINE ด้วยคน ห้ามแก้สถานะชำระเงินเพื่อให้ข้อความหาย");
       else if(Number(status.unresolved)>0)setMessage("รายการแจ้งครัวยังอยู่ในช่วง backoff · รอให้ถึงเวลาลองใหม่แล้วกดอีกครั้ง");
       else setMessage("ไม่พบรายการแจ้งครัวที่ค้าง");
       await refresh("today",true);
     }catch(e:any){
-      setMessage(e?.message==="network_unavailable"?"ติดต่อ Server ไม่ได้ · ยังไม่เปลี่ยนสถานะการชำระเงินหรือคิว":"ลองส่งแจ้งครัวไม่สำเร็จ · ตรวจการตั้งค่า LINE แล้วลองใหม่");
+      setMessage(e?.message==="network_unavailable"?"เชื่อมต่อระบบไม่ได้ · ยังไม่เปลี่ยนสถานะการชำระเงินหรือคิว":"ลองส่งแจ้งบาร์ไม่สำเร็จ · ตรวจการตั้งค่า LINE แล้วลองใหม่");
       await refresh("today",true).catch(()=>{});
     }finally{setKitchenRetryBusy(false)}
   }
@@ -373,12 +373,12 @@ export default function PosOperationsHub({session,bootstrap,open,onClose,onRefre
             <div className="rounded-2xl border border-slate-200 bg-white p-4"><p className="text-[10px] font-bold text-slate-500">ออเดอร์วันนี้</p><b className="mt-1 block text-2xl">{n(todaySummary?.todayOrders)}</b></div>
           </div>
           <div className={"rounded-2xl border p-4 "+(todayBlockers>0?"border-amber-300 bg-amber-50":"border-emerald-200 bg-emerald-50")}>
-            <div className="flex items-start justify-between gap-3"><div><b>{todayBlockers>0?"ยังปิดวันไม่ได้":"พร้อมตรวจปิดวัน"}</b><p className="mt-1 text-xs text-slate-600">{todayBlockers>0?"ต้องเคลียร์คิวหรือรายการชำระที่ค้างก่อน เพื่อไม่ให้ยอดและ Stock คลาดเคลื่อน":"ไม่พบคิวหรือ payment blocker จากข้อมูลล่าสุด"}</p></div><span className={"rounded-full px-2 py-1 text-[10px] font-black "+(todayBlockers>0?"bg-amber-200 text-amber-900":"bg-emerald-200 text-emerald-900")}>{todayBlockers>0?todayBlockers+" ค้าง":"OK"}</span></div>
+            <div className="flex items-start justify-between gap-3"><div><b>{todayBlockers>0?"ยังปิดวันไม่ได้":"พร้อมตรวจปิดวัน"}</b><p className="mt-1 text-xs text-slate-600">{todayBlockers>0?"ต้องเคลียร์คิวหรือรายการชำระที่ค้างก่อน เพื่อไม่ให้ยอดและสต็อกคลาดเคลื่อน":"ไม่พบคิวหรือรายการชำระที่ค้างจากข้อมูลล่าสุด"}</p></div><span className={"rounded-full px-2 py-1 text-[10px] font-black "+(todayBlockers>0?"bg-amber-200 text-amber-900":"bg-emerald-200 text-emerald-900")}>{todayBlockers>0?todayBlockers+" ค้าง":"OK"}</span></div>
             <div className="mt-3 grid grid-cols-2 gap-2 text-center"><Metric label="คิวค้าง" value={n(closeStatus?.orderBlockers?.length)}/><Metric label="ชำระค้าง" value={n(closeStatus?.paymentBlockers?.length)}/></div>
           </div>
           {canReadiness&&readiness&&<div className={"rounded-2xl border p-4 "+(readiness.readyForFullOperations?"border-emerald-200 bg-emerald-50":readiness.accounting?.ok===false?"border-red-200 bg-red-50":"border-amber-200 bg-amber-50")}>
             <div className="flex items-start justify-between gap-3">
-              <div><b>ความพร้อมระบบ</b><p className="mt-1 text-xs text-slate-600">{readiness.accounting?.ok===false?"บัญชีมี Critical mismatch · ระบบบล็อก Close Day อัตโนมัติ":readiness.readyForFullOperations?"ขาย/สต็อก/ต้นทุน/Payment ผ่านเงื่อนไขหลัก":"ยังมี Warning ที่ควรตรวจ แต่ระบบไม่เดาหรือแก้ยอดเอง"}</p></div>
+              <div><b>ความพร้อมระบบ</b><p className="mt-1 text-xs text-slate-600">{readiness.accounting?.ok===false?"ยอดบัญชีไม่ตรง · ระบบหยุดปิดวันอัตโนมัติเพื่อให้ตรวจสอบก่อน":readiness.readyForFullOperations?"ขาย / สต็อก / ต้นทุน / การชำระเงินพร้อมใช้งาน":"ยังมีจุดที่ควรตรวจ แต่ระบบจะไม่เดาหรือแก้ยอดเอง"}</p></div>
               <span className={"rounded-full px-2 py-1 text-[10px] font-black "+(readiness.readyForFullOperations?"bg-emerald-200 text-emerald-900":readiness.accounting?.ok===false?"bg-red-200 text-red-800":"bg-amber-200 text-amber-900")}>{readiness.readyForFullOperations?"READY":readiness.accounting?.ok===false?"BLOCK":"CHECK"}</span>
             </div>
             <div className="mt-3 grid grid-cols-3 gap-2 text-center"><Metric label="ขายเงินสด" value={readiness.readyForCashSales?1:0}/><Metric label="PromptPay" value={readiness.readyForPromptPay?1:0}/><Metric label="บัญชี" value={readiness.accounting?.ok===false?0:1}/></div>
@@ -389,10 +389,10 @@ export default function PosOperationsHub({session,bootstrap,open,onClose,onRefre
             </div>}
           </div>}
           {canReadiness&&kitchen?.configured&&<div className={"rounded-2xl border p-4 "+(n(kitchen.unresolved)>0?"border-amber-300 bg-amber-50":"border-emerald-200 bg-emerald-50")}>
-            <div className="flex items-start justify-between gap-3"><div><b>LINE แจ้งครัว</b><p className="mt-1 text-xs text-slate-600">{n(kitchen.unresolved)>0?"มี notification ที่ยังไม่จบ · Payment และยอดขายยังยึดสถานะจาก Server ตามเดิม":"ไม่พบแจ้งครัวค้าง"}</p></div><span className={"rounded-full px-2 py-1 text-[10px] font-black "+(n(kitchen.unresolved)>0?"bg-amber-200 text-amber-900":"bg-emerald-200 text-emerald-900")}>{n(kitchen.unresolved)>0?n(kitchen.unresolved)+" ค้าง":"OK"}</span></div>
+            <div className="flex items-start justify-between gap-3"><div><b>LINE แจ้งบาร์</b><p className="mt-1 text-xs text-slate-600">{n(kitchen.unresolved)>0?"มีข้อความแจ้งบาร์ที่ยังส่งไม่สำเร็จ · ยอดขายและการชำระเงินไม่เปลี่ยน":"ไม่พบแจ้งบาร์ค้าง"}</p></div><span className={"rounded-full px-2 py-1 text-[10px] font-black "+(n(kitchen.unresolved)>0?"bg-amber-200 text-amber-900":"bg-emerald-200 text-emerald-900")}>{n(kitchen.unresolved)>0?n(kitchen.unresolved)+" ค้าง":"OK"}</span></div>
             {n(kitchen.unresolved)>0&&<div className="mt-3 grid grid-cols-3 gap-2 text-center"><Metric label="รอส่ง" value={n(kitchen.pending)+n(kitchen.sending)}/><Metric label="ถูกบล็อก" value={n(kitchen.blocked)}/><Metric label="เกิน 23ชม." value={n(kitchen.stale)}/></div>}
             {n(kitchen.retryable)>0&&<button type="button" disabled={kitchenRetryBusy||!cloudAvailable} onClick={retryKitchenNotifications} className="mt-3 min-h-11 w-full rounded-xl bg-[#1F4D3A] px-3 text-xs font-bold text-white disabled:opacity-40">{kitchenRetryBusy?"กำลังลองส่งเดิม…":"ลองส่งแจ้งครัวอีกครั้ง · "+n(kitchen.retryable)+" รายการ"}</button>}
-            {(n(kitchen.blocked)>0||n(kitchen.stale)>0)&&<p className="mt-3 rounded-xl bg-white px-3 py-2 text-[10px] text-amber-900">รายการ Blocked/Stale ต้องตรวจ LINE configuration หรือออเดอร์จริงด้วยคน · ห้ามแก้ยอดขาย/Payment เพื่อให้ notification หาย</p>}
+            {(n(kitchen.blocked)>0||n(kitchen.stale)>0)&&<p className="mt-3 rounded-xl bg-white px-3 py-2 text-[10px] text-amber-900">รายการที่ส่งไม่ได้หรือค้างนานต้องตรวจการตั้งค่า LINE และออเดอร์จริงด้วยคน · ห้ามแก้ยอดขายหรือสถานะชำระเงินเพียงเพื่อให้ข้อความหาย</p>}
           </div>}
           {!!todaySummary?.lowStock?.length&&<div className="rounded-2xl border border-amber-200 bg-white p-4"><b className="text-sm">สต็อกที่ควรดูวันนี้</b><p className="mt-2 text-xs text-slate-600">{todaySummary.lowStock.slice(0,4).map(x=>x.name).join(" · ")}</p><button onClick={()=>setTab("stock")} className="mt-3 min-h-11 w-full rounded-xl border border-slate-300 bg-white text-xs font-bold">ดูสต็อกในหน้านี้</button></div>}
           {!!todaySummary?.recommendations?.length&&<div className="rounded-2xl border border-slate-200 bg-white p-4"><b className="text-sm">ระบบแนะนำ</b><p className="mt-2 text-xs font-semibold text-slate-800">{todaySummary.recommendations[0].title}</p><p className="mt-1 text-xs text-slate-500">{todaySummary.recommendations[0].detail}</p></div>}
@@ -404,13 +404,13 @@ export default function PosOperationsHub({session,bootstrap,open,onClose,onRefre
           {kitchenStatus?.configured&&n(kitchenStatus.unresolved)>0&&<div className={"rounded-2xl border p-3 "+(n(kitchenStatus.blocked)+n(kitchenStatus.stale)>0?"border-red-300 bg-red-50":"border-amber-300 bg-amber-50")}>
             <div className="flex items-start justify-between gap-3">
               <div><b className="text-sm">แจ้งบาร์ผ่าน LINE ค้าง {n(kitchenStatus.unresolved)} รายการ</b><p className="mt-1 text-xs text-slate-600">{n(kitchenStatus.blocked)+n(kitchenStatus.stale)>0?"มีรายการที่ส่งซ้ำอัตโนมัติไม่ได้ · ต้องตรวจการตั้งค่า LINE ก่อน":"ยอดขายและคิวยืนยันแล้ว · เฉพาะข้อความแจ้งบาร์กำลังรอส่งซ้ำ"}</p></div>
-              <span className={"rounded-full px-2 py-1 text-[10px] font-black "+(n(kitchenStatus.blocked)+n(kitchenStatus.stale)>0?"bg-red-200 text-red-800":"bg-amber-200 text-amber-900")}>{n(kitchenStatus.blocked)+n(kitchenStatus.stale)>0?"ตรวจ LINE":"รอ Retry"}</span>
+              <span className={"rounded-full px-2 py-1 text-[10px] font-black "+(n(kitchenStatus.blocked)+n(kitchenStatus.stale)>0?"bg-red-200 text-red-800":"bg-amber-200 text-amber-900")}>{n(kitchenStatus.blocked)+n(kitchenStatus.stale)>0?"ตรวจ LINE":"รอลองส่งใหม่"}</span>
             </div>
             <div className="mt-3 grid grid-cols-3 gap-2 text-center"><Metric label="ส่งซ้ำได้" value={n(kitchenStatus.retryable)}/><Metric label="กำลังส่ง" value={n(kitchenStatus.sending)}/><Metric label="ต้องตรวจ" value={n(kitchenStatus.blocked)+n(kitchenStatus.stale)}/></div>
-            {session.user.role==="admin"&&n(kitchenStatus.retryable)>0&&<button disabled={kitchenBusy||!cloudAvailable} onClick={retryKitchenNotifications} className="mt-3 min-h-11 w-full rounded-xl bg-[#1F4D3A] px-3 text-xs font-black text-white disabled:opacity-40">{kitchenBusy?"กำลังส่ง request เดิม…":"ลองส่งแจ้งบาร์ที่ค้างอีกครั้ง"}</button>}
-            {session.user.role!=="admin"&&<p className="mt-2 text-[10px] font-semibold text-slate-600">แจ้ง Admin ให้กด Retry จากแท็บคิว · ไม่ต้องทำรายการขายหรือรับเงินซ้ำ</p>}
+            {session.user.role==="admin"&&n(kitchenStatus.retryable)>0&&<button disabled={kitchenBusy||!cloudAvailable} onClick={retryKitchenNotifications} className="mt-3 min-h-11 w-full rounded-xl bg-[#1F4D3A] px-3 text-xs font-black text-white disabled:opacity-40">{kitchenBusy?"กำลังลองส่งรายการเดิม…":"ลองส่งแจ้งบาร์ที่ค้างอีกครั้ง"}</button>}
+            {session.user.role!=="admin"&&<p className="mt-2 text-[10px] font-semibold text-slate-600">แจ้งผู้ดูแลให้กดลองส่งอีกครั้งจากแท็บคิว · ไม่ต้องทำรายการขายหรือรับเงินซ้ำ</p>}
           </div>}
-          {queueRows.length===0?<Empty text={!cloudAvailable?"ออฟไลน์ · ยังไม่ดึงคิวจาก Server":"ไม่มีคิวที่กำลังทำ"}/>:queueRows.map(order=>{
+          {queueRows.length===0?<Empty text={!cloudAvailable?"ออฟไลน์ · ยังดึงคิวล่าสุดไม่ได้":"ไม่มีคิวที่กำลังทำ"}/>:queueRows.map(order=>{
             const total=(order.items||[]).reduce((s,x)=>s+n(x.qty),0),ready=(order.items||[]).reduce((s,x)=>s+Math.min(n(x.qty),n(x.readyQty)),0),called=(order.items||[]).reduce((s,x)=>s+Math.min(n(x.qty),n(x.calledQty)),0);
             const allCalled=total>0&&called>=total,isProduction=productionHead?.id===order.id;
             const nextIndex=isProduction?(order.items||[]).findIndex(item=>n(item.readyQty)<n(item.qty)):-1;
@@ -430,7 +430,7 @@ export default function PosOperationsHub({session,bootstrap,open,onClose,onRefre
                 {isProduction&&nextItem&&<button disabled={queueBusy||!cloudAvailable} onClick={()=>runQuickWasteRemake(order,nextIndex)} className="flex min-h-12 items-center justify-center gap-1.5 rounded-xl border border-red-200 bg-white px-3 text-[11px] font-black text-red-700 disabled:opacity-40"><RotateCcw size={15}/>ชงเสีย / ทำใหม่</button>}
                 <button disabled={queueBusy||!cloudAvailable} onClick={()=>runQuickQueueAction(order)} className={"flex min-h-12 items-center justify-center gap-2 rounded-xl px-4 text-sm font-black disabled:opacity-40 "+(allCalled?"bg-emerald-600 text-white":"bg-[#1F4D3A] text-white")}><QuickIcon size={17}/>{queueBusy?"กำลังยืนยันคิวเดิม…":quick.label}</button>
               </div>}
-              {!isProduction&&!allCalled&&<p className="mt-2 rounded-xl bg-slate-50 px-3 py-2 text-[10px] font-semibold text-slate-500">รอคิวก่อนหน้า · Server บังคับ FIFO</p>}
+              {!isProduction&&!allCalled&&<p className="mt-2 rounded-xl bg-slate-50 px-3 py-2 text-[10px] font-semibold text-slate-500">รอคิวก่อนหน้า · ระบบไม่อนุญาตให้ข้ามคิว</p>}
             </div>
           })}
           <p className="rounded-xl bg-blue-50 px-3 py-2 text-[10px] text-blue-800">ปุ่มด่วนรองรับ flow ปกติ: ทำเมนูถัดไป → เรียกคิว → ส่งมอบ · ชงเสีย/ทำใหม่/เรียกแยกหมวด/ดูเบสละเอียด ให้เปิดหน้าคิวเต็ม</p>
@@ -439,7 +439,7 @@ export default function PosOperationsHub({session,bootstrap,open,onClose,onRefre
 
         {tab==="orders"&&canOrder&&<div className="space-y-2">
           {latestSales.length===0?<Empty text="ยังไม่มีออเดอร์ล่าสุด"/>:latestSales.map(s=><div key={s.id} className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-3">
-            <div className="min-w-0"><div><b>{s.queueNo||s.billNo}</b><span className="ml-2 text-[10px] uppercase text-slate-500">{s.payment}</span></div><p className="mt-1 truncate text-xs text-slate-500">{s.itemCount} รายการ · {s.status}{s.orderStatus?" · "+s.orderStatus:""}</p></div><b className="shrink-0 text-[#765b08]">฿{formatMoney(s.total)}</b>
+            <div className="min-w-0"><div><b>{s.queueNo||s.billNo}</b><span className="ml-2 text-[10px] text-slate-500">{paymentLabel(s.payment)}</span></div><p className="mt-1 truncate text-xs text-slate-500">{s.itemCount} รายการ · {s.status}{s.orderStatus?" · "+s.orderStatus:""}</p></div><b className="shrink-0 text-[#765b08]">฿{formatMoney(s.total)}</b>
           </div>)}
           <FullLink href="/orders" label="เปิดประวัติออเดอร์เต็ม"/>
         </div>}
@@ -461,7 +461,7 @@ export default function PosOperationsHub({session,bootstrap,open,onClose,onRefre
               <input inputMode="decimal" value={expenseAmount} onChange={e=>setExpenseAmount(e.target.value)} placeholder="จำนวนเงิน" className="min-h-11 rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm outline-none"/>
               <input value={expenseDescription} onChange={e=>setExpenseDescription(e.target.value)} placeholder="รายละเอียด เช่น ค่าน้ำแข็งฉุกเฉิน" className="min-h-11 rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm outline-none"/>
               <button disabled={expenseBusy||!cloudAvailable||!(Number(expenseAmount)>0)} onClick={saveExpense} className="min-h-12 rounded-xl bg-[#1F4D3A] px-4 text-sm font-bold text-white disabled:opacity-40">{expenseBusy?"กำลังตรวจรายการเดิม…":"บันทึก · อยู่หน้า POS ต่อ"}</button>
-              {expensePayment==="cash"&&<p className="text-[10px] text-amber-700">เงินสดจะถูกนับเป็นเงินออกจากลิ้นชักใน Close Day</p>}
+              {expensePayment==="cash"&&<p className="text-[10px] text-amber-700">เงินสดจะถูกนับเป็นเงินออกจากลิ้นชักตอนปิดวัน</p>}
             </div>
           </div>
           <div><p className="mb-2 text-[10px] font-black tracking-[.16em] text-slate-500">ล่าสุด</p>{latestExpenses.length===0?<Empty text="ยังไม่มีค่าใช้จ่ายล่าสุด"/>:<div className="space-y-2">{latestExpenses.map(x=><div key={x.id} className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-3 text-xs"><div className="min-w-0"><b>{x.category}</b><p className="mt-0.5 truncate text-slate-500">{x.description||paymentLabel(x.paymentMethod)}</p></div><b className="shrink-0 text-red-700">฿{formatMoney(x.amount)}</b></div>)}</div>}</div>

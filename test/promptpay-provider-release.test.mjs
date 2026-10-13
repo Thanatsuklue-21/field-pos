@@ -26,7 +26,7 @@ test("client never clears local PromptPay pending until server confirms provider
   const recover=pos.slice(pos.indexOf("async function recoverPending"),pos.indexOf("function errorText"));
   assert.match(recover,/const released=await cancelPendingReservation\(p\)/);
   assert.match(recover,/if\(released\)\{pendingClear\(\);return\}/);
-  assert.match(recover,/Server ยังไม่ยืนยันการคืน Stock/);
+  assert.match(recover,/ยังยืนยันการคืนสต็อกไม่ได้/);
 });
 
 test("checkout keeps pending evidence when provider release is unconfirmed",async()=>{

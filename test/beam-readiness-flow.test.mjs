@@ -13,7 +13,7 @@ test('POS PromptPay reserves stock before creating provider QR',async()=>{
   assert.ok(setup.indexOf('/api/pos/split/start')<setup.indexOf('/api/payments/promptpay/create'));
   assert.match(checkout,/pendingWrite\(activePending\)/);
   assert.match(checkout,/ensurePendingPrompt/);
-  assert.match(pos,/PromptPay ยังไม่เปิดรับเงินจริง/);
+  assert.match(pos,/QR พร้อมเพย์ยังไม่เปิดรับเงินจริง/);
   assert.match(pos,/promptConfig\?\.ready!==true/);
 });
 

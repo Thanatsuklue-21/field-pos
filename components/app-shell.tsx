@@ -85,7 +85,7 @@ export default function AppShell({children}:{children:React.ReactNode}){
           </>}
         </nav>
       </aside>
-      <main className="min-w-0 flex-1 overflow-hidden rounded-[20px] border border-slate-300/80 bg-[#f3f5f7] shadow-[0_10px_30px_rgba(15,23,42,.08)] sm:rounded-[24px] md:rounded-[32px]">{offlineRouteAllowed?children:<div className="grid h-full place-items-center p-6 text-center text-sm text-amber-800"><div><b>ออฟไลน์ · รับเงินสดเท่านั้น</b><p className="mt-2 text-xs text-slate-500">กำลังกลับหน้าขาย เพื่อป้องกันการใช้ข้อมูลคิวหรือรายการจาก Server ที่อาจไม่อัปเดต</p></div></div>}</main>
+      <main className="min-w-0 flex-1 overflow-hidden rounded-[20px] border border-slate-300/80 bg-[#f3f5f7] shadow-[0_10px_30px_rgba(15,23,42,.08)] sm:rounded-[24px] md:rounded-[32px]">{offlineRouteAllowed?children:<div className="grid h-full place-items-center p-6 text-center text-sm text-amber-800"><div><b>ออฟไลน์ · รับเงินสดเท่านั้น</b><p className="mt-2 text-xs text-slate-500">กำลังกลับหน้าขาย เพื่อป้องกันการใช้ข้อมูลคิวหรือรายการเก่าที่ยังไม่อัปเดต</p></div></div>}</main>
     </div>
 
     {mobileMore.length>0&&moreOpen&&<div className="fixed inset-0 z-[48] bg-black/20 md:hidden" onClick={closeMore}>

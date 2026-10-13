@@ -95,8 +95,8 @@ test("PWA Today workspace surfaces admin accounting readiness without creating a
   assert.match(hub,/\/api\/admin\/readiness/);
   assert.match(hub,/canReadiness=session\.user\.role==="admin"/);
   assert.match(hub,/ความพร้อมระบบ/);
-  assert.match(hub,/บัญชีมี Critical mismatch/);
-  assert.match(hub,/ระบบบล็อก Close Day อัตโนมัติ/);
+  assert.match(hub,/ยอดบัญชีไม่ตรง/);
+  assert.match(hub,/ระบบหยุดปิดวันอัตโนมัติเพื่อให้ตรวจสอบก่อน/);
   assert.match(hub,/readiness\.accounting\?\.ok===false/);
   assert.doesNotMatch(hub,/method:"POST"[\s\S]{0,160}\/api\/admin\/readiness/);
 });

@@ -219,7 +219,7 @@ test("Queue tab offers one-state-at-a-time quick actions without leaving POS",as
   assert.match(hub,/const productionHead=queueSorted\.find\(order=>\(order\.items\|\|\[\]\)\.some\(item=>n\(item\.calledQty\)<n\(item\.qty\)\)\)\|\|null/);
   assert.match(hub,/const allCalled=total>0&&called>=total,isProduction=productionHead\?\.id===order\.id/);
   assert.match(hub,/const quick=\(isProduction\|\|allCalled\)\?quickQueueStep\(order\):null/);
-  assert.match(hub,/Server บังคับ FIFO/);
+  assert.match(hub,/ระบบไม่อนุญาตให้ข้ามคิว/);
   assert.match(hub,/รอลูกค้ารับ/);
   assert.match(hub,/เปิดหน้าคิวเต็ม \/ งานผลิตละเอียด/);
 });
@@ -281,7 +281,7 @@ test("Quick Queue offers WASTE remake only for the current production item and c
   const hub=await read("components/pos-operations-hub.tsx");
   assert.match(hub,/async function runQuickWasteRemake\(order:QueueOrder,itemIndex:number\)/);
   assert.match(hub,/window\.confirm\("บันทึก “ชงเสีย \/ ทำใหม่”/);
-  assert.match(hub,/หักวัตถุดิบเพิ่มตามสูตรที่ใช้ตอนขาย และลงค่าใช้จ่าย WASTE อัตโนมัติ/);
+  assert.match(hub,/หักวัตถุดิบเพิ่มตามสูตรที่ใช้ตอนขาย และบันทึกต้นทุนของเสียอัตโนมัติ/);
   assert.match(hub,/action:"waste_remake"/);
   assert.match(hub,/reason:"ชงเสีย \/ ทำใหม่"/);
   assert.match(hub,/sendQueueActionDurably\(session\.csrf,\{/);
@@ -296,7 +296,7 @@ test("Quick WASTE reconciles any ambiguous queue request before generating a new
   const block=hub.slice(start,end);
   assert.match(block,/if\(readPendingQueueAction\(\)\)\{await recoverQueueAction\(\);return\}/);
   assert.ok(block.indexOf("readPendingQueueAction()")<block.indexOf("crypto.randomUUID()"));
-  assert.match(block,/ผล WASTE ยังไม่ชัดเจน/);
+  assert.match(block,/ผลการบันทึกชงเสียครั้งก่อนยังไม่ชัดเจน/);
 });
 
 test("Quick WASTE exposes waste cost and actionable recipe or stock failures without leaving POS",async()=>{

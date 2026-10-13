@@ -34,5 +34,5 @@ test("Beam and Opn enforce their provider minimum before any external creation a
 test("operator gets a clear action for PromptPay amount-range rejection",async()=>{
   const pos=await read("app/pos/page.tsx");
   assert.match(pos,/promptpay_amount_out_of_range/);
-  assert.match(pos,/ยอดนี้อยู่นอกช่วงที่ Provider PromptPay รองรับ/);
+  assert.match(pos,/ยอดนี้อยู่นอกช่วงที่ระบบ QR รองรับ/);
 });

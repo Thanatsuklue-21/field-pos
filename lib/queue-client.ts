@@ -58,10 +58,10 @@ export function queueActionErrorText(code:string){
     code.startsWith("stock_shortage:")?"วัตถุดิบไม่พอสำหรับทำใหม่ 1 แก้ว · กรุณาตรวจ Stock":
     code.startsWith("ingredient_missing:")?"สูตรอ้างวัตถุดิบที่ไม่มีใน Stock Master":
     code==="queue_state_changed"?"สถานะคิวเปลี่ยนแล้ว ระบบจะดึงข้อมูลล่าสุด":
-    code==="queue_action_pending"?"มี Queue action เดิมที่ยังไม่ทราบผล · ระบบจะตรวจ request เดิมก่อน":
-    code==="queue_action_unconfirmed"?"Server ยังไม่ยืนยัน Queue action เดิมครบถ้วน · ระบบเก็บ request เดิมไว้เพื่อป้องกันทำซ้ำ":
-    code==="queue_recovery_corrupt"?"ข้อมูล Queue recovery ในเครื่องเสีย · ห้ามทำ action ใหม่จนกว่าจะตรวจคิว":
-    code==="queue_recovery_storage_unavailable"?"เครื่องนี้เก็บ Queue recovery ไม่ได้ · ระบบไม่ส่ง action เพื่อป้องกันทำซ้ำ":
-    code==="network_unavailable"?"ขาดการเชื่อมต่อ · ระบบเก็บ Queue action เดิมไว้และจะตรวจซ้ำ":
+    code==="queue_action_pending"?"มีการกดคิวก่อนหน้าที่ยังตรวจสอบไม่เสร็จ · ระบบจะตรวจรายการเดิมก่อน ห้ามกดซ้ำ":
+    code==="queue_action_unconfirmed"?"ระบบยังยืนยันผลการกดคิวก่อนหน้าไม่ได้ · เก็บข้อมูลเดิมไว้เพื่อป้องกันตัดสต็อกหรือเปลี่ยนคิวซ้ำ":
+    code==="queue_recovery_corrupt"?"ข้อมูลป้องกันการกดซ้ำในเครื่องมีปัญหา · หยุดเปลี่ยนสถานะคิวชั่วคราวและตรวจคิวเดิมก่อน":
+    code==="queue_recovery_storage_unavailable"?"เครื่องนี้เก็บข้อมูลป้องกันการกดซ้ำไม่ได้ · ระบบจึงยังไม่เปลี่ยนสถานะคิว":
+    code==="network_unavailable"?"ขาดการเชื่อมต่อ · ระบบเก็บการกดครั้งเดิมไว้และจะตรวจอีกครั้งเมื่อเชื่อมต่อ":
     code;
 }

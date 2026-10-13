@@ -157,7 +157,7 @@ function PosView({session}:{session:Session}){
     const integrity=paymentRecoveryIntegrityIssue();
     if(integrity){
       setRecoveryIntegrityIssue(integrity);
-      setNotice("ข้อมูล recovery การชำระในเครื่องอ่านไม่ได้ · ระบบหยุดรับชำระรายการใหม่เพื่อป้องกันยอดซ้ำ");
+      setNotice("ข้อมูลติดตามรายการชำระก่อนหน้าในเครื่องมีปัญหา · ระบบพักการรับเงินชั่วคราวเพื่อป้องกันยอดซ้ำ");
     }else recoverCashCheckout().then(()=>recoverPending()).catch(()=>{});
     return()=>{active=false};
   },[]);
@@ -507,7 +507,7 @@ function PosView({session}:{session:Session}){
     const integrity=recoveryIntegrityIssue||paymentRecoveryIntegrityIssue();
     if(integrity){
       setRecoveryIntegrityIssue(integrity);
-      setNotice("ข้อมูล recovery การชำระในเครื่องผิดปกติ · ยังพัก/เปลี่ยนบิลไม่ได้จนกว่าจะตรวจรายการเดิม");
+      setNotice("ข้อมูลติดตามรายการชำระก่อนหน้าในเครื่องมีปัญหา · ยังพักหรือเปลี่ยนบิลไม่ได้จนกว่าจะตรวจรายการเดิม");
       return;
     }
     if(pendingRead()||cashPendingRead()){
@@ -579,7 +579,7 @@ function PosView({session}:{session:Session}){
     const p=cashPendingRead();
     if(!p)return;
     const ageMs=Math.max(0,Date.now()-Number(p.createdAt||0));
-    if(ageMs>24*60*60*1000)setNotice("พบรายการเงินสดค้างเกิน 24 ชม. · กำลังตรวจ request เดิมกับ Server ก่อน เพื่อป้องกันบิลซ้ำ");
+    if(ageMs>24*60*60*1000)setNotice("พบรายการเงินสดเดิมค้างเกิน 24 ชม. · ระบบกำลังตรวจรายการเดิมก่อน ห้ามกดรับเงินซ้ำ");
     try{
       const r=await api<any>("/api/pos/checkout",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify(p.body)});
       cashPendingClear();
@@ -595,10 +595,10 @@ function PosView({session}:{session:Session}){
           createdAt:Number(p.createdAt)||0,
           reason:e.message
         });
-        setNotice("รายการเงินสดค้างข้ามวันและ Server ไม่พบ replay ที่ยืนยันได้ · กรุณาตรวจ Orders ก่อน ระบบยังเก็บ request เดิมไว้และจะไม่สร้างบิลซ้ำ");
+        setNotice("รายการเงินสดเดิมค้างข้ามวันและยังยืนยันผลไม่ได้ · กรุณาตรวจประวัติออเดอร์ก่อน ระบบจะไม่สร้างบิลซ้ำ");
       }else if(shouldRetainCashPending(e)){
         setCashRecoveryReview(null);
-        setNotice("ยังยืนยันผลรายการเงินสดค้างไม่ได้ · ระบบเก็บ request เดิมไว้เพื่อป้องกันบิลซ้ำ กรุณาตรวจการเชื่อมต่อ/เข้าสู่ระบบแล้วลองอีกครั้ง");
+        setNotice("ยังยืนยันผลรายการเงินสดเดิมไม่ได้ · ระบบเก็บข้อมูลเดิมไว้เพื่อป้องกันบิลซ้ำ กรุณาตรวจอินเทอร์เน็ตและเข้าสู่ระบบแล้วลองอีกครั้ง");
       }else{
         setCashRecoveryReview({
           requestKey:String(p.body?.requestKey||""),
@@ -608,7 +608,7 @@ function PosView({session}:{session:Session}){
           createdAt:Number(p.createdAt)||0,
           reason:"server_rejected"
         });
-        setNotice("Server ปฏิเสธรายการเงินสดเดิม · ระบบยังไม่ล้าง pending อัตโนมัติ กรุณาตรวจ Orders ก่อน เพื่อยืนยันว่าไม่มีบิลจาก request เดิม");
+        setNotice("รายการเงินสดเดิมถูกปฏิเสธและยังต้องตรวจสอบ · กรุณาตรวจประวัติออเดอร์ก่อน ระบบจะยังไม่ล้างข้อมูลเดิมอัตโนมัติ");
       }
     }
   }
@@ -620,8 +620,8 @@ function PosView({session}:{session:Session}){
       kind==="promptpay"
         ?"ยืนยันว่าตรวจ Orders และผู้ให้บริการ PromptPay แล้วว่าไม่มีรายการชำระที่ต้องรับรู้?\nการล้างข้อมูลนี้อาจทำให้ไม่สามารถติดตาม QR เดิมจากเครื่องนี้ได้"
         :kind==="cash"
-          ?"ยืนยันว่าตรวจ Orders แล้วว่าไม่มีรายการเงินสดเดิมจากเครื่องนี้ที่ต้องรับรู้?\nการล้างข้อมูลนี้จะลบเฉพาะ recovery ในเครื่อง"
-          :"ยืนยันว่าตรวจ Orders/PromptPay แล้ว? ระบบจะพยายามล้าง recovery keys ในเครื่องเพื่อให้กลับมาใช้งานได้"
+          ?"ยืนยันว่าตรวจประวัติออเดอร์แล้วว่าไม่มีรายการเงินสดเดิมจากเครื่องนี้ที่ต้องรับรู้?\nการล้างนี้จะลบเฉพาะข้อมูลติดตามรายการเดิมในเครื่อง"
+          :"ยืนยันว่าตรวจประวัติออเดอร์และ PromptPay แล้ว? ระบบจะล้างเฉพาะข้อมูลติดตามรายการเดิมในเครื่องเพื่อให้กลับมาใช้งานได้"
     );
     if(!ok)return;
     try{
@@ -629,9 +629,9 @@ function PosView({session}:{session:Session}){
       if(kind==="cash"||kind==="storage")localStorage.removeItem(CASH_PENDING_KEY);
       const next=paymentRecoveryIntegrityIssue();
       setRecoveryIntegrityIssue(next);
-      setNotice(next?"ยังอ่าน recovery storage ไม่ได้ · กรุณาตรวจสิทธิ์/พื้นที่เก็บข้อมูลของเบราว์เซอร์":"ล้าง recovery ที่เสียหลังตรวจสอบแล้ว · กรุณารีเฟรชข้อมูลและตรวจตะกร้าก่อนขายต่อ");
+      setNotice(next?"ยังอ่านข้อมูลติดตามรายการเดิมในเครื่องไม่ได้ · กรุณาตรวจพื้นที่เก็บข้อมูลของเบราว์เซอร์":"ล้างข้อมูลติดตามที่เสียหลังตรวจสอบแล้ว · กรุณารีเฟรชและตรวจตะกร้าก่อนขายต่อ");
     }catch{
-      setNotice("ล้าง recovery storage ไม่สำเร็จ · ห้ามรับชำระต่อบนเครื่องนี้จนกว่าพื้นที่เก็บข้อมูลจะใช้งานได้");
+      setNotice("ล้างข้อมูลติดตามรายการเดิมไม่สำเร็จ · ห้ามรับชำระต่อบนเครื่องนี้จนกว่าพื้นที่เก็บข้อมูลจะใช้งานได้");
     }
   }
 
@@ -646,13 +646,13 @@ function PosView({session}:{session:Session}){
     const ok=window.confirm(
       "ยืนยันว่าตรวจ Orders แล้วและไม่พบบิลจาก request นี้?\n"+
       "วันที่เดิม: "+cashRecoveryReview.date+" · ยอด ฿"+formatMoney(cashRecoveryReview.total)+"\n"+
-      "การทำรายการนี้จะล้างเฉพาะ pending ในเครื่อง ไม่สร้างยอดขายและไม่เปลี่ยน Stock"
+      "การทำรายการนี้จะล้างเฉพาะข้อมูลรายการเดิมในเครื่อง ไม่สร้างยอดขายและไม่เปลี่ยนสต็อก"
     );
     if(!ok)return;
     cashPendingClear();
     setCashRecoveryReview(null);
     setPayOpen(false);
-    setNotice("ล้าง pending เงินสดในเครื่องแล้ว · หากรับเงินจริงไปแล้ว ต้องบันทึก/ปรับปรุงยอดตามหลักฐานด้วย Admin ก่อนปิดวัน");
+    setNotice("ล้างข้อมูลรายการเงินสดเดิมในเครื่องแล้ว · หากรับเงินจริงไปแล้ว ต้องให้ผู้ดูแลปรับยอดตามหลักฐานก่อนปิดวัน");
   }
 
   async function finalizePending(p:PendingPrompt,verified:string){
@@ -764,7 +764,7 @@ function PosView({session}:{session:Session}){
         if(released){pendingClear();return}
         setMethod("promptpay");
         setPayOpen(true);
-        setResult("Provider แจ้งสถานะสิ้นสุดแล้ว แต่ Server ยังไม่ยืนยันการคืน Stock · ระบบเก็บ pending ไว้และห้ามรับเงินช่องทางอื่นจนกว่าจะ reconcile สำเร็จ");
+        setResult("ระบบชำระเงินแจ้งว่ารายการสิ้นสุดแล้ว แต่ยังยืนยันการคืนสต็อกไม่ได้ · ห้ามรับเงินช่องทางอื่นจนกว่าระบบตรวจรายการเดิมเสร็จ");
         return;
       }
       setMethod("promptpay");
@@ -790,13 +790,13 @@ function PosView({session}:{session:Session}){
       code==="variant_unavailable"?"ตัวเลือกของเมนูในตะกร้าเปลี่ยนแล้ว กรุณาเลือกเมนูใหม่":
       (code==="stock_shortage"||code.startsWith("stock_shortage:"))?"วัตถุดิบไม่เพียงพอสำหรับออเดอร์นี้":
       code==="promptpay_timeout"?"หมดเวลารอ PromptPay ระบบยังเก็บรายการจองไว้ชั่วคราวและจะตรวจสอบอีกครั้ง":
-      code==="promptpay_not_ready"?"PromptPay ยังไม่พร้อมใช้งาน กรุณารอ Beam อนุมัติและตั้งค่า API/Webhook ให้ครบ":
-      code==="promptpay_provider_not_configured"?"ยังไม่ได้ตั้งค่า Beam Merchant ID / API Key":
-      code==="promptpay_webhook_not_configured"?"ยังไม่ได้ตั้งค่า Beam Webhook HMAC Key":
+      code==="promptpay_not_ready"?"QR พร้อมเพย์ยังไม่พร้อมรับเงินจริง · ใช้เงินสดหรือช่องทางอื่นก่อน และแจ้งผู้ดูแล":
+      code==="promptpay_provider_not_configured"?"QR พร้อมเพย์ยังตั้งค่าไม่ครบ · ใช้ช่องทางอื่นก่อน และแจ้งผู้ดูแล":
+      code==="promptpay_webhook_not_configured"?"QR พร้อมเพย์ยังยืนยันผลอัตโนมัติไม่ได้ · ใช้ช่องทางอื่นก่อน และแจ้งผู้ดูแล":
       code==="promptpay_failed"?"PromptPay ไม่สำเร็จ กรุณาลองใหม่":
-      code==="promptpay_amount_out_of_range"?"ยอดนี้อยู่นอกช่วงที่ Provider PromptPay รองรับ · กรุณาใช้ช่องทางชำระอื่นหรือปรับยอดก่อนสร้าง QR":
+      code==="promptpay_amount_out_of_range"?"ยอดนี้อยู่นอกช่วงที่ระบบ QR รองรับ · กรุณาใช้ช่องทางชำระอื่นหรือปรับยอดก่อนสร้าง QR":
       code==="promptpay_charge_creation_unknown"?"ผลการสร้าง QR เดิมยังไม่ชัดเจน · ระบบหยุดสร้าง QR ใหม่เพื่อป้องกันเก็บเงินซ้ำ กรุณาตรวจผู้ให้บริการ/Orders ก่อน":
-      code==="promptpay_release_unconfirmed"?"Provider สิ้นสุดรายการแล้ว แต่ Server ยังไม่ยืนยันการคืน Stock · เก็บ pending ไว้และห้ามรับเงินใหม่จนกว่าจะตรวจสอบสำเร็จ":
+      code==="promptpay_release_unconfirmed"?"รายการ QR เดิมสิ้นสุดแล้ว แต่ยังยืนยันการคืนสต็อกไม่ได้ · ห้ามรับเงินใหม่จนกว่าระบบตรวจรายการเดิมเสร็จ":
       code==="pending_promptpay_exists"?"มี PromptPay รายการเดิมที่ยังไม่สิ้นสุด กรุณาชำระหรือรอผลรายการเดิม":
       code==="pending_cash_checkout_exists"?"มีออเดอร์เงินสดเดิมที่ยังไม่ทราบผล กรุณารอระบบตรวจรายการเดิมก่อนรับบิลใหม่":
       code==="business_date_changed"?"วันธุรกิจเปลี่ยนแล้ว กรุณาตรวจ Orders ก่อนทำรายการใหม่":
@@ -806,8 +806,8 @@ function PosView({session}:{session:Session}){
       code==="offline_storage_unavailable"?"เครื่องนี้ไม่สามารถเปิดพื้นที่เก็บ Offline ได้ กรุณาเชื่อมต่ออินเทอร์เน็ตก่อนขาย":
       code==="offline_storage_failed"?"บันทึกบิล Offline ไม่สำเร็จ · ตะกร้ายังอยู่ กรุณาตรวจพื้นที่เก็บข้อมูลหรือเชื่อมต่ออินเทอร์เน็ตก่อนลองอีกครั้ง":
       code==="offline_catalog_unavailable"?"ไม่มีข้อมูลเมนู/สต็อกที่ cache ไว้ จึงยังขาย Offline ไม่ได้":
-      code==="offline_catalog_stale_day"?"ข้อมูลเมนู/สต็อก Offline เป็นของวันก่อน · ต้องเชื่อมต่ออินเทอร์เน็ตเพื่ออัปเดต Stock ก่อนรับเงิน":
-      code==="offline_session_revalidation"?"อินเทอร์เน็ตกลับมาแล้ว · กำลังตรวจสิทธิ์ผู้ใช้กับ Server กรุณากดชำระอีกครั้ง":
+      code==="offline_catalog_stale_day"?"ข้อมูลเมนู/สต็อกออฟไลน์เป็นของวันก่อน · ต้องเชื่อมต่ออินเทอร์เน็ตเพื่ออัปเดตสต็อกก่อนรับเงิน":
+      code==="offline_session_revalidation"?"อินเทอร์เน็ตกลับมาแล้ว · ระบบกำลังตรวจสิทธิ์ผู้ใช้ กรุณากดชำระอีกครั้งเมื่อข้อความนี้หาย":
       code==="offline_price_changed"?"ราคาบน Cloud เปลี่ยนจากตอนขาย Offline · เก็บบิลไว้ให้ตรวจสอบ ไม่ลงยอดผิด":
       code==="offline_write_blocked"?"ออฟไลน์อยู่ · ระบบรองรับเฉพาะเงินสดแบบ Offline":
       code==="network_unavailable"?"การเชื่อมต่อขาดหาย กรุณาตรวจอินเทอร์เน็ต ระบบจะไม่สร้างบิลซ้ำ":
@@ -833,7 +833,7 @@ function PosView({session}:{session:Session}){
     const integrity=recoveryIntegrityIssue||paymentRecoveryIntegrityIssue();
     if(integrity){
       setRecoveryIntegrityIssue(integrity);
-      setResult("ข้อมูล recovery การชำระในเครื่องผิดปกติ · ห้ามรับชำระรายการใหม่จนกว่าจะตรวจรายการเดิม");
+      setResult("ข้อมูลติดตามรายการชำระก่อนหน้าในเครื่องมีปัญหา · ห้ามรับชำระรายการใหม่จนกว่าจะตรวจรายการเดิม");
       return;
     }
     if(cashRecoveryReview){
@@ -955,7 +955,7 @@ function PosView({session}:{session:Session}){
         setNotice(message);
         load().catch(()=>{});
       }else{
-        setResult(method==="cash"&&e.message==="network_unavailable"?"การเชื่อมต่อขาดหาย · เก็บ request เดิมไว้และจะตรวจซ้ำอัตโนมัติ":message);
+        setResult(method==="cash"&&e.message==="network_unavailable"?"การเชื่อมต่อขาดหาย · ระบบเก็บรายการเดิมไว้และจะตรวจอีกครั้งอัตโนมัติ":message);
       }
     }finally{
       setBusy(false);
@@ -971,11 +971,11 @@ function PosView({session}:{session:Session}){
     const integrity=recoveryIntegrityIssue||paymentRecoveryIntegrityIssue();
     if(integrity){
       setRecoveryIntegrityIssue(integrity);
-      setNotice("ข้อมูล recovery การชำระในเครื่องผิดปกติ · กรุณาตรวจรายการเดิมก่อนเปิดชำระ");
+      setNotice("ข้อมูลติดตามรายการชำระก่อนหน้าในเครื่องมีปัญหา · กรุณาตรวจรายการเดิมก่อนเปิดชำระ");
       return;
     }
     if(cashRecoveryReview){
-      setNotice("ต้องตรวจรายการเงินสดค้างก่อนเปิดชำระบิลใหม่ · เปิด Orders หรือให้ Admin ล้าง pending ที่ตรวจแล้ว");
+      setNotice("ต้องตรวจรายการเงินสดเดิมก่อนเปิดชำระบิลใหม่ · เปิดประวัติออเดอร์ หรือให้ผู้ดูแลล้างข้อมูลรายการที่ตรวจแล้ว");
       return;
     }
     const byId=new Map((data?.menu||[]).filter(sellable).map(x=>[x.id,x]));
@@ -1135,7 +1135,7 @@ function PosView({session}:{session:Session}){
         <p className="px-2 pb-2 pt-1 text-[11px] font-semibold text-slate-500">เลือกวิธีที่ลูกค้าจ่าย · ขายทั่วไปใช้ 2 ปุ่มนี้</p>
         <div className="grid grid-cols-2 gap-1.5">
           <button onClick={()=>{setMethod("cash");setManualPaymentReference("");setShowMorePaymentMethods(false)}} className={"min-h-14 rounded-xl px-2 py-2 text-sm font-bold "+(method==="cash"?"bg-[#d4af37] text-black shadow-sm":"bg-white text-slate-700")}>เงินสด</button>
-          <button disabled={!online||promptConfig?.ready!==true||netPayable<=0} onClick={()=>{setMethod("promptpay");setManualPaymentReference("");setShowMorePaymentMethods(false)}} title={!online?"PromptPay ต้องใช้อินเทอร์เน็ต":promptConfig?.ready===true?"PromptPay พร้อมใช้งาน":"รอ Beam อนุมัติ / ตั้งค่า API และ Webhook"} className={"min-h-14 rounded-xl px-2 py-2 text-sm font-bold disabled:cursor-not-allowed disabled:opacity-45 "+(method==="promptpay"?"bg-[#d4af37] text-black shadow-sm":"bg-white text-slate-700")}>QR พร้อมเพย์{promptConfig?.selectedProvider==="beam"&&promptConfig?.mode==="test"?" · TEST":""}</button>
+          <button disabled={!online||promptConfig?.ready!==true||netPayable<=0} onClick={()=>{setMethod("promptpay");setManualPaymentReference("");setShowMorePaymentMethods(false)}} title={!online?"QR พร้อมเพย์ต้องใช้อินเทอร์เน็ต":promptConfig?.ready===true?"QR พร้อมเพย์พร้อมใช้งาน":"QR พร้อมเพย์ยังไม่พร้อมรับเงินจริง · แจ้งผู้ดูแล"} className={"min-h-14 rounded-xl px-2 py-2 text-sm font-bold disabled:cursor-not-allowed disabled:opacity-45 "+(method==="promptpay"?"bg-[#d4af37] text-black shadow-sm":"bg-white text-slate-700")}>QR พร้อมเพย์{promptConfig?.selectedProvider==="beam"&&promptConfig?.mode==="test"?" · TEST":""}</button>
         </div>
         <button type="button" disabled={!online} aria-expanded={showMorePaymentMethods} onClick={()=>{if(showMorePaymentMethods){if(method==="bank"||method==="card"||method==="delivery")setMethod("cash");setShowMorePaymentMethods(false)}else setShowMorePaymentMethods(true)}} className="mt-1.5 min-h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 disabled:opacity-45">{showMorePaymentMethods?"ซ่อนวิธีอื่น":"วิธีอื่น · โอน / บัตร / เดลิเวอรี"}</button>
         {showMorePaymentMethods&&<div className="mt-1.5 grid grid-cols-3 gap-1.5">
@@ -1144,7 +1144,7 @@ function PosView({session}:{session:Session}){
           <button disabled={!online} onClick={()=>{setMethod("delivery");setSplitBill(false);setSplitSelection({});setReceived("");setManualPaymentReference("")}} className={"min-h-11 rounded-xl px-2 py-2 text-xs sm:text-sm disabled:opacity-45 "+(method==="delivery"?"bg-[#d4af37] font-semibold text-black shadow-sm":"bg-white text-slate-700")}>เดลิเวอรี</button>
         </div>}
       </div>}
-      {tenderUnlocked&&online&&promptConfig?.ready!==true&&<div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">PromptPay ยังไม่เปิดรับเงินจริง · ระบบกำลังรอ Beam Merchant/API/Webhook ให้พร้อม</div>}
+      {tenderUnlocked&&online&&promptConfig?.ready!==true&&<div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">QR พร้อมเพย์ยังไม่เปิดรับเงินจริง · ใช้เงินสดหรือช่องทางอื่นก่อน และแจ้งผู้ดูแล</div>}
       {tenderUnlocked&&["bank","card"].includes(method)&&<div className="mt-3 rounded-[20px] border border-slate-200 bg-slate-50 p-3"><label className="text-xs font-semibold text-slate-700">{method==="bank"?"เลขอ้างอิงโอน / หมายเหตุ":"เลขอ้างอิงบัตร / Terminal"}</label><input value={manualPaymentReference} onChange={e=>setManualPaymentReference(e.target.value)} placeholder={method==="bank"?"เช่น เลขท้ายรายการโอน (ใส่ได้ถ้ามี)":"เช่น Slip/Terminal ref (ใส่ได้ถ้ามี)"} className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-3 py-3"/><p className="mt-2 text-[11px] text-slate-500">ระบบบันทึกเป็นช่องทางรับเงินแยกสำหรับรายงานและ Export บัญชี · ไม่กระทบเงินสดในลิ้นชัก</p></div>}
       {tenderUnlocked&&method==="delivery"&&<div className="mt-3 rounded-[20px] border border-slate-200 bg-slate-50 p-3"><label className="text-xs font-semibold text-slate-700">แพลตฟอร์ม Delivery</label><select value={deliveryPlatform} onChange={e=>setDeliveryPlatform(e.target.value as any)} className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-3 py-3"><option value="grab">Grab</option><option value="lineman">LINE MAN</option><option value="other_delivery">Delivery อื่น</option></select><div className="mt-3 grid grid-cols-3 gap-2 text-center text-xs"><div className="rounded-xl bg-white p-2"><span className="text-slate-500">ยอดขาย</span><b className="mt-1 block">฿{formatMoney(netPayable)}</b></div><div className="rounded-xl bg-white p-2"><span className="text-slate-500">GP {(deliveryGpRate*100).toFixed(1)}%</span><b className="mt-1 block text-red-600">−฿{formatMoney(deliveryGpFee)}</b></div><div className="rounded-xl bg-white p-2"><span className="text-slate-500">รับสุทธิ</span><b className="mt-1 block text-emerald-700">฿{formatMoney(deliveryNetSettlement)}</b></div></div><p className="mt-2 text-[11px] text-slate-500">ยอดขายยังบันทึกเต็มจำนวน ส่วน GP แยกเป็นค่าธรรมเนียมเพื่อให้รายงานกระแสเงินสดตรงกับเงินที่จะได้รับจริง</p></div>}
       {tenderUnlocked&&method==="cash"&&<><div className="mt-4 grid grid-cols-[1fr_auto] gap-2"><input inputMode="decimal" enterKeyHint="done" autoComplete="off" aria-label="จำนวนเงินสดที่รับจากลูกค้า" value={received} onChange={e=>setReceived(e.target.value)} placeholder="จำนวนเงินที่รับ" className="min-w-0 rounded-2xl border border-slate-300 bg-slate-100 px-4 py-3 text-lg outline-none focus:border-[#c59b19]"/><button type="button" disabled={busy||!payableItems.length} onClick={()=>chooseCashAmount(netPayable)} className="min-h-12 rounded-2xl border border-[#d4af37] bg-[#fff8dc] px-3 text-sm font-bold text-[#765b08] disabled:opacity-40">รับพอดี ฿{formatMoney(netPayable)}</button></div><div className="mt-2"><p className="mb-1.5 text-[11px] font-semibold text-slate-500">แตะจำนวนเงินที่ลูกค้าจ่าย</p><div className="grid grid-cols-4 gap-1.5">{quickCashAmounts.map(amount=><button key={amount} type="button" disabled={busy||!payableItems.length} onClick={()=>chooseCashAmount(amount)} aria-label={"รับเงินสด "+amount+" บาท"} className={"min-h-11 rounded-xl border px-2 text-sm font-bold disabled:opacity-40 "+(cashReceived===amount?"border-[#d4af37] bg-[#fff8dc] text-[#765b08]":"border-slate-300 bg-white text-slate-700")}>฿{formatMoney(amount)}</button>)}</div></div>{received.trim()!==""&&Number.isFinite(cashDelta)&&<div className={"mt-3 flex items-center justify-between rounded-2xl border px-4 py-3 "+(cashDelta>=0?"border-emerald-300 bg-emerald-50 text-emerald-900":"border-red-300 bg-red-50 text-red-800")}><span>{cashDelta>=0?"เงินทอน":"ขาดอีก"}</span><b className="text-xl">฿{formatMoney(Math.abs(cashDelta))}</b></div>}</>}
