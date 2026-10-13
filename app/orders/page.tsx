@@ -1,12 +1,13 @@
 "use client";
 
-import {useEffect,useMemo,useState} from "react";
+import {useEffect,useMemo,useRef,useState} from "react";
 import {useRouter} from "next/navigation";
 import {AlertTriangle,Ban,Eye,Pencil,Printer,RefreshCw,RotateCcw,Search,ShieldCheck,X} from "lucide-react";
 import AuthGate from "@/components/auth-gate";
 import SaleReceipt from "@/components/sale-receipt";
 import {api,type Session} from "@/lib/api-client";
 import {useCartStore} from "@/stores/cart-store";
+import {prepareOrderMutationIntent,readOrderMutationIntent,sendOrderMutationIntent,type OrderMutationIntent,type RefundMutationBody,type VoidMutationBody} from "@/lib/order-mutation-recovery";
 
 type SaleItem={id:string;name:string;variant:string;qty:number;price:number};
 type Sale={
@@ -37,6 +38,9 @@ function OrdersView({session}:{session:Session}){
   const [recoveryReceived,setRecoveryReceived]=useState("");
   const [recoveryReference,setRecoveryReference]=useState("");
   const [recoveryConfirmed,setRecoveryConfirmed]=useState(false);
+  const [pendingMutation,setPendingMutation]=useState<OrderMutationIntent|null>(null);
+  const [mutationRecoveryBlocked,setMutationRecoveryBlocked]=useState(false);
+  const mutationRef=useRef(false);
 
   async function load(openFromQuery=false){
     const x=await api<{sales:Sale[]}>("/api/pos/history");
@@ -67,9 +71,89 @@ function OrdersView({session}:{session:Session}){
   }
 
   useEffect(()=>{load(true).catch(()=>{});loadRecovery().catch(()=>{})},[]);
+  useEffect(()=>{
+    let disposed=false;
+    const recover=async()=>{
+      if(disposed||session.user.role!=="admin"||mutationRef.current)return;
+      let intent:OrderMutationIntent|null=null;
+      try{intent=readOrderMutationIntent(session.user.id);if(!disposed){setPendingMutation(intent);setMutationRecoveryBlocked(false)}}
+      catch{if(!disposed){setMutationRecoveryBlocked(true);setMsg("อ่าน Recovery ของ VOID/Refund ไม่ได้ · งดทำรายการแก้ยอดขายใหม่จนกว่าจะตรวจพื้นที่เก็บข้อมูลได้")}return}
+      if(!intent)return;
+      if(typeof navigator!=="undefined"&&!navigator.onLine){if(!disposed)setMsg("มี VOID/Refund เดิมที่ยังไม่ทราบผล · ขณะ Offline ระบบจะไม่สร้างรายการแก้ยอดใหม่");return}
+      await runOrderMutation(intent,true);
+    };
+    const onOnline=()=>recover().catch(()=>{}),onFocus=()=>recover().catch(()=>{}),onVisible=()=>{if(document.visibilityState==="visible")recover().catch(()=>{})};
+    recover().catch(()=>{});
+    window.addEventListener("online",onOnline);window.addEventListener("focus",onFocus);document.addEventListener("visibilitychange",onVisible);
+    return()=>{disposed=true;window.removeEventListener("online",onOnline);window.removeEventListener("focus",onFocus);document.removeEventListener("visibilitychange",onVisible)};
+  },[session.user.id,session.user.role,session.csrf]);
   const rows=useMemo(()=>sales.filter(x=>(x.billNo+" "+x.queueNo).toLowerCase().includes(q.toLowerCase())),[sales,q]);
 
+  function mutationError(code:string,operation:"void"|"refund"){
+    const common:Record<string,string>={
+      network_unavailable:"ยังไม่ทราบว่า Server บันทึกรายการแล้วหรือไม่ · ระบบเก็บ Request เดิมไว้ ห้ามทำรายการซ้ำ",
+      offline_write_blocked:"ยังไม่ได้ส่งรายการเพราะออฟไลน์ · ระบบเก็บ Request เดิมไว้และจะตรวจเมื่อออนไลน์",
+      order_mutation_ack_unknown:"Server ยังไม่ยืนยันผลรายการเดิมครบถ้วน · ระบบเก็บ Request เดิมไว้ ห้ามสร้าง VOID/Refund ใหม่",
+      order_mutation_recovery_unavailable:"อ่าน/บันทึก Recovery ไม่ได้ · ระบบหยุด VOID/Refund ใหม่เพื่อป้องกันยอดขายและสต็อกคลาดเคลื่อน",
+      pending_order_mutation_exists:"มี VOID/Refund เดิมที่ยังไม่ทราบผล · ต้องตรวจ Request เดิมก่อน",
+      request_key_conflict:"Request เดิมไม่ตรงกับ actor/payload บน Server · หยุดและตรวจ Audit ก่อนดำเนินการต่อ",
+      void_target_changed:"ยอดหรือวันที่ของบิลเปลี่ยนจากตอนยืนยัน VOID · Server ไม่ได้ทำรายการใหม่ กรุณารีเฟรช",
+      refund_target_changed:"ชุดบิลหรือยอด Refund เปลี่ยนจากตอนยืนยัน · Server ไม่ได้ทำรายการใหม่ กรุณารีเฟรช"
+    };
+    if(common[code])return common[code];
+    if(operation==="void"){
+      const map:Record<string,string>={
+        void_after_production_started:"เริ่มผลิตแล้ว ไม่สามารถ VOID และคืน Stock อัตโนมัติ",
+        non_cash_void_requires_refund:"บิลไม่ใช่เงินสด ต้องใช้ Refund",
+        void_multi_sale_order_not_supported:"ออเดอร์นี้มีหลายบิล/รายการเพิ่ม ไม่รองรับ VOID อัตโนมัติ",
+        void_closed_day:"วันนี้ถูก Close Day แล้ว ไม่อนุญาตให้ VOID ย้อนหลัง",
+        sale_already_void:"บิลนี้ถูก VOID ไปแล้วจากรายการอื่น · โหลดข้อมูลล่าสุดก่อนทำต่อ"
+      };return map[code]||code;
+    }
+    const map:Record<string,string>={
+      refund_closed_day:"วันนี้ถูก Close Day แล้ว ไม่อนุญาตให้แก้ย้อนหลัง",
+      promptpay_manual_refund_required:"ต้องคืนเงินจริงส่วน PromptPay ภายนอกระบบก่อนยืนยัน",
+      external_manual_refund_required:"ต้องคืนเงินจริงผ่านช่องทางภายนอกก่อนยืนยัน",
+      manual_refund_reference_required:"ต้องกรอกเลขอ้างอิงการคืนเงิน",
+      refund_payment_not_supported:"ช่องทางชำระเงินของบิลในออเดอร์นี้ยังไม่รองรับ Refund",
+      order_sale_missing:"ข้อมูลบิลในออเดอร์ไม่ครบ ระบบจึงหยุดเพื่อป้องกันยอดบัญชีผิด",
+      use_void_before_production:"บิลเงินสดเดี่ยวยังไม่เริ่มผลิต ให้ใช้ VOID เพื่อคืนสต็อกอัตโนมัติ",
+      sale_already_refunded:"บิลนี้ถูก Refund ไปแล้วจากรายการอื่น · โหลดข้อมูลล่าสุดก่อนทำต่อ"
+    };return map[code]||code;
+  }
+
+  function restoreEditContext(intent:OrderMutationIntent){
+    const snapshot=intent.meta?.saleSnapshot;
+    if(intent.operation!=="void"||intent.meta?.purpose!=="edit_cash"||!snapshot||!Array.isArray(snapshot.items))return false;
+    cart.replaceItems(snapshot.items.map((i:any)=>({key:i.id+"::"+i.variant,id:i.id,name:i.name,variant:i.variant,price:Number(i.price)||0,qty:Number(i.qty)||0})));
+    try{sessionStorage.setItem("field-pos-edit-cash-v1",JSON.stringify({heldCash:Number(snapshot.total)||0,fromBill:String(snapshot.billNo||""),fromQueue:String(snapshot.queueNo||"")}))}catch{}
+    router.push("/pos");return true;
+  }
+
+  async function runOrderMutation(intent:OrderMutationIntent,background=false){
+    if(mutationRef.current||mutationRecoveryBlocked||session.user.role!=="admin")return null;
+    mutationRef.current=true;setBusy(true);setMsg("");
+    try{
+      const r=await sendOrderMutationIntent(intent,(operation,body)=>api<any>("/api/pos/"+operation,{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify(body)}));
+      setPendingMutation(null);setMutationRecoveryBlocked(false);setDetail(null);
+      if(background&&restoreEditContext(intent))setMsg("ยืนยัน VOID รายการเดิมแล้ว · ระบบคืน Stock และโหลดบิลกลับหน้า POS ให้แก้ไขต่อ");
+      else if(intent.operation==="void")setMsg((r.replayed?"ตรวจพบว่า VOID เดิมสำเร็จแล้ว · ไม่ทำซ้ำ":"ยกเลิกบิลสำเร็จ")+" · คืน Stock แล้ว");
+      else{
+        const count=Array.isArray(r.saleIds)?r.saleIds.length:1;
+        setMsg((r.replayed?"ตรวจพบว่า Refund เดิมสำเร็จแล้ว · ไม่ทำซ้ำ":count>1?"Refund ทั้งออเดอร์ "+count+" บิลสำเร็จ":"Refund ถูกบันทึกแล้ว")+" · "+(r.stockRestored?"คืนสต็อกแล้วเพราะยังไม่เริ่มผลิต":"ไม่คืนสต็อกเพราะวัตถุดิบถูกใช้/ออเดอร์ดำเนินการแล้ว"));
+      }
+      await load().catch(()=>{});await loadRecovery().catch(()=>{});
+      return r;
+    }catch(e:any){
+      try{setPendingMutation(readOrderMutationIntent(session.user.id))}
+      catch{setMutationRecoveryBlocked(true)}
+      setMsg(mutationError(e.message,intent.operation));
+      await load().catch(()=>{});return null;
+    }finally{mutationRef.current=false;setBusy(false)}
+  }
+
   async function refundSaleUi(s:Sale){
+    if(pendingMutation||mutationRecoveryBlocked){setMsg("มี VOID/Refund เดิมที่ยังไม่ทราบผล · ตรวจรายการเดิมก่อน");return}
     const group=s.orderId?sales.filter(x=>x.orderId===s.orderId&&x.status==="paid"):[s];
     const refundable=group.length?group:[s];
     const methods=[...new Set(refundable.flatMap(x=>x.payment==="split"?(x.paymentMethods||[]):[x.payment]))],external=methods.filter(m=>["promptpay","bank","card"].includes(m));
@@ -86,34 +170,41 @@ function OrdersView({session}:{session:Session}){
       ?"ยืนยัน Refund ทั้งออเดอร์ "+s.queueNo+" จำนวน "+refundable.length+" บิล รวม ฿"+refundTotal.toFixed(0)+" ? ระบบจะคืนทุก sale ในคิวนี้พร้อมกันและตัดสินการคืนสต็อกจากสถานะการผลิต"
       :"ยืนยัน Refund เต็มจำนวน ฿"+refundTotal.toFixed(0)+" ? ระบบจะตัดสินการคืนสต็อกจากสถานะการผลิต";
     if(!window.confirm(confirmText))return;
-    setBusy(true);setMsg("");
     try{
-      const r=await api<any>("/api/pos/refund",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({requestKey:crypto.randomUUID(),saleId:s.id,reason,riskConfirmed:true,manualConfirmed:external.length>0,manualReference})});
-      setDetail(null);
-      const count=Array.isArray(r.saleIds)?r.saleIds.length:1;
-      setMsg((count>1?"Refund ทั้งออเดอร์ "+count+" บิลสำเร็จ":"Refund ถูกบันทึกแล้ว")+" · "+(r.stockRestored?"คืนสต็อกแล้วเพราะยังไม่เริ่มผลิต":"ไม่คืนสต็อกเพราะวัตถุดิบถูกใช้/ออเดอร์ดำเนินการแล้ว"));
-      await load();
+      const body:RefundMutationBody={
+        requestKey:"refund:"+crypto.randomUUID(),saleId:s.id,reason:reason.trim(),riskConfirmed:true,
+        manualConfirmed:external.length>0,manualReference:manualReference.trim(),expectedDate:s.date,
+        expectedRefundAmount:refundTotal,expectedSaleIds:refundable.map(x=>x.id).sort()
+      };
+      const intent=prepareOrderMutationIntent(session.user.id,"refund",body);
+      setPendingMutation(intent);
+      await runOrderMutation(intent,false);
     }catch(e:any){
-      setMsg(e.message==="refund_closed_day"?"วันนี้ถูก Close Day แล้ว ไม่อนุญาตให้แก้ย้อนหลัง":e.message==="promptpay_manual_refund_required"?"ต้องคืนเงินจริงส่วน PromptPay ภายนอกระบบก่อนยืนยัน":e.message==="external_manual_refund_required"?"ต้องคืนเงินจริงผ่านช่องทางภายนอกก่อนยืนยัน":e.message==="manual_refund_reference_required"?"ต้องกรอกเลขอ้างอิงการคืนเงิน":e.message==="refund_payment_not_supported"?"ช่องทางชำระเงินของบิลในออเดอร์นี้ยังไม่รองรับ Refund":e.message==="order_sale_missing"?"ข้อมูลบิลในออเดอร์ไม่ครบ ระบบจึงหยุดเพื่อป้องกันยอดบัญชีผิด":e.message==="use_void_before_production"?"บิลเงินสดเดี่ยวยังไม่เริ่มผลิต ให้ใช้ VOID เพื่อคืนสต็อกอัตโนมัติ":e.message);
-    }finally{setBusy(false)}
+      setMsg(mutationError(e.message,"refund"));
+      if(e.message==="order_mutation_recovery_unavailable")setMutationRecoveryBlocked(true);
+      try{setPendingMutation(readOrderMutationIntent(session.user.id))}catch{setMutationRecoveryBlocked(true)}
+    }
   }
 
-  async function voidCash(s:Sale,reasonInput?:string){
+  async function voidCash(s:Sale,reasonInput?:string,purpose:"void"|"edit_cash"="void"){
+    if(pendingMutation||mutationRecoveryBlocked){setMsg("มี VOID/Refund เดิมที่ยังไม่ทราบผล · ตรวจรายการเดิมก่อน");return false}
     const reason=reasonInput??window.prompt("เหตุผลในการยกเลิกบิลเงินสด (ทำได้ก่อนเริ่มผลิตเท่านั้น)");
     if(reason===null)return false;
     if(reason.trim().length<2){setMsg("VOID ต้องระบุเหตุผลเพื่อเก็บ Audit Log");return false}
     if(reasonInput===undefined&&!window.confirm("ยืนยัน VOID บิลนี้? ระบบจะบันทึกผู้ทำ เหตุผล และคืน Stock ตามเงื่อนไข"))return false;
-    setBusy(true);setMsg("");
     try{
-      await api("/api/pos/void",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({requestKey:crypto.randomUUID(),saleId:s.id,reason,riskConfirmed:true})});
-      setDetail(null);
-      setMsg("ยกเลิกบิลสำเร็จ · คืน Stock แล้ว");
-      await load();
-      return true;
+      const body:VoidMutationBody={requestKey:"void:"+crypto.randomUUID(),saleId:s.id,reason:reason.trim(),riskConfirmed:true,expectedDate:s.date,expectedAmount:Number(s.total)||0};
+      const meta=purpose==="edit_cash"?{purpose,saleSnapshot:{items:s.items,total:s.total,billNo:s.billNo,queueNo:s.queueNo}}:undefined;
+      const intent=prepareOrderMutationIntent(session.user.id,"void",body,meta);
+      setPendingMutation(intent);
+      const result=await runOrderMutation(intent,false);
+      return !!result;
     }catch(e:any){
-      setMsg(e.message==="void_after_production_started"?"เริ่มผลิตแล้ว ไม่สามารถยกเลิกและคืน Stock อัตโนมัติ":e.message==="non_cash_void_requires_refund"?"บิลไม่ใช่เงินสด ต้องใช้ขั้นตอน Refund":e.message==="void_multi_sale_order_not_supported"?"ออเดอร์นี้มีหลายบิล/รายการเพิ่ม ไม่รองรับการยกเลิกอัตโนมัติ":e.message);
+      setMsg(mutationError(e.message,"void"));
+      if(e.message==="order_mutation_recovery_unavailable")setMutationRecoveryBlocked(true);
+      try{setPendingMutation(readOrderMutationIntent(session.user.id))}catch{setMutationRecoveryBlocked(true)}
       return false;
-    }finally{setBusy(false)}
+    }
   }
 
   async function editCashOrder(s:Sale){
@@ -127,7 +218,7 @@ function OrdersView({session}:{session:Session}){
       return;
     }
     if(!window.confirm("แก้ไข "+s.queueNo+" ?\nระบบจะยกเลิกบิลเดิม คืน Stock และนำรายการทั้งหมดกลับไปหน้า POS เพื่อให้เพิ่ม/ลด/เปลี่ยนเมนูแล้วคิดเงินใหม่"))return;
-    const ok=await voidCash(s,"ลูกค้าขอแก้ไขรายการก่อนเริ่มผลิต");
+    const ok=await voidCash(s,"ลูกค้าขอแก้ไขรายการก่อนเริ่มผลิต","edit_cash");
     if(!ok)return;
     cart.replaceItems(s.items.map(i=>({key:i.id+"::"+i.variant,id:i.id,name:i.name,variant:i.variant,price:i.price,qty:i.qty})));
     try{sessionStorage.setItem("field-pos-edit-cash-v1",JSON.stringify({heldCash:s.total,fromBill:s.billNo,fromQueue:s.queueNo}))}catch{}
@@ -186,6 +277,8 @@ function OrdersView({session}:{session:Session}){
   return <section className="flex h-full flex-col p-3 sm:p-5 md:p-7">
     <header className="mb-3 sm:mb-5"><p className="gold m-0 text-[10px] font-bold tracking-[.3em]">TRANSACTIONS</p><h1 className="mt-1 text-xl font-semibold sm:text-2xl">รายการออเดอร์</h1><div className="mt-2 flex gap-2"><button onClick={()=>router.push("/pos")} className="min-h-11 rounded-xl bg-[#d4af37] px-4 text-sm font-bold">รับออเดอร์ใหม่</button>{(session.user.role==="admin"||session.user.permissions?.queue===true)&&<button onClick={()=>router.push("/queue")} className="min-h-11 rounded-xl border border-slate-300 bg-white px-4 text-sm font-semibold">ไปคิวครัว</button>}</div></header>
     {msg&&<div className="mb-4 flex items-start justify-between gap-3 rounded-2xl border border-slate-300 bg-white p-3 text-sm"><span>{msg}</span><button onClick={()=>setMsg("")}><X size={16}/></button></div>}
+    {pendingMutation&&<div role="status" className="mb-4 rounded-2xl border-2 border-amber-300 bg-amber-50 p-4 text-sm text-amber-950"><b>{pendingMutation.operation==="void"?"VOID":"Refund"} เดิมยังไม่ทราบผล</b><p className="mt-1 text-xs">Request …{pendingMutation.body.requestKey.slice(-8)} · ระบบล็อกการแก้ยอดขายซ้ำไว้ แต่ยังรับออเดอร์ใหม่ได้ตามปกติ</p><button disabled={busy||mutationRecoveryBlocked} onClick={()=>runOrderMutation(pendingMutation,true)} className="mt-3 min-h-11 rounded-xl bg-amber-700 px-4 text-xs font-bold text-white disabled:opacity-40">{busy?"กำลังตรวจผลเดิม…":"ตรวจผลรายการเดิม"}</button></div>}
+    {mutationRecoveryBlocked&&<div role="alert" className="mb-4 rounded-2xl border border-red-300 bg-red-50 p-3 text-sm font-semibold text-red-800">Recovery ของ VOID/Refund อ่านไม่ได้ · ระบบปิดเฉพาะการแก้ยอดขายใหม่เพื่อป้องกันเงิน/สต็อกซ้ำ กรุณาให้เจ้าของร้านตรวจเครื่องนี้</div>}
     {session.user.role==="admin"&&recoverySessions.length>0&&<div className="mb-3 rounded-2xl border border-amber-300 bg-amber-50 p-3 sm:mb-4 sm:p-4"><div className="flex items-start justify-between gap-3"><div className="flex min-w-0 gap-3"><span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-amber-100 text-amber-800"><AlertTriangle size={18}/></span><div><b className="text-sm text-amber-950">Payment Recovery · {recoverySessions.length} รายการ</b><p className="mt-1 text-xs text-amber-800">มี Payment session ที่ยังไม่จบ · รายการเหล่านี้อาจจอง Stock และบล็อก Close Day</p></div></div><button disabled={busy} onClick={()=>loadRecovery().catch(e=>setMsg(e.message))} className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-amber-300 bg-white disabled:opacity-40" aria-label="รีเฟรช Payment Recovery"><RefreshCw size={16}/></button></div><div className="mt-3 grid gap-2 sm:grid-cols-2">{recoverySessions.map(s=>{const paid=s.payments.reduce((n,p)=>n+Number(p.amount||0),0);return <button key={s.id} onClick={()=>openRecovery(s)} className={"rounded-xl border p-3 text-left "+(s.status==="requires_resolution"?"border-red-200 bg-white":"border-amber-200 bg-white/80")}><div className="flex items-center justify-between gap-2"><b className="text-sm">฿{Number(s.remainingAmount||0).toFixed(0)} คงเหลือ</b><span className={"rounded-full px-2 py-1 text-[9px] font-black uppercase "+(s.status==="requires_resolution"?"bg-red-100 text-red-700":"bg-amber-100 text-amber-800")}>{s.status==="requires_resolution"?"ต้องกู้คืน":"กำลังรับชำระ"}</span></div><p className="mt-1 text-[11px] text-slate-500">{s.date} · รับแล้ว ฿{paid.toFixed(0)} · {s.items.reduce((n,x)=>n+x.qty,0)} แก้ว</p></button>})}</div></div>}
     <div className="glass mb-3 flex items-center gap-2.5 rounded-full px-3 py-2.5 sm:mb-4 sm:gap-3 sm:px-4 sm:py-3"><Search size={18} className="text-slate-500"/><input value={q} onChange={e=>setQ(e.target.value)} placeholder="ค้นหาเลขบิล / เลขคิว" className="w-full bg-transparent outline-none"/></div>
 
@@ -219,9 +312,9 @@ function OrdersView({session}:{session:Session}){
         <div className="mt-4 space-y-2">{detail.items.map((i,n)=><div key={n} className="flex justify-between gap-3 rounded-2xl bg-slate-50 p-3"><span><b>{i.name}</b><small className="block text-slate-500">{i.variant} ×{i.qty} · ฿{i.price.toFixed(0)}/แก้ว</small></span><b className="shrink-0">฿{(i.price*i.qty).toFixed(0)}</b></div>)}</div>
         {Number(detail.discountTotal||0)>0&&<div className="mt-4 rounded-2xl bg-amber-50 p-3 text-sm"><div className="flex justify-between"><span>ยอดก่อนส่วนลด</span><b>฿{Number(detail.subtotal??detail.total).toFixed(0)}</b></div><div className="mt-1 flex justify-between text-amber-800"><span>ส่วนลดสมาชิก{detail.pointsRedeemed?" · "+detail.pointsRedeemed+" แต้ม":""}</span><b>−฿{Number(detail.discountTotal||0).toFixed(0)}</b></div></div>}<div className="mt-5 flex justify-between border-t border-slate-200 pt-4 text-lg"><b>ยอดสุทธิ</b><b className="gold">฿{detail.total.toFixed(0)}</b></div>{Number(detail.pointsAwarded||0)>0&&<p className="mt-2 text-right text-xs text-emerald-700">ได้รับ +{detail.pointsAwarded} แต้ม</p>}
 
-        {session.user.role==="admin"&&detail.payment==="cash"&&detail.status==="paid"&&!detail.productionStarted&&<button disabled={busy} onClick={()=>editCashOrder(detail)} className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl bg-[#d4af37] py-3 text-sm font-black text-black disabled:opacity-50"><Pencil size={16}/>{busy?"กำลังบันทึก...":"แก้ไข / ลด / เปลี่ยนเมนู"}</button>}
-        {session.user.role==="admin"&&detail.payment==="cash"&&detail.status==="paid"&&<button disabled={busy} onClick={()=>voidCash(detail)} className="mt-2 flex w-full items-center justify-center gap-2 rounded-2xl border border-red-400/30 py-3 text-sm font-semibold text-red-600 disabled:opacity-40"><Ban size={16}/>ยกเลิกบิลเงินสด + คืนสต็อก</button>}
-        {session.user.role==="admin"&&["cash","promptpay","bank","card","split"].includes(detail.payment)&&detail.status==="paid"&&<button disabled={busy} onClick={()=>refundSaleUi(detail)} className="mt-2 flex w-full items-center justify-center gap-2 rounded-2xl border border-amber-400/30 py-3 text-sm font-semibold text-amber-800 disabled:opacity-40"><RotateCcw size={16}/>{detail.orderId&&sales.filter(x=>x.orderId===detail.orderId&&x.status==="paid").length>1?"คืนเงินทั้งออเดอร์":"คืนเงินเต็มจำนวน"}</button>}
+        {session.user.role==="admin"&&detail.payment==="cash"&&detail.status==="paid"&&!detail.productionStarted&&<button disabled={busy||!!pendingMutation||mutationRecoveryBlocked} onClick={()=>editCashOrder(detail)} className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl bg-[#d4af37] py-3 text-sm font-black text-black disabled:opacity-50"><Pencil size={16}/>{busy?"กำลังบันทึก...":"แก้ไข / ลด / เปลี่ยนเมนู"}</button>}
+        {session.user.role==="admin"&&detail.payment==="cash"&&detail.status==="paid"&&<button disabled={busy||!!pendingMutation||mutationRecoveryBlocked} onClick={()=>voidCash(detail)} className="mt-2 flex w-full items-center justify-center gap-2 rounded-2xl border border-red-400/30 py-3 text-sm font-semibold text-red-600 disabled:opacity-40"><Ban size={16}/>ยกเลิกบิลเงินสด + คืนสต็อก</button>}
+        {session.user.role==="admin"&&["cash","promptpay","bank","card","split"].includes(detail.payment)&&detail.status==="paid"&&<button disabled={busy||!!pendingMutation||mutationRecoveryBlocked} onClick={()=>refundSaleUi(detail)} className="mt-2 flex w-full items-center justify-center gap-2 rounded-2xl border border-amber-400/30 py-3 text-sm font-semibold text-amber-800 disabled:opacity-40"><RotateCcw size={16}/>{detail.orderId&&sales.filter(x=>x.orderId===detail.orderId&&x.status==="paid").length>1?"คืนเงินทั้งออเดอร์":"คืนเงินเต็มจำนวน"}</button>}
         <button onClick={()=>window.print()} className="mt-2 flex w-full items-center justify-center gap-2 rounded-2xl border border-slate-300 py-3 text-sm font-semibold"><Printer size={16}/>พิมพ์ใบเสร็จ</button>
       </div>
     </div>}
