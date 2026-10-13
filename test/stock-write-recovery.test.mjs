@@ -84,8 +84,11 @@ test("Stock UI persists Purchase Edit and Cancel before network send and require
   assert.match(ui,/prepareStockWriteIntent\(session\.user\.id,"purchaseCancel",today\(\),body\)/);
   assert.match(ui,/intent\.operation==="purchaseEdit"/);
   assert.match(ui,/result\?\.performedBy===intent\.actorId/);
-  assert.match(ui,/purchaseEdit"\?\{path:"\/api\/stock\/purchases\//);
-  assert.match(ui,/purchaseCancel/);
+  const requestStart=ui.indexOf("function stockRequest");
+  const requestEnd=ui.indexOf("function exactStockAck",requestStart);
+  const requestBlock=ui.slice(requestStart,requestEnd);
+  assert.match(requestBlock,/operation==="purchaseEdit"\)return \{path:"\/api\/stock\/purchases\/"\+encodeURIComponent\(String\(body\.purchaseId\|\|""\)\),method:"PATCH"\}/);
+  assert.match(requestBlock,/return \{path:"\/api\/stock\/purchases\/"\+encodeURIComponent\(String\(body\.purchaseId\|\|""\)\)\+"\/cancel",method:"POST"\}/);
   const save=ui.slice(ui.indexOf("async function savePurchaseEdit"),ui.indexOf("async function cancelPurchase"));
   const cancel=ui.slice(ui.indexOf("async function cancelPurchase"),ui.indexOf("async function purgeIngredient"));
   assert.ok(save.indexOf("prepareStockWriteIntent")<save.indexOf("submitStockIntent"));
