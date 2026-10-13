@@ -113,3 +113,43 @@ test('stock count approval and direct count cannot mutate stock after day is clo
   assert.equal((await doc(db)).ingredients.matcha.qty,100);
   assert.equal((await db.execute('SELECT COUNT(*) AS n FROM field_stock_transactions')).rows[0].n,0);
 });
+
+
+test('cycle count proposal exact replay returns the same proposal and rejects cross-actor key reuse',async t=>{
+  const db=await setup(t),api=handler(db);
+  const body={requestKey:'count-proposal-replay-01',counts:[{ingredientId:'matcha',countedQty:91}]};
+  const first=await call(api,{token:'staff-token',csrf:'staff-csrf',route:'stock/cycle-count/proposals',body});
+  const replay=await call(api,{token:'staff-token',csrf:'staff-csrf',route:'stock/cycle-count/proposals',body});
+  const other=await call(api,{token:'owner-token',csrf:'owner-csrf',route:'stock/cycle-count/proposals',body});
+  assert.equal(first.status,201);assert.equal(replay.status,200);assert.equal(replay.body.replayed,true);
+  assert.equal(replay.body.requestKey,body.requestKey);assert.equal(replay.body.proposal.id,first.body.proposal.id);
+  assert.equal(other.status,409);assert.equal(other.body.error,'request_key_conflict');
+  const state=await doc(db);assert.equal(state.cycleCountProposals.length,1);
+  assert.equal((await db.execute("SELECT COUNT(*) AS n FROM field_audit WHERE action='cycle_count_proposal'")).rows[0].n,1);
+  assert.equal((await db.execute("SELECT COUNT(*) AS n FROM field_pos_requests WHERE request_key=?",[body.requestKey])).rows[0].n,1);
+});
+
+test('direct owner cycle count exact replay adjusts stock and audit only once',async t=>{
+  const db=await setup(t),api=handler(db);
+  const body={requestKey:'direct-count-replay-01',confirm:true,counts:[{ingredientId:'matcha',countedQty:90}]};
+  const first=await call(api,{token:'owner-token',csrf:'owner-csrf',route:'stock/cycle-count',body});
+  const replay=await call(api,{token:'owner-token',csrf:'owner-csrf',route:'stock/cycle-count',body});
+  assert.equal(first.status,201);assert.equal(replay.status,200);assert.equal(replay.body.replayed,true);
+  assert.equal(replay.body.requestKey,body.requestKey);assert.equal(replay.body.cycleCount.id,first.body.cycleCount.id);
+  const state=await doc(db);assert.equal(state.ingredients.matcha.qty,90);assert.equal(state.cycleCounts.length,1);
+  assert.equal((await db.execute("SELECT COUNT(*) AS n FROM field_stock_transactions WHERE reference_type='CYCLE_COUNT'")).rows[0].n,1);
+  assert.equal((await db.execute("SELECT COUNT(*) AS n FROM field_audit WHERE action='cycle_count_commit'")).rows[0].n,1);
+  assert.equal((await db.execute("SELECT COUNT(*) AS n FROM field_pos_requests WHERE request_key=?",[body.requestKey])).rows[0].n,1);
+});
+
+test('stock UI persists stock transaction and count identity until exact ACK',async()=>{
+  const {readFile}=await import('node:fs/promises');
+  const ui=await readFile(new URL('../app/stock/page.tsx',import.meta.url),'utf8');
+  assert.match(ui,/prepareCriticalWriteIntent/);
+  assert.match(ui,/sendCriticalWriteIntent/);
+  assert.match(ui,/stockTransaction/);
+  assert.match(ui,/cycleCountCommit/);
+  assert.match(ui,/cycleCountProposal/);
+  assert.match(ui,/ตรวจผลรายการเดิม/);
+  assert.match(ui,/ตรวจผลนับเดิม/);
+});
