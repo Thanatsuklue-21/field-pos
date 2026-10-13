@@ -100,3 +100,20 @@ html,body{overscroll-behavior:none}
   .field-app-root button{min-block-size:44px;min-inline-size:44px}
   input,select,textarea{font-size:16px}
 }
+
+
+/* POS/PWA modal safety: keep sheets clear of Android gesture areas and on-screen keyboards. */
+.field-modal-overlay{
+  padding-top:max(.5rem,env(safe-area-inset-top));
+  padding-right:max(.5rem,env(safe-area-inset-right));
+  padding-bottom:max(.5rem,env(safe-area-inset-bottom));
+  padding-left:max(.5rem,env(safe-area-inset-left));
+}
+.field-modal-panel{
+  max-height:calc(100dvh - max(1rem,env(safe-area-inset-top)) - max(1rem,env(safe-area-inset-bottom)));
+  scroll-padding-bottom:max(5rem,env(safe-area-inset-bottom));
+  outline:none;
+}
+@supports (height:100svh){
+  .field-modal-panel{max-height:calc(100svh - max(1rem,env(safe-area-inset-top)) - max(1rem,env(safe-area-inset-bottom)))}
+}
