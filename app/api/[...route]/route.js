@@ -23,7 +23,8 @@ async function handle(request,{params}){
     }
     try{
       await getDb().execute("SELECT 1 AS ok");
-      const release={commit:String(process.env.VERCEL_GIT_COMMIT_SHA||process.env.GIT_COMMIT_SHA||"local").slice(0,40),branch:String(process.env.VERCEL_GIT_COMMIT_REF||process.env.GIT_BRANCH||"local").slice(0,120),environment:String(process.env.VERCEL_ENV||process.env.NODE_ENV||"development").slice(0,40),deploymentId:String(process.env.VERCEL_DEPLOYMENT_ID||"").slice(0,120)};\n      return Response.json({ok:true,storage:"turso",release},{status:200,headers:{"Cache-Control":"no-store"}});
+      const release={commit:String(process.env.VERCEL_GIT_COMMIT_SHA||process.env.GIT_COMMIT_SHA||"local").slice(0,40),branch:String(process.env.VERCEL_GIT_COMMIT_REF||process.env.GIT_BRANCH||"local").slice(0,120),environment:String(process.env.VERCEL_ENV||process.env.NODE_ENV||"development").slice(0,40),deploymentId:String(process.env.VERCEL_DEPLOYMENT_ID||"").slice(0,120)};
+      return Response.json({ok:true,storage:"turso",release},{status:200,headers:{"Cache-Control":"no-store"}});
     }catch{
       return Response.json({ok:false,storage:"turso",error:"turso_unavailable"},{status:503,headers:{"Cache-Control":"no-store"}});
     }
