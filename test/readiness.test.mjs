@@ -107,3 +107,16 @@ test('production smoke also monitors stale main release hourly without deploying
   assert.match(yml,/Stale release: expected SHA/);
   assert.doesNotMatch(yml,/vercel deploy|create_deployment|deploy --prod/);
 });
+
+
+test('runtime health guard probes repeatedly and enforces security and latency budgets',async()=>{
+  const yml=await read('.github/workflows/production-smoke.yml');
+  assert.match(yml,/for attempt in 1 2 3/);
+  assert.match(yml,/strict-transport-security/);
+  assert.match(yml,/x-content-type-options/);
+  assert.match(yml,/x-frame-options/);
+  assert.match(yml,/content-security-policy/);
+  assert.match(yml,/health_latency_budget_exceeded/);
+  assert.match(yml,/max>5/);
+  assert.match(yml,/release_context_missing/);
+});
