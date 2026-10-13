@@ -8,7 +8,8 @@ test("POS exposes one in-place operations hub instead of forcing routine page sw
   const pos=await read("app/pos/page.tsx");
   assert.match(pos,/PosOperationsHub/);
   assert.match(pos,/setOpsOpen\(true\)/);
-  assert.match(pos,/>งานร้าน<\/button>/);
+  assert.match(pos,/คิว \/ งานร้าน/);
+  assert.match(pos,/setOpsInitialTab\(undefined\);setOpsOpen\(true\)/);
   assert.match(pos,/bootstrap=\{data\}/);
   assert.match(pos,/open=\{opsOpen\}/);
   assert.match(pos,/networkOnline=\{online\}/);
