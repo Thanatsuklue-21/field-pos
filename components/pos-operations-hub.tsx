@@ -19,6 +19,14 @@ type Sale={id:string;billNo:string;date:string;time:number;total:number;payment:
 type ExpenseRow={id:string;date:string;time:number;category:string;description:string;amount:number;paymentMethod?:string;sourceType?:string};
 type TodaySummary={today:string;todayRevenue:number;todayOrders:number;grossMargin:number;lowStock?:{name:string}[];recommendations?:{level:string;title:string;detail:string}[]};
 type CloseStatus={businessDate:string;shift:any;paymentBlockers:any[];orderBlockers:any[];closeBlockedByPayments:boolean;closeBlockedByOrders:boolean;closes:any[]};
+type AdminReadiness={
+  businessDate?:string;
+  readyForCashSales:boolean;
+  readyForPromptPay:boolean;
+  readyForFullOperations:boolean;
+  accounting?:{ok:boolean;level:string;blocking?:any[];totals?:Record<string,any>};
+  warnings?:{code:string;message:string}[];
+};
 const n=(v:any)=>Number(v)||0;
 const paymentLabel=(v?:string)=>v==="cash"?"เงินสด":v==="bank"?"โอน/ธนาคาร":v==="other"?"อื่น ๆ":String(v||"—").toUpperCase();
 
@@ -28,6 +36,7 @@ export default function PosOperationsHub({session,bootstrap,open,onClose,onRefre
   const canStock=session.user.role==="admin"||session.user.permissions?.stock===true;
   const canExpense=session.user.role==="admin"||session.user.permissions?.report===true;
   const canReport=canExpense;
+  const canReadiness=session.user.role==="admin";
   const cloudAvailable=networkOnline&&!session.offline;
   const availableTabs=useMemo(()=>[
     canReport&&"today",canQueue&&"queue",canOrder&&"orders",canStock&&"stock",canExpense&&"expenses"
@@ -38,6 +47,7 @@ export default function PosOperationsHub({session,bootstrap,open,onClose,onRefre
   const [expenses,setExpenses]=useState<ExpenseRow[]>([]);
   const [todaySummary,setTodaySummary]=useState<TodaySummary|null>(null);
   const [closeStatus,setCloseStatus]=useState<CloseStatus|null>(null);
+  const [readiness,setReadiness]=useState<AdminReadiness|null>(null);
   const [loading,setLoading]=useState(false);
   const [message,setMessage]=useState("");
   const [expenseBusy,setExpenseBusy]=useState(false);
@@ -101,8 +111,9 @@ export default function PosOperationsHub({session,bootstrap,open,onClose,onRefre
     if(!quiet){setLoading(true);setMessage("")}
     try{
       const tasks:Promise<any>[]=[];
-      const names:("todaySummary"|"closeStatus"|"queue"|"orders"|"expenses"|"stock")[]=[];
+      const names:("todaySummary"|"closeStatus"|"readiness"|"queue"|"orders"|"expenses"|"stock")[]=[];
       if(canReport&&(scope==="all"||scope==="today")){tasks.push(api<any>("/api/management/dashboard"));names.push("todaySummary");tasks.push(api<any>("/api/close-day"));names.push("closeStatus")}
+      if(canReadiness&&(scope==="all"||scope==="today")){tasks.push(api<any>("/api/admin/readiness"));names.push("readiness")}
       if(canQueue&&(scope==="all"||scope==="queue")){tasks.push(api<any>("/api/pos/queue"));names.push("queue")}
       if(canOrder&&(scope==="all"||scope==="orders")){tasks.push(api<any>("/api/pos/history"));names.push("orders")}
       if(canExpense&&(scope==="all"||scope==="expenses")){tasks.push(api<any>("/api/expenses"));names.push("expenses")}
@@ -114,6 +125,7 @@ export default function PosOperationsHub({session,bootstrap,open,onClose,onRefre
         const name=names[index],value=result.value;
         if(name==="todaySummary")setTodaySummary(value as TodaySummary);
         if(name==="closeStatus")setCloseStatus(value as CloseStatus);
+        if(name==="readiness")setReadiness(value as AdminReadiness);
         if(name==="queue")setQueue(Array.isArray(value.orders)?value.orders:[]);
         if(name==="orders")setSales(Array.isArray(value.sales)?value.sales:[]);
         if(name==="expenses")setExpenses(Array.isArray(value.expenses)?value.expenses:[]);
@@ -251,7 +263,7 @@ export default function PosOperationsHub({session,bootstrap,open,onClose,onRefre
       window.removeEventListener("focus",onFocus);
       document.removeEventListener("visibilitychange",onVisible);
     };
-  },[open,session.csrf,cloudAvailable,canQueue,canOrder,canStock,canExpense]);
+  },[open,session.csrf,cloudAvailable,canQueue,canOrder,canStock,canExpense,canReadiness]);
 
   async function saveExpense(){
     if(!(Number(expenseAmount)>0)||expenseBusy||!cloudAvailable)return;
@@ -289,7 +301,7 @@ export default function PosOperationsHub({session,bootstrap,open,onClose,onRefre
   const outCount=stockHealth.filter(x=>x.level==="out").length,lowCount=stockHealth.filter(x=>x.level==="low").length;
 
   if(!open)return null;
-  const todayBlockers=n(closeStatus?.paymentBlockers?.length)+n(closeStatus?.orderBlockers?.length);
+  const todayBlockers=n(closeStatus?.paymentBlockers?.length)+n(closeStatus?.orderBlockers?.length)+(readiness?.accounting?.ok===false?1:0);
   const tabMeta:{key:HubTab;label:string;icon:any;count?:number;allowed:boolean}[]=[
     {key:"today",label:"วันนี้",icon:CalendarCheck2,count:todayBlockers,allowed:canReport},
     {key:"queue",label:"คิว",icon:ListOrdered,count:queue.length,allowed:canQueue},
@@ -338,6 +350,14 @@ export default function PosOperationsHub({session,bootstrap,open,onClose,onRefre
             <div className="flex items-start justify-between gap-3"><div><b>{todayBlockers>0?"ยังปิดวันไม่ได้":"พร้อมตรวจปิดวัน"}</b><p className="mt-1 text-xs text-slate-600">{todayBlockers>0?"ต้องเคลียร์คิวหรือรายการชำระที่ค้างก่อน เพื่อไม่ให้ยอดและ Stock คลาดเคลื่อน":"ไม่พบคิวหรือ payment blocker จากข้อมูลล่าสุด"}</p></div><span className={"rounded-full px-2 py-1 text-[10px] font-black "+(todayBlockers>0?"bg-amber-200 text-amber-900":"bg-emerald-200 text-emerald-900")}>{todayBlockers>0?todayBlockers+" ค้าง":"OK"}</span></div>
             <div className="mt-3 grid grid-cols-2 gap-2 text-center"><Metric label="คิวค้าง" value={n(closeStatus?.orderBlockers?.length)}/><Metric label="ชำระค้าง" value={n(closeStatus?.paymentBlockers?.length)}/></div>
           </div>
+          {canReadiness&&readiness&&<div className={"rounded-2xl border p-4 "+(readiness.readyForFullOperations?"border-emerald-200 bg-emerald-50":readiness.accounting?.ok===false?"border-red-200 bg-red-50":"border-amber-200 bg-amber-50")}>
+            <div className="flex items-start justify-between gap-3">
+              <div><b>ความพร้อมระบบ</b><p className="mt-1 text-xs text-slate-600">{readiness.accounting?.ok===false?"บัญชีมี Critical mismatch · ระบบบล็อก Close Day อัตโนมัติ":readiness.readyForFullOperations?"ขาย/สต็อก/ต้นทุน/Payment ผ่านเงื่อนไขหลัก":"ยังมี Warning ที่ควรตรวจ แต่ระบบไม่เดาหรือแก้ยอดเอง"}</p></div>
+              <span className={"rounded-full px-2 py-1 text-[10px] font-black "+(readiness.readyForFullOperations?"bg-emerald-200 text-emerald-900":readiness.accounting?.ok===false?"bg-red-200 text-red-800":"bg-amber-200 text-amber-900")}>{readiness.readyForFullOperations?"READY":readiness.accounting?.ok===false?"BLOCK":"CHECK"}</span>
+            </div>
+            <div className="mt-3 grid grid-cols-3 gap-2 text-center"><Metric label="ขายเงินสด" value={readiness.readyForCashSales?1:0}/><Metric label="PromptPay" value={readiness.readyForPromptPay?1:0}/><Metric label="บัญชี" value={readiness.accounting?.ok===false?0:1}/></div>
+            {readiness.accounting?.ok===false&&<p className="mt-3 rounded-xl bg-white px-3 py-2 text-xs font-semibold text-red-700">พบ {n(readiness.accounting?.blocking?.length)} จุด Critical · เปิดหน้าปิดวัน/รายงานเพื่อตรวจหลักฐานก่อน</p>}
+          </div>}
           {!!todaySummary?.lowStock?.length&&<div className="rounded-2xl border border-amber-200 bg-white p-4"><b className="text-sm">สต็อกที่ควรดูวันนี้</b><p className="mt-2 text-xs text-slate-600">{todaySummary.lowStock.slice(0,4).map(x=>x.name).join(" · ")}</p><button onClick={()=>setTab("stock")} className="mt-3 min-h-11 w-full rounded-xl border border-slate-300 bg-white text-xs font-bold">ดูสต็อกในหน้านี้</button></div>}
           {!!todaySummary?.recommendations?.length&&<div className="rounded-2xl border border-slate-200 bg-white p-4"><b className="text-sm">ระบบแนะนำ</b><p className="mt-2 text-xs font-semibold text-slate-800">{todaySummary.recommendations[0].title}</p><p className="mt-1 text-xs text-slate-500">{todaySummary.recommendations[0].detail}</p></div>}
           <div className="grid grid-cols-2 gap-2"><FullLink href="/dashboard" label="ดูสรุปทั้งหมด"/><FullLink href="/close" label="ตรวจและปิดวัน"/></div>
