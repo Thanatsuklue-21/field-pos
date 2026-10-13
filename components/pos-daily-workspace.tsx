@@ -147,9 +147,9 @@ export default function PosDailyWorkspace({
 
   async function submitQuickExpense(recovered?:ExpenseIntent){
     if(!canExpense||expenseSavingRef.current||expenseRecoveryBlocked)return;
-    expenseSavingRef.current=true;
     const amount=Number(expenseAmount)||0;
     if(!recovered&&!pendingExpense&&!canSaveExpense)return;
+    expenseSavingRef.current=true;
     setBusy(true);setExpenseFeedback("");
     try{
       const intent=recovered||pendingExpense||prepareExpenseIntent(session.user.id,{
@@ -218,7 +218,7 @@ export default function PosDailyWorkspace({
   const queueRows=queue.slice().sort((a,b)=>n(a.time)-n(b.time)).slice(0,6);
   const orderRows=sales.slice(0,7);
   const latestOrder=orderRows[0]||null;
-  const expenseRows=(expenseData?.expenses||[]).slice(0,5);
+  const expenseRows=(expenseData?.expenses||[]).filter(row=>!expenseData?.businessDate||row.date===expenseData.businessDate).slice(0,5);
   const expenseAmountNumber=Number(expenseAmount)||0;
   const expenseIsCash=expensePaymentMethod==="cash";
   const drawerCash=Number(expenseData?.drawerSnapshot?.availableCash||0);
