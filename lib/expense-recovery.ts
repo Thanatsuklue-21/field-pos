@@ -1,7 +1,8 @@
 export type ExpenseBody={requestKey:string;date:string;amount:number;category:string;description:string;paymentMethod:string;riskConfirmed:boolean};
 export type ExpenseIntent={version:1;actorId:string;createdAt:number;body:ExpenseBody};
 type StorageLike=Pick<Storage,"getItem"|"setItem"|"removeItem">;
-const storageKey=(actorId:string)=>"field-expense-pending-v1:"+encodeURIComponent(actorId);
+export const EXPENSE_INTENT_PREFIX="field-expense-pending-v1:";
+const storageKey=(actorId:string)=>EXPENSE_INTENT_PREFIX+encodeURIComponent(actorId);
 const recoveryError=(code:string,cause?:unknown)=>Object.assign(new Error(code),{status:0,cause});
 function storageOrThrow(storage?:StorageLike){
   try{return storage||localStorage}catch(cause){throw recoveryError("expense_recovery_unavailable",cause)}
@@ -48,4 +49,19 @@ export async function sendExpenseIntent(intent:ExpenseIntent,send:(body:ExpenseB
   if(!exact)throw recoveryError("expense_ack_unknown");
   try{clearExpenseIntent(intent,store)}catch(cause){throw recoveryError("expense_recovery_unavailable",cause)}
   return result;
+}
+
+
+export function listExpenseIntents(storage?:StorageLike&Pick<Storage,"length"|"key">):ExpenseIntent[]{
+  const store=(storageOrThrow(storage) as StorageLike&Pick<Storage,"length"|"key">),out:ExpenseIntent[]=[];
+  try{
+    for(let i=0;i<store.length;i++){
+      const key=store.key(i);
+      if(!key||!key.startsWith(EXPENSE_INTENT_PREFIX))continue;
+      const actorId=decodeURIComponent(key.slice(EXPENSE_INTENT_PREFIX.length));
+      const intent=readExpenseIntent(actorId,store);
+      if(intent)out.push(intent);
+    }
+    return out;
+  }catch(cause){throw recoveryError("expense_recovery_unavailable",cause)}
 }
