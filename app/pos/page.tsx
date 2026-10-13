@@ -83,6 +83,7 @@ function PosView({session}:{session:Session}){
   const [splitGroup,setSplitGroup]=useState<SplitGroup|null>(null);
   const [online,setOnline]=useState(true);
   const [offlineStats,setOfflineStats]=useState<OfflineCashSummary>({pending:0,needsReview:0,total:0});
+  const [offlineStorageError,setOfflineStorageError]=useState(false);
   const revisionRef=useRef<number|null>(null);
   const offlineSyncRef=useRef(false);
   const cart=useCartStore();
@@ -237,7 +238,8 @@ function PosView({session}:{session:Session}){
   }
 
   async function refreshOfflineStats(){
-    setOfflineStats(await getOfflineCashSummary());
+    try{setOfflineStats(await getOfflineCashSummary());setOfflineStorageError(false)}
+    catch(error){setOfflineStorageError(true);throw error}
   }
 
   async function syncOfflineQueue(){
@@ -245,6 +247,7 @@ function PosView({session}:{session:Session}){
     offlineSyncRef.current=true;
     try{
       const sync=await syncOfflineCashSales(session);
+      setOfflineStorageError(false);
       setOfflineStats({pending:sync.pending,needsReview:sync.needsReview,total:sync.total});
       if(sync.synced>0){
         setNotice("ซิงก์ยอดเงินสด Offline สำเร็จ "+sync.synced+" บิล · Cloud/Stock อัปเดตแล้ว");
@@ -252,6 +255,9 @@ function PosView({session}:{session:Session}){
         await loadCustomers().catch(()=>{});
       }
       if(sync.needsReview>0)setNotice("มีบิล Offline "+sync.needsReview+" รายการที่ต้องตรวจสอบก่อนลง Cloud · ระบบเก็บรายการไว้และไม่ลบทิ้ง");
+    }catch(error:any){
+      if(error?.message==="offline_storage_unavailable")setOfflineStorageError(true);
+      throw error;
     }finally{offlineSyncRef.current=false}
   }
 
@@ -580,6 +586,8 @@ function PosView({session}:{session:Session}){
         if(splitBill||splitGroup)throw Object.assign(new Error("offline_split_not_supported"),{status:409});
         if(customerId||redeemPoints>0)throw Object.assign(new Error("offline_loyalty_not_supported"),{status:409});
         if(!data)throw Object.assign(new Error("offline_catalog_unavailable"),{status:409});
+        // Never confirm another offline sale while existing local bills are unreadable.
+        await refreshOfflineStats();
         const offlineCreatedAt=Date.now();
         const body={
           requestKey,date:localDate(),cart:cartPayload,payment:"cash",received:Number(received),
@@ -705,7 +713,7 @@ function PosView({session}:{session:Session}){
       <div className="mb-3 flex items-center justify-between gap-2">
         <div><p className="gold m-0 text-[10px] font-bold tracking-[.3em]">FIELD POS</p><h1 className="m-0 mt-1 text-xl font-semibold tracking-wide md:text-2xl">รับออเดอร์</h1><p className="mt-0.5 text-[11px] text-slate-500">แตะเมนู → ตรวจรายการ → รับเงิน</p></div>
         <div className="flex items-center gap-1.5 sm:gap-2">
-          {(!online||offlineStats.total>0)&&<div className={"hidden rounded-full border px-2.5 py-1.5 text-[10px] font-bold sm:block sm:text-xs "+(!online?"border-amber-300 bg-amber-50 text-amber-800":offlineStats.needsReview>0?"border-red-300 bg-red-50 text-red-700":"border-emerald-300 bg-emerald-50 text-emerald-700")}>{!online?"OFFLINE · เงินสดเท่านั้น":offlineStats.needsReview>0?"Offline ต้องตรวจ "+offlineStats.needsReview:"Offline รอ Sync "+offlineStats.pending}</div>}
+          {!offlineStorageError&&(!online||offlineStats.total>0)&&<div className={"hidden rounded-full border px-2.5 py-1.5 text-[10px] font-bold sm:block sm:text-xs "+(!online?"border-amber-300 bg-amber-50 text-amber-800":offlineStats.needsReview>0?"border-red-300 bg-red-50 text-red-700":"border-emerald-300 bg-emerald-50 text-emerald-700")}>{!online?"OFFLINE · เงินสดเท่านั้น":offlineStats.needsReview>0?"Offline ต้องตรวจ "+offlineStats.needsReview:"Offline รอ Sync "+offlineStats.pending}</div>}
           <button disabled={busy||payOpen} onClick={()=>setWorkspaceOpen(true)} className="flex min-h-11 items-center gap-1.5 rounded-full border border-[#d4af37]/50 bg-[#fff8dc] px-2.5 text-[11px] font-bold text-[#6f5510] disabled:opacity-40 sm:px-3 sm:text-xs"><ClipboardList size={14}/>งานร้าน</button><button onClick={()=>setHeldOpen(true)} className="relative flex min-h-11 items-center gap-1.5 rounded-full border border-slate-300 bg-white px-2.5 text-[11px] font-semibold text-slate-700 sm:px-3 sm:text-xs"><Clock3 size={14}/>พักบิล{heldBills.held.length>0&&<span className="grid h-5 min-w-5 place-items-center rounded-full bg-[#d4af37] px-1 text-[10px] font-black text-black">{heldBills.held.length}</span>}</button>
           <div className="hidden rounded-full border border-slate-300 bg-white px-3 py-1.5 text-[11px] text-slate-600 sm:block sm:px-4 sm:py-2 sm:text-xs">{session.user.username}</div>
         </div>
@@ -715,6 +723,7 @@ function PosView({session}:{session:Session}){
         {[["1","เลือกเมนู"],["2","ตรวจรายการ"],["3","รับเงิน"]].map(([n,label])=>{const step=Number(n),active=orderStep===step,done=orderStep>step;return <div key={n} className={"flex min-h-10 items-center justify-center gap-1.5 rounded-xl px-2 text-[10px] font-semibold sm:text-xs "+(active?"bg-[#d4af37] text-black shadow-sm":done?"bg-emerald-50 text-emerald-700":"text-slate-400")}><span className={"grid h-5 w-5 place-items-center rounded-full text-[10px] "+(active?"bg-black/10":done?"bg-emerald-100":"bg-slate-100")}>{done?"✓":n}</span><span>{label}</span></div>})}
       </div>
 
+      {offlineStorageError&&<div role="alert" className="mb-3 shrink-0 rounded-2xl border border-red-200 bg-red-50 p-3 text-sm text-red-900"><b>ยังอ่านบิล Offline ในเครื่องไม่ได้</b><p className="mt-1 text-xs">ยังยืนยันไม่ได้ว่ามีบิลรอส่งกี่รายการ · หยุดรับเงินสด Offline และอย่าล้างข้อมูลเบราว์เซอร์ กรุณาตรวจพื้นที่เก็บข้อมูลหรือให้เจ้าของร้านช่วย</p><button disabled={busy} onClick={()=>refreshOfflineStats().catch(()=>{})} className="mt-2 min-h-11 rounded-xl border border-red-300 bg-white px-3 text-xs font-bold disabled:opacity-40">อ่านรายการ Offline อีกครั้ง</button></div>}
       {notice&&<div className="mb-3 flex items-start justify-between gap-3 rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900"><span>{notice}</span><button onClick={()=>setNotice("")} className="shrink-0"><X size={16}/></button></div>}
       {allUnavailable&&<div className="mb-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-900"><b>เมนูทั้งหมดถูกพักขายชั่วคราว</b><p className="mt-1 text-xs">ต้องบันทึกยอดวัตถุดิบจริงก่อนรับออเดอร์{unavailableNames.length?" · ขาด: "+unavailableNames.join(", "):""}</p><button onClick={()=>router.push("/stock")} className="mt-3 rounded-full bg-red-700 px-4 py-2 text-xs font-bold text-white">ตั้งยอดเริ่มต้น Stock</button></div>}
 

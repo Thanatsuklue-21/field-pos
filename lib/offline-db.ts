@@ -50,13 +50,7 @@ export async function offlineCashPut(record:OfflineCashRecord){
   await txDone(tx);db.close();
 }
 export async function offlineCashList():Promise<OfflineCashRecord[]>{
-  const db=await openDb();if(!db)return [];
-  const rows=await new Promise<OfflineCashRecord[]>(resolve=>{
-    const r=db.transaction(OUTBOX_STORE,"readonly").objectStore(OUTBOX_STORE).getAll();
-    r.onsuccess=()=>resolve(Array.isArray(r.result)?r.result:[]);r.onerror=()=>resolve([]);
-  });
-  db.close();
-  return rows.sort((a,b)=>Number(a.createdAt||0)-Number(b.createdAt||0));
+  return offlineCashListStrict();
 }
 export async function offlineCashDelete(requestKey:string){
   const db=await openDb();if(!db)return;
@@ -81,7 +75,8 @@ function openDbStrict():Promise<IDBDatabase>{
   return new Promise((resolve,reject)=>{
     let settled=false;
     const finishError=()=>{if(!settled){settled=true;reject(new Error("offline_storage_unavailable"))}};
-    const r=indexedDB.open(DB_NAME,VERSION);
+    let r:IDBOpenDBRequest;
+    try{r=indexedDB.open(DB_NAME,VERSION)}catch{finishError();return}
     r.onupgradeneeded=()=>{
       if(!r.result.objectStoreNames.contains(CACHE_STORE))r.result.createObjectStore(CACHE_STORE);
       if(!r.result.objectStoreNames.contains(OUTBOX_STORE))r.result.createObjectStore(OUTBOX_STORE,{keyPath:"requestKey"});
@@ -103,9 +98,14 @@ export async function offlineCashListStrict():Promise<OfflineCashRecord[]>{
       const tx=db.transaction(OUTBOX_STORE,"readonly"),request=tx.objectStore(OUTBOX_STORE).getAll();
       let settled=false,rows:OfflineCashRecord[]|null=null;
       const fail=()=>{if(!settled){settled=true;reject(new Error("offline_storage_unavailable"))}};
-      request.onsuccess=()=>{rows=Array.isArray(request.result)?request.result:[]};
+      request.onsuccess=()=>{
+        if(!Array.isArray(request.result)){fail();return}
+        rows=request.result;
+        if(rows!.some(row=>!row||typeof row.requestKey!=="string"||row.requestKey.length<8||!row.body||row.body.requestKey!==row.requestKey||!/^\d{4}-\d{2}-\d{2}$/.test(String(row.body.date||""))||!["pending","needs_review"].includes(row.status))){fail();return}
+      };
       request.onerror=fail;tx.onabort=fail;tx.onerror=fail;
-      tx.oncomplete=()=>{if(!settled){settled=true;resolve(rows||[])}};
+      tx.oncomplete=()=>{if(!settled){if(rows===null){fail();return}settled=true;resolve(rows)}};
     }).then(rows=>rows.sort((a,b)=>Number(a.createdAt||0)-Number(b.createdAt||0)));
-  }finally{db.close()}
+  }catch(cause){throw Object.assign(new Error("offline_storage_unavailable"),{cause})}
+  finally{db.close()}
 }

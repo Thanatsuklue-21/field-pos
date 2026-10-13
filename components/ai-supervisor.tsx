@@ -1,6 +1,6 @@
 "use client";
 import {useEffect,useMemo,useState} from "react";
-import {useRouter} from "next/navigation";
+import {useRouter,usePathname} from "next/navigation";
 import {Bot,RefreshCw,Send,ShieldAlert,Sparkles,X} from "lucide-react";
 import {api,type Session} from "@/lib/api-client";
 
@@ -9,7 +9,7 @@ type Snapshot={health:"critical"|"review"|"ok";topSeverity:string;metrics:Record
 type AiReply={answer:string;actions:{type:"navigate"|"refresh";label:string;href:string;reason:string}[];mode:"ai"|"rules";snapshot:Snapshot};
 
 export default function AiSupervisor({session}:{session:Session|null}){
-  const router=useRouter(),[open,setOpen]=useState(false),[snap,setSnap]=useState<Snapshot|null>(null),[busy,setBusy]=useState(false),[message,setMessage]=useState("ช่วยตรวจว่าตอนนี้ต้องทำอะไรก่อน"),[reply,setReply]=useState<AiReply|null>(null),[error,setError]=useState("");
+  const router=useRouter(),path=usePathname(),[open,setOpen]=useState(false),[snap,setSnap]=useState<Snapshot|null>(null),[busy,setBusy]=useState(false),[message,setMessage]=useState("ช่วยตรวจว่าตอนนี้ต้องทำอะไรก่อน"),[reply,setReply]=useState<AiReply|null>(null),[error,setError]=useState("");
   async function load(){
     if(!session)return;
     try{setSnap(await api<Snapshot>("/api/ai/supervisor"));setError("")}
@@ -41,7 +41,7 @@ export default function AiSupervisor({session}:{session:Session|null}){
   if(!session)return null;
   const critical=snap?.health==="critical",review=snap?.health==="review";
   return <>
-    <button type="button" onClick={()=>setOpen(v=>!v)} aria-label="FIELD AI Supervisor" className={"fixed bottom-[78px] right-3 z-[70] grid h-12 w-12 place-items-center rounded-full border shadow-lg md:bottom-6 md:right-6 "+(critical?"border-red-300 bg-red-50 text-red-700":review?"border-amber-300 bg-amber-50 text-amber-700":"border-emerald-200 bg-white text-emerald-700")}>
+    <button type="button" onClick={()=>setOpen(v=>!v)} aria-label="FIELD AI Supervisor" className={"fixed bottom-[78px] right-3 z-[70] h-12 w-12 place-items-center rounded-full border shadow-lg md:bottom-6 md:right-6 "+(path==="/pos"?"hidden ":"grid ")+(critical?"border-red-300 bg-red-50 text-red-700":review?"border-amber-300 bg-amber-50 text-amber-700":"border-emerald-200 bg-white text-emerald-700")}>
       <Bot size={21}/>{badge>0&&<span className="absolute -right-1 -top-1 min-w-5 rounded-full bg-red-600 px-1.5 py-0.5 text-center text-[10px] font-bold text-white">{badge}</span>}
     </button>
     {open&&<div className="fixed inset-0 z-[120] bg-slate-950/20 p-2 backdrop-blur-[2px] md:flex md:items-end md:justify-end" onClick={e=>{if(e.currentTarget===e.target)setOpen(false)}}>

@@ -2,7 +2,7 @@
 
 import {useEffect,useMemo,useState} from "react";
 import Link from "next/link";
-import {Boxes,ClipboardList,ListOrdered,RefreshCw,ShieldCheck,X} from "lucide-react";
+import {Bot,Boxes,ClipboardList,ListOrdered,RefreshCw,ShieldCheck,X} from "lucide-react";
 import {api,type Bootstrap,type Session} from "@/lib/api-client";
 
 type WorkspaceTab="queue"|"orders"|"stock"|"status";
@@ -140,6 +140,12 @@ export default function PosDailyWorkspace({
           <p className="mt-1 text-xs text-slate-500">เช็กงานหลักโดยไม่ออกจากหน้า POS · งานแก้ไขเชิงลึกค่อยเปิดหน้าเต็ม</p>
         </div>
         <div className="flex gap-1">
+          <button type="button" onClick={()=>{
+            onClose();
+            window.dispatchEvent(new CustomEvent("field:ai-ask",{detail:{message:"ช่วยตรวจงานร้านตอนนี้และบอกสิ่งที่ควรทำต่อ"}}));
+          }} aria-label="ถามผู้ช่วยเรื่องงานร้าน" className="grid h-11 w-11 place-items-center rounded-xl border border-slate-200 bg-white">
+            <Bot size={18}/>
+          </button>
           <button disabled={busy||!online} onClick={()=>refresh()} aria-label="รีเฟรชงานร้าน" className="grid h-11 w-11 place-items-center rounded-xl border border-slate-200 bg-white disabled:opacity-40">
             <RefreshCw size={17} className={busy?"animate-spin":""}/>
           </button>
