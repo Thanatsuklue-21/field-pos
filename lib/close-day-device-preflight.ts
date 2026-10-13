@@ -109,7 +109,7 @@ export function buildCloseDayDevicePreflight(input:{
     });
   }
   for(const intent of (input.stockWriteIntents||[]).filter(x=>x.businessDate===businessDate)){
-    const label=intent.operation==="stockTransaction"?"รายการรับเข้า/ของเสีย":intent.operation==="cycleCountCommit"?"การปรับ Stock จากการนับจริง":intent.operation==="cycleCountProposal"?"ผลนับ Stock ที่รอส่ง":intent.operation==="cycleCountProposalApprove"?"การอนุมัติผลนับ Stock":"การตีกลับผลนับ Stock";
+    const label=intent.operation==="stockTransaction"?"รายการรับเข้า/ของเสีย":intent.operation==="cycleCountCommit"?"การปรับ Stock จากการนับจริง":intent.operation==="cycleCountProposal"?"ผลนับ Stock ที่รอส่ง":intent.operation==="cycleCountProposalApprove"?"การอนุมัติผลนับ Stock":intent.operation==="cycleCountProposalReject"?"การตีกลับผลนับ Stock":intent.operation==="purchaseEdit"?"การแก้รายการรับเข้า":"การยกเลิกรายการรับเข้า";
     blockers.push({
       kind:"stock_write_unknown",
       title:intent.actorId===actorId?label+" ที่ผลยังไม่ชัด":"มีรายการ Stock ค้างจากผู้ใช้อื่นบนเครื่องนี้",
