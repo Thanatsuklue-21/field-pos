@@ -29,13 +29,18 @@ async function fetchWithPolicy(path:string,init:RequestInit,method:string){
   const controller=method==="GET"&&!init.signal?new AbortController():null;
   const timer=controller?setTimeout(()=>controller.abort("field_get_timeout"),GET_TIMEOUT_MS):null;
   try{
-    return await fetch(path,{
+    const res=await fetch(path,{
       ...init,
       headers,
       credentials:"same-origin",
       cache:"no-store",
       signal:controller?.signal||init.signal,
     });
+    const data=await res.json().catch((error)=>{
+      if(controller?.signal.aborted||init.signal?.aborted)throw error;
+      return {};
+    });
+    return {res,data};
   }finally{
     if(timer)clearTimeout(timer);
   }
@@ -61,8 +66,7 @@ export async function getSessionCached(force=false){
 
 async function executeApi<T>(path:string,init:RequestInit,method:string){
   try{
-    const res=await fetchWithPolicy(path,init,method);
-    const data=await res.json().catch(()=>({}));
+    const {res,data}=await fetchWithPolicy(path,init,method);
     if(res.status===401){
       clearSessionCache();
       if(typeof window!=="undefined")window.dispatchEvent(new Event("field:auth-expired"));
@@ -74,9 +78,10 @@ async function executeApi<T>(path:string,init:RequestInit,method:string){
     emit("online");
     return data as T;
   }catch(error:any){
+    if(init.signal?.aborted)throw init.signal.reason??error;
     if(error?.status===undefined){
       if(method==="GET"&&SAFE_GET_CACHE.has(path)){
-        const cached=await cacheGet<T>(path);
+        const cached=await cacheGet<T>(path).catch(()=>null);
         if(cached){emit("cached");return cached}
       }
       emit("offline");

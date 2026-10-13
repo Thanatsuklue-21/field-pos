@@ -3,9 +3,9 @@ import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import ts from 'typescript';
 
-async function client(t){
+async function client(t,cache='const cacheGet=async()=>null; const cachePut=async()=>{};'){
   const source=await readFile(new URL('../lib/api-client.ts',import.meta.url),'utf8');
-  const code=ts.transpileModule(source.replace(/^import .*offline-db.*;$/m,'const cacheGet=async()=>null; const cachePut=async()=>{};'),{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText;
+  const code=ts.transpileModule(source.replace(/^import .*offline-db.*;$/m,cache),{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText;
   return import('data:text/javascript;base64,'+Buffer.from(code+'\n// '+t.name).toString('base64'));
 }
 
@@ -36,10 +36,47 @@ test('canceling one GET does not cancel another caller while ordinary GETs coale
   const first=api('/api/read');
   const second=api('/api/read');
   assert.equal(pending.length,2);
-  const rejected=assert.rejects(canceled,{message:'network_unavailable'});
+  const rejected=assert.rejects(canceled,{name:'AbortError'});
   controller.abort();
   pending[1]();
   await rejected;
   assert.deepEqual(await first,{ok:true});
   assert.deepEqual(await second,{ok:true});
+});
+
+test('canceling bootstrap does not return stale cache or emit an offline event',async t=>{
+  const descriptor=Object.getOwnPropertyDescriptor(globalThis,'window');
+  const events=[];
+  Object.defineProperty(globalThis,'window',{configurable:true,value:{dispatchEvent:event=>events.push(event)}});
+  t.after(()=>{if(descriptor)Object.defineProperty(globalThis,'window',descriptor);else delete globalThis.window});
+  const {api}=await client(t,'const cacheGet=async()=>({stale:true}); const cachePut=async()=>{};');
+  const controller=new AbortController();
+  t.mock.method(globalThis,'fetch',async()=>{controller.abort();throw controller.signal.reason});
+  await assert.rejects(api('/api/pos/bootstrap',{signal:controller.signal}),{name:'AbortError'});
+  assert.deepEqual(events,[]);
+});
+
+test('GET timeout includes reading a stalled JSON response body',async t=>{
+  const {api}=await client(t);
+  t.mock.timers.enable({apis:['setTimeout']});
+  let bodyStarted;
+  const started=new Promise(resolve=>{bodyStarted=resolve});
+  t.mock.method(globalThis,'fetch',async(_path,init)=>({
+    json:()=>new Promise((_resolve,reject)=>{
+      init.signal.addEventListener('abort',()=>reject(new DOMException('Aborted','AbortError')),{once:true});
+      bodyStarted();
+    }),
+    ok:true,status:200,
+  }));
+  const request=api('/api/read');
+  const rejected=assert.rejects(request,{message:'network_unavailable',status:0});
+  await started;
+  t.mock.timers.tick(8000);
+  await rejected;
+});
+
+test('unavailable IndexedDB preserves the network error instead of leaking a storage error',async t=>{
+  const {api}=await client(t,'const cacheGet=async()=>{throw new Error("storage_denied")}; const cachePut=async()=>{};');
+  t.mock.method(globalThis,'fetch',async()=>{throw new TypeError('fetch failed')});
+  await assert.rejects(api('/api/pos/bootstrap'),error=>error.message==='network_unavailable'&&error.status===0&&error.cause.message==='fetch failed');
 });

@@ -18,6 +18,13 @@ so CSRF and explicit content types are retained. Caller-cancelable reads are
 isolated from shared reads; ordinary concurrent reads still coalesce. Writes
 remain single-attempt. Behavioral tests exercise headers and concurrent cancellation.
 
+The GET timeout now covers JSON body consumption as well as receiving headers.
+Caller cancellation retains its original abort reason without changing network
+status or returning cached bootstrap data. If IndexedDB is unavailable during
+network recovery, the client still reports the original network failure.
+Behavioral tests cover stalled response bodies, cancellation with cache present,
+and storage failure during fallback.
+
 ## Next development priorities
 
 - POS / orders / queue: device acceptance of checkout, grouped preparation,
