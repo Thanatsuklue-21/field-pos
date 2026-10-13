@@ -34,3 +34,30 @@ test('full operation readiness is blocked by accounting reconciliation failure',
   assert.match(seg,/readyForFullOperations=.*accounting\.ok/);
   assert.match(seg,/accounting_reconciliation_failed/);
 });
+
+
+test('production readiness separates cash-only from full operations',async()=>{
+  const api=await read('lib/api.mjs'),ui=await read('app/settings/page.tsx');
+  const start=api.indexOf("if(path==='/api/admin/readiness'");
+  const end=api.indexOf("if(path==='/api/admin/business-settings'",start);
+  const seg=api.slice(start,end);
+  assert.match(seg,/productionGate/);
+  assert.match(seg,/READY_CASH_ONLY/);
+  assert.match(seg,/READY_FULL/);
+  assert.match(seg,/payment_recovery/);
+  assert.match(seg,/offline_safety/);
+  assert.match(seg,/disaster_recovery/);
+  assert.match(seg,/backup_restore_drill/);
+  assert.match(ui,/PRODUCTION GATE/);
+  assert.match(ui,/ต้องแก้ก่อนเปิดจริง/);
+  assert.match(ui,/PromptPay/);
+});
+
+test('production readiness keeps backup restore drill visible before opening',async()=>{
+  const api=await read('lib/api.mjs');
+  const start=api.indexOf("if(path==='/api/admin/readiness'");
+  const end=api.indexOf("if(path==='/api/admin/business-settings'",start);
+  const seg=api.slice(start,end);
+  assert.match(seg,/Full Backup \+ Restore Preview แบบ transactional/);
+  assert.match(seg,/ทดลอง Export Backup → Preview Restore ก่อนเปิดจริง/);
+});
