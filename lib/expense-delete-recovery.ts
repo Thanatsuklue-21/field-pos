@@ -1,11 +1,11 @@
-export type ExpenseDeleteBody={requestKey:string;expenseId:string;date:string};
+export type ExpenseDeleteBody={requestKey:string;expenseId:string;date:string;expectedAmount:number};
 export type ExpenseDeleteIntent={version:1;actorId:string;createdAt:number;body:ExpenseDeleteBody};
 type StorageLike=Pick<Storage,"getItem"|"setItem"|"removeItem">;
 export const EXPENSE_DELETE_INTENT_PREFIX="field-expense-delete-pending-v1:";
 const storageKey=(actorId:string)=>EXPENSE_DELETE_INTENT_PREFIX+encodeURIComponent(actorId);
 const recoveryError=(code:string,cause?:unknown)=>Object.assign(new Error(code),{status:0,cause});
 function storageOrThrow(storage?:StorageLike){try{return storage||localStorage}catch(cause){throw recoveryError("expense_delete_recovery_unavailable",cause)}}
-function validBody(b:any):b is ExpenseDeleteBody{return !!b&&typeof b==="object"&&typeof b.requestKey==="string"&&b.requestKey.length>=8&&b.requestKey.length<=120&&typeof b.expenseId==="string"&&b.expenseId.length>0&&/^\d{4}-\d{2}-\d{2}$/.test(String(b.date||""))}
+function validBody(b:any):b is ExpenseDeleteBody{return !!b&&typeof b==="object"&&typeof b.requestKey==="string"&&b.requestKey.length>=8&&b.requestKey.length<=120&&typeof b.expenseId==="string"&&b.expenseId.length>0&&/^\d{4}-\d{2}-\d{2}$/.test(String(b.date||""))&&Number.isFinite(Number(b.expectedAmount))&&Number(b.expectedAmount)>0}
 export function readExpenseDeleteIntent(actorId:string,storage?:StorageLike):ExpenseDeleteIntent|null{
   try{
     const raw=storageOrThrow(storage).getItem(storageKey(actorId));if(!raw)return null;
@@ -32,7 +32,7 @@ function clearIntent(intent:ExpenseDeleteIntent,storage:StorageLike){
   const current=readExpenseDeleteIntent(intent.actorId,storage);
   if(current?.body.requestKey===intent.body.requestKey)storage.removeItem(storageKey(intent.actorId));
 }
-const NOT_COMMITTED=new Set(["invalid_request_key","invalid_date","expense_not_found","expense_target_changed","day_closed","system_expense_read_only"]);
+const NOT_COMMITTED=new Set(["invalid_request_key","invalid_date","invalid_expense_delete","expense_not_found","expense_target_changed","day_closed","system_expense_read_only"]);
 export async function sendExpenseDeleteIntent(intent:ExpenseDeleteIntent,send:(body:ExpenseDeleteBody)=>Promise<any>,storage?:StorageLike){
   const store=storageOrThrow(storage),current=readExpenseDeleteIntent(intent.actorId,store);
   if(!current||JSON.stringify(current)!==JSON.stringify(intent))throw recoveryError("expense_delete_recovery_unavailable");
@@ -42,7 +42,7 @@ export async function sendExpenseDeleteIntent(intent:ExpenseDeleteIntent,send:(b
     throw error;
   }
   const b=intent.body;
-  const exact=result?.ok===true&&result.deleted===true&&result.requestKey===b.requestKey&&result.expenseId===b.expenseId&&result.date===b.date;
+  const exact=result?.ok===true&&result.deleted===true&&result.requestKey===b.requestKey&&result.expenseId===b.expenseId&&result.date===b.date&&Number(result.amount)===Number(b.expectedAmount)&&result.deletedBy===intent.actorId;
   if(!exact)throw recoveryError("expense_delete_ack_unknown");
   try{clearIntent(intent,store)}catch(cause){throw recoveryError("expense_delete_recovery_unavailable",cause)}
   return result;
