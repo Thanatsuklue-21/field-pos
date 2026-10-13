@@ -84,3 +84,15 @@ test('health endpoint includes release identity for production smoke checks',asy
   assert.match(seg,/environment:/);
   assert.match(seg,/deploymentId:/);
 });
+
+
+test('production smoke workflow checks health routes and stale release without creating deployments',async()=>{
+  const yml=await read('.github/workflows/production-smoke.yml');
+  assert.match(yml,/deployment_status:/);
+  assert.match(yml,/workflow_dispatch:/);
+  assert.match(yml,/\/api\/health/);
+  for(const route of ['/pos','/settings','/close'])assert.match(yml,new RegExp(route.replace('/','\\/')));
+  assert.match(yml,/Stale release/);
+  assert.match(yml,/release_identity_missing/);
+  assert.doesNotMatch(yml,/vercel deploy|create_deployment|deploy --prod/);
+});
