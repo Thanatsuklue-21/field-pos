@@ -1,4 +1,4 @@
-export type StockWriteOperation="stockTransaction"|"cycleCountCommit"|"cycleCountProposal";
+export type StockWriteOperation="stockTransaction"|"cycleCountCommit"|"cycleCountProposal"|"purchaseEdit"|"purchaseCancel";
 export type StockWriteBody=Record<string,any>&{requestKey:string};
 export type StockWriteIntent<T extends StockWriteBody=StockWriteBody>={
   version:1;
@@ -18,7 +18,7 @@ function storageOrThrow(storage?:StorageLike){
   try{return storage||localStorage}catch(cause){throw recoveryError("stock_recovery_unavailable",cause)}
 }
 function validOperation(value:any):value is StockWriteOperation{
-  return ["stockTransaction","cycleCountCommit","cycleCountProposal"].includes(String(value||""));
+  return ["stockTransaction","cycleCountCommit","cycleCountProposal","purchaseEdit","purchaseCancel"].includes(String(value||""));
 }
 function validIntent<T extends StockWriteBody>(value:any,actorId:string):value is StockWriteIntent<T>{
   const body=value?.body;
