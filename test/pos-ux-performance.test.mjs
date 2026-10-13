@@ -79,13 +79,12 @@ test('queue shows pager number and one guided production action',async()=>{
   const queue=await read('app/queue/page.tsx');
   assert.match(queue,/บัตรเรียกคิว/);
   assert.match(queue,/บัตรผลิตปัจจุบัน/);
-  assert.match(queue,/ทำ \{task\.item\.name\} ครบ/);
+  assert.match(queue,/เสร็จแล้ว · \{task\.item\.name\} ครบ/);
   assert.match(queue,/ทำตอนนี้/);
   assert.match(queue,/text-4xl font-black/);
   assert.doesNotMatch(queue,/recommendedTask/);
   assert.doesNotMatch(queue,/selectedTask/);
 });
-
 test('cold-start schema checks are batched instead of one Turso request per DDL statement',async()=>{
   const db=await read('lib/db.mjs');
   assert.match(db,/db\.batch\(SCHEMA\.map/);
@@ -120,13 +119,12 @@ test('queue production flow stays guided by FIFO while summary is menu-category 
   const queue=await read('app/queue/page.tsx');
   assert.match(queue,/สรุปตามหมวดเมนู/);
   assert.match(queue,/activeMenu/);
-  assert.match(queue,/ทำ \{task\.item\.name\} ครบ/);
+  assert.match(queue,/เสร็จแล้ว · \{task\.item\.name\} ครบ/);
   assert.match(queue,/action:"call_item"/);
   assert.doesNotMatch(queue,/รับเมนูนี้ก่อน/);
   assert.match(queue,/เรียกบัตร \{first\.pagerNo\}/);
   assert.match(queue,/ลูกค้ารับแล้ว/);
 });
-
 test('queue reads a compact snapshot and renders order production details',async()=>{
   const queue=await read('app/queue/page.tsx'),api=await read('lib/api.mjs'),posApi=await read('lib/pos-api.mjs');
   assert.match(queue,/api<QueueSnapshot\|RevisionUnchanged>\("\/api\/pos\/queue"/);
@@ -219,7 +217,7 @@ test('PWA runtime synchronizes modal height to the visual viewport for software 
 
 test('mobile operational pages use compact density while preserving touch actions',async()=>{
   const shell=await read('components/app-shell.tsx'),pos=await read('app/pos/page.tsx'),queue=await read('app/queue/page.tsx'),stock=await read('app/stock/page.tsx'),orders=await read('app/orders/page.tsx');
-  assert.match(shell,/const primaryMobile=\["\/pos","\/queue","\/orders"\]/);
+  assert.match(shell,/const primaryMobile=\["\/pos"\]/);
   assert.match(shell,/MoreHorizontal/);
   assert.doesNotMatch(shell,/overflow-x-auto rounded-\[20px\] p-1 md:hidden/);
   assert.match(pos,/min-h-\[154px\]/);
@@ -228,9 +226,6 @@ test('mobile operational pages use compact density while preserving touch action
   assert.match(stock,/p-3 sm:p-5 md:p-7/);
   assert.match(orders,/p-3 sm:p-5 md:p-7/);
 });
-
-
-
 test('Operations Hub traps keyboard focus, restores the opener and locks background scroll',async()=>{
   const hub=await read('components/pos-operations-hub.tsx');
   assert.match(hub,/previousFocusRef\.current=document\.activeElement instanceof HTMLElement/);
@@ -269,11 +264,9 @@ test('payment modal stays above mobile navigation with sticky confirm and exact-
   assert.match(pos,/field-payment-sheet/);
   assert.match(pos,/sticky bottom-0 z-10/);
   assert.match(pos,/รับพอดี ฿\{formatMoney\(netPayable\)\}/);
-  assert.match(pos,/setReceived\(String\(netPayable\)\)/);
+  assert.match(pos,/chooseCashAmount\(netPayable\)/);
   assert.match(pos,/รับเงินพอดียอด · กดยืนยันชำระได้เลย/);
 });
-
-
 test('separate-person bills keep unpaid drinks in cart and pay only selected quantities',async()=>{
   const pos=await read('app/pos/page.tsx');
   assert.match(pos,/แยกบิล \/ จ่ายแยกตามคน/);
@@ -354,7 +347,8 @@ test('CRM redemption makes the payment UI use net payable for cash and PromptPay
 
 test('queue production view centers one pager card with order summary and menu-category counts',async()=>{
   const queue=await read('app/queue/page.tsx');
-  assert.match(queue,/ทำออเดอร์ \/ รันบัตร/);
+  assert.match(queue,/คิวผลิต · FIFO/);
+  assert.match(queue,/ทำคิวตามลำดับ/);
   assert.match(queue,/บัตรผลิตปัจจุบัน/);
   assert.match(queue,/รายการรวมในบัตรนี้/);
   assert.match(queue,/สรุปตามหมวดเมนู/);
@@ -370,7 +364,6 @@ test('queue production view centers one pager card with order summary and menu-c
   assert.doesNotMatch(queue,/ดูภาพรวม/);
   assert.doesNotMatch(queue,/ดูรายการ \/ แก้ไขออเดอร์/);
 });
-
 test('queue mobile card keeps pager identity and production metadata readable',async()=>{
   const queue=await read('app/queue/page.tsx');
   assert.match(queue,/บัตรเรียกคิว/);
@@ -410,14 +403,13 @@ test('solo operator daily flow keeps routine queue checks in POS with full produ
   assert.match(pos,/รับออเดอร์ถัดไป/);
   assert.match(hub,/href="\/queue"/);
   assert.match(queue,/คิวผลิต · FIFO/);
-  assert.match(queue,/ทำออเดอร์ \/ รันบัตร/);
+  assert.match(queue,/ทำคิวตามลำดับ/);
   assert.doesNotMatch(queue,/router\.push\("\/orders/);
   assert.doesNotMatch(queue,/router\.push\("\/pos/);
   assert.match(close,/OPEN \/ CLOSE DAY/);
   assert.match(close,/เปิดร้านวันนี้/);
   assert.match(close,/ปิดร้านวันนี้/);
 });
-
 test('queue grouped menu progress remains visible while cache schema protects snapshots',async()=>{
   const queue=await read('app/queue/page.tsx'),api=await read('lib/pos-api.mjs'),cache=await read('lib/queue-cache.ts');
   assert.match(queue,/category\.pendingQty/);
@@ -442,7 +434,6 @@ test('queue guides one production category and active menu inside the pager card
   assert.doesNotMatch(queue,/สูตรต่อ 1 แก้ว/);
   assert.match(api,/a\.compatibilityKey\.localeCompare\(b\.compatibilityKey\)/);
 });
-
 test('queue mobile page uses a single primary scroll surface so bottom content remains reachable',async()=>{
   const queue=await read('app/queue/page.tsx');
   assert.match(queue,/soft-scroll h-full overflow-y-auto overscroll-contain/);
@@ -514,8 +505,6 @@ test('called pickup cards can reveal ordered menu details before handoff',async(
   assert.ok(pickup.indexOf('ดูรายการ')<pickup.indexOf('ลูกค้ารับแล้ว'));
   assert.doesNotMatch(pickup,/action:"call"/);
 });
-
-
 test('continuous next-order action remains on POS and resets operator UI without touching queue',async()=>{
   const pos=await read('app/pos/page.tsx');
   assert.match(pos,/function startNextOrder\(\)/);
@@ -598,13 +587,16 @@ test('cash checkout exposes bill-aware tender shortcuts without bypassing confir
   assert.match(pos,/sort\(\(a,b\)=>a-b\)/);
   assert.match(pos,/slice\(0,4\)/);
   assert.match(pos,/quickCashAmounts\.map\(amount/);
+  assert.match(pos,/function chooseCashAmount/);
   assert.match(pos,/setReceived\(String\(amount\)\)/);
   assert.match(pos,/cashReceived===amount/);
   assert.match(pos,/รับพอดี ฿\{formatMoney\(netPayable\)\}/);
   assert.match(pos,/onClick=\{checkout\}/);
-  assert.doesNotMatch(pos,/setReceived\(String\(amount\)\).*checkout\(/s);
+  const helperStart=pos.indexOf("function chooseCashAmount");
+  const helperEnd=pos.indexOf("async function checkout",helperStart);
+  assert.ok(helperStart>=0&&helperEnd>helperStart);
+  assert.doesNotMatch(pos.slice(helperStart,helperEnd),/checkout\(/);
 });
-
 test('novice operator UX exposes routine mobile destinations without opening More',async()=>{
   const shell=await read('components/app-shell.tsx'),mobile=await read('lib/mobile-navigation.ts');
   assert.match(shell,/const primaryMobile=\["\/pos","\/queue","\/orders"\]/);
