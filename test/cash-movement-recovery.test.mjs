@@ -35,7 +35,7 @@ async function send(handler,token,route,body){
 
 test("cash drawer movement requestKey prevents duplicate money movement after lost response",async t=>{
   const {db,token,handler}=await setup(t);
-  assert.equal((await send(handler,token,"cash-shift/open",{openingCash:500})).status,201);
+  assert.equal((await send(handler,token,"cash-shift/open",{requestKey:"open-for-cash-move-1",openingCash:500})).status,201);
   const body={requestKey:"cash-move-0001",type:"CASH_OUT",amount:100,reason:"เก็บเงินสดส่วนเกิน"};
   const first=await send(handler,token,"cash-shift/movements",body);
   assert.equal(first.status,201);assert.equal(first.body.replayed,false);
@@ -51,7 +51,7 @@ test("cash drawer movement requestKey prevents duplicate money movement after lo
 
 test("cash movement requestKey conflict fails closed",async t=>{
   const {token,handler}=await setup(t);
-  await send(handler,token,"cash-shift/open",{openingCash:500});
+  await send(handler,token,"cash-shift/open",{requestKey:"open-for-cash-move-2",openingCash:500});
   await send(handler,token,"cash-shift/movements",{requestKey:"cash-move-0002",type:"CASH_IN",amount:50,reason:"เติมเงินทอน"});
   const conflict=await send(handler,token,"cash-shift/movements",{requestKey:"cash-move-0002",type:"CASH_IN",amount:60,reason:"เติมเงินทอน"});
   assert.equal(conflict.status,409);assert.equal(conflict.body.error,"request_key_conflict");
