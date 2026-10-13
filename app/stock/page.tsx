@@ -3,6 +3,7 @@ import {useEffect,useMemo,useState} from "react";
 import {AlertTriangle,Archive,ArrowDownCircle,ArrowUpCircle,Edit3,Plus,RotateCcw,Search,Trash2,X} from "lucide-react";
 import AuthGate from "@/components/auth-gate";
 import {api,type Session} from "@/lib/api-client";
+import {prepareCriticalWriteIntent,readCriticalWriteIntent,sendCriticalWriteIntent,type CriticalWriteIntent} from "@/lib/critical-write-recovery";
 
 type Purchase={
   id:string;stockTransactionId:string;supplier:string;purchaseDate:string;packageQty:number|null;packageUnit:string;packSize:number|null;packSizeUnit:string;
@@ -17,6 +18,7 @@ type CountInput={packs:string;loose:string;base:string};
 type CountAdjustment={ingredientId:string;name:string;expectedQty:number;countedQty:number;variance:number;unit:string};
 type CountProposal={id:string;date:string;status:string;submittedAt:number;submittedBy:string;adjustments:CountAdjustment[];rejectReason?:string};
 type MasterDraft=Partial<Ingredient>&{originalUnit?:string;loadedAt?:number};
+type StockWriteBody=Record<string,any>&{requestKey:string;ingredientId:string;type:"PURCHASE"|"WASTE";unit:string;referenceType:string;referenceId:string;reason:string};
 
 const today=()=>new Date().toLocaleDateString("en-CA",{timeZone:"Asia/Bangkok"});
 const packageUnits=["ขวด","ถุง","ถัง","แกลลอน","กล่อง","แพ็ก","ลัง","ชิ้น"];
@@ -47,10 +49,19 @@ function StockView({session}:{session:Session}){
   const [purchaseCost,setPurchaseCost]=useState(""),[purchaseDate,setPurchaseDate]=useState(today()),[supplier,setSupplier]=useState(""),[sourceUrl,setSourceUrl]=useState(""),[imageUrl,setImageUrl]=useState(""),[note,setNote]=useState(""),[purchasePaymentMethod,setPurchasePaymentMethod]=useState("bank");
   const [packageQty,setPackageQty]=useState("1"),[packageUnit,setPackageUnit]=useState("ขวด"),[packSize,setPackSize]=useState(""),[packSizeUnit,setPackSizeUnit]=useState("g"),[presetId,setPresetId]=useState("");
   const [master,setMaster]=useState<MasterDraft|null>(null),[masterMsg,setMasterMsg]=useState(""),[purchaseEdit,setPurchaseEdit]=useState<{ingredient:Ingredient;purchase:Purchase}|null>(null);
-  const [countOpen,setCountOpen]=useState(false),[counts,setCounts]=useState<Record<string,CountInput>>({}),[countProposals,setCountProposals]=useState<CountProposal[]>([]);
+  const [countOpen,setCountOpen]=useState(false),[counts,setCounts]=useState<Record<string,CountInput>>({}),[countProposals,setCountProposals]=useState<CountProposal[]>([]),[pendingStockWrite,setPendingStockWrite]=useState<CriticalWriteIntent<StockWriteBody>|null>(null);
 
   const load=async()=>{const [overview,proposalData]=await Promise.all([api<Overview>("/api/stock/overview"),api<{proposals:CountProposal[]}>("/api/stock/cycle-count/proposals")]);setData(overview);setCountProposals(proposalData.proposals||[])};
   useEffect(()=>{load().catch(()=>{})},[]);
+  useEffect(()=>{
+    try{
+      const intent=readCriticalWriteIntent<StockWriteBody>(session.user.id,"stockTransaction");
+      setPendingStockWrite(intent);
+      if(intent)setMsg("มีรายการ Stock ที่ยังไม่ทราบผล · ระบบเก็บ Request Key และข้อมูลเดิมไว้ กรุณาตรวจผลรายการเดิมก่อนทำรายการใหม่");
+    }catch{
+      setMsg("ตรวจ Recovery ของ Stock ไม่ได้ · งดทำรายการ Stock ใหม่จนกว่าจะอ่านข้อมูล Recovery ได้");
+    }
+  },[session.user.id]);
   const rows=useMemo(()=>(data?.ingredients||[]).filter(x=>x.archived===(tab==="archived")&&(x.name+" "+x.id).toLowerCase().includes(q.toLowerCase())),[data,q,tab]);
   const active=(data?.ingredients||[]).filter(x=>!x.archived),low=active.filter(x=>x.lowStock);
   const purchaseHistory=useMemo(()=>(data?.ingredients||[]).flatMap(i=>(i.recentPurchases||[]).map(p=>({ingredient:i,p}))).sort((a,b)=>b.p.createdAt-a.p.createdAt).slice(0,60),[data]);
@@ -70,8 +81,8 @@ function StockView({session}:{session:Session}){
     setPackSizeUnit(p?.packSizeUnit||profile?.packSizeUnit||((x.unit==="ml")?"ml":x.unit==="piece"?"piece":"g"));
     setPresetId(p?.id||"");
   }
-  function openPurchase(x:Ingredient){setMsg("");setType("PURCHASE");setTxOpen(x);setFromPurchase(x,latestPurchase(x))}
-  function openWaste(x:Ingredient){setMsg("");setType("WASTE");setTxOpen(x);setWasteQty("");setNote("")}
+  function openPurchase(x:Ingredient){if(pendingStockWrite){setMsg("มีรายการ Stock เดิมที่ยังไม่ทราบผล · กรุณาตรวจผลรายการเดิมก่อน");return}setMsg("");setType("PURCHASE");setTxOpen(x);setFromPurchase(x,latestPurchase(x))}
+  function openWaste(x:Ingredient){if(pendingStockWrite){setMsg("มีรายการ Stock เดิมที่ยังไม่ทราบผล · กรุณาตรวจผลรายการเดิมก่อน");return}setMsg("");setType("WASTE");setTxOpen(x);setWasteQty("");setNote("")}
 
   async function openMaster(x?:Ingredient){
     setMasterMsg("");
@@ -91,21 +102,81 @@ function StockView({session}:{session:Session}){
     }finally{setBusy(false)}
   }
 
+  const stockNotCommitted=new Set([
+    "invalid_stock_transaction","invalid_request_key","ingredient_required","invalid_stock_transaction_type","invalid_qty_delta","invalid_stock_text",
+    "purchase_must_increase_stock","waste_must_decrease_stock","ingredient_missing","invalid_purchase_cost","invalid_purchase_date","future_purchase_date",
+    "invalid_package_qty","invalid_pack_size","unsupported_stock_unit","incompatible_stock_unit","incomplete_purchase_packaging","packaging_quantity_mismatch",
+    "invalid_purchase_url","invalid_cost_status","confirmed_cost_required","invalid_purchase_payment_method","stock_shortage","day_closed","purchase_date_closed"
+  ]);
+
+  function exactStockAck(result:any,body:StockWriteBody,intent:CriticalWriteIntent<StockWriteBody>){
+    const tx=result?.transaction;
+    if(result?.ok!==true||!tx||tx.requestKey!==body.requestKey||tx.createdBy!==intent.actorId||tx.ingredientId!==body.ingredientId||tx.type!==body.type||tx.referenceId!==body.referenceId||String(tx.reason||"")!==String(body.reason||""))return false;
+    if(body.type==="WASTE")return Number(tx.qtyDelta)===Number(body.qtyDelta);
+    return Number(tx.purchaseCost)===Number(body.purchaseCost)&&String(tx.purchaseDate||"")===String(body.purchaseDate||"")&&Number(tx.packageQty)===Number(body.packageQty)&&String(tx.packageUnit||"")===String(body.packageUnit||"")&&Number(tx.packSize)===Number(body.packSize)&&String(tx.packSizeUnit||"")===String(body.packSizeUnit||"")&&String(tx.purchasePaymentMethod||"")===String(body.purchasePaymentMethod||"");
+  }
+
+  async function sendStockIntent(intent:CriticalWriteIntent<StockWriteBody>,recovered=false){
+    await sendCriticalWriteIntent(
+      intent,
+      body=>api<any>("/api/stock/transactions",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify(body)}),
+      exactStockAck,
+      stockNotCommitted
+    );
+    setPendingStockWrite(null);setTxOpen(null);setWasteQty("");
+    setMsg((recovered?"ยืนยันผลรายการเดิมแล้ว · ":"")+"บันทึก Stock สำเร็จและ Server ยืนยันรายการแล้ว");
+    await load();
+  }
+
+  async function recoverStockWrite(){
+    if(!pendingStockWrite)return;
+    setBusy(true);setMsg("");
+    try{await sendStockIntent(pendingStockWrite,true)}
+    catch(e:any){
+      try{setPendingStockWrite(readCriticalWriteIntent<StockWriteBody>(session.user.id,"stockTransaction"))}catch{}
+      if(!e?.status||["network_unavailable","offline_write_blocked","critical_ack_unknown","critical_recovery_unavailable"].includes(String(e.message||""))){
+        setMsg("ยังยืนยันผลรายการ Stock เดิมไม่ได้ · ระบบเก็บ Request Key เดิมไว้ ห้ามสร้างรายการใหม่จนกว่าจะได้ ACK จาก Server");
+      }else if(e.message==="idempotency_conflict"||e.message==="request_key_conflict"){
+        setMsg("Request Key เดิมไม่ตรงกับข้อมูลบน Server · หยุดทำรายการและตรวจ Audit/Stock Ledger ก่อน");
+      }else{
+        setMsg("Server ปฏิเสธรายการ Stock เดิมแล้ว · ตรวจข้อมูลล่าสุดก่อนสร้างรายการใหม่");
+      }
+    }finally{setBusy(false)}
+  }
+
   async function saveTx(){
-    if(!txOpen)return;setBusy(true);setMsg("");
+    if(!txOpen)return;
+    if(pendingStockWrite){setMsg("มีรายการ Stock เดิมที่ยังไม่ทราบผล · กรุณาตรวจผลรายการเดิมก่อน");return}
+    setBusy(true);setMsg("");
     try{
-      const packs=Number(packageQty),size=Number(packSize),waste=Number(wasteQty);
-      const body=type==="PURCHASE"?{
-        requestKey:crypto.randomUUID(),ingredientId:txOpen.id,type:"PURCHASE",unit:txOpen.unit,referenceType:"purchase",referenceId:"manual-"+Date.now(),reason:note||"รับเข้าสินค้า",
+      const packs=Number(packageQty),size=Number(packSize),waste=Number(wasteQty),requestKey=crypto.randomUUID(),referenceId="manual-"+Date.now();
+      const body:StockWriteBody=type==="PURCHASE"?{
+        requestKey,ingredientId:txOpen.id,type:"PURCHASE",unit:txOpen.unit,referenceType:"purchase",referenceId,reason:note||"รับเข้าสินค้า",
         purchaseCost:Number(purchaseCost),purchaseDate,supplier,packageQty:packs,packageUnit,packSize:size,packSizeUnit,sourceUrl,imageUrl,purchaseNote:note,purchasePaymentMethod
       }:{
-        requestKey:crypto.randomUUID(),ingredientId:txOpen.id,type:"WASTE",qtyDelta:-waste,unit:txOpen.unit,referenceType:"waste",referenceId:"manual-"+Date.now(),reason:note||"ของเสีย"
+        requestKey,ingredientId:txOpen.id,type:"WASTE",qtyDelta:-waste,unit:txOpen.unit,referenceType:"waste",referenceId,reason:note||"ของเสีย"
       };
-      await api("/api/stock/transactions",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify(body)});
-      setTxOpen(null);setWasteQty("");setMsg("บันทึก Stock แล้ว");await load();
+      const intent=prepareCriticalWriteIntent(session.user.id,"stockTransaction",body);
+      setPendingStockWrite(intent);
+      await sendStockIntent(intent);
     }catch(e:any){
-      const map:Record<string,string>={invalid_purchase_url:"ลิงก์ไม่ถูกต้อง · ใส่ได้ทั้ง https://... หรือโดเมน เช่น shopee.co.th/...",future_purchase_date:"วันที่ซื้อห้ามเป็นอนาคต",purchase_date_closed:"วันที่ซื้อถูก Close Day แล้ว",stock_shortage:"จำนวนคงเหลือไม่พอ",incompatible_stock_unit:"หน่วยต่อบรรจุภัณฑ์ไม่เข้ากับหน่วยที่สูตรใช้"};
-      setMsg(map[e.message]||e.message)
+      try{setPendingStockWrite(readCriticalWriteIntent<StockWriteBody>(session.user.id,"stockTransaction"))}catch{}
+      if(!e?.status||["network_unavailable","offline_write_blocked","critical_ack_unknown","critical_recovery_unavailable","pending_critical_write_exists"].includes(String(e.message||""))){
+        setTxOpen(null);
+        setMsg("ยังไม่ทราบว่า Server บันทึก Stock แล้วหรือไม่ · ระบบเก็บข้อมูลและ Request Key เดิมไว้ ห้ามกดเพิ่ม/ตัด Stock ซ้ำ ให้ใช้ “ตรวจผลรายการเดิม”");
+      }else{
+        const map:Record<string,string>={
+          invalid_purchase_url:"ลิงก์ไม่ถูกต้อง · ใส่ได้ทั้ง https://... หรือโดเมน เช่น shopee.co.th/...",
+          future_purchase_date:"วันที่ซื้อห้ามเป็นอนาคต",
+          purchase_date_closed:"วันที่ซื้อถูก Close Day แล้ว",
+          day_closed:"วันนี้ถูก Close Day แล้ว · Server ยืนยันว่าไม่ได้บันทึกรายการใหม่",
+          stock_shortage:"จำนวนคงเหลือไม่พอ · Server ยืนยันว่าไม่ได้บันทึกรายการ",
+          incompatible_stock_unit:"หน่วยต่อบรรจุภัณฑ์ไม่เข้ากับหน่วยที่สูตรใช้",
+          invalid_purchase_payment_method:"ช่องทางชำระค่าวัตถุดิบไม่ถูกต้อง",
+          idempotency_conflict:"Request Key เดิมถูกใช้กับข้อมูลอื่น · หยุดและตรวจ Stock Ledger/Audit ก่อน"
+        };
+        setMsg(map[e.message]||"Server ปฏิเสธรายการ Stock นี้ · ตรวจข้อมูลก่อนลองใหม่");
+      }
     }finally{setBusy(false)}
   }
 
@@ -245,6 +316,7 @@ function StockView({session}:{session:Session}){
       <div className="flex flex-wrap gap-2">{admin&&<button onClick={()=>openMaster()} className="flex min-h-11 items-center gap-2 rounded-full bg-[#d4af37] px-4 text-xs font-bold text-black"><Plus size={15}/>เพิ่ม Stock</button>}<button onClick={openCount} className="min-h-11 rounded-full border border-slate-300 bg-white px-4 text-xs font-bold">{admin?"นับสต๊อกจริง · Owner":"นับสต๊อกจริง · ส่งให้ Owner"}</button></div>
     </header>
 
+    {pendingStockWrite&&<div className="mt-3 rounded-[20px] border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900"><b>มีรายการ Stock ที่ยังไม่ทราบผล</b><p className="mt-1 text-xs">{pendingStockWrite.body.type==="PURCHASE"?"รับเข้า":"ของเสีย"} · Request Key เดิมถูกล็อกไว้ ระบบจะไม่สร้างรายการใหม่จนกว่าจะยืนยันผลเดิมจาก Server</p><button type="button" disabled={busy} onClick={recoverStockWrite} className="mt-3 min-h-11 rounded-xl bg-amber-700 px-4 text-xs font-bold text-white disabled:opacity-40">ตรวจผลรายการเดิม</button></div>}
     {msg&&<div className="mt-3 flex items-start justify-between rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm"><span>{msg}</span><button onClick={()=>setMsg("")}><X size={16}/></button></div>}
     {low.length>0&&<div className="mt-3 rounded-[20px] border border-amber-300 bg-amber-50 p-3"><div className="flex items-center gap-2 text-sm font-semibold text-amber-800"><AlertTriangle size={16}/>{low.length} รายการถึง Safety Stock</div></div>}
     {admin&&countProposals.filter(x=>x.status==="pending").length>0&&<div className="mt-3 rounded-[20px] border border-blue-200 bg-blue-50 p-3"><div className="flex items-center gap-2 text-sm font-semibold text-blue-800"><AlertTriangle size={16}/>รอ Owner ตรวจผลนับ {countProposals.filter(x=>x.status==="pending").length} รายการ</div><div className="mt-2 space-y-2">{countProposals.filter(x=>x.status==="pending").slice(0,5).map(p=><div key={p.id} className="rounded-2xl border border-blue-100 bg-white p-3 text-sm"><div className="flex flex-wrap items-start justify-between gap-2"><div><b>{p.submittedBy}</b><small className="ml-2 text-slate-500">{new Date(p.submittedAt).toLocaleTimeString("th-TH",{timeZone:"Asia/Bangkok",hour:"2-digit",minute:"2-digit"})}</small><div className="mt-1 text-xs text-slate-500">{p.adjustments.filter(x=>Math.abs(Number(x.variance||0))>0.000001).slice(0,4).map(x=>x.name+" "+(x.variance>0?"+":"")+Number(x.variance).toLocaleString()+" "+x.unit).join(" · ")||"นับตรงทุกรายการ"}</div></div><div className="flex gap-2"><button disabled={busy} onClick={()=>reviewCountProposal(p,false)} className="min-h-10 rounded-xl border border-slate-300 px-3 text-xs">ตีกลับ</button><button disabled={busy} onClick={()=>reviewCountProposal(p,true)} className="min-h-10 rounded-xl bg-[#d4af37] px-3 text-xs font-bold text-black">อนุมัติ</button></div></div></div>)}</div></div>}
