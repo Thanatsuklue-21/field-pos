@@ -227,7 +227,7 @@ function QueueView({session}:{session:Session}){
     try{
       const r=await sendQueueAction({requestKey:crypto.randomUUID(),orderId:order.id,itemIndex,action:"waste_remake",reason:"ชงเสีย / ทำใหม่"});
       if(!applyState(r))load().catch(()=>{});
-      setNotice("บันทึก WASTE "+item.name+" 1 แก้วแล้ว · หัก Stock เพิ่มตามสูตร"+(Number(r?.wasteCost)>0?" · ต้นทุนของเสีย ฿"+formatMoney(Number(r.wasteCost)):"")+" · ทำใหม่ต่อในคิวเดิม");
+      setNotice("บันทึกชงเสีย "+item.name+" 1 แก้วแล้ว · หักสต็อกเพิ่มตามสูตร"+(Number(r?.wasteCost)>0?" · ต้นทุนของเสีย ฿"+formatMoney(Number(r.wasteCost)):"")+" · ทำใหม่ต่อในคิวเดิม");
     }catch(e:any){if(snapshot)setData(snapshot);setMsg(errorText(e.message));await load().catch(()=>{})}finally{busyRef.current=false;setBusy("")}
   }
 
