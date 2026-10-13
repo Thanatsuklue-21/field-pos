@@ -131,7 +131,7 @@ export async function readCloseDayDevicePreflight(actorId:string,businessDate:st
   }catch{
     return {
       ok:false,checkedAt:(deps?.now||Date.now)(),businessDate,
-      blockers:[{kind:"storage_unreadable",title:"อ่านรายการค้างในเครื่องไม่ได้",detail:"ยังยืนยันไม่ได้ว่าเครื่องนี้ไม่มีบิล/การชำระ/ค่าใช้จ่ายค้าง · ห้ามปิดวันจนกว่าจะอ่าน recovery storage ได้"}]
+      blockers:[{kind:"storage_unreadable",title:"อ่านรายการค้างในเครื่องไม่ได้",detail:"ยังยืนยันไม่ได้ว่าเครื่องนี้ไม่มีธุรกรรมค้าง เช่น บิล การชำระ รายจ่าย หรือเงินเข้า/ออกลิ้นชัก · ห้ามปิดวันจนกว่าจะอ่าน recovery storage ได้"}]
     };
   }
 }
