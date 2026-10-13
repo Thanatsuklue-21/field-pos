@@ -139,3 +139,10 @@ test('Vercel production deploys are gated by an explicit release marker change',
   assert.match(config.ignoreCommand,/git diff --quiet HEAD\^ HEAD/);
   assert.doesNotMatch(config.ignoreCommand,/force|deploy --prod/);
 });
+
+
+test('deployment-status smoke uses the public production alias instead of protected deployment URLs',async()=>{
+  const yml=await read('.github/workflows/production-smoke.yml');
+  assert.match(yml,/BASE_URL: .*https:\/\/field-pos\.vercel\.app/);
+  assert.doesNotMatch(yml,/deployment_status\.environment_url/);
+});
