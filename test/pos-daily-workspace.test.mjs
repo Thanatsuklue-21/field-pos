@@ -1,0 +1,127 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import {readFile} from "node:fs/promises";
+import {chooseWorkspaceNextAction} from "../lib/workspace-guidance.mjs";
+
+const read=p=>readFile(new URL("../"+p,import.meta.url),"utf8");
+
+test("POS opens the daily workspace in-place and blocks it during payment mutation",async()=>{
+  const pos=await read("app/pos/page.tsx");
+  assert.match(pos,/PosDailyWorkspace/);
+  assert.match(pos,/setWorkspaceOpen\(true\)/);
+  assert.match(pos,/>งานร้าน<\/button>/);
+  assert.match(pos,/disabled=\{busy\|\|payOpen\}/);
+  assert.match(pos,/bootstrap=\{data\}/);
+  assert.match(pos,/online=\{online\}/);
+});
+
+test("daily workspace covers queue orders stock quick expense and owner readiness",async()=>{
+  const hub=await read("components/pos-daily-workspace.tsx");
+  assert.match(hub,/FIELD DAILY WORKSPACE/);
+  for(const label of ["คิว","ออเดอร์","สต็อก","รายจ่าย","สถานะ"])assert.match(hub,new RegExp(label));
+  assert.match(hub,/\/api\/pos\/queue/);
+  assert.match(hub,/\/api\/pos\/history/);
+  assert.match(hub,/\/api\/expenses/);
+  assert.match(hub,/\/api\/control-center/);
+  assert.match(hub,/bootstrap\?\.menu/);
+});
+
+test("daily workspace quick expense reuses report permission and durable expense recovery",async()=>{
+  const hub=await read("components/pos-daily-workspace.tsx");
+  assert.match(hub,/session\.user\.permissions\?\.queue===true/);
+  assert.match(hub,/session\.user\.permissions\?\.order===true/);
+  assert.match(hub,/session\.user\.permissions\?\.stock===true/);
+  assert.match(hub,/session\.user\.permissions\?\.report===true/);
+  assert.match(hub,/prepareExpenseIntent/);
+  assert.match(hub,/readExpenseIntent/);
+  assert.match(hub,/sendExpenseIntent/);
+  assert.match(hub,/method:"POST"/);
+  assert.doesNotMatch(hub,/method:"DELETE"/);
+  assert.match(hub,/X-CSRF-Token/);
+  assert.match(hub,/highRiskExpense/);
+  assert.match(hub,/cashTooLarge/);
+  for(const href of ["/queue","/orders","/stock","/expenses","/control"])assert.match(hub,new RegExp('href="'+href.replaceAll("/","\\/")+'"'));
+});
+
+test("workspace previews the latest receipt in-place and keeps deep actions on Orders",async()=>{
+  const hub=await read("components/pos-daily-workspace.tsx");
+  assert.match(hub,/ใบเสร็จล่าสุด/);
+  assert.match(hub,/<details className=/);
+  assert.match(hub,/latestOrder\.items/);
+  assert.match(hub,/latestOrder\.paymentMethods/);
+  assert.match(hub,/ดูบิลได้ตรงนี้โดยไม่ออกจากหน้า POS/);
+  assert.match(hub,/FullLink href="\/orders" label="เปิดประวัติ\/Refund\/VOID"/);
+  const receiptStart=hub.indexOf("ใบเสร็จล่าสุด");
+  const receiptEnd=hub.indexOf("เปิดประวัติ/Refund/VOID",receiptStart);
+  const receiptBlock=hub.slice(receiptStart,receiptEnd);
+  assert.doesNotMatch(receiptBlock,/href=\{latestOrder\.queueNo/);
+});
+
+test("workspace fails safe offline while still exposing cached stock signals",async()=>{
+  const hub=await read("components/pos-daily-workspace.tsx");
+  assert.match(hub,/OFFLINE · ดูสัญญาณสต็อกจากข้อมูลล่าสุดได้/);
+  assert.match(hub,/disabled=\{busy\|\|!online\}/);
+  assert.match(hub,/เมนูที่เปิดขายยังไม่พบสัญญาณสต็อกต่ำ/);
+});
+
+test("workspace remains touch friendly and light-theme compliant",async()=>{
+  const hub=await read("components/pos-daily-workspace.tsx");
+  assert.match(hub,/min-h-12/);
+  assert.match(hub,/h-11 w-11/);
+  assert.doesNotMatch(hub,/bg-black\/[6789]/);
+  assert.doesNotMatch(hub,/border-white\//);
+});
+
+
+test("workspace next-action policy prioritizes unresolved money before operational work",()=>{
+  const base={canExpense:true,canQueue:true,canStock:true,canStatus:true,canOrder:true};
+  assert.equal(chooseWorkspaceNextAction({...base,pendingExpense:true,queueCount:3,firstQueue:"Q12",outCount:2,blockedCount:1}).tab,"expense");
+  assert.equal(chooseWorkspaceNextAction({...base,queueCount:3,firstQueue:"Q12",outCount:2,blockedCount:1}).tab,"queue");
+  assert.equal(chooseWorkspaceNextAction({...base,outCount:2,blockedCount:1}).tab,"stock");
+  assert.equal(chooseWorkspaceNextAction({...base,blockedCount:1}).tab,"status");
+  assert.equal(chooseWorkspaceNextAction({...base,lowCount:2}).tab,"stock");
+  assert.equal(chooseWorkspaceNextAction({...base,latestOrderLabel:"Q11"}).tab,"orders");
+  assert.equal(chooseWorkspaceNextAction(base).tab,null);
+});
+
+test("workspace guidance explains FIFO instead of asking a new operator to choose a queue",()=>{
+  const action=chooseWorkspaceNextAction({canQueue:true,queueCount:2,firstQueue:"Q7"});
+  assert.equal(action.label,"ทำ Q7 ก่อน");
+  assert.match(action.detail,/FIFO/);
+  assert.match(action.detail,/ไม่ต้องเลือกคิวเอง/);
+});
+
+test("workspace dialog traps keyboard focus and supports Escape without changing business mutations",async()=>{
+  const hub=await read("components/pos-daily-workspace.tsx");
+  assert.match(hub,/dialogRef=useRef/);
+  assert.match(hub,/closeButtonRef=useRef/);
+  assert.match(hub,/event\.key==="Escape"/);
+  assert.match(hub,/event\.key!=="Tab"/);
+  assert.match(hub,/querySelectorAll<HTMLElement>/);
+  assert.match(hub,/previous\?\.focus\(\)/);
+  assert.doesNotMatch(hub,/method:"POST"[\s\S]{0,180}\/api\/pos\/queue/);
+  assert.doesNotMatch(hub,/method:"POST"[\s\S]{0,180}\/api\/stock/);
+});
+
+test("workspace renders one explicit recommended action above the detail tabs",async()=>{
+  const hub=await read("components/pos-daily-workspace.tsx");
+  assert.match(hub,/chooseWorkspaceNextAction/);
+  assert.match(hub,/แนะนำตอนนี้/);
+  assert.match(hub,/aria-live="polite"/);
+  assert.match(hub,/setTab\(nextAction\.tab as WorkspaceTab\)/);
+});
+
+
+test("inline receipt is read-only and uses the existing history payload",async()=>{
+  const hub=await read("components/pos-daily-workspace.tsx");
+  assert.match(hub,/items\?:Array<\{id:string;name:string;variant\?:string;qty:number;price:number\}>/);
+  assert.match(hub,/item\.qty} × ฿\{money\(item\.price\)\}/);
+  assert.match(hub,/money\(Number\(item\.price\)\*Number\(item\.qty\)\)/);
+  const api=await read("lib/api.mjs");
+  const start=api.indexOf("if(path==='/api/pos/history'&&method==='GET')");
+  const end=api.indexOf("\n      if(",start+10);
+  const history=api.slice(start,end);
+  assert.match(history,/paymentMethods/);
+  assert.match(history,/items:\(s\.items\|\|\[\]\)\.map/);
+  assert.doesNotMatch(hub,/method:"POST"[\s\S]{0,160}ใบเสร็จล่าสุด/);
+});

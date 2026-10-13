@@ -21,6 +21,15 @@ export type OfflineCashRecord={
   stockShortages?:OfflineStockShortage[];
 };
 
+const OFFLINE_DATE_RE=/^\d{4}-\d{2}-\d{2}$/;
+function validateOfflineRows(value:unknown):OfflineCashRecord[]{
+  if(!Array.isArray(value))throw new Error("offline_storage_unavailable");
+  if(value.some(row=>!row||typeof row.requestKey!=="string"||row.requestKey.length<8||!row.body||row.body.requestKey!==row.requestKey||!OFFLINE_DATE_RE.test(String(row.body.date||""))||!["pending","needs_review"].includes(row.status))){
+    throw new Error("offline_storage_unavailable");
+  }
+  return value as OfflineCashRecord[];
+}
+
 function openDb():Promise<IDBDatabase|null>{
   if(typeof indexedDB==="undefined")return Promise.resolve(null);
   return new Promise<IDBDatabase|null>(resolve=>{
@@ -33,6 +42,26 @@ function openDb():Promise<IDBDatabase|null>{
     r.onerror=()=>resolve(null);
   }).catch(()=>null);
 }
+function openDbStrict():Promise<IDBDatabase>{
+  if(typeof indexedDB==="undefined")return Promise.reject(new Error("offline_storage_unavailable"));
+  return new Promise((resolve,reject)=>{
+    let settled=false;
+    const fail=()=>{if(!settled){settled=true;reject(new Error("offline_storage_unavailable"))}};
+    let request:IDBOpenDBRequest;
+    try{request=indexedDB.open(DB_NAME,VERSION)}catch{fail();return}
+    request.onupgradeneeded=()=>{
+      if(!request.result.objectStoreNames.contains(CACHE_STORE))request.result.createObjectStore(CACHE_STORE);
+      if(!request.result.objectStoreNames.contains(OUTBOX_STORE))request.result.createObjectStore(OUTBOX_STORE,{keyPath:"requestKey"});
+    };
+    request.onsuccess=()=>{
+      if(settled){request.result.close();return}
+      settled=true;resolve(request.result);
+    };
+    request.onerror=fail;
+    request.onblocked=fail;
+  });
+}
+
 function committedTransaction<T>(db:IDBDatabase,stores:string|string[],mode:IDBTransactionMode,work:(tx:IDBTransaction)=>()=>T):Promise<T>{
   return new Promise<T>((resolve,reject)=>{
     let tx:IDBTransaction|undefined;
@@ -106,12 +135,38 @@ export async function offlineCashPut(record:OfflineCashRecord,projectBootstrap?:
   return projected;
 }
 export async function offlineCashList():Promise<OfflineCashRecord[]>{
-  const db=await openDb();if(!db)throw new Error("offline_storage_unavailable");
-  const rows=await committedTransaction<OfflineCashRecord[]>(db,OUTBOX_STORE,"readonly",tx=>{
-    const r=tx.objectStore(OUTBOX_STORE).getAll();
-    return ()=>Array.isArray(r.result)?r.result:[];
-  });
-  return rows.sort((a,b)=>Number(a.createdAt||0)-Number(b.createdAt||0));
+  return offlineCashListStrict();
+}
+
+export async function offlineCashListStrict():Promise<OfflineCashRecord[]>{
+  const db=await openDbStrict();
+  try{
+    const rows=await new Promise<OfflineCashRecord[]>((resolve,reject)=>{
+      let tx:IDBTransaction;
+      let request:IDBRequest<any>;
+      let settled=false,readRows:OfflineCashRecord[]|null=null;
+      const fail=()=>{if(!settled){settled=true;reject(new Error("offline_storage_unavailable"))}};
+      try{
+        tx=db.transaction(OUTBOX_STORE,"readonly");
+        request=tx.objectStore(OUTBOX_STORE).getAll();
+      }catch{fail();return}
+      request.onsuccess=()=>{
+        try{readRows=validateOfflineRows(request.result)}
+        catch{fail()}
+      };
+      request.onerror=fail;
+      tx.onerror=fail;
+      tx.onabort=fail;
+      tx.oncomplete=()=>{
+        if(settled)return;
+        if(readRows===null){fail();return}
+        settled=true;resolve(readRows);
+      };
+    });
+    return rows.sort((a,b)=>Number(a.createdAt||0)-Number(b.createdAt||0));
+  }catch(cause){
+    throw Object.assign(new Error("offline_storage_unavailable"),{cause});
+  }finally{db.close()}
 }
 export async function offlineCashDelete(requestKey:string){
   const db=await openDb();if(!db)throw new Error("offline_storage_unavailable");
@@ -138,7 +193,7 @@ export async function clientStorageStatus(){
   const [cached,rows]=await committedTransaction<[Cached<any>|undefined,OfflineCashRecord[]]>(db,[CACHE_STORE,OUTBOX_STORE],"readonly",tx=>{
     const cacheReq=tx.objectStore(CACHE_STORE).get("/api/pos/bootstrap"),
       outboxReq=tx.objectStore(OUTBOX_STORE).getAll();
-    return ()=>[cacheReq.result,Array.isArray(outboxReq.result)?outboxReq.result:[]];
+    return ()=>[cacheReq.result,validateOfflineRows(outboxReq.result)];
   });
   const pending=rows.filter(x=>x.status==="pending").length,review=rows.filter(x=>x.status==="needs_review").length;
   const savedAt=Number(cached?.savedAt||0),cacheAgeMs=savedAt>0?Math.max(0,Date.now()-savedAt):null;
