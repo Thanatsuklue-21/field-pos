@@ -3,14 +3,19 @@ import assert from "node:assert/strict";
 import {readFile} from "node:fs/promises";
 const read=p=>readFile(new URL("../"+p,import.meta.url),"utf8");
 
-test("payment sheet shows only the three common front-counter methods by default",async()=>{
+test("payment sheet shows only the two fastest front-counter methods by default",async()=>{
   const pos=await read("app/pos/page.tsx");
   assert.match(pos,/showMorePaymentMethods,setShowMorePaymentMethods/);
   assert.match(pos,/>เงินสด<\/button>/);
   assert.match(pos,/>QR พร้อมเพย์/);
-  assert.match(pos,/>โอนธนาคาร<\/button>/);
-  assert.match(pos,/ช่องทางอื่น · บัตร \/ เดลิเวอรี/);
+  assert.match(pos,/วิธีอื่น · โอน \/ บัตร \/ เดลิเวอรี/);
   assert.match(pos,/showMorePaymentMethods&&<div/);
+  const primaryStart=pos.indexOf('grid grid-cols-2');
+  const moreStart=pos.indexOf('aria-expanded={showMorePaymentMethods}',primaryStart);
+  const primary=pos.slice(primaryStart,moreStart);
+  assert.doesNotMatch(primary,/>โอนธนาคาร<\/button>/);
+  assert.doesNotMatch(primary,/>บัตร<\/button>/);
+  assert.doesNotMatch(primary,/>เดลิเวอรี<\/button>/);
 });
 
 test("advanced payment methods remain available without cluttering routine checkout",async()=>{
@@ -25,7 +30,7 @@ test("advanced payment methods remain available without cluttering routine check
 
 test("hiding advanced payment methods cannot leave a hidden card or delivery method active",async()=>{
   const pos=await read("app/pos/page.tsx");
-  assert.match(pos,/if\(showMorePaymentMethods\)\{if\(method==="card"\|\|method==="delivery"\)setMethod\("cash"\);setShowMorePaymentMethods\(false\)\}/);
+  assert.match(pos,/if\(showMorePaymentMethods\)\{if\(method==="bank"\|\|method==="card"\|\|method==="delivery"\)setMethod\("cash"\);setShowMorePaymentMethods\(false\)\}/);
 });
 
 test("new transactions collapse advanced payment choices back to the simple default",async()=>{
