@@ -100,3 +100,26 @@ test("POS dialogs trap keyboard focus, restore focus, and respect mobile safe ar
   assert.ok(css.includes("100dvh"));
   assert.ok(css.includes("100svh"));
 });
+
+
+test("cashier-facing POS status copy avoids infrastructure jargon",async()=>{
+  const pos=await read("app/pos/page.tsx");
+  for(const phrase of [
+    "Offline Mode",
+    "Sync Cloud",
+    "Stock reservation",
+    "Beam Merchant/API/Webhook",
+    "เลขอ้างอิงบัตร / Terminal",
+    "Slip/Terminal ref",
+    "Export บัญชี",
+    "OFFLINE ORDER"
+  ]) assert.equal(pos.includes(phrase),false,"cashier copy leaks "+phrase);
+
+  assert.match(pos,/เน็ตหลุด/);
+  assert.match(pos,/การจองวัตถุดิบ/);
+  assert.match(pos,/ให้เจ้าของร้านตรวจการตั้งค่า PromptPay/);
+  assert.match(pos,/เลขอ้างอิงจากเครื่องรับบัตร/);
+  assert.match(pos,/รายงานบัญชี/);
+  assert.match(pos,/บิลรอส่ง/);
+  assert.match(pos,/ห้ามล้างข้อมูลแอปหรือเบราว์เซอร์/);
+});
