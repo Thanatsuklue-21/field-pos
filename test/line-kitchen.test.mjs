@@ -40,3 +40,20 @@ test('LINE outbox can retry a due notification without another payment webhook',
  assert.equal(calls[0].headers['X-Line-Retry-Key'],calls[1].headers['X-Line-Retry-Key']);
  assert.equal((await db.execute('SELECT state FROM field_line_outbox WHERE session_id=?',['split-drain'])).rows[0].state,'sent');
 });
+
+
+test('LINE 429 is retriable while permanent client errors are blocked',async t=>{
+ const db=createClient({url:':memory:'});t.after(()=>db.close());await db.batch(SCHEMA,'write');
+ const oldToken=process.env.LINE_CHANNEL_ACCESS_TOKEN,oldTarget=process.env.LINE_KITCHEN_GROUP_ID;
+ process.env.LINE_CHANNEL_ACCESS_TOKEN='test-token';process.env.LINE_KITCHEN_GROUP_ID='C'+'d'.repeat(32);
+ t.after(()=>{if(oldToken===undefined)delete process.env.LINE_CHANNEL_ACCESS_TOKEN;else process.env.LINE_CHANNEL_ACCESS_TOKEN=oldToken;if(oldTarget===undefined)delete process.env.LINE_KITCHEN_GROUP_ID;else process.env.LINE_KITCHEN_GROUP_ID=oldTarget});
+ const throttled={sessionId:'split-429',orderId:'o-429',queueNo:'010',total:90};
+ await notifyKitchenPayment(db,throttled,{fetcher:async()=>new Response('',{status:429}),now:2_000_000});
+ let row=(await db.execute('SELECT state,next_at FROM field_line_outbox WHERE session_id=?',['split-429'])).rows[0];
+ assert.equal(row.state,'pending');assert.ok(Number(row.next_at)>2_000_000);
+
+ const blocked={sessionId:'split-400',orderId:'o-400',queueNo:'011',total:95};
+ await notifyKitchenPayment(db,blocked,{fetcher:async()=>new Response('',{status:400}),now:2_100_000});
+ row=(await db.execute('SELECT state FROM field_line_outbox WHERE session_id=?',['split-400'])).rows[0];
+ assert.equal(row.state,'blocked');
+});
