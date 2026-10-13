@@ -14,9 +14,11 @@ async function setup(t){
   t.after(async()=>{db.close();try{await rm(dir,{recursive:true,force:true})}catch(error){if(process.platform!=='win32'||error.code!=='EBUSY')throw error}});
   await db.batch(SCHEMA,'write');
   await db.execute({sql:"INSERT INTO field_users(id,username,password_hash,role,permissions,created_at,updated_at) VALUES(?,?,?,?,?,?,?)",args:['owner','owner','x','admin','{}',0,0]});
+  await db.execute({sql:"INSERT INTO field_users(id,username,password_hash,role,permissions,created_at,updated_at) VALUES(?,?,?,?,?,?,?)",args:['owner2','owner2','x','admin','{}',0,0]});
   await db.execute({sql:"INSERT INTO field_users(id,username,password_hash,role,permissions,created_at,updated_at) VALUES(?,?,?,?,?,?,?)",args:['staff','staff','x','staff',JSON.stringify({stock:true}),0,0]});
   const now=Date.now();
   await db.execute({sql:'INSERT INTO field_sessions(token_hash,user_id,csrf_token,expires_at) VALUES(?,?,?,?)',args:[digest('owner-token'),'owner','owner-csrf',now+600000]});
+  await db.execute({sql:'INSERT INTO field_sessions(token_hash,user_id,csrf_token,expires_at) VALUES(?,?,?,?)',args:[digest('owner2-token'),'owner2','owner2-csrf',now+600000]});
   await db.execute({sql:'INSERT INTO field_sessions(token_hash,user_id,csrf_token,expires_at) VALUES(?,?,?,?)',args:[digest('staff-token'),'staff','staff-csrf',now+600000]});
   await db.execute({sql:'UPDATE field_state SET document=? WHERE singleton=1',args:[JSON.stringify({ingredients:{matcha:{name:'Matcha',qty:100,unit:'g'}},sales:[],orders:[],closes:[]})]});
   return db;
@@ -112,4 +114,38 @@ test('stock count approval and direct count cannot mutate stock after day is clo
   assert.equal(direct.status,409);assert.equal(direct.body.error,'day_closed');
   assert.equal((await doc(db)).ingredients.matcha.qty,100);
   assert.equal((await db.execute('SELECT COUNT(*) AS n FROM field_stock_transactions')).rows[0].n,0);
+});
+
+
+test('cycle count proposal exact replay is actor and payload bound',async t=>{
+  const db=await setup(t),api=handler(db);
+  const body={requestKey:'count-proposal-replay-01',counts:[{ingredientId:'matcha',countedQty:91}]};
+  const first=await call(api,{token:'staff-token',csrf:'staff-csrf',route:'stock/cycle-count/proposals',body});
+  const replay=await call(api,{token:'staff-token',csrf:'staff-csrf',route:'stock/cycle-count/proposals',body});
+  const otherActor=await call(api,{token:'owner-token',csrf:'owner-csrf',route:'stock/cycle-count/proposals',body});
+  const changedPayload=await call(api,{token:'staff-token',csrf:'staff-csrf',route:'stock/cycle-count/proposals',body:{...body,counts:[{ingredientId:'matcha',countedQty:92}]}});
+  assert.equal(first.status,201);
+  assert.equal(replay.status,200);assert.equal(replay.body.replayed,true);assert.equal(replay.body.proposal.id,first.body.proposal.id);
+  assert.equal(otherActor.status,409);assert.equal(otherActor.body.error,'request_key_conflict');
+  assert.equal(changedPayload.status,409);assert.equal(changedPayload.body.error,'request_key_conflict');
+  const state=await doc(db);assert.equal(state.cycleCountProposals.length,1);
+  assert.equal((await db.execute("SELECT COUNT(*) AS n FROM field_audit WHERE action='cycle_count_proposal'")).rows[0].n,1);
+  assert.equal((await db.execute("SELECT COUNT(*) AS n FROM field_pos_requests WHERE request_key=?",[body.requestKey])).rows[0].n,1);
+});
+
+test('direct owner cycle count exact replay adjusts stock and audit only once',async t=>{
+  const db=await setup(t),api=handler(db);
+  const body={requestKey:'direct-count-replay-01',confirm:true,counts:[{ingredientId:'matcha',countedQty:90}]};
+  const first=await call(api,{token:'owner-token',csrf:'owner-csrf',route:'stock/cycle-count',body});
+  const replay=await call(api,{token:'owner-token',csrf:'owner-csrf',route:'stock/cycle-count',body});
+  const otherActor=await call(api,{token:'owner2-token',csrf:'owner2-csrf',route:'stock/cycle-count',body});
+  const changedPayload=await call(api,{token:'owner-token',csrf:'owner-csrf',route:'stock/cycle-count',body:{...body,counts:[{ingredientId:'matcha',countedQty:89}]}});
+  assert.equal(first.status,201);assert.equal(first.body.requestKey,body.requestKey);
+  assert.equal(replay.status,200);assert.equal(replay.body.replayed,true);assert.equal(replay.body.cycleCount.id,first.body.cycleCount.id);
+  assert.equal(otherActor.status,409);assert.equal(otherActor.body.error,'request_key_conflict');
+  assert.equal(changedPayload.status,409);assert.equal(changedPayload.body.error,'request_key_conflict');
+  const state=await doc(db);assert.equal(state.ingredients.matcha.qty,90);assert.equal(state.cycleCounts.length,1);
+  assert.equal((await db.execute("SELECT COUNT(*) AS n FROM field_stock_transactions WHERE reference_type='CYCLE_COUNT'")).rows[0].n,1);
+  assert.equal((await db.execute("SELECT COUNT(*) AS n FROM field_audit WHERE action='cycle_count_commit'")).rows[0].n,1);
+  assert.equal((await db.execute("SELECT COUNT(*) AS n FROM field_pos_requests WHERE request_key=?",[body.requestKey])).rows[0].n,1);
 });
