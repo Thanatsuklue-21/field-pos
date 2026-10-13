@@ -597,10 +597,18 @@ test('cash checkout exposes bill-aware tender shortcuts without bypassing confir
   assert.ok(helperStart>=0&&helperEnd>helperStart);
   assert.doesNotMatch(pos.slice(helperStart,helperEnd),/checkout\(/);
 });
-test('novice operator UX exposes routine mobile destinations without opening More',async()=>{
-  const shell=await read('components/app-shell.tsx'),mobile=await read('lib/mobile-navigation.ts');
-  assert.match(shell,/const primaryMobile=\["\/pos","\/queue","\/orders"\]/);
-  assert.match(mobile,/const PRIMARY=\["\/pos","\/queue","\/orders"\]/);
+test('novice operator UX keeps POS as the single mobile home and exposes routine work in-place',async()=>{
+  const shell=await read('components/app-shell.tsx');
+  const mobile=await read('lib/mobile-navigation.ts');
+  const pos=await read('app/pos/page.tsx');
+  const hub=await read('components/pos-operations-hub.tsx');
+  assert.match(shell,/const primaryMobile=\["\/pos"\]/);
+  assert.match(mobile,/const PRIMARY=\["\/pos"\]/);
+  assert.match(pos,/PosOperationsHub/);
+  assert.match(pos,/setOpsOpen\(true\)/);
+  for(const tab of ['today','queue','orders','stock','expenses'])assert.match(hub,new RegExp('"' + tab + '"'));
+  assert.match(hub,/runQuickQueueAction/);
+  assert.match(hub,/sendExpenseDurably/);
 });
 
 test('POS gives immediate non-blocking feedback and hides empty mobile cart chrome',async()=>{
