@@ -112,8 +112,10 @@ function View({session}:{session:Session}){
     }
   }
 
-  function closeError(code:string){
+  function closeError(code:string,data?:any){
+    const accountingFinding=Array.isArray(data?.findings)?String(data.findings[0]?.message||"").trim():"";
     return code==="day_already_closed"?"วันนี้ถูกปิดวันแล้ว":
+      code==="accounting_reconciliation_failed"?"ปิดวันไม่ได้ · ยอดบัญชียังไม่ตรงกัน"+(accountingFinding?" · "+accountingFinding:"")+" · กรุณาตรวจยอดขายและยอดรับชำระใน “งานร้าน > วันนี้/ออเดอร์” ก่อน":
       code==="close_day_pending_payments"?"ยังมี Split/Payment ที่ค้างอยู่ กรุณาจัดการให้เสร็จก่อนปิดวัน":
       code==="close_day_open_orders"?"ยังมีออเดอร์ที่ยังไม่ได้ส่งมอบ กรุณาปิดคิวให้ครบก่อนปิดวัน":
       code==="counted_cash_required"?"กรุณากรอกเงินสดที่นับได้จริง โดยไม่เกิน 2 ตำแหน่งทศนิยม":
@@ -178,7 +180,7 @@ function View({session}:{session:Session}){
     const recover=async()=>{
       if(disposed||closeRecoveryRef.current||session.offline||session.user.role!=="admin")return;
       let pending:PendingCloseDay|null=null;
-      try{pending=closeDayPendingRead()}catch(e:any){if(!disposed)setMsg(closeError(e.message));return}
+      try{pending=closeDayPendingRead()}catch(e:any){if(!disposed)setMsg(closeError(e.message,e.data));return}
       if(!pending)return;
       closeRecoveryRef.current=true;setBusy(true);setMsg("");
       try{
@@ -191,7 +193,7 @@ function View({session}:{session:Session}){
         }
       }catch(e:any){
         if(!disposed){
-          setMsg(shouldRetainCloseDayPending(e)?"ผลการปิดวันเดิมยังไม่ชัดเจน · ระบบเก็บ request เดิมไว้และจะตรวจซ้ำเมื่อเชื่อมต่อ":closeError(e.message));
+          setMsg(shouldRetainCloseDayPending(e)?"ผลการปิดวันเดิมยังไม่ชัดเจน · ระบบเก็บ request เดิมไว้และจะตรวจซ้ำเมื่อเชื่อมต่อ":closeError(e.message,e.data));
           await load().catch(()=>{});
         }
       }finally{
@@ -259,7 +261,7 @@ function View({session}:{session:Session}){
     setBusy(true);setMsg("");
     const body:CloseDayBody={requestKey:crypto.randomUUID(),date:businessDate||shift.date,countedCash:counted};
     try{const r=await sendCloseDay(body);const v=Number(r.close.cashVariance||0);setMsg("ปิดวันสำเร็จ · เงินสด "+(v===0?"ตรงพอดี":v>0?"เกิน ฿"+formatMoney(v):"ขาด ฿"+formatMoney(Math.abs(v))));setCountedCash("");await load()}
-    catch(e:any){setMsg(shouldRetainCloseDayPending(e)?"ผลการปิดวันยังไม่ชัดเจน · ระบบเก็บ request เดิมไว้และจะตรวจซ้ำอัตโนมัติ ห้ามกดปิดวันซ้ำด้วย request ใหม่":closeError(e.message))}
+    catch(e:any){setMsg(shouldRetainCloseDayPending(e)?"ผลการปิดวันยังไม่ชัดเจน · ระบบเก็บ request เดิมไว้และจะตรวจซ้ำอัตโนมัติ ห้ามกดปิดวันซ้ำด้วย request ใหม่":closeError(e.message,e.data))}
     finally{setBusy(false)}
   }
 
