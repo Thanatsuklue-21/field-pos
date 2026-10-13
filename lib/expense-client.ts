@@ -47,10 +47,10 @@ export async function sendExpenseDurably(csrf:string,body:ExpenseBody){
 export function expenseErrorText(code:string){
   return code==="day_closed"?"ปิดยอดวันนี้แล้ว ไม่สามารถบันทึกค่าใช้จ่ายได้":
     code==="invalid_expense"?"จำนวนค่าใช้จ่ายต้องมากกว่า 0 และไม่เกิน 2 ตำแหน่งทศนิยม":
-    code==="expense_pending"?"มีค่าใช้จ่ายเดิมที่ยังไม่ทราบผล · ระบบจะตรวจ request เดิมก่อน":
-    code==="expense_unconfirmed"?"Server ยังไม่ยืนยันค่าใช้จ่ายเดิมอย่างครบถ้วน · ระบบเก็บ request เดิมไว้เพื่อป้องกันบันทึกซ้ำ":
-    code==="expense_recovery_corrupt"?"ข้อมูล recovery ค่าใช้จ่ายในเครื่องเสีย · ห้ามบันทึกรายการใหม่จนกว่าจะตรวจข้อมูล":
-    code==="expense_recovery_storage_unavailable"?"เครื่องนี้เก็บ recovery ค่าใช้จ่ายไม่ได้ · ระบบไม่ส่งรายการเพื่อป้องกันยอดซ้ำ":
+    code==="expense_pending"?"มีค่าใช้จ่ายรายการก่อนหน้าที่ยังตรวจสอบไม่เสร็จ · ระบบจะตรวจรายการเดิมก่อน ห้ามกดบันทึกซ้ำ":
+    code==="expense_unconfirmed"?"ระบบยังยืนยันผลค่าใช้จ่ายรายการก่อนหน้าไม่ได้ · เก็บข้อมูลเดิมไว้เพื่อป้องกันยอดซ้ำ":
+    code==="expense_recovery_corrupt"?"ข้อมูลป้องกันรายการซ้ำในเครื่องมีปัญหา · หยุดบันทึกค่าใช้จ่ายชั่วคราวและตรวจรายการเดิมก่อน":
+    code==="expense_recovery_storage_unavailable"?"เครื่องนี้เก็บข้อมูลป้องกันรายการซ้ำไม่ได้ · ระบบจึงยังไม่ส่งค่าใช้จ่ายใหม่":
     code==="offline_write_blocked"?"ออฟไลน์อยู่ · ยังไม่บันทึกค่าใช้จ่ายจนกว่าจะเชื่อมต่อ":
     code;
 }
