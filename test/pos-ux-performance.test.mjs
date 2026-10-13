@@ -407,7 +407,7 @@ test('solo operator daily flow keeps routine queue checks in POS with full produ
   assert.match(queue,/ทำคิวตามลำดับ/);
   assert.doesNotMatch(queue,/router\.push\("\/orders/);
   assert.doesNotMatch(queue,/router\.push\("\/pos/);
-  assert.match(close,/OPEN \/ CLOSE DAY/);
+  assert.match(close,/เปิดร้าน \/ ปิดร้าน/);
   assert.match(close,/เปิดร้านวันนี้/);
   assert.match(close,/ปิดร้านวันนี้/);
 });
