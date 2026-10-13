@@ -1,5 +1,17 @@
 # FIELD POS — main audit และส่งต่อรอบ Anyone Can Use
 
+## Latest checkpoint — 2026-10-13 shared client / offline persistence
+
+- Exact baseline รอบนี้: `main 4844a0a34f5fc1e83744e30173b3db5965ad7c0b` หลัง merge PR #269; branch ใหม่ไม่ใช้ PR #255 เป็น baseline.
+- PR #255 ยัง open/unmergeable บน base เก่า. Audit แบบ selective พบ 2 gap ที่ main ยังขาด: (1) GET timeout/cancellation/header handling ใน shared API client และ (2) IndexedDB readwrite transaction ที่ error/abort ถูก resolve เป็น success.
+- Port เฉพาะ gap ดังกล่าว โดยรักษา current-main malformed/incomplete successful-ACK rejection, checkout exact ACK, Close Day strict offline read และ financial recovery controls.
+- Offline cash put/patch/delete จะถือว่าสำเร็จเมื่อ transaction complete เท่านั้น; unavailable/failed persistence ไม่ถูกตีความว่าเก็บบิลแล้ว.
+- Caller-owned AbortSignal ไม่เข้า shared GET coalescing, ไม่ fallback cache และไม่ emit offline; internal GET timeout ครอบ response body consumption.
+- เพิ่ม regression tests สำหรับ Headers/tuple headers, cancellation isolation, stalled JSON body timeout, cache-storage failure, transaction abort และ synchronous quota failure.
+- เพิ่มข้อความไทย `offline_storage_write_failed` เพื่อไม่ให้พนักงานเข้าใจผิดว่าบิล Offline ถูกยืนยันแล้ว.
+- Validation สุดท้ายต้องอ้าง exact PR-head CI; session นี้ไม่อ้าง local npm test/build เพราะ container ไม่มี outbound GitHub clone.
+
+
 ## Latest checkpoint — 2026-10-13 cycle-count review durability
 
 - Exact baseline: `main 6e05d6a98edb017b77972e9962a427829e6d5671` (PR #268 merged).
