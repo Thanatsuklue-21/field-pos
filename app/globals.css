@@ -91,3 +91,30 @@ button:disabled{cursor:not-allowed}
 button,a,[role="button"]{touch-action:manipulation;-webkit-tap-highlight-color:transparent}
 html{-webkit-text-size-adjust:100%}
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}
+
+
+/* Operator-first mobile UX */
+.operator-surface button,
+.operator-surface [role="button"]{
+  touch-action:manipulation;
+  -webkit-tap-highlight-color:transparent;
+}
+@media (max-width:767px){
+  .operator-surface button,
+  .operator-surface [role="button"]{
+    min-block-size:44px;
+  }
+}
+.operator-step{
+  transition:background-color 160ms cubic-bezier(.2,.8,.2,1),color 160ms cubic-bezier(.2,.8,.2,1),border-color 160ms cubic-bezier(.2,.8,.2,1),transform 120ms cubic-bezier(.2,.8,.2,1);
+}
+.operator-step[data-active="true"]{
+  border-color:rgba(197,155,25,.65);
+  background:#fff8dc;
+  color:#6f5510;
+}
+.operator-step[data-done="true"]{
+  border-color:rgba(52,199,89,.28);
+  background:#effcf3;
+  color:#18743a;
+}
