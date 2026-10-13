@@ -4,7 +4,6 @@ import {useEffect,useMemo,useState} from "react";
 import Link from "next/link";
 import {Boxes,ClipboardList,ListOrdered,RefreshCw,ShieldCheck,X} from "lucide-react";
 import {api,type Bootstrap,type Session} from "@/lib/api-client";
-import {formatMoney} from "@/lib/money-format.mjs";
 
 type WorkspaceTab="queue"|"orders"|"stock"|"status";
 type QueueOrder={
@@ -24,6 +23,7 @@ type Readiness={
 type ControlAnalysis={level:string;metrics?:Record<string,number>;readiness?:Readiness};
 
 const n=(value:any)=>Number(value)||0;
+const money=(value:any)=>new Intl.NumberFormat("th-TH",{minimumFractionDigits:0,maximumFractionDigits:2}).format(n(value));
 
 export default function PosDailyWorkspace({
   session,bootstrap,open,online,onClose
@@ -188,7 +188,7 @@ export default function PosDailyWorkspace({
               <div><b>{sale.queueNo||sale.billNo||"บิล"}</b><span className="ml-2 text-[10px] uppercase text-slate-500">{sale.payment}</span></div>
               <p className="mt-1 truncate text-xs text-slate-500">{sale.itemCount} รายการ · {sale.status}{sale.orderStatus?" · "+sale.orderStatus:""}</p>
             </div>
-            <b className="shrink-0 text-[#765b08]">฿{formatMoney(sale.total)}</b>
+            <b className="shrink-0 text-[#765b08]">฿{money(sale.total)}</b>
           </div>)}
           <FullLink href="/orders" label="เปิดประวัติ/Refund/VOID"/>
         </div>}
