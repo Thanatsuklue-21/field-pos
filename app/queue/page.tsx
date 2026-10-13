@@ -150,12 +150,12 @@ function QueueView({session}:{session:Session}){
         const r=await sendQueueAction(pending.body);
         if(!disposed){
           if(!applyState(r))await load().catch(()=>{});
-          setNotice("กู้คืน Queue action เดิมสำเร็จ · ใช้ request key เดิมและไม่ทำรายการซ้ำ");
+          setNotice("ตรวจสอบการกดคิวก่อนหน้าสำเร็จ · ระบบไม่ทำรายการซ้ำ");
         }
       }catch(e:any){
         if(!disposed){
           setMsg(shouldRetainQueuePending(e)
-            ?"Queue action เดิมยังไม่ทราบผล · ระบบเก็บ request เดิมไว้ ห้ามกด action ซ้ำจนกว่าจะเชื่อมต่อและตรวจซ้ำ"
+            ?"การกดคิวก่อนหน้ายังตรวจสอบไม่เสร็จ · ห้ามกดซ้ำ ระบบจะตรวจอีกครั้งเมื่อเชื่อมต่อ"
             :errorText(e.message));
           await load().catch(()=>{});
         }
@@ -192,10 +192,10 @@ function QueueView({session}:{session:Session}){
       code.startsWith("stock_shortage:")?"วัตถุดิบไม่พอสำหรับทำใหม่ 1 แก้ว · กรุณาตรวจ Stock":
       code.startsWith("ingredient_missing:")?"สูตรอ้างวัตถุดิบที่ไม่มีใน Stock Master":
       code==="queue_state_changed"?"สถานะคิวเปลี่ยนแล้ว ระบบกำลังอัปเดต":
-      code==="queue_action_pending"?"มี Queue action เดิมที่ยังไม่ทราบผล · ระบบจะตรวจ request เดิมก่อน":
-      code==="queue_action_unconfirmed"?"Server ยังไม่ยืนยัน Queue action เดิมอย่างครบถ้วน · ระบบเก็บ request เดิมไว้เพื่อป้องกันทำซ้ำ":
-      code==="queue_recovery_corrupt"?"ข้อมูล Queue recovery ในเครื่องเสีย · ห้ามทำ action ใหม่จนกว่าจะตรวจสถานะคิว/ข้อมูลเครื่อง":
-      code==="queue_recovery_storage_unavailable"?"เครื่องนี้บันทึก Queue recovery ไม่ได้ · ระบบไม่ส่ง action เพื่อป้องกันตัด Stock/เปลี่ยนคิวซ้ำ":code;
+      code==="queue_action_pending"?"มีการกดคิวก่อนหน้าที่ยังตรวจสอบไม่เสร็จ · ระบบจะตรวจรายการเดิมก่อน ห้ามกดซ้ำ":
+      code==="queue_action_unconfirmed"?"ระบบยังยืนยันผลการกดคิวก่อนหน้าไม่ได้ · เก็บข้อมูลเดิมไว้เพื่อป้องกันตัดสต็อกหรือเปลี่ยนคิวซ้ำ":
+      code==="queue_recovery_corrupt"?"ข้อมูลป้องกันการกดซ้ำในเครื่องมีปัญหา · หยุดเปลี่ยนสถานะคิวชั่วคราวและตรวจคิวเดิมก่อน":
+      code==="queue_recovery_storage_unavailable"?"เครื่องนี้เก็บข้อมูลป้องกันการกดซ้ำไม่ได้ · ระบบจึงยังไม่เปลี่ยนสถานะคิว":code;
   }
 
   async function completeNext(order:QOrder,item:QItem,itemIndex:number){
