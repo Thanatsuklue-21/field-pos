@@ -152,7 +152,7 @@ test("stale pending cash always reconciles the original request key instead of t
   assert.ok(block.includes('["business_date_changed","day_closed"].includes(e.message)'));
   const catchBlock=block.slice(block.indexOf("}catch(e:any){"));
   assert.ok(!catchBlock.includes("cashPendingClear()"));
-  assert.ok(catchBlock.includes("ระบบยังเก็บ request เดิมไว้และจะไม่สร้างบิลซ้ำ"));
+  assert.ok(catchBlock.includes("ระบบจะไม่สร้างบิลซ้ำ"));
 });
 
 test("stale cash resolution is explicit admin-only and only clears the matching local request",async()=>{
@@ -161,7 +161,7 @@ test("stale cash resolution is explicit admin-only and only clears the matching 
   assert.ok(pos.includes('session.user.role!=="admin"||!cashRecoveryReview'));
   assert.ok(pos.includes('String(pending.body?.requestKey||"")!==cashRecoveryReview.requestKey'));
   assert.ok(pos.includes("window.confirm("));
-  assert.ok(pos.includes("ล้างเฉพาะ pending ในเครื่อง ไม่สร้างยอดขายและไม่เปลี่ยน Stock"));
+  assert.ok(pos.includes("ล้างเฉพาะข้อมูลรายการเดิมในเครื่อง ไม่สร้างยอดขายและไม่เปลี่ยนสต็อก"));
   assert.ok(pos.includes('session.user.role==="admin"&&<button onClick={clearReviewedCashPending}'));
   assert.ok(pos.includes('setOpsInitialTab("orders");setOpsOpen(true)'));
   const hub=await read("components/pos-operations-hub.tsx");
@@ -175,7 +175,7 @@ test("stale cash keeps ambiguous failures pending and sends authoritative reject
   const block=pos.slice(start,end);
   assert.ok(block.includes("shouldRetainCashPending(e)"));
   assert.ok(block.includes('reason:"server_rejected"'));
-  assert.ok(block.includes("กรุณาตรวจ Orders ก่อน"));
+  assert.ok(block.includes("กรุณาตรวจประวัติออเดอร์ก่อน"));
   const catchBlock=block.slice(block.indexOf("}catch(e:any){"));
   assert.ok(!catchBlock.includes("cashPendingClear()"));
 });
@@ -193,7 +193,7 @@ test("unresolved stale cash review blocks new payment before any new checkout re
   const openEnd=pos.indexOf("return <section",openStart);
   const openBlock=pos.slice(openStart,openEnd);
   assert.ok(openBlock.includes("if(cashRecoveryReview)"));
-  assert.ok(openBlock.includes("ต้องตรวจรายการเงินสดค้างก่อนเปิดชำระบิลใหม่"));
+  assert.ok(openBlock.includes("ต้องตรวจรายการเงินสดเดิมก่อนเปิดชำระบิลใหม่"));
 });
 
 
