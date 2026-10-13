@@ -160,3 +160,18 @@ test('production keeps the proven Vercel routing path while pinning Node 24',asy
   assert.equal(Object.prototype.hasOwnProperty.call(vercel,'regions'),false);
   assert.match(route,/preferredRegion="sin1"/);
 });
+
+
+test('cashier-flow QA measures the guided checkout without weakening durable cash identity',async()=>{
+  const qa=await read('scripts/qa-cashier-flow.py');
+  assert.match(qa,/menu → modifier → cart → payment → queue\/pager\/change|Cashier-flow metrics browser QA/);
+  assert.match(qa,/pos\/checkout/);
+  assert.match(qa,/requestKey/);
+  assert.match(qa,/checkoutRequests/);
+  assert.match(qa,/uiInteractions/);
+  assert.match(qa,/automationElapsedMs/);
+  assert.match(qa,/not a human training-time claim/);
+  assert.match(qa,/payment\"\]==\"cash\"/);
+  assert.match(qa,/received\"\]==100/);
+  assert.doesNotMatch(qa,/field-pos\.vercel\.app/);
+});
