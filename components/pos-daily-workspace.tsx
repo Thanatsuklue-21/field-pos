@@ -26,9 +26,9 @@ type ControlAnalysis={level:string;metrics?:Record<string,number>;readiness?:Rea
 const n=(value:any)=>Number(value)||0;
 
 export default function PosDailyWorkspace({
-  session,bootstrap,open,onClose
+  session,bootstrap,open,online,onClose
 }:{
-  session:Session;bootstrap:Bootstrap|null;open:boolean;onClose:()=>void
+  session:Session;bootstrap:Bootstrap|null;open:boolean;online:boolean;onClose:()=>void
 }){
   const canQueue=session.user.role==="admin"||session.user.permissions?.queue===true;
   const canOrder=session.user.role==="admin"||session.user.permissions?.order===true;
@@ -50,7 +50,7 @@ export default function PosDailyWorkspace({
   },[tabs.join("|"),tab]);
 
   async function refresh(){
-    if(session.offline){
+    if(!online){
       setMessage("OFFLINE · ดูสัญญาณสต็อกจากข้อมูลล่าสุดได้ แต่คิว ออเดอร์ และสถานะระบบต้องรอเชื่อมต่อ");
       return;
     }
@@ -87,7 +87,7 @@ export default function PosDailyWorkspace({
       window.removeEventListener("focus",refreshOnFocus);
       window.removeEventListener("online",refreshOnFocus);
     };
-  },[open,session.offline,session.csrf]);
+  },[open,!online,session.csrf]);
 
   const stockRows=useMemo(()=>{
     const rows:Array<{key:string;name:string;variant:string;level:"out"|"low";detail:string}>=[];
@@ -140,7 +140,7 @@ export default function PosDailyWorkspace({
           <p className="mt-1 text-xs text-slate-500">เช็กงานหลักโดยไม่ออกจากหน้า POS · งานแก้ไขเชิงลึกค่อยเปิดหน้าเต็ม</p>
         </div>
         <div className="flex gap-1">
-          <button disabled={busy||session.offline} onClick={()=>refresh()} aria-label="รีเฟรชงานร้าน" className="grid h-11 w-11 place-items-center rounded-xl border border-slate-200 bg-white disabled:opacity-40">
+          <button disabled={busy||!online} onClick={()=>refresh()} aria-label="รีเฟรชงานร้าน" className="grid h-11 w-11 place-items-center rounded-xl border border-slate-200 bg-white disabled:opacity-40">
             <RefreshCw size={17} className={busy?"animate-spin":""}/>
           </button>
           <button onClick={onClose} aria-label="ปิดงานร้าน" className="grid h-11 w-11 place-items-center rounded-xl border border-slate-200 bg-white">
@@ -164,7 +164,7 @@ export default function PosDailyWorkspace({
 
       <div className="soft-scroll min-h-0 flex-1 overflow-auto p-3 sm:p-4">
         {tab==="queue"&&canQueue&&<div className="space-y-2">
-          {queueRows.length===0?<Empty text={session.offline?"ออฟไลน์ · ยังไม่ดึงคิวจาก Server":"ไม่มีคิวที่กำลังทำ"}/>:queueRows.map(order=>{
+          {queueRows.length===0?<Empty text={!online?"ออฟไลน์ · ยังไม่ดึงคิวจาก Server":"ไม่มีคิวที่กำลังทำ"}/>:queueRows.map(order=>{
             const total=(order.items||[]).reduce((s,x)=>s+n(x.qty),0);
             const ready=(order.items||[]).reduce((s,x)=>s+Math.min(n(x.qty),n(x.readyQty)),0);
             const called=(order.items||[]).reduce((s,x)=>s+Math.min(n(x.qty),n(x.calledQty)),0);
@@ -209,7 +209,7 @@ export default function PosDailyWorkspace({
         </div>}
 
         {tab==="status"&&canStatus&&<div className="space-y-3">
-          {!readiness?<Empty text={session.offline?"ออฟไลน์ · ต้องเชื่อมต่อเพื่ออ่าน System Readiness":"ยังไม่มีข้อมูล System Readiness"}/>:<>
+          {!readiness?<Empty text={!online?"ออฟไลน์ · ต้องเชื่อมต่อเพื่ออ่าน System Readiness":"ยังไม่มีข้อมูล System Readiness"}/>:<>
             <div className={"rounded-2xl border p-4 "+(readiness.status==="READY"?"border-emerald-200 bg-emerald-50":readiness.status==="WARN"?"border-amber-200 bg-amber-50":"border-red-200 bg-red-50")}>
               <div className="flex items-center justify-between gap-3">
                 <div><p className="text-[10px] font-black tracking-[.15em] text-slate-500">SYSTEM READINESS</p><b className="mt-1 block text-lg">{readiness.status}</b></div>
