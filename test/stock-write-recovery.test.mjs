@@ -58,6 +58,35 @@ test("stock recovery lists pending intents for all actors on this device",async 
   assert.deepEqual(rows.map(r=>r.actorId).sort(),["owner","staff-2"]);
 });
 
+test("committed stale cycle count review stays pending until exact replay ACK",async t=>{
+  const x=await mod(t),store=storage(),body={requestKey:"count-review-stale-03",proposalId:"proposal-1",confirm:true,note:"checked"};
+  const intent=x.prepareStockWriteIntent("owner","cycleCountProposalApprove","2026-10-13",body,store);
+  await assert.rejects(
+    x.sendStockWriteIntent(intent,async()=>{throw Object.assign(new Error("cycle_count_proposal_stale"),{status:409})},()=>false,new Set(["cycle_count_proposal_not_found"]),store),
+    /cycle_count_proposal_stale/
+  );
+  assert.equal(x.readStockWriteIntent("owner",store)?.body.requestKey,body.requestKey);
+  const result=await x.sendStockWriteIntent(
+    intent,
+    async()=>({requestKey:body.requestKey,performedBy:"owner",proposalId:body.proposalId,outcome:"stale",replayed:true}),
+    (ack,b,i)=>ack.requestKey===b.requestKey&&ack.performedBy===i.actorId&&ack.proposalId===b.proposalId&&ack.outcome==="stale",
+    new Set(),
+    store
+  );
+  assert.equal(result.replayed,true);
+  assert.equal(x.readStockWriteIntent("owner",store),null);
+});
+
+test("authoritative admin permission denial clears cycle count review intent",async t=>{
+  const x=await mod(t),store=storage(),body={requestKey:"count-review-denied-01",proposalId:"proposal-2",reason:"recount"};
+  const intent=x.prepareStockWriteIntent("owner","cycleCountProposalReject","2026-10-13",body,store);
+  await assert.rejects(
+    x.sendStockWriteIntent(intent,async()=>{throw Object.assign(new Error("admin_required"),{status:403})},()=>false,new Set(["admin_required"]),store),
+    /admin_required/
+  );
+  assert.equal(x.readStockWriteIntent("owner",store),null);
+});
+
 test("stock UI recovers exact pending writes on reconnect focus and visible resume",async()=>{
   const ui=await readFile(new URL("../app/stock/page.tsx",import.meta.url),"utf8");
   assert.match(ui,/prepareStockWriteIntent/);
@@ -68,4 +97,7 @@ test("stock UI recovers exact pending writes on reconnect focus and visible resu
   assert.match(ui,/document\.addEventListener\("visibilitychange",onVisible\)/);
   assert.match(ui,/มีรายการ Stock เดิมที่ยังไม่ทราบผล/);
   assert.match(ui,/ตรวจผล Request เดิม/);
+  assert.match(ui,/cycleCountProposalApprove/);
+  assert.match(ui,/cycleCountProposalReject/);
+  assert.match(ui,/proposalId:p\.id/);
 });
