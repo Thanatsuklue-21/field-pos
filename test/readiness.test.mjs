@@ -61,3 +61,26 @@ test('production readiness keeps backup restore drill visible before opening',as
   assert.match(seg,/Full Backup \+ Restore Preview แบบ transactional/);
   assert.match(seg,/ทดลอง Export Backup → Preview Restore ก่อนเปิดจริง/);
 });
+
+
+test('release freshness is exposed without secrets',async()=>{
+  const api=await read('lib/api.mjs'),ui=await read('app/settings/page.tsx');
+  assert.match(api,/VERCEL_GIT_COMMIT_SHA/);
+  assert.match(api,/VERCEL_GIT_COMMIT_REF/);
+  assert.match(api,/VERCEL_ENV/);
+  assert.match(api,/Release Freshness/);
+  assert.match(ui,/Release/);
+  assert.doesNotMatch(api,/TURSO_AUTH_TOKEN|OMISE_SECRET_KEY/);
+});
+
+test('health endpoint includes release identity for production smoke checks',async()=>{
+  const api=await read('lib/api.mjs');
+  const start=api.indexOf("if(path==='/api/health'");
+  const end=api.indexOf("const signedPaymentWebhook",start);
+  const seg=api.slice(start,end);
+  assert.match(seg,/release:\{/);
+  assert.match(seg,/commit:/);
+  assert.match(seg,/branch:/);
+  assert.match(seg,/environment:/);
+  assert.match(seg,/deploymentId:/);
+});
