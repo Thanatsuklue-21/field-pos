@@ -196,7 +196,8 @@ test('order items preserve sale-time price while production queue hides commerci
 
 test('mobile operational pages use compact density while preserving touch actions',async()=>{
   const shell=await read('components/app-shell.tsx'),pos=await read('app/pos/page.tsx'),queue=await read('app/queue/page.tsx'),stock=await read('app/stock/page.tsx'),orders=await read('app/orders/page.tsx');
-  assert.match(shell,/min-w-\[54px\]/);
+  assert.match(shell,/const primaryMobile=\["\/pos","\/queue","\/orders","\/stock"\]/);
+  assert.match(shell,/MoreHorizontal/);
   assert.match(pos,/min-h-\[154px\]/);
   assert.match(pos,/bottom-\[70px\]/);
   assert.match(queue,/h-full overflow-y-auto overscroll-contain p-2\.5 pb-28/);
@@ -362,7 +363,8 @@ test('payment success prioritizes queue prefetch before noncritical refreshes',a
 
 test('solo operator daily flow keeps sales and production as separate focused screens',async()=>{
   const shell=await read('components/app-shell.tsx'),pos=await read('app/pos/page.tsx'),queue=await read('app/queue/page.tsx'),close=await read('app/close/page.tsx');
-  assert.match(shell,/\["\/pos","\/queue","\/stock","\/expenses","\/close","\/orders","\/settings"\]/);
+  assert.match(shell,/const primaryMobile=\["\/pos","\/queue","\/orders","\/stock"\]/);
+  assert.match(shell,/const overflowMobile=\["\/expenses","\/close","\/settings"\]/);
   assert.match(pos,/ไปทำคิว \{lastSale\.queueNo\}/);
   assert.match(pos,/รับออเดอร์ถัดไป/);
   assert.match(queue,/PRODUCTION RUN/);
@@ -520,7 +522,7 @@ test('variant modal reflects cart-aware remaining stock instead of raw availabil
 
 test('payment mapping v2 exposes bank and card as first-class channels',async()=>{
   const pos=await read('app/pos/page.tsx'),api=await read('lib/api.mjs'),core=await read('lib/pos-api.mjs'),close=await read('app/close/page.tsx'),reports=await read('app/reports/page.tsx');
-  assert.match(pos,/setMethod\("bank"\)/);assert.match(pos,/setMethod\("card"\)/);assert.match(pos,/โอนธนาคาร/);assert.match(pos,/เลขอ้างอิงบัตร \/ Terminal/);
+  assert.match(pos,/setMethod\("bank"\)/);assert.match(pos,/setMethod\("card"\)/);assert.match(pos,/>โอน<\/button>/);assert.match(pos,/เลขอ้างอิงบัตร \/ Terminal/);
   assert.match(core,/\['cash','promptpay','bank','card','other'\]/);assert.match(core,/manual_bank/);assert.match(core,/manual_card/);
   assert.match(api,/paymentSummary=\{cash:0,promptpay:0,bank:0,card:0,other:0\}/);assert.match(api,/bankAmount:/);assert.match(api,/cardAmount:/);
   assert.match(close,/x\.bank/);assert.match(close,/x\.card/);assert.match(reports,/PAYMENT CHANNELS/);

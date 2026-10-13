@@ -46,7 +46,7 @@ test('settings bootstrap reports and CSV expose delivery GP without hard-coding 
   assert.match(settings,/Delivery GP/);
   assert.match(settings,/LINE MAN/);
   assert.match(settings,/GP %/);
-  assert.match(pos,/CONFIRM DELIVERY ORDER/);
+  assert.match(pos,/ยืนยันออเดอร์เดลิเวอรี/);
   assert.match(pos,/รับสุทธิ/);
   assert.match(pos,/payment:method==="delivery"\?"other":method/);
   assert.match(reports,/DELIVERY SETTLEMENT/);
