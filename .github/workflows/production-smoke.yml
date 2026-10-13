@@ -20,7 +20,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
-      BASE_URL: ${{ github.event_name == 'workflow_dispatch' && inputs.base_url || github.event_name == 'deployment_status' && github.event.deployment_status.environment_url || 'https://field-pos.vercel.app' }}
+      BASE_URL: ${{ github.event_name == 'workflow_dispatch' && inputs.base_url || 'https://field-pos.vercel.app' }}
       EXPECTED_SHA: ${{ github.event_name == 'deployment_status' && github.event.deployment.sha || github.sha }}
     steps:
       - name: Verify public health and core routes
