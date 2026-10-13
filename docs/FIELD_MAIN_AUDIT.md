@@ -1,5 +1,16 @@
 # FIELD POS — main audit และส่งต่อรอบ Anyone Can Use
 
+## Latest checkpoint — 2026-10-13 cycle-count review durability
+
+- Exact baseline: `main 6e05d6a98edb017b77972e9962a427829e6d5671` (PR #268 merged).
+- PR #255 ยัง open/unmerged และ base เก่า; ห้ามถือว่า shared-client/offline patch อยู่บน main.
+- PR #256 merge แล้ว. PR #266 ยัง draft/open และทำ Purchase Edit/Cancel durability; รอบนี้ไม่แก้ scope ซ้ำ.
+- Evidence ใหม่บน main: Owner approve/reject ของ Cycle Count Proposal เรียก API ตรงจาก `app/stock/page.tsx` โดยไม่มี persisted request identity. ฝั่ง approve ยังมีกรณี `stale/expired` ที่ commit proposal status + audit แล้วตอบ 409 จึงห้ามตีความ 409 เหล่านี้ว่า no-op.
+- Patch รอบนี้ใช้ stock recovery channel เดิม, เพิ่ม durable ledger binding `operation + actor + exact payload + proposalId`, exact ACK, replay หลัง lost response/reload/reconnect และ Close Day blocker สำหรับ unresolved approve/reject.
+- ไม่มี schema migration, bypass endpoint, payment/checkout semantics หรือ stock authority ใหม่.
+- Validation สุดท้ายต้องอ้าง exact PR head CI; local container ใน session นี้ clone GitHub ไม่ได้ จึงไม่อ้าง local npm test/build.
+
+
 วันที่ตรวจ: 2026-10-13 UTC
 Baseline: `origin/main` = `fe0688e7c43913ded21db5dab62ee8fc1fd14184`
 Feature branch สร้างใหม่จาก exact baseline: `fix/field-safe-ack-handoff`
