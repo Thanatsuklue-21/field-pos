@@ -557,8 +557,10 @@ test('real libSQL: deleting expense and evicting state cache never permits repla
   const body={date:bangkokDate(),amount:30,category:'OTHER',description:'parking',paymentMethod:'bank',requestKey:'expense-delete-replay-1'};
   const first=await apiPost(handler,token,'expenses',body);
   const deleted={writeHead(status){this.status=status},end(raw){this.body=JSON.parse(raw)}};
-  await handler({method:'DELETE',query:{route:['expenses',first.body.expense.id]},headers:{origin:'https://field.test',cookie:'field_session='+token,'x-csrf-token':'csrf'}},deleted);
+  await handler({method:'DELETE',query:{route:['expenses',first.body.expense.id]},headers:{origin:'https://field.test',cookie:'field_session='+token,'x-csrf-token':'csrf'},body:{requestKey:'expense-delete-replay-op-1',date:body.date,expectedAmount:body.amount}},deleted);
   assert.equal(deleted.status,200);
+  assert.equal(deleted.body.deleted,true);
+  assert.equal(deleted.body.expenseId,first.body.expense.id);
   const doc=await state(db);doc.posRequestKeys={};
   await db.execute({sql:'UPDATE field_state SET document=? WHERE singleton=1',args:[JSON.stringify(doc)]});
   const replay=await apiPost(handler,token,'expenses',body);
