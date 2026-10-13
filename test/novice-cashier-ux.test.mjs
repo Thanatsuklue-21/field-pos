@@ -17,8 +17,8 @@ test("modifier dialog explains one next action and highlights the normal/default
 test("payment sheet gives a simple three-step mental model with accessible close control",async()=>{
   const pos=await read("app/pos/page.tsx");
   assert.match(pos,/aria-labelledby="field-payment-title"/);
-  assert.match(pos,/1 · ทวนรายการ/);
-  assert.match(pos,/2 · เลือกวิธีจ่าย/);
-  assert.match(pos,/3 · ยืนยันรับเงิน/);
+  assert.match(pos,/paymentStage/);
+  assert.match(pos,/\[\["1","ทวนรายการ"\],\["2","เลือกวิธีจ่าย"\],\["3","ยืนยันรับเงิน"\]\]/);
+  assert.match(pos,/active=paymentStage===step/);
   assert.match(pos,/aria-label="ปิดหน้าชำระเงิน"/);
 });
