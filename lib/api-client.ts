@@ -28,6 +28,7 @@ const RECOVERABLE_WRITE_PATHS=new Set([
   "/api/pos/split/cancel",
   "/api/pos/split/provider-release",
   "/api/pos/payment-resolutions/reconcile",
+  "/api/pos/kitchen/retry",
   "/api/payments/promptpay/create",
   "/api/payments/promptpay/status"
 ]);

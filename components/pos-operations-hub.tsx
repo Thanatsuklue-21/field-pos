@@ -19,6 +19,7 @@ type Sale={id:string;billNo:string;date:string;time:number;total:number;payment:
 type ExpenseRow={id:string;date:string;time:number;category:string;description:string;amount:number;paymentMethod?:string;sourceType?:string};
 type TodaySummary={today:string;todayRevenue:number;todayOrders:number;grossMargin:number;lowStock?:{name:string}[];recommendations?:{level:string;title:string;detail:string}[]};
 type CloseStatus={businessDate:string;shift:any;paymentBlockers:any[];orderBlockers:any[];closeBlockedByPayments:boolean;closeBlockedByOrders:boolean;closes:any[]};
+type KitchenStatus={configured:boolean;pending:number;sending:number;retryable:number;blocked:number;stale:number;unresolved:number;oldestUnresolvedAt:number|null};
 type AdminReadiness={
   businessDate?:string;
   readyForCashSales:boolean;
@@ -26,6 +27,7 @@ type AdminReadiness={
   readyForFullOperations:boolean;
   accounting?:{ok:boolean;level:string;blocking?:any[];totals?:Record<string,any>};
   accountingCauses?:{code:string;confidence:string;severity:string;title:string;explanation:string;nextAction:string}[];
+  notifications?:{lineKitchen?:{configured:boolean;pending:number;sending:number;retryable:number;blocked:number;stale:number;unresolved:number;oldestUnresolvedAt:number|null}};
   warnings?:{code:string;message:string}[];
 };
 const n=(v:any)=>Number(v)||0;
@@ -49,10 +51,13 @@ export default function PosOperationsHub({session,bootstrap,open,onClose,onRefre
   const [todaySummary,setTodaySummary]=useState<TodaySummary|null>(null);
   const [closeStatus,setCloseStatus]=useState<CloseStatus|null>(null);
   const [readiness,setReadiness]=useState<AdminReadiness|null>(null);
+  const [kitchenStatus,setKitchenStatus]=useState<KitchenStatus|null>(null);
   const [loading,setLoading]=useState(false);
   const [message,setMessage]=useState("");
   const [expenseBusy,setExpenseBusy]=useState(false);
   const [queueBusy,setQueueBusy]=useState(false);
+  const [kitchenBusy,setKitchenBusy]=useState(false);
+  const [kitchenRetryBusy,setKitchenRetryBusy]=useState(false);
   const [expenseAmount,setExpenseAmount]=useState("");
   const [expenseCategory,setExpenseCategory]=useState("OTHER");
   const [expenseDescription,setExpenseDescription]=useState("");
@@ -112,10 +117,10 @@ export default function PosOperationsHub({session,bootstrap,open,onClose,onRefre
     if(!quiet){setLoading(true);setMessage("")}
     try{
       const tasks:Promise<any>[]=[];
-      const names:("todaySummary"|"closeStatus"|"readiness"|"queue"|"orders"|"expenses"|"stock")[]=[];
+      const names:("todaySummary"|"closeStatus"|"readiness"|"queue"|"kitchen"|"orders"|"expenses"|"stock")[]=[];
       if(canReport&&(scope==="all"||scope==="today")){tasks.push(api<any>("/api/management/dashboard"));names.push("todaySummary");tasks.push(api<any>("/api/close-day"));names.push("closeStatus")}
       if(canReadiness&&(scope==="all"||scope==="today")){tasks.push(api<any>("/api/admin/readiness"));names.push("readiness")}
-      if(canQueue&&(scope==="all"||scope==="queue")){tasks.push(api<any>("/api/pos/queue"));names.push("queue")}
+      if(canQueue&&(scope==="all"||scope==="queue")){tasks.push(api<any>("/api/pos/queue"));names.push("queue");tasks.push(api<KitchenStatus>("/api/pos/kitchen/status"));names.push("kitchen")}
       if(canOrder&&(scope==="all"||scope==="orders")){tasks.push(api<any>("/api/pos/history"));names.push("orders")}
       if(canExpense&&(scope==="all"||scope==="expenses")){tasks.push(api<any>("/api/expenses"));names.push("expenses")}
       if(canStock&&(scope==="all"||scope==="stock")&&onRefreshStock){tasks.push(onRefreshStock());names.push("stock")}
@@ -128,6 +133,7 @@ export default function PosOperationsHub({session,bootstrap,open,onClose,onRefre
         if(name==="closeStatus")setCloseStatus(value as CloseStatus);
         if(name==="readiness")setReadiness(value as AdminReadiness);
         if(name==="queue")setQueue(Array.isArray(value.orders)?value.orders:[]);
+        if(name==="kitchen")setKitchenStatus(value as KitchenStatus);
         if(name==="orders")setSales(Array.isArray(value.sales)?value.sales:[]);
         if(name==="expenses")setExpenses(Array.isArray(value.expenses)?value.expenses:[]);
         // Stock freshness is applied by the parent POS bootstrap loader via onRefreshStock.
@@ -266,6 +272,24 @@ export default function PosOperationsHub({session,bootstrap,open,onClose,onRefre
     };
   },[open,session.csrf,cloudAvailable,canQueue,canOrder,canStock,canExpense,canReadiness]);
 
+  async function retryKitchenNotifications(){
+    if(!canReadiness||!cloudAvailable||kitchenRetryBusy)return;
+    setKitchenRetryBusy(true);setMessage("");
+    try{
+      const result=await api<any>("/api/pos/kitchen/retry",{method:"POST",headers:{"x-csrf-token":session.csrf},body:"{}"});
+      const status=result?.status||{};
+      if(Number(result?.accepted)>0)setMessage("ส่งแจ้งครัวสำเร็จ "+Number(result.accepted)+" รายการ");
+      else if(Number(status.blocked)>0)setMessage("LINE แจ้งครัวยังถูกบล็อก · ตรวจ Token, Group ID และสิทธิ์ Bot ก่อนลองใหม่");
+      else if(Number(status.stale)>0)setMessage("มีแจ้งครัวเกินช่วง retry 23 ชั่วโมง · ตรวจออเดอร์กับ LINE ด้วยคน ห้ามย้อนสถานะชำระเงิน");
+      else if(Number(status.unresolved)>0)setMessage("รายการแจ้งครัวยังอยู่ในช่วง backoff · รอให้ถึงเวลาลองใหม่แล้วกดอีกครั้ง");
+      else setMessage("ไม่พบรายการแจ้งครัวที่ค้าง");
+      await refresh("today",true);
+    }catch(e:any){
+      setMessage(e?.message==="network_unavailable"?"ติดต่อ Server ไม่ได้ · ยังไม่เปลี่ยนสถานะการชำระเงินหรือคิว":"ลองส่งแจ้งครัวไม่สำเร็จ · ตรวจการตั้งค่า LINE แล้วลองใหม่");
+      await refresh("today",true).catch(()=>{});
+    }finally{setKitchenRetryBusy(false)}
+  }
+
   async function saveExpense(){
     if(!(Number(expenseAmount)>0)||expenseBusy||!cloudAvailable)return;
     setExpenseBusy(true);setMessage("");
@@ -303,6 +327,7 @@ export default function PosOperationsHub({session,bootstrap,open,onClose,onRefre
 
   if(!open)return null;
   const todayBlockers=n(closeStatus?.paymentBlockers?.length)+n(closeStatus?.orderBlockers?.length)+(readiness?.accounting?.ok===false?1:0);
+  const kitchen=readiness?.notifications?.lineKitchen;
   const tabMeta:{key:HubTab;label:string;icon:any;count?:number;allowed:boolean}[]=[
     {key:"today",label:"วันนี้",icon:CalendarCheck2,count:todayBlockers,allowed:canReport},
     {key:"queue",label:"คิว",icon:ListOrdered,count:queue.length,allowed:canQueue},
@@ -363,6 +388,12 @@ export default function PosOperationsHub({session,bootstrap,open,onClose,onRefre
               {canOrder&&<button type="button" onClick={()=>setTab("orders")} className="mt-3 min-h-11 w-full rounded-xl border border-red-200 bg-red-50 px-3 font-bold text-red-800">ตรวจออเดอร์ในงานร้าน</button>}
             </div>}
           </div>}
+          {canReadiness&&kitchen?.configured&&<div className={"rounded-2xl border p-4 "+(n(kitchen.unresolved)>0?"border-amber-300 bg-amber-50":"border-emerald-200 bg-emerald-50")}>
+            <div className="flex items-start justify-between gap-3"><div><b>LINE แจ้งครัว</b><p className="mt-1 text-xs text-slate-600">{n(kitchen.unresolved)>0?"มี notification ที่ยังไม่จบ · Payment และยอดขายยังยึดสถานะจาก Server ตามเดิม":"ไม่พบแจ้งครัวค้าง"}</p></div><span className={"rounded-full px-2 py-1 text-[10px] font-black "+(n(kitchen.unresolved)>0?"bg-amber-200 text-amber-900":"bg-emerald-200 text-emerald-900")}>{n(kitchen.unresolved)>0?n(kitchen.unresolved)+" ค้าง":"OK"}</span></div>
+            {n(kitchen.unresolved)>0&&<div className="mt-3 grid grid-cols-3 gap-2 text-center"><Metric label="รอส่ง" value={n(kitchen.pending)+n(kitchen.sending)}/><Metric label="ถูกบล็อก" value={n(kitchen.blocked)}/><Metric label="เกิน 23ชม." value={n(kitchen.stale)}/></div>}
+            {n(kitchen.retryable)>0&&<button type="button" disabled={kitchenRetryBusy||!cloudAvailable} onClick={retryKitchenNotifications} className="mt-3 min-h-11 w-full rounded-xl bg-[#1F4D3A] px-3 text-xs font-bold text-white disabled:opacity-40">{kitchenRetryBusy?"กำลังลองส่งเดิม…":"ลองส่งแจ้งครัวอีกครั้ง · "+n(kitchen.retryable)+" รายการ"}</button>}
+            {(n(kitchen.blocked)>0||n(kitchen.stale)>0)&&<p className="mt-3 rounded-xl bg-white px-3 py-2 text-[10px] text-amber-900">รายการ Blocked/Stale ต้องตรวจ LINE configuration หรือออเดอร์จริงด้วยคน · ห้ามแก้ยอดขาย/Payment เพื่อให้ notification หาย</p>}
+          </div>}
           {!!todaySummary?.lowStock?.length&&<div className="rounded-2xl border border-amber-200 bg-white p-4"><b className="text-sm">สต็อกที่ควรดูวันนี้</b><p className="mt-2 text-xs text-slate-600">{todaySummary.lowStock.slice(0,4).map(x=>x.name).join(" · ")}</p><button onClick={()=>setTab("stock")} className="mt-3 min-h-11 w-full rounded-xl border border-slate-300 bg-white text-xs font-bold">ดูสต็อกในหน้านี้</button></div>}
           {!!todaySummary?.recommendations?.length&&<div className="rounded-2xl border border-slate-200 bg-white p-4"><b className="text-sm">ระบบแนะนำ</b><p className="mt-2 text-xs font-semibold text-slate-800">{todaySummary.recommendations[0].title}</p><p className="mt-1 text-xs text-slate-500">{todaySummary.recommendations[0].detail}</p></div>}
           <div className="grid grid-cols-2 gap-2"><FullLink href="/dashboard" label="ดูสรุปทั้งหมด"/><FullLink href="/close" label="ตรวจและปิดวัน"/></div>
@@ -370,6 +401,15 @@ export default function PosOperationsHub({session,bootstrap,open,onClose,onRefre
         </div>}
 
         {tab==="queue"&&canQueue&&<div className="space-y-2">
+          {kitchenStatus?.configured&&n(kitchenStatus.unresolved)>0&&<div className={"rounded-2xl border p-3 "+(n(kitchenStatus.blocked)+n(kitchenStatus.stale)>0?"border-red-300 bg-red-50":"border-amber-300 bg-amber-50")}>
+            <div className="flex items-start justify-between gap-3">
+              <div><b className="text-sm">แจ้งบาร์ผ่าน LINE ค้าง {n(kitchenStatus.unresolved)} รายการ</b><p className="mt-1 text-xs text-slate-600">{n(kitchenStatus.blocked)+n(kitchenStatus.stale)>0?"มีรายการที่ส่งซ้ำอัตโนมัติไม่ได้ · ต้องตรวจการตั้งค่า LINE ก่อน":"ยอดขายและคิวยืนยันแล้ว · เฉพาะข้อความแจ้งบาร์กำลังรอส่งซ้ำ"}</p></div>
+              <span className={"rounded-full px-2 py-1 text-[10px] font-black "+(n(kitchenStatus.blocked)+n(kitchenStatus.stale)>0?"bg-red-200 text-red-800":"bg-amber-200 text-amber-900")}>{n(kitchenStatus.blocked)+n(kitchenStatus.stale)>0?"ตรวจ LINE":"รอ Retry"}</span>
+            </div>
+            <div className="mt-3 grid grid-cols-3 gap-2 text-center"><Metric label="ส่งซ้ำได้" value={n(kitchenStatus.retryable)}/><Metric label="กำลังส่ง" value={n(kitchenStatus.sending)}/><Metric label="ต้องตรวจ" value={n(kitchenStatus.blocked)+n(kitchenStatus.stale)}/></div>
+            {session.user.role==="admin"&&n(kitchenStatus.retryable)>0&&<button disabled={kitchenBusy||!cloudAvailable} onClick={retryKitchenNotifications} className="mt-3 min-h-11 w-full rounded-xl bg-[#1F4D3A] px-3 text-xs font-black text-white disabled:opacity-40">{kitchenBusy?"กำลังส่ง request เดิม…":"ลองส่งแจ้งบาร์ที่ค้างอีกครั้ง"}</button>}
+            {session.user.role!=="admin"&&<p className="mt-2 text-[10px] font-semibold text-slate-600">แจ้ง Admin ให้กด Retry จากแท็บคิว · ไม่ต้องทำรายการขายหรือรับเงินซ้ำ</p>}
+          </div>}
           {queueRows.length===0?<Empty text={!cloudAvailable?"ออฟไลน์ · ยังไม่ดึงคิวจาก Server":"ไม่มีคิวที่กำลังทำ"}/>:queueRows.map(order=>{
             const total=(order.items||[]).reduce((s,x)=>s+n(x.qty),0),ready=(order.items||[]).reduce((s,x)=>s+Math.min(n(x.qty),n(x.readyQty)),0),called=(order.items||[]).reduce((s,x)=>s+Math.min(n(x.qty),n(x.calledQty)),0);
             const allCalled=total>0&&called>=total,isProduction=productionHead?.id===order.id;
