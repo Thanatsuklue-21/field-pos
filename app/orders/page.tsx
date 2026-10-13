@@ -149,7 +149,7 @@ function OrdersView({session}:{session:Session}){
       }catch(e:any){
         if(!disposed){
           setMsg(shouldRetainOrderMutationPending(e)
-            ?"VOID/Refund เดิมยังไม่ทราบผล · ระบบเก็บ request เดิมไว้และจะตรวจซ้ำเมื่อเชื่อมต่อ"
+            ?"การยกเลิกหรือคืนเงินครั้งก่อนยังตรวจสอบไม่เสร็จ · ระบบเก็บข้อมูลเดิมไว้และจะตรวจอีกครั้งเมื่อเชื่อมต่อ"
             :orderMutationErrorText(e.message));
           await load().catch(()=>{});
         }
