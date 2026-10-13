@@ -4,6 +4,7 @@ import {AlertTriangle,Archive,ArrowDownCircle,ArrowUpCircle,Edit3,Plus,RotateCcw
 import AuthGate from "@/components/auth-gate";
 import {api,type Session} from "@/lib/api-client";
 import {prepareStockWriteIntent,readStockWriteIntent,sendStockWriteIntent,type StockWriteIntent,type StockWriteOperation} from "@/lib/stock-write-recovery";
+import {operatorErrorFallback} from "@/lib/operator-error-language.mjs";
 
 type Purchase={
   id:string;stockTransactionId:string;supplier:string;purchaseDate:string;packageQty:number|null;packageUnit:string;packSize:number|null;packSizeUnit:string;
@@ -56,44 +57,44 @@ function StockView({session}:{session:Session}){
 
   function stockError(code:string){
     const map:Record<string,string>={
-      stock_recovery_unavailable:"อ่าน/บันทึก recovery ของ Stock ไม่ได้ · ระบบล็อกการปรับ Stock ใหม่เพื่อป้องกันยอดซ้ำ",
-      pending_stock_write_exists:"มีรายการ Stock เดิมที่ยังไม่ทราบผล · ระบบจะตรวจ Request เดิมก่อน ห้ามสร้างรายการใหม่",
-      stock_ack_unknown:"Server ยังไม่ยืนยันผลรายการ Stock เดิมอย่างครบถ้วน · ระบบเก็บ Request เดิมไว้และจะตรวจซ้ำ",
-      network_unavailable:"ยังไม่ทราบว่า Server บันทึก Stock แล้วหรือไม่ · ระบบเก็บ Request เดิมไว้ ห้ามทำรายการใหม่แทน",
-      idempotency_conflict:"Request เดิมไม่ตรงกับผู้ใช้หรือข้อมูลเดิม · หยุดรายการนี้และตรวจ Audit/Stock ก่อนดำเนินการต่อ",
-      request_key_conflict:"Request เดิมถูกผูกกับผู้ใช้หรือข้อมูลชุดอื่น · หยุดรายการนี้และตรวจผลเดิมก่อน",
+      stock_recovery_unavailable:"อ่าน/บันทึกข้อมูลสต็อกที่ค้างไม่ได้ · ระบบล็อกการปรับสต็อกใหม่ชั่วคราวเพื่อป้องกันยอดซ้ำ",
+      pending_stock_write_exists:"มีรายการสต็อกเดิมที่ยังไม่ทราบผล · ระบบจะตรวจรายการเดิมก่อน ห้ามสร้างรายการใหม่",
+      stock_ack_unknown:"ระบบกลางยังยืนยันผลรายการสต็อกเดิมไม่ครบ · ระบบเก็บรายการเดิมไว้และจะตรวจซ้ำ",
+      network_unavailable:"เน็ตขาดการเชื่อมต่อ · ยังไม่ทราบว่ารายการสต็อกสำเร็จหรือไม่ ระบบเก็บรายการเดิมไว้ ห้ามทำรายการใหม่แทน",
+      idempotency_conflict:"ข้อมูลรายการเดิมไม่ตรงกัน · ระบบหยุดไว้เพื่อป้องกันทำซ้ำ กรุณาตรวจประวัติและยอดสต็อกก่อนทำต่อ",
+      request_key_conflict:"ข้อมูลรายการเดิมถูกผูกกับผู้ใช้หรือข้อมูลชุดอื่น · กรุณาตรวจผลเดิมก่อนทำต่อ",
       invalid_purchase_url:"ลิงก์ไม่ถูกต้อง · ใส่ได้ทั้ง https://... หรือโดเมน เช่น shopee.co.th/...",
       future_purchase_date:"วันที่ซื้อห้ามเป็นอนาคต",
-      purchase_date_closed:"วันที่ซื้อถูก Close Day แล้ว",
+      purchase_date_closed:"วันที่ซื้อนี้ปิดยอดแล้ว · ไม่อนุญาตให้แก้ย้อนหลังจากหน้านี้",
       stock_shortage:"จำนวนคงเหลือไม่พอ · ระบบยังไม่ได้บันทึกรายการใหม่นี้",
       incompatible_stock_unit:"หน่วยต่อบรรจุภัณฑ์ไม่เข้ากับหน่วยที่สูตรใช้",
       invalid_purchase_payment_method:"ช่องทางชำระค่าซื้อไม่ถูกต้อง",
-      purchase_not_found:"ไม่พบรายการรับเข้าต้นทาง · ระบบยังไม่ได้แก้ Stock/ต้นทุนจาก Request นี้",
+      purchase_not_found:"ไม่พบรายการรับเข้าต้นทาง · ระบบยังไม่ได้แก้สต็อกหรือต้นทุนจากรายการนี้",
       purchase_already_cancelled:"รายการรับเข้านี้ถูกยกเลิกไปแล้ว · กรุณาตรวจประวัติก่อนทำต่อ",
       purchase_before_reset_read_only:"รายการนี้อยู่ก่อนจุดล้างข้อมูลทดลอง จึงแก้ย้อนหลังไม่ได้",
       invalid_purchase_date:"วันที่ซื้อไม่ถูกต้อง · กรุณาตรวจวันที่แล้วส่งใหม่",
       invalid_purchase_cost:"ราคาซื้อไม่ถูกต้อง · กรุณาตรวจยอดรวม",
-      incomplete_purchase_packaging:"ข้อมูลจำนวนแพ็ก/ขนาดต่อแพ็กไม่ครบ · ยังไม่ได้แก้ Stock",
-      purchase_correction_stock_negative:"แก้จำนวนรับเข้าไม่ได้ เพราะจะทำให้ Stock ติดลบ · กรุณาตรวจนับ Stock จริงก่อน",
-      purchase_cancel_stock_negative:"ยกเลิกรับเข้าไม่ได้ เพราะวัตถุดิบถูกใช้ไปแล้วหรือยอดคงเหลือไม่พอ · กรุณาตรวจนับ Stock จริง",
-      purchase_cancel_has_later_movement:"ยกเลิกย้อนหลังอัตโนมัติไม่ได้ เพราะมีการขาย/ของเสีย/นับหรือปรับ Stock หลังรายการนี้ · เพื่อไม่ให้ Stock เพี้ยน กรุณาใช้การตรวจนับ Stock จริงหรือปรับยอดแทน",
-      purchase_stock_transaction_missing:"ไม่พบ Stock Ledger ต้นทาง · ระบบหยุดการยกเลิกเพื่อป้องกัน Stock เพี้ยน",
-      purchase_cancel_confirmation_required:"การยืนยันยกเลิกรับเข้าไม่ถูกต้อง · ยังไม่มีการเปลี่ยน Stock",
-      purchase_cancel_reason_required:"กรุณาระบุเหตุผลยกเลิกรับเข้าเพื่อเก็บ Audit",
-      invalid_purchase_quantity:"ข้อมูลจำนวนรับเข้าต้นทางไม่ถูกต้อง · ระบบหยุดการยกเลิกเพื่อป้องกัน Stock เพี้ยน",
-      invalid_cycle_count:"ข้อมูลนับ Stock ไม่ถูกต้อง · กรุณาตรวจจำนวนก่อนส่ง",
-      cycle_count_requires_confirmation:"ต้องยืนยันผลนับก่อนปรับ Stock",
-      day_closed:"วันนี้ปิดยอดแล้ว · ไม่สามารถปรับ Stock ย้อนหลังใน flow นี้",
-      cycle_count_approval_confirmation_required:"ต้องยืนยันการอนุมัติผลนับก่อนปรับ Stock",
+      incomplete_purchase_packaging:"ข้อมูลจำนวนแพ็กหรือขนาดต่อแพ็กไม่ครบ · ระบบยังไม่ได้แก้สต็อก",
+      purchase_correction_stock_negative:"แก้จำนวนรับเข้าไม่ได้ เพราะจะทำให้สต็อกติดลบ · กรุณานับของจริงก่อน",
+      purchase_cancel_stock_negative:"ยกเลิกรับเข้าไม่ได้ เพราะวัตถุดิบถูกใช้ไปแล้วหรือยอดคงเหลือไม่พอ · กรุณานับของจริงก่อน",
+      purchase_cancel_has_later_movement:"ยกเลิกย้อนหลังอัตโนมัติไม่ได้ เพราะมีการขาย ของเสีย หรือนับสต็อกหลังรายการนี้ · กรุณานับของจริงหรือปรับยอดแทน",
+      purchase_stock_transaction_missing:"ไม่พบประวัติการเคลื่อนไหวต้นทาง · ระบบหยุดการยกเลิกเพื่อป้องกันสต็อกเพี้ยน",
+      purchase_cancel_confirmation_required:"การยืนยันยกเลิกรับเข้าไม่ถูกต้อง · ยังไม่มีการเปลี่ยนสต็อก",
+      purchase_cancel_reason_required:"กรุณาระบุเหตุผลยกเลิกรับเข้า เพื่อให้ตรวจสอบย้อนหลังได้",
+      invalid_purchase_quantity:"ข้อมูลจำนวนรับเข้าต้นทางไม่ถูกต้อง · ระบบหยุดการยกเลิกเพื่อป้องกันสต็อกเพี้ยน",
+      invalid_cycle_count:"ข้อมูลนับสต็อกไม่ถูกต้อง · กรุณาตรวจจำนวนก่อนส่ง",
+      cycle_count_requires_confirmation:"ต้องยืนยันผลนับก่อนปรับสต็อก",
+      day_closed:"วันนี้ปิดยอดแล้ว · ไม่สามารถปรับสต็อกย้อนหลังจากหน้านี้",
+      cycle_count_approval_confirmation_required:"ต้องยืนยันการอนุมัติผลนับก่อนปรับสต็อก",
       cycle_count_reject_reason_required:"กรุณาระบุเหตุผลที่ตีกลับผลนับ",
-      cycle_count_proposal_not_found:"ไม่พบผลนับที่ต้องการตรวจ · ระบบยังไม่ได้ปรับ Stock จาก Request นี้",
-      cycle_count_proposal_id_mismatch:"รหัสผลนับใน Request ไม่ตรงกับรายการที่เปิดอยู่ · ระบบยังไม่เปลี่ยน Stock",
-      cycle_count_proposal_not_pending:"ผลนับนี้ถูกตรวจไปแล้ว · ระบบจะตรวจ Request เดิมก่อน ห้ามกดซ้ำด้วย Request ใหม่",
-      cycle_count_proposal_day_closed:"วันที่ของผลนับถูก Close Day แล้ว · ไม่อนุญาตให้ปรับ Stock ย้อนหลัง",
-      cycle_count_proposal_expired:"ผลนับหมดอายุ · Server บันทึกสถานะหมดอายุแล้ว ระบบเก็บ Request เดิมไว้เพื่อยืนยัน ACK เดิม",
-      cycle_count_proposal_stale:"Stock เปลี่ยนหลังพนักงานนับ · Server บันทึกผลนี้เป็นหมดอายุจากข้อมูลเปลี่ยนแล้ว ระบบเก็บ Request เดิมไว้เพื่อยืนยัน ACK เดิม"
+      cycle_count_proposal_not_found:"ไม่พบผลนับที่ต้องการตรวจ · ระบบยังไม่ได้ปรับสต็อกจากรายการนี้",
+      cycle_count_proposal_id_mismatch:"ข้อมูลผลนับไม่ตรงกับรายการที่เปิดอยู่ · ระบบยังไม่เปลี่ยนสต็อก",
+      cycle_count_proposal_not_pending:"ผลนับนี้ถูกตรวจไปแล้ว · ระบบจะตรวจรายการเดิมก่อน ห้ามกดซ้ำด้วยรายการใหม่",
+      cycle_count_proposal_day_closed:"วันที่ของผลนับปิดยอดแล้ว · ไม่อนุญาตให้ปรับสต็อกย้อนหลัง",
+      cycle_count_proposal_expired:"ผลนับหมดอายุแล้ว · ระบบเก็บรายการเดิมไว้และจะตรวจผลเดิมอีกครั้ง",
+      cycle_count_proposal_stale:"สต็อกเปลี่ยนหลังพนักงานนับ · ผลนับเดิมใช้ต่อไม่ได้ ระบบเก็บรายการเดิมไว้เพื่อตรวจผลให้ครบ"
     };
-    return map[code]||code;
+    return map[code]||operatorErrorFallback(code,"การจัดการสต็อก");
   }
 
   function stockRequest(operation:StockWriteOperation,body:any){
@@ -187,7 +188,7 @@ function StockView({session}:{session:Session}){
       catch{if(!disposed){setStockRecoveryBlocked(true);setMsg(stockError("stock_recovery_unavailable"))}return}
       if(!disposed)setPendingStockIntent(intent);
       if(!intent)return;
-      if(typeof navigator!=="undefined"&&!navigator.onLine){if(!disposed)setMsg("มีรายการ Stock เดิมรอตรวจ · ขณะ Offline ระบบจะไม่สร้างรายการใหม่");return}
+      if(typeof navigator!=="undefined"&&!navigator.onLine){if(!disposed)setMsg("มีรายการสต็อกเดิมรอตรวจ · ตอนเน็ตหลุดระบบจะไม่สร้างรายการใหม่");return}
       recovering=true;stockRecoveryRef.current=true;
       try{await submitStockIntent(intent,true)}
       finally{recovering=false;stockRecoveryRef.current=false}
@@ -274,7 +275,7 @@ function StockView({session}:{session:Session}){
         unit_change_recipe_in_use:"เปลี่ยนหน่วยตัดสูตรไม่ได้ เพราะรายการนี้ถูกใช้ในสูตรอยู่ · แก้ชื่อได้ตามปกติ",
         invalid_ingredient_name:"ชื่อรายการไม่ถูกต้อง กรุณากรอกอย่างน้อย 2 ตัวอักษร"
       };
-      setMasterMsg(map[e.message]||e.message)
+      setMasterMsg(map[e.message]||operatorErrorFallback(e.message,"การบันทึกข้อมูลสต็อก"))
     }finally{setBusy(false)}
   }
   async function ingredientAction(x:Ingredient,action:"archive"|"restore"|"reset"){
@@ -284,7 +285,7 @@ function StockView({session}:{session:Session}){
     try{
       await api("/api/stock/ingredients/"+encodeURIComponent(x.id)+"/"+action,{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify(action==="reset"?{confirm:"RESET"}:{})});
       setMaster(null);setMsg(action==="reset"?"ล้างข้อมูลทดลองแล้ว":action==="archive"?"เก็บรายการแล้ว":"กู้คืนรายการแล้ว");await load();
-    }catch(e:any){setMsg(e.message==="ingredient_in_use"?"รายการนี้ยังถูกใช้ในสูตรเมนู ต้องเอาออกจากสูตรก่อนเก็บ":e.message)}finally{setBusy(false)}
+    }catch(e:any){setMsg(e.message==="ingredient_in_use"?"รายการนี้ยังถูกใช้ในสูตรเมนู · ต้องเอาออกจากสูตรก่อนเก็บ":operatorErrorFallback(e.message,"การเก็บรายการสต็อก"))}finally{setBusy(false)}
   }
 
   function openCount(){
@@ -396,7 +397,7 @@ function StockView({session}:{session:Session}){
         ingredient_purge_would_empty_recipe:"ลบไม่ได้ เพราะจะทำให้สูตรบางเมนูไม่มีวัตถุดิบเหลือเลย · กรุณาแก้สูตรเมนูนั้นก่อน",
         ingredient_purge_confirmation_required:"การยืนยันลบไม่ถูกต้อง"
       };
-      setMsg(map[e.message]||e.message);
+      setMsg(map[e.message]||operatorErrorFallback(e.message,"การลบรายการสต็อก"));
     }finally{setBusy(false)}
   }
 
