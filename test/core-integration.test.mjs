@@ -527,3 +527,59 @@ test('real libSQL: manual cash expense is idempotent and cannot overdraw the dra
   assert.equal(doc.expenses[0].requestKey,'expense-control-0001');
   assert.equal(doc.expenses[1].paymentMethod,'bank');
 });
+
+test('real libSQL: lost expense response replays after close without repeating drawer or audit effects',async t=>{
+  const db=await setup(t),token='expense-recovery-token';
+  await db.execute({sql:'INSERT INTO field_sessions VALUES(?,?,?,?)',args:[digest(token),user.id,'csrf',Date.now()+60000]});
+  const handler=createApi({db,origin:'https://field.test'});
+  await apiPost(handler,token,['cash-shift','open'],{openingCash:100});
+  const body={date:bangkokDate(),amount:30,category:'OTHER',description:'parking',paymentMethod:'cash',requestKey:'expense-recovery-0001'};
+  const original=await apiPost(handler,token,'expenses',body);
+  assert.equal(original.status,201);
+  const closed=await reviewedClose(handler,token,70);
+  assert.equal(closed.status,201);
+  const revision=(await db.execute('SELECT revision FROM field_state')).rows[0].revision;
+  const replay=await apiPost(handler,token,'expenses',body);
+  assert.equal(replay.status,200);
+  assert.equal(replay.body.replayed,true);
+  assert.equal(replay.body.expense.id,original.body.expense.id);
+  assert.equal((await state(db)).expenses.length,1);
+  assert.equal((await db.execute('SELECT revision FROM field_state')).rows[0].revision,revision);
+  assert.equal((await db.execute("SELECT COUNT(*) AS count FROM field_audit WHERE action='expense_create'")).rows[0].count,1);
+  assert.equal((await apiPost(handler,token,'expenses',{...body,amount:31})).body.error,'request_key_conflict');
+  assert.equal((await apiPost(handler,token,'expenses',{...body,requestKey:'expense-new-after-close'})).body.error,'day_closed');
+});
+
+test('real libSQL: deleting expense and evicting state cache never permits replay to create another expense',async t=>{
+  const db=await setup(t),token='expense-delete-replay-token';
+  await db.execute({sql:'INSERT INTO field_sessions VALUES(?,?,?,?)',args:[digest(token),user.id,'csrf',Date.now()+60000]});
+  const handler=createApi({db,origin:'https://field.test'});
+  const body={date:bangkokDate(),amount:30,category:'OTHER',description:'parking',paymentMethod:'bank',requestKey:'expense-delete-replay-1'};
+  const first=await apiPost(handler,token,'expenses',body);
+  const deleted={writeHead(status){this.status=status},end(raw){this.body=JSON.parse(raw)}};
+  await handler({method:'DELETE',query:{route:['expenses',first.body.expense.id]},headers:{origin:'https://field.test',cookie:'field_session='+token,'x-csrf-token':'csrf'}},deleted);
+  assert.equal(deleted.status,200);
+  const doc=await state(db);doc.posRequestKeys={};
+  await db.execute({sql:'UPDATE field_state SET document=? WHERE singleton=1',args:[JSON.stringify(doc)]});
+  const replay=await apiPost(handler,token,'expenses',body);
+  assert.equal(replay.status,200);
+  assert.equal(replay.body.expense.id,first.body.expense.id);
+  assert.equal((await state(db)).expenses.length,0);
+  assert.equal((await db.execute("SELECT COUNT(*) AS count FROM field_audit WHERE action='expense_create'")).rows[0].count,1);
+});
+
+test('real libSQL: concurrent expense requests commit once and reject another actor',async t=>{
+  const db=await setup(t),token='expense-concurrent-token';
+  await db.execute({sql:'INSERT INTO field_sessions VALUES(?,?,?,?)',args:[digest(token),user.id,'csrf',Date.now()+60000]});
+  await db.execute({sql:"INSERT INTO field_users(id,username,password_hash,role,created_at,updated_at) VALUES('other','other','unused','admin',0,0)",args:[]});
+  await db.execute({sql:'INSERT INTO field_sessions VALUES(?,?,?,?)',args:[digest('other-token'),'other','csrf',Date.now()+60000]});
+  const handler=createApi({db,origin:'https://field.test'});
+  const body={date:bangkokDate(),amount:30,category:'OTHER',description:'parking',paymentMethod:'bank',requestKey:'expense-concurrent-1'};
+  const replies=await Promise.all([apiPost(handler,token,'expenses',body),apiPost(handler,token,'expenses',body)]);
+  assert.deepEqual(replies.map(x=>x.status).sort(),[200,201]);
+  assert.equal(replies[0].body.expense.id,replies[1].body.expense.id);
+  assert.equal((await state(db)).expenses.length,1);
+  const conflict=await apiPost(handler,'other-token','expenses',body);
+  assert.equal(conflict.status,409);
+  assert.equal(conflict.body.error,'request_key_conflict');
+});

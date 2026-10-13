@@ -60,7 +60,17 @@ export async function getSessionCached(force=false){
 async function executeApi<T>(path:string,init:RequestInit,method:string){
   try{
     const res=await fetchWithPolicy(path,init,method);
-    const data=await res.json().catch(()=>({}));
+    const data=await res.json().catch((cause)=>{
+      // A successful HTTP status is not an acknowledgement if its body was lost.
+      // Preserve status 0 so critical flows retain their existing recovery key.
+      if(res.ok)throw Object.assign(new Error("network_unavailable"),{status:0,cause,responseStatus:res.status});
+      return {};
+    });
+    if(res.ok&&(!data||typeof data!=="object"||(method!=="GET"&&(Array.isArray(data)||Object.keys(data).length===0))))throw Object.assign(new Error("network_unavailable"),{status:0,responseStatus:res.status});
+    if(res.ok&&path==="/api/pos/checkout"&&method==="POST"){
+      const complete=data.ok===true&&typeof data.orderId==="string"&&data.orderId.length>0&&typeof data.queueNo==="string"&&Array.isArray(data.saleIds)&&data.saleIds.length>0&&data.saleIds.every((id:unknown)=>typeof id==="string"&&id.length>0)&&[data.total,data.received,data.change].every((value:unknown)=>typeof value==="number"&&Number.isFinite(value)&&value>=0);
+      if(!complete)throw Object.assign(new Error("network_unavailable"),{status:0,responseStatus:res.status});
+    }
     if(res.status===401){
       clearSessionCache();
       if(typeof window!=="undefined")window.dispatchEvent(new Event("field:auth-expired"));
