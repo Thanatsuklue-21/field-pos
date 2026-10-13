@@ -168,6 +168,8 @@ function View({session}:{session:Session}){
     const local=await refreshDevicePreflight();
     if(!local.ok){setMsg("ยังปิดวันไม่ได้ · พบรายการค้างในเครื่องหรืออ่าน recovery ไม่ได้ กรุณาจัดการก่อน แล้วตรวจใหม่");return}
     if(!window.confirm("ยืนยันปิดวันตามผลตรวจ AI? "+(review.variance===0?"เงินสดตรงพอดี":review.summary)))return;
+    const finalLocal=await refreshDevicePreflight();
+    if(!finalLocal.ok){setReview(null);setMsg("ยกเลิกการปิดวัน · พบรายการค้างใหม่ในเครื่องหลังการยืนยัน กรุณาจัดการรายการเดิมก่อน แล้วนับ/ตรวจใหม่");return}
     setBusy(true);setMsg("");
     try{
       const r=await api<any>("/api/close-day",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({countedCash:counted,reviewId:review.id,varianceReason:varianceReason.trim(),confirmVariance})});
