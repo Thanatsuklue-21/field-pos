@@ -29,6 +29,8 @@ test("primary POS actions use operator language instead of developer checkout ja
   assert.ok(pos.includes('"สร้าง QR ให้ลูกค้า"'));
   assert.ok(pos.includes("เลือกระดับหวาน / สูตร"));
   assert.ok(pos.includes("เลือกวิธีชำระ"));
+  assert.ok(pos.includes("ยอดสินค้า"));
+  assert.ok(pos.includes("รวมสุทธิ"));
 });
 
 test("cash payment provides common one-tap tender amounts",async()=>{
@@ -45,7 +47,7 @@ test("menu rendering and touch ergonomics stay mobile friendly",async()=>{
   assert.ok(pos.includes('decoding="async"'));
   assert.ok(pos.includes("pos-menu-card"));
   assert.ok(css.includes(".pos-menu-card{content-visibility:auto"));
-  assert.ok(css.includes(".field-app-root button{min-block-size:44px}"));
+  assert.ok(css.includes(".field-app-root button{min-block-size:44px;min-inline-size:44px}"));
   assert.ok(css.includes("input,select,textarea{font-size:16px}"));
 });
 
