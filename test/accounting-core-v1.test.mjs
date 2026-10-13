@@ -64,3 +64,16 @@ test('cash drawer movements are audited and guarded by an open shift',async()=>{
   assert.match(close,/เติมเงินเข้า/);
   assert.match(close,/นำเงินออก/);
 });
+
+test('cash drawer movement uses a guided server-authoritative dialog',async()=>{
+  const api=await read('lib/api.mjs'),close=await read('app/close/page.tsx');
+  assert.match(api,/drawerSnapshot/);
+  assert.match(api,/availableCash=Number\(shift\.openingCash\|\|0\)\+cashSales\+cashIn-cashPaidOut-cashOut/);
+  assert.match(api,/type==='CASH_OUT'&&amount>available/);
+  assert.match(close,/CASH DRAWER CONTROL/);
+  assert.match(close,/role="dialog"/);
+  assert.match(close,/movementTooLarge/);
+  assert.match(close,/movementHighRisk/);
+  assert.match(close,/riskConfirmed:movementRiskConfirmed/);
+  assert.match(close,/ระบบจะตรวจยอดอีกครั้งที่ Server/);
+});
