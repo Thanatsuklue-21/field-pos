@@ -9,7 +9,7 @@ export type CloseDayDeviceBlocker={
   kind:CloseDayDeviceBlockerKind;
   title:string;
   detail:string;
-  route?:"/pos"|"/orders"|"/expenses";
+  route?:"/pos"|"/orders"|"/expenses"|"/stock";
   date?:string;
   actorId?:string;
   count?:number;
