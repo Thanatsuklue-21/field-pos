@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {readFile} from "node:fs/promises";
+import {chooseWorkspaceNextAction} from "../lib/workspace-guidance.mjs";
 
 const read=p=>readFile(new URL("../"+p,import.meta.url),"utf8");
 
@@ -63,4 +64,43 @@ test("workspace remains touch friendly and light-theme compliant",async()=>{
   assert.match(hub,/h-11 w-11/);
   assert.doesNotMatch(hub,/bg-black\/[6789]/);
   assert.doesNotMatch(hub,/border-white\//);
+});
+
+
+test("workspace next-action policy prioritizes unresolved money before operational work",()=>{
+  const base={canExpense:true,canQueue:true,canStock:true,canStatus:true,canOrder:true};
+  assert.equal(chooseWorkspaceNextAction({...base,pendingExpense:true,queueCount:3,firstQueue:"Q12",outCount:2,blockedCount:1}).tab,"expense");
+  assert.equal(chooseWorkspaceNextAction({...base,queueCount:3,firstQueue:"Q12",outCount:2,blockedCount:1}).tab,"queue");
+  assert.equal(chooseWorkspaceNextAction({...base,outCount:2,blockedCount:1}).tab,"stock");
+  assert.equal(chooseWorkspaceNextAction({...base,blockedCount:1}).tab,"status");
+  assert.equal(chooseWorkspaceNextAction({...base,lowCount:2}).tab,"stock");
+  assert.equal(chooseWorkspaceNextAction({...base,latestOrderLabel:"Q11"}).tab,"orders");
+  assert.equal(chooseWorkspaceNextAction(base).tab,null);
+});
+
+test("workspace guidance explains FIFO instead of asking a new operator to choose a queue",()=>{
+  const action=chooseWorkspaceNextAction({canQueue:true,queueCount:2,firstQueue:"Q7"});
+  assert.equal(action.label,"ทำ Q7 ก่อน");
+  assert.match(action.detail,/FIFO/);
+  assert.match(action.detail,/ไม่ต้องเลือกคิวเอง/);
+});
+
+test("workspace dialog traps keyboard focus and supports Escape without changing business mutations",async()=>{
+  const hub=await read("components/pos-daily-workspace.tsx");
+  assert.match(hub,/dialogRef=useRef/);
+  assert.match(hub,/closeButtonRef=useRef/);
+  assert.match(hub,/event\.key==="Escape"/);
+  assert.match(hub,/event\.key!=="Tab"/);
+  assert.match(hub,/querySelectorAll<HTMLElement>/);
+  assert.match(hub,/previous\?\.focus\(\)/);
+  assert.doesNotMatch(hub,/method:"POST"[\s\S]{0,180}\/api\/pos\/queue/);
+  assert.doesNotMatch(hub,/method:"POST"[\s\S]{0,180}\/api\/stock/);
+});
+
+test("workspace renders one explicit recommended action above the detail tabs",async()=>{
+  const hub=await read("components/pos-daily-workspace.tsx");
+  assert.match(hub,/chooseWorkspaceNextAction/);
+  assert.match(hub,/แนะนำตอนนี้/);
+  assert.match(hub,/aria-live="polite"/);
+  assert.match(hub,/setTab\(nextAction\.tab as WorkspaceTab\)/);
 });
