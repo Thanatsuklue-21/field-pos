@@ -101,10 +101,11 @@ export async function offlineCashListStrict():Promise<OfflineCashRecord[]>{
   try{
     return await new Promise<OfflineCashRecord[]>((resolve,reject)=>{
       const tx=db.transaction(OUTBOX_STORE,"readonly"),request=tx.objectStore(OUTBOX_STORE).getAll();
-      let settled=false;
+      let settled=false,rows:OfflineCashRecord[]|null=null;
       const fail=()=>{if(!settled){settled=true;reject(new Error("offline_storage_unavailable"))}};
-      request.onsuccess=()=>{if(!settled){settled=true;resolve(Array.isArray(request.result)?request.result:[])}};
+      request.onsuccess=()=>{rows=Array.isArray(request.result)?request.result:[]};
       request.onerror=fail;tx.onabort=fail;tx.onerror=fail;
+      tx.oncomplete=()=>{if(!settled){settled=true;resolve(rows||[])}};
     }).then(rows=>rows.sort((a,b)=>Number(a.createdAt||0)-Number(b.createdAt||0)));
   }finally{db.close()}
 }
