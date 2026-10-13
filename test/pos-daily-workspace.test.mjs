@@ -17,7 +17,7 @@ test("POS opens the daily workspace in-place and blocks it during payment mutati
 
 test("daily workspace covers queue orders stock quick expense and owner readiness",async()=>{
   const hub=await read("components/pos-daily-workspace.tsx");
-  assert.match(hub,/FIELD DAILY WORKSPACE/);
+  assert.match(hub,/FIELD · งานวันนี้/);
   for(const label of ["คิว","ออเดอร์","สต็อก","รายจ่าย","สถานะ"])assert.match(hub,new RegExp(label));
   assert.match(hub,/\/api\/pos\/queue/);
   assert.match(hub,/\/api\/pos\/history/);
@@ -50,16 +50,16 @@ test("workspace previews the latest receipt in-place and keeps deep actions on O
   assert.match(hub,/latestOrder\.items/);
   assert.match(hub,/latestOrder\.paymentMethods/);
   assert.match(hub,/ดูบิลได้ตรงนี้โดยไม่ออกจากหน้า POS/);
-  assert.match(hub,/FullLink href="\/orders" label="เปิดประวัติ\/Refund\/VOID"/);
+  assert.match(hub,/FullLink href="\/orders" label="เปิดประวัติ \/ คืนเงิน \/ ยกเลิกบิล"/);
   const receiptStart=hub.indexOf("ใบเสร็จล่าสุด");
-  const receiptEnd=hub.indexOf("เปิดประวัติ/Refund/VOID",receiptStart);
+  const receiptEnd=hub.indexOf("เปิดประวัติ / คืนเงิน / ยกเลิกบิล",receiptStart);
   const receiptBlock=hub.slice(receiptStart,receiptEnd);
   assert.doesNotMatch(receiptBlock,/href=\{latestOrder\.queueNo/);
 });
 
 test("workspace fails safe offline while still exposing cached stock signals",async()=>{
   const hub=await read("components/pos-daily-workspace.tsx");
-  assert.match(hub,/OFFLINE · ดูสัญญาณสต็อกจากข้อมูลล่าสุดได้/);
+  assert.match(hub,/เน็ตหลุด · ยังดูสัญญาณสต็อกจากข้อมูลล่าสุดได้/);
   assert.match(hub,/disabled=\{busy\|\|!online\}/);
   assert.match(hub,/เมนูที่เปิดขายยังไม่พบสัญญาณสต็อกต่ำ/);
 });
@@ -87,8 +87,8 @@ test("workspace next-action policy prioritizes unresolved money before operation
 test("workspace guidance explains FIFO instead of asking a new operator to choose a queue",()=>{
   const action=chooseWorkspaceNextAction({canQueue:true,queueCount:2,firstQueue:"Q7"});
   assert.equal(action.label,"ทำ Q7 ก่อน");
-  assert.match(action.detail,/FIFO/);
-  assert.match(action.detail,/ไม่ต้องเลือกคิวเอง/);
+  assert.match(action.detail,/เรียงตามลำดับเวลา/);
+  assert.match(action.detail,/ทำคิวบนสุดก่อน/);
 });
 
 test("workspace dialog traps keyboard focus and supports Escape without changing business mutations",async()=>{
@@ -124,4 +124,31 @@ test("inline receipt is read-only and uses the existing history payload",async()
   assert.match(history,/paymentMethods/);
   assert.match(history,/items:\(s\.items\|\|\[\]\)\.map/);
   assert.doesNotMatch(hub,/method:"POST"[\s\S]{0,160}ใบเสร็จล่าสุด/);
+});
+
+
+test("workspace uses plain Thai operator language instead of engineering jargon",async()=>{
+  const hub=await read("components/pos-daily-workspace.tsx");
+  const guidance=await read("lib/workspace-guidance.mjs");
+  for(const term of [
+    "Quick Expense","SYSTEM READINESS","Request เดิม","exact ACK","FIFO","Server"
+  ]){
+    assert.equal(hub.includes(term),false,"workspace leaks "+term);
+    assert.equal(guidance.includes(term),false,"guidance leaks "+term);
+  }
+  assert.match(hub,/รายจ่ายด่วน/);
+  assert.match(hub,/ความพร้อมระบบ/);
+  assert.match(hub,/ใกล้หมด/);
+  assert.match(hub,/คืนเงิน \/ ยกเลิกบิล/);
+  assert.match(guidance,/ระบบจะตรวจรายการเดิมซ้ำ/);
+  assert.match(guidance,/เรียงตามลำดับเวลา/);
+});
+
+test("readiness machine states are translated before operators see them",async()=>{
+  const hub=await read("components/pos-daily-workspace.tsx");
+  assert.match(hub,/readinessLabel/);
+  assert.match(hub,/checkStatusLabel/);
+  assert.match(hub,/value==="READY"\?"พร้อม"/);
+  assert.match(hub,/value==="WARN"\?"มีจุดต้องดู"/);
+  assert.match(hub,/value==="WARN"\?"เตือน"/);
 });
