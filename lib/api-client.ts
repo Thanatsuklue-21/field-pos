@@ -19,6 +19,7 @@ const RECOVERABLE_WRITE_PATHS=new Set([
   "/api/expenses",
   "/api/accounting/settlements",
   "/api/close-day",
+  "/api/cash-shift/open",
   "/api/cash-shift/movements",
   "/api/stock/transactions",
   "/api/stock/cycle-count",
