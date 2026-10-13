@@ -5,13 +5,14 @@ test('close day blocks while payments or customer orders are still open and rout
 test('close day requires blind double count review and stores reconciliation fields',async()=>{const api=await read('lib/api.mjs'),ui=await read('app/close/page.tsx');assert.match(api,/counted_cash_required/);assert.match(api,/\/api\/close-day\/review/);assert.match(api,/validateCloseReview/);assert.match(api,/reconcileCash/);assert.match(api,/expectedCash/);assert.match(api,/cashVariance/);assert.match(ui,/เงินสดที่นับได้จริง/);assert.match(ui,/Blind Count 2 รอบ/);assert.match(ui,/Expected Drawer/);assert.match(ui,/Cash Variance/);});
 
 
-test('close day fails closed on unresolved device-local offline cash recovery',async()=>{
-  const ui=await read('app/close/page.tsx'),offline=await read('lib/offline-sales.ts'),storage=await read('lib/offline-db.ts');
-  assert.match(ui,/getOfflineCashClosePreflight/);
-  assert.match(ui,/requireDeviceRecoveryClear/);
-  assert.match(ui,/deviceRecovery\.status!=="clear"/);
-  assert.match(ui,/กลับหน้าขาย \/ Recovery/);
-  assert.match(offline,/offlineCashListStrict/);
+test('close day fails closed on unresolved device-local recovery including critical writes',async()=>{
+  const ui=await read('app/close/page.tsx'),preflight=await read('lib/close-day-device-preflight.ts'),storage=await read('lib/offline-db.ts');
+  assert.match(ui,/readCloseDayDevicePreflight/);
+  assert.match(ui,/await refreshDevicePreflight\(\)/);
+  assert.match(ui,/devicePreflight\?\.ok===false/);
+  assert.match(preflight,/offlineCashListStrict/);
+  assert.match(preflight,/listCriticalWriteIntents/);
+  assert.match(preflight,/critical_write_unknown/);
   assert.match(storage,/offline_storage_unavailable/);
 });
 
