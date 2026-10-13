@@ -19,6 +19,7 @@ type CountAdjustment={ingredientId:string;name:string;expectedQty:number;counted
 type CountProposal={id:string;date:string;status:string;submittedAt:number;submittedBy:string;adjustments:CountAdjustment[];rejectReason?:string};
 type MasterDraft=Partial<Ingredient>&{originalUnit?:string;loadedAt?:number};
 type StockWriteBody=Record<string,any>&{requestKey:string;ingredientId:string;type:"PURCHASE"|"WASTE";unit:string;referenceType:string;referenceId:string;reason:string};
+type CycleWriteBody=Record<string,any>&{requestKey:string;counts:{ingredientId:string;countedQty:number}[];confirm?:boolean};
 
 const today=()=>new Date().toLocaleDateString("en-CA",{timeZone:"Asia/Bangkok"});
 const packageUnits=["ขวด","ถุง","ถัง","แกลลอน","กล่อง","แพ็ก","ลัง","ชิ้น"];
@@ -44,12 +45,13 @@ function latestPurchase(x:Ingredient){return x.recentPurchases?.find(p=>!p.cance
 
 function StockView({session}:{session:Session}){
   const admin=session.user.role==="admin";
+  const cycleOperation=admin?"cycleCountCommit":"cycleCountProposal";
   const [data,setData]=useState<Overview|null>(null),[q,setQ]=useState(""),[tab,setTab]=useState<"active"|"archived">("active"),[msg,setMsg]=useState(""),[busy,setBusy]=useState(false);
   const [txOpen,setTxOpen]=useState<Ingredient|null>(null),[type,setType]=useState<"PURCHASE"|"WASTE">("PURCHASE"),[wasteQty,setWasteQty]=useState("");
   const [purchaseCost,setPurchaseCost]=useState(""),[purchaseDate,setPurchaseDate]=useState(today()),[supplier,setSupplier]=useState(""),[sourceUrl,setSourceUrl]=useState(""),[imageUrl,setImageUrl]=useState(""),[note,setNote]=useState(""),[purchasePaymentMethod,setPurchasePaymentMethod]=useState("bank");
   const [packageQty,setPackageQty]=useState("1"),[packageUnit,setPackageUnit]=useState("ขวด"),[packSize,setPackSize]=useState(""),[packSizeUnit,setPackSizeUnit]=useState("g"),[presetId,setPresetId]=useState("");
   const [master,setMaster]=useState<MasterDraft|null>(null),[masterMsg,setMasterMsg]=useState(""),[purchaseEdit,setPurchaseEdit]=useState<{ingredient:Ingredient;purchase:Purchase}|null>(null);
-  const [countOpen,setCountOpen]=useState(false),[counts,setCounts]=useState<Record<string,CountInput>>({}),[countProposals,setCountProposals]=useState<CountProposal[]>([]),[pendingStockWrite,setPendingStockWrite]=useState<CriticalWriteIntent<StockWriteBody>|null>(null);
+  const [countOpen,setCountOpen]=useState(false),[counts,setCounts]=useState<Record<string,CountInput>>({}),[countProposals,setCountProposals]=useState<CountProposal[]>([]),[pendingStockWrite,setPendingStockWrite]=useState<CriticalWriteIntent<StockWriteBody>|null>(null),[pendingCycleWrite,setPendingCycleWrite]=useState<CriticalWriteIntent<CycleWriteBody>|null>(null);
 
   const load=async()=>{const [overview,proposalData]=await Promise.all([api<Overview>("/api/stock/overview"),api<{proposals:CountProposal[]}>("/api/stock/cycle-count/proposals")]);setData(overview);setCountProposals(proposalData.proposals||[])};
   useEffect(()=>{load().catch(()=>{})},[]);
@@ -62,6 +64,15 @@ function StockView({session}:{session:Session}){
       setMsg("ตรวจ Recovery ของ Stock ไม่ได้ · งดทำรายการ Stock ใหม่จนกว่าจะอ่านข้อมูล Recovery ได้");
     }
   },[session.user.id]);
+  useEffect(()=>{
+    try{
+      const intent=readCriticalWriteIntent<CycleWriteBody>(session.user.id,cycleOperation);
+      setPendingCycleWrite(intent);
+      if(intent)setMsg("มีผลนับ Stock ที่ยังไม่ทราบผล · ระบบเก็บ Request Key เดิมไว้ กรุณาตรวจผลเดิมก่อนเริ่มนับรอบใหม่");
+    }catch{
+      setMsg("ตรวจ Recovery ของผลนับ Stock ไม่ได้ · งดส่งผลนับใหม่จนกว่าจะอ่านข้อมูล Recovery ได้");
+    }
+  },[session.user.id,cycleOperation]);
   const rows=useMemo(()=>(data?.ingredients||[]).filter(x=>x.archived===(tab==="archived")&&(x.name+" "+x.id).toLowerCase().includes(q.toLowerCase())),[data,q,tab]);
   const active=(data?.ingredients||[]).filter(x=>!x.archived),low=active.filter(x=>x.lowStock);
   const purchaseHistory=useMemo(()=>(data?.ingredients||[]).flatMap(i=>(i.recentPurchases||[]).map(p=>({ingredient:i,p}))).sort((a,b)=>b.p.createdAt-a.p.createdAt).slice(0,60),[data]);
@@ -210,6 +221,7 @@ function StockView({session}:{session:Session}){
   }
 
   function openCount(){
+    if(pendingCycleWrite){setMsg("มีผลนับ Stock เดิมที่ยังไม่ทราบผล · กรุณาตรวจผลรายการเดิมก่อน");return}
     const next:Record<string,CountInput>={};
     for(const x of active){
       const per=Number(x.purchaseProfile?.quantityPerPackage)||0;
@@ -218,19 +230,66 @@ function StockView({session}:{session:Session}){
     }
     setCounts(next);setCountOpen(true);
   }
+  const cycleNotCommitted=new Set(["invalid_cycle_count","cycle_count_requires_confirmation","day_closed"]);
+
+  function exactCycleAck(result:any,body:CycleWriteBody,intent:CriticalWriteIntent<CycleWriteBody>){
+    if(result?.ok!==true||result?.requestKey!==body.requestKey)return false;
+    if(intent.operation==="cycleCountCommit"){
+      const record=result?.cycleCount;
+      return record&&record.requestKey===body.requestKey&&record.createdBy===intent.actorId&&Array.isArray(record.adjustments)&&record.adjustments.length===body.counts.length&&body.counts.every(row=>record.adjustments.some((a:any)=>String(a.ingredientId)===String(row.ingredientId)&&Number(a.countedQty)===Number(row.countedQty)));
+    }
+    const proposal=result?.proposal;
+    return proposal&&proposal.requestKey===body.requestKey&&proposal.submittedBy===intent.actorId&&Array.isArray(proposal.adjustments)&&proposal.adjustments.length===body.counts.length&&body.counts.every(row=>proposal.adjustments.some((a:any)=>String(a.ingredientId)===String(row.ingredientId)&&Number(a.countedQty)===Number(row.countedQty)));
+  }
+
+  async function sendCycleIntent(intent:CriticalWriteIntent<CycleWriteBody>,recovered=false){
+    const path=intent.operation==="cycleCountCommit"?"/api/stock/cycle-count":"/api/stock/cycle-count/proposals";
+    await sendCriticalWriteIntent(
+      intent,
+      body=>api<any>(path,{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify(body)}),
+      exactCycleAck,
+      cycleNotCommitted
+    );
+    setPendingCycleWrite(null);setCountOpen(false);
+    setMsg(recovered?"ยืนยันผลนับรายการเดิมแล้ว · Server ยืนยันว่าใช้ Request Key เดิม":"Owner บันทึกยอดนับจริงแล้ว");
+    if(intent.operation==="cycleCountProposal")setMsg(recovered?"ยืนยันผลนับที่ส่งเดิมแล้ว · Server ยืนยัน Proposal เดิม":"ส่งผลนับให้เจ้าของตรวจแล้ว · Stock ยังไม่เปลี่ยนจนกว่า Owner อนุมัติ");
+    await load();
+  }
+
+  async function recoverCycleWrite(){
+    if(!pendingCycleWrite)return;
+    setBusy(true);setMsg("");
+    try{await sendCycleIntent(pendingCycleWrite,true)}
+    catch(e:any){
+      try{setPendingCycleWrite(readCriticalWriteIntent<CycleWriteBody>(session.user.id,cycleOperation))}catch{}
+      if(!e?.status||["network_unavailable","offline_write_blocked","critical_ack_unknown","critical_recovery_unavailable"].includes(String(e.message||""))){
+        setMsg("ยังยืนยันผลนับ Stock เดิมไม่ได้ · ระบบเก็บ Request Key เดิมไว้ ห้ามส่งผลนับใหม่");
+      }else if(e.message==="request_key_conflict"){
+        setMsg("Request Key ของผลนับเดิมไม่ตรงกับ Server · หยุดและตรวจ Stock Audit ก่อน");
+      }else setMsg("Server ปฏิเสธผลนับเดิม · โหลด Stock ล่าสุดแล้วนับใหม่ก่อนส่ง");
+    }finally{setBusy(false)}
+  }
+
   async function saveCount(){
-    if(!data)return;setBusy(true);setMsg("");
+    if(!data)return;
+    if(pendingCycleWrite){setMsg("มีผลนับ Stock เดิมที่ยังไม่ทราบผล · กรุณาตรวจผลรายการเดิมก่อน");return}
+    setBusy(true);setMsg("");
     try{
-      const payload=active.map(x=>{const row=counts[x.id]||{packs:"0",loose:"0",base:String(x.qty)},per=Number(x.purchaseProfile?.quantityPerPackage)||0;return {ingredientId:x.id,countedQty:per>0?Number(row.packs||0)*per+Number(row.loose||0):Number(row.base||0)}});
-      if(admin){
-        await api("/api/stock/cycle-count",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({requestKey:crypto.randomUUID(),confirm:true,counts:payload})});
-        setMsg("Owner บันทึกยอดนับจริงแล้ว");
+      const countsPayload=active.map(x=>{const row=counts[x.id]||{packs:"0",loose:"0",base:String(x.qty)},per=Number(x.purchaseProfile?.quantityPerPackage)||0;return {ingredientId:x.id,countedQty:per>0?Number(row.packs||0)*per+Number(row.loose||0):Number(row.base||0)}});
+      const body:CycleWriteBody={requestKey:crypto.randomUUID(),counts:countsPayload,...(admin?{confirm:true}:{})};
+      const intent=prepareCriticalWriteIntent(session.user.id,cycleOperation,body);
+      setPendingCycleWrite(intent);
+      await sendCycleIntent(intent);
+    }catch(e:any){
+      try{setPendingCycleWrite(readCriticalWriteIntent<CycleWriteBody>(session.user.id,cycleOperation))}catch{}
+      if(!e?.status||["network_unavailable","offline_write_blocked","critical_ack_unknown","critical_recovery_unavailable","pending_critical_write_exists"].includes(String(e.message||""))){
+        setCountOpen(false);
+        setMsg("ยังไม่ทราบว่า Server รับผลนับแล้วหรือไม่ · ระบบเก็บ Request Key และค่าที่นับเดิมไว้ ห้ามส่งผลนับใหม่ ให้ใช้ “ตรวจผลนับเดิม”");
       }else{
-        await api("/api/stock/cycle-count/proposals",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({requestKey:crypto.randomUUID(),counts:payload})});
-        setMsg("ส่งผลนับให้เจ้าของตรวจแล้ว · Stock ยังไม่เปลี่ยนจนกว่า Owner อนุมัติ");
+        const map:Record<string,string>={invalid_cycle_count:"ข้อมูลผลนับไม่ถูกต้อง · Server ยืนยันว่าไม่ได้บันทึก",day_closed:"วันนี้ปิดวันแล้ว · Server ยืนยันว่าไม่ได้บันทึกผลนับใหม่",request_key_conflict:"Request Key เดิมไม่ตรงกับผลนับเดิม · หยุดและตรวจ Stock Audit"};
+        setMsg(map[e.message]||"Server ปฏิเสธผลนับนี้ · โหลด Stock ล่าสุดก่อนนับใหม่");
       }
-      setCountOpen(false);await load();
-    }catch(e:any){setMsg(e.message)}finally{setBusy(false)}
+    }finally{setBusy(false)}
   }
   async function reviewCountProposal(p:CountProposal,approve:boolean){
     if(!admin)return;
@@ -317,6 +376,7 @@ function StockView({session}:{session:Session}){
     </header>
 
     {pendingStockWrite&&<div className="mt-3 rounded-[20px] border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900"><b>มีรายการ Stock ที่ยังไม่ทราบผล</b><p className="mt-1 text-xs">{pendingStockWrite.body.type==="PURCHASE"?"รับเข้า":"ของเสีย"} · Request Key เดิมถูกล็อกไว้ ระบบจะไม่สร้างรายการใหม่จนกว่าจะยืนยันผลเดิมจาก Server</p><button type="button" disabled={busy} onClick={recoverStockWrite} className="mt-3 min-h-11 rounded-xl bg-amber-700 px-4 text-xs font-bold text-white disabled:opacity-40">ตรวจผลรายการเดิม</button></div>}
+    {pendingCycleWrite&&<div className="mt-3 rounded-[20px] border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900"><b>มีผลนับ Stock ที่ยังไม่ทราบผล</b><p className="mt-1 text-xs">ระบบล็อก Request Key และค่าที่นับเดิมไว้ เพื่อไม่ให้สร้าง Adjustment/Proposal ซ้ำ</p><button type="button" disabled={busy} onClick={recoverCycleWrite} className="mt-3 min-h-11 rounded-xl bg-amber-700 px-4 text-xs font-bold text-white disabled:opacity-40">ตรวจผลนับเดิม</button></div>}
     {msg&&<div className="mt-3 flex items-start justify-between rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm"><span>{msg}</span><button onClick={()=>setMsg("")}><X size={16}/></button></div>}
     {low.length>0&&<div className="mt-3 rounded-[20px] border border-amber-300 bg-amber-50 p-3"><div className="flex items-center gap-2 text-sm font-semibold text-amber-800"><AlertTriangle size={16}/>{low.length} รายการถึง Safety Stock</div></div>}
     {admin&&countProposals.filter(x=>x.status==="pending").length>0&&<div className="mt-3 rounded-[20px] border border-blue-200 bg-blue-50 p-3"><div className="flex items-center gap-2 text-sm font-semibold text-blue-800"><AlertTriangle size={16}/>รอ Owner ตรวจผลนับ {countProposals.filter(x=>x.status==="pending").length} รายการ</div><div className="mt-2 space-y-2">{countProposals.filter(x=>x.status==="pending").slice(0,5).map(p=><div key={p.id} className="rounded-2xl border border-blue-100 bg-white p-3 text-sm"><div className="flex flex-wrap items-start justify-between gap-2"><div><b>{p.submittedBy}</b><small className="ml-2 text-slate-500">{new Date(p.submittedAt).toLocaleTimeString("th-TH",{timeZone:"Asia/Bangkok",hour:"2-digit",minute:"2-digit"})}</small><div className="mt-1 text-xs text-slate-500">{p.adjustments.filter(x=>Math.abs(Number(x.variance||0))>0.000001).slice(0,4).map(x=>x.name+" "+(x.variance>0?"+":"")+Number(x.variance).toLocaleString()+" "+x.unit).join(" · ")||"นับตรงทุกรายการ"}</div></div><div className="flex gap-2"><button disabled={busy} onClick={()=>reviewCountProposal(p,false)} className="min-h-10 rounded-xl border border-slate-300 px-3 text-xs">ตีกลับ</button><button disabled={busy} onClick={()=>reviewCountProposal(p,true)} className="min-h-10 rounded-xl bg-[#d4af37] px-3 text-xs font-bold text-black">อนุมัติ</button></div></div></div>)}</div></div>}
