@@ -11,7 +11,8 @@ type Analysis={
   generatedAt:number;date:string;level:"OK"|"LOW"|"MEDIUM"|"HIGH"|"CRITICAL";
   signals:Signal[];recommendations:Recommendation[];
   metrics:{lowStock:number;pendingPayments:number;openOrders:number;cashMovements:number;largeCashMovements:number;highRiskAuditEvents:number;pendingOwnerApprovals:number;stockAdjustments:number;wasteEvents:number;highWasteIngredients:number;voidReversals:number};
-  evidence:{lowStock:any[];largeMovements:any[];highRiskActions:any[];pendingOwnerApprovals:any[];stockIntegrity:any[]};\n  accounting?:{ok:boolean;level:string;findings:any[];blocking:any[];totals:{revenue:number;paymentSum:number;paymentTotals:Record<string,number>;cashExpenses:number;cashIn:number;cashOut:number}};
+  evidence:{lowStock:any[];largeMovements:any[];highRiskActions:any[];pendingOwnerApprovals:any[];stockIntegrity:any[]};
+  accounting?:{ok:boolean;level:string;findings:any[];blocking:any[];totals:{revenue:number;paymentSum:number;paymentTotals:Record<string,number>;cashExpenses:number;cashIn:number;cashOut:number}};
 };
 const routeFor=(action:string)=>action==="REVIEW_ACCOUNTING"?"/close":action==="REVIEW_LOW_STOCK"||action==="REVIEW_STOCK_INTEGRITY"||action==="REVIEW_OWNER_APPROVALS"?"/stock":action==="FINISH_OPEN_ORDERS"?"/queue":action==="REVIEW_CASH_MOVEMENTS"?"/close":action==="OWNER_REVIEW"?"/audit":action==="REVIEW_PENDING_PAYMENTS"?"/orders":"/pos";
 const levelText:Record<string,string>={OK:"ปกติ",LOW:"เฝ้าดู",MEDIUM:"ควรตรวจ",HIGH:"เสี่ยงสูง",CRITICAL:"ต้องจัดการทันที"};
