@@ -120,3 +120,11 @@ test('runtime health guard probes repeatedly and enforces security and latency b
   assert.match(yml,/max>5/);
   assert.match(yml,/release_context_missing/);
 });
+
+
+test('Next route health fast path exposes the same release identity contract',async()=>{
+  const route=await read('app/api/[...route]/route.js');
+  const health=route.slice(route.indexOf('if(routePath==="/api/health"'),route.indexOf('if(routePath==="/api/build"'));
+  for(const field of ['VERCEL_GIT_COMMIT_SHA','VERCEL_GIT_COMMIT_REF','VERCEL_ENV','VERCEL_DEPLOYMENT_ID','commit','branch','environment','deploymentId']) assert.match(health,new RegExp(field));
+  assert.match(health,/Response\.json\(\{ok:true,storage:"turso",release\}/);
+});
