@@ -13,8 +13,9 @@ type QueueOrder={
   items:Array<{name:string;qty:number;readyQty?:number;calledQty?:number}>;
 };
 type Sale={
-  id:string;billNo?:string;date:string;time:number;total:number;payment:string;
+  id:string;billNo?:string;date:string;time:number;total:number;payment:string;paymentMethods?:string[];
   status:string;queueNo?:string;itemCount:number;orderStatus?:string|null;
+  items?:Array<{id:string;name:string;variant?:string;qty:number;price:number}>;
 };
 type Readiness={
   status:"READY"|"WARN"|"BLOCKED";score:number;
@@ -352,9 +353,25 @@ export default function PosDailyWorkspace({
         </div>}
 
         {tab==="orders"&&canOrder&&<div className="space-y-2">
-          {latestOrder&&<Link href={latestOrder.queueNo?"/orders?queue="+encodeURIComponent(latestOrder.queueNo):"/orders"} className="flex min-h-12 items-center justify-between gap-3 rounded-2xl border border-[#d4af37]/40 bg-[#d4af37]/10 px-3 text-sm font-bold text-[#6f5510]">
-            <span>ดูใบเสร็จล่าสุด · {latestOrder.queueNo||latestOrder.billNo||"บิล"}</span><span>฿{money(latestOrder.total)}</span>
-          </Link>}
+          {latestOrder&&<details className="overflow-hidden rounded-2xl border border-[#d4af37]/40 bg-[#fffaf0]">
+            <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 px-3 text-sm font-bold text-[#6f5510]">
+              <span>ใบเสร็จล่าสุด · {latestOrder.queueNo||latestOrder.billNo||"บิล"}</span><span>฿{money(latestOrder.total)}</span>
+            </summary>
+            <div className="border-t border-[#d4af37]/25 bg-white p-3">
+              <div className="flex items-center justify-between gap-3 text-xs text-slate-500">
+                <span>{latestOrder.date||"—"} · {latestOrder.billNo||latestOrder.queueNo||"บิล"}</span>
+                <span>{(latestOrder.paymentMethods?.length?latestOrder.paymentMethods:[latestOrder.payment]).filter(Boolean).join(" + ")||"—"}</span>
+              </div>
+              <div className="mt-3 space-y-2">
+                {(latestOrder.items||[]).length===0?<p className="rounded-xl bg-slate-50 p-3 text-xs text-slate-500">ไม่มีรายละเอียดเมนูในข้อมูลบิลนี้</p>:(latestOrder.items||[]).map((item,index)=><div key={item.id+"|"+item.variant+"|"+index} className="flex items-start justify-between gap-3 rounded-xl bg-slate-50 p-3 text-xs">
+                  <div className="min-w-0"><b className="block text-slate-900">{item.name}</b>{item.variant&&<span className="mt-1 block text-[10px] text-slate-500">{item.variant}</span>}<span className="mt-1 block text-[10px] text-slate-500">{item.qty} × ฿{money(item.price)}</span></div>
+                  <b className="shrink-0 text-[#765b08]">฿{money(Number(item.price)*Number(item.qty))}</b>
+                </div>)}
+              </div>
+              <div className="mt-3 flex items-center justify-between border-t border-slate-200 pt-3"><span className="text-sm font-semibold">ยอดชำระ</span><b className="text-lg text-[#765b08]">฿{money(latestOrder.total)}</b></div>
+              <p className="mt-2 text-[10px] text-slate-500">ดูบิลได้ตรงนี้โดยไม่ออกจากหน้า POS · หากต้อง Refund/VOID ให้เปิดประวัติเต็มด้านล่าง</p>
+            </div>
+          </details>}
           {orderRows.length===0?<Empty text="ยังไม่มีออเดอร์ล่าสุด"/>:orderRows.map(sale=><div key={sale.id} className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-3">
             <div className="min-w-0">
               <div><b>{sale.queueNo||sale.billNo||"บิล"}</b><span className="ml-2 text-[10px] uppercase text-slate-500">{sale.payment}</span></div>
