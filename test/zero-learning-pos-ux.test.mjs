@@ -22,6 +22,17 @@ test("single-variant products add directly while multi-variant drinks still ask 
   assert.ok(pos.includes("onClick={()=>chooseMenu(x)}"));
 });
 
+test("normal payment stays compact while split bill keeps line-item controls explicit",async()=>{
+  const pos=await read("app/pos/page.tsx");
+  assert.ok(pos.includes("const [paymentReviewOpen,setPaymentReviewOpen]=useState(false)"));
+  assert.ok(pos.includes("setPaymentReviewOpen(false)"));
+  assert.ok(pos.includes("(splitBill||paymentReviewOpen)&&"));
+  assert.ok(pos.includes('paymentReviewOpen?"ซ่อนรายการ":"ดูรายการ"'));
+  assert.ok(pos.includes("setPaymentReviewOpen(next)"));
+  assert.ok(pos.includes("flex items-end justify-center"));
+  assert.ok(pos.includes("sticky bottom-0 z-10"));
+});
+
 test("primary POS actions use operator language instead of developer checkout jargon",async()=>{
   const pos=await read("app/pos/page.tsx");
   assert.ok(pos.includes(">ชำระเงิน</button>"));
