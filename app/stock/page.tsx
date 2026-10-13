@@ -76,7 +76,7 @@ function StockView({session}:{session:Session}){
       incomplete_purchase_packaging:"ข้อมูลจำนวนแพ็ก/ขนาดต่อแพ็กไม่ครบ · ยังไม่ได้แก้ Stock",
       purchase_correction_stock_negative:"แก้จำนวนรับเข้าไม่ได้ เพราะจะทำให้ Stock ติดลบ · กรุณาตรวจนับ Stock จริงก่อน",
       purchase_cancel_stock_negative:"ยกเลิกรับเข้าไม่ได้ เพราะวัตถุดิบถูกใช้ไปแล้วหรือยอดคงเหลือไม่พอ · กรุณาตรวจนับ Stock จริง",
-      purchase_cancel_has_later_movement:"ยกเลิกย้อนหลังอัตโนมัติไม่ได้ เพราะมีการขาย/ของเสีย/นับหรือปรับ Stock หลังรายการนี้ · ใช้ตรวจนับ Stock จริงแทน",
+      purchase_cancel_has_later_movement:"ยกเลิกย้อนหลังอัตโนมัติไม่ได้ เพราะมีการขาย/ของเสีย/นับหรือปรับ Stock หลังรายการนี้ · เพื่อไม่ให้ Stock เพี้ยน กรุณาใช้การตรวจนับ Stock จริงหรือปรับยอดแทน",
       purchase_stock_transaction_missing:"ไม่พบ Stock Ledger ต้นทาง · ระบบหยุดการยกเลิกเพื่อป้องกัน Stock เพี้ยน",
       purchase_cancel_confirmation_required:"การยืนยันยกเลิกรับเข้าไม่ถูกต้อง · ยังไม่มีการเปลี่ยน Stock",
       purchase_cancel_reason_required:"กรุณาระบุเหตุผลยกเลิกรับเข้าเพื่อเก็บ Audit",
