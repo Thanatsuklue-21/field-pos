@@ -53,7 +53,7 @@ export function buildCloseDayDevicePreflight(input:{
   expenseIntents:ExpenseIntent[];
   cashMovementIntents:CashMovementIntent[];
   expenseDeleteIntents:ExpenseDeleteIntent[];
-  stockWriteIntents:StockWriteIntent[];
+  stockWriteIntents?:StockWriteIntent[];
   checkedAt?:number;
 }):CloseDayDevicePreflight{
   const {actorId,businessDate}=input;
@@ -106,7 +106,7 @@ export function buildCloseDayDevicePreflight(input:{
       route:intent.actorId===actorId?"/expenses":undefined,date:businessDate,actorId:intent.actorId,count:1
     });
   }
-  for(const intent of input.stockWriteIntents.filter(x=>x.businessDate===businessDate)){
+  for(const intent of (input.stockWriteIntents||[]).filter(x=>x.businessDate===businessDate)){
     const label=intent.operation==="stockTransaction"?"รายการรับเข้า/ของเสีย":intent.operation==="cycleCountCommit"?"การปรับ Stock จากการนับจริง":"ผลนับ Stock ที่รอส่ง";
     blockers.push({
       kind:"stock_write_unknown",
