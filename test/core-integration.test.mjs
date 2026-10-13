@@ -486,3 +486,44 @@ test('real libSQL: pre-production bank and card refunds require external referen
     const after=await state(db);assert.equal(after.sales[0].status,'refunded');assert.equal(after.sales[0].refundMethod,method==='bank'?'manual_bank':'manual_card');assert.equal(after.sales[0].refundReference,method+'-refund-ref');assert.equal(after.ingredients.matcha.qty,1000);assert.equal(after.ingredients.milk.qty,30000);
   }
 });
+
+
+test('real libSQL: manual cash expense is idempotent and cannot overdraw the drawer',async t=>{
+  const db=await setup(t),token='expense-control-token';
+  await db.execute({sql:'INSERT INTO field_sessions VALUES(?,?,?,?)',args:[digest(token),user.id,'csrf',Date.now()+60000]});
+  const handler=createApi({db,origin:'https://field.test'});
+  const opened=await apiPost(handler,token,['cash-shift','open'],{openingCash:100});
+  assert.equal(opened.status,201);
+
+  const body={amount:30,category:'OTHER',description:'parking fee',paymentMethod:'cash',requestKey:'expense-control-0001'};
+  const first=await apiPost(handler,token,'expenses',body);
+  assert.equal(first.status,201);
+  assert.equal(first.body.availableCash,70);
+  assert.equal((await state(db)).expenses.length,1);
+
+  const replay=await apiPost(handler,token,'expenses',body);
+  assert.equal(replay.status,200);
+  assert.equal(replay.body.replayed,true);
+  assert.equal((await state(db)).expenses.length,1);
+
+  const conflict=await apiPost(handler,token,'expenses',{...body,amount:31});
+  assert.equal(conflict.status,409);
+  assert.equal(conflict.body.error,'request_key_conflict');
+
+  const shortage=await apiPost(handler,token,'expenses',{amount:100,category:'OTHER',description:'cash purchase',paymentMethod:'cash',requestKey:'expense-control-0002'});
+  assert.equal(shortage.status,409);
+  assert.equal(shortage.body.error,'drawer_cash_shortage');
+  assert.equal(shortage.body.availableCash,70);
+
+  const highRisk=await apiPost(handler,token,'expenses',{amount:500,category:'OTHER',description:'cash maintenance',paymentMethod:'cash',requestKey:'expense-control-0003'});
+  assert.equal(highRisk.status,400);
+  assert.equal(highRisk.body.error,'high_risk_confirmation_required');
+
+  const bank=await apiPost(handler,token,'expenses',{amount:1000,category:'UTILITY',description:'electricity',paymentMethod:'bank',requestKey:'expense-control-0004'});
+  assert.equal(bank.status,201);
+  assert.equal(bank.body.availableCash,null);
+  const doc=await state(db);
+  assert.equal(doc.expenses.length,2);
+  assert.equal(doc.expenses[0].requestKey,'expense-control-0001');
+  assert.equal(doc.expenses[1].paymentMethod,'bank');
+});
