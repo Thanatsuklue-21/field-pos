@@ -16,7 +16,7 @@ test('AI system readiness includes accounting and module blockers',async()=>{
   const seg=api.slice(start,end);
   assert.match(seg,/buildAccountingReconciliation/);
   assert.match(seg,/aiSystemCheck/);
-  assert.match(seg,/status:'NOT_READY'/);
+  assert.match(seg,/status:aiBlockers\.length\?'NOT_READY':aiWarnings\.length\?'READY_WITH_WARNINGS':'READY'/);
   assert.match(seg,/id:'accounting'/);
   assert.match(seg,/id:'payment'/);
   assert.match(seg,/id:'stock'/);
