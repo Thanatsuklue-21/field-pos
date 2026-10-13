@@ -140,9 +140,9 @@ test("Close Day refreshes blockers after reconnect focus and visible resume and 
   assert.match(ui,/window\.addEventListener\("focus",onFocus\)/);
   assert.match(ui,/document\.addEventListener\("visibilitychange",onVisible\)/);
   assert.match(ui,/ไปหน้า POS/);
-  assert.match(ui,/ไป Payment Recovery/);
+  assert.match(ui,/ไปตรวจรายการรับเงินค้าง/);
   assert.match(ui,/ไปหน้า Expenses/);
-  assert.match(ui,/Server ตรวจเฉพาะรายการที่ขึ้น Cloud แล้ว/);
+  assert.match(ui,/ระบบกลางเห็นเฉพาะรายการที่ส่งสำเร็จแล้ว/);
 });
 
 test("strict offline outbox inspection distinguishes unreadable storage from an empty outbox",async()=>{

@@ -16,8 +16,8 @@ test('cash reconciliation subtracts only explicitly cash-paid expenses',async()=
   const api=await read('lib/api.mjs'),close=await read('app/close/page.tsx'),expenses=await read('app/expenses/page.tsx');
   assert.match(api,/cashPaidOut=cashExpenseTotal\(expenses\)/);
   assert.match(api,/reconcileCash\(\{openingCash,cashSales:cash,cashIn,cashPaidOut,cashOut,countedCash\}\)/);
-  assert.match(close,/Expected Cash = เงินตั้งต้น \+ ยอดขายเงินสด \+ เงินเติมเข้า − ค่าใช้จ่ายเงินสด − เงินนำออก/);
-  assert.match(close,/Cash Paid Out/);
+  assert.match(close,/เงินสดที่ควรมี = เงินตั้งต้น \+ ยอดขายเงินสด \+ เงินเติมเข้า − ค่าใช้จ่ายเงินสด − เงินนำออก/);
+  assert.match(close,/ค่าใช้จ่ายเงินสด/);
   assert.match(expenses,/เงินสดจากลิ้นชัก/);
   assert.match(expenses,/paymentMethod/);
 });
@@ -70,10 +70,10 @@ test('cash drawer movement uses a guided server-authoritative dialog',async()=>{
   assert.match(api,/drawerSnapshot/);
   assert.match(api,/availableCash=Number\(shift\.openingCash\|\|0\)\+cashSales\+cashIn-cashPaidOut-cashOut/);
   assert.match(api,/type==='CASH_OUT'&&amount>available/);
-  assert.match(close,/CASH DRAWER CONTROL/);
+  assert.match(close,/เงินสดในลิ้นชัก/);
   assert.match(close,/role="dialog"/);
   assert.match(close,/movementTooLarge/);
   assert.match(close,/movementHighRisk/);
   assert.match(close,/riskConfirmed:movementRiskConfirmed/);
-  assert.match(close,/ระบบจะตรวจยอดอีกครั้งที่ Server/);
+  assert.match(close,/ระบบจะตรวจยอดล่าสุดอีกครั้งตอนกดยืนยัน/);
 });

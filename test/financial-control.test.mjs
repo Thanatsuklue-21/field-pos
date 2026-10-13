@@ -66,8 +66,8 @@ test('API and close UI enforce the reviewed close-day path',async()=>{
   assert.match(api,/cash_variance_reason_required/);
   assert.match(api,/cash_variance_owner_confirmation_required/);
   assert.match(api,/ownerConfirmRequired:assessment\.ownerConfirmRequired/);
-  assert.match(close,/Blind Count 2 รอบ/);
-  assert.match(close,/AI ตรวจความถูกต้องก่อนปิดวัน/);
+  assert.match(close,/นับเงินสด 2 รอบโดยไม่ดูยอดระบบ/);
+  assert.match(close,/ตรวจยอดก่อนปิดวัน/);
   assert.match(close,/reviewId:review\.id/);
   assert.match(shell,/\/control/);
 });

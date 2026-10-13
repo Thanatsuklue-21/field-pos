@@ -26,5 +26,5 @@ test('close day UI freezes opening float and requires blind reviewed count',asyn
   assert.match(ui,/firstCount:first,secondCount:second/);
   assert.match(ui,/reviewId:review\.id/);
   assert.doesNotMatch(ui,/body:JSON\.stringify\(\{openingCash:opening,countedCash:counted\}\)/);
-  assert.match(ui,/Expected Cash = เงินตั้งต้น \+ ยอดขายเงินสด \+ เงินเติมเข้า − ค่าใช้จ่ายเงินสด − เงินนำออก/);
+  assert.match(ui,/เงินสดที่ควรมี = เงินตั้งต้น \+ ยอดขายเงินสด \+ เงินเติมเข้า − ค่าใช้จ่ายเงินสด − เงินนำออก/);
 });

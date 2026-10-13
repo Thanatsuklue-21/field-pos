@@ -8,6 +8,7 @@ import {ArrowLeft,BellRing,CheckCircle2,RotateCcw,X} from "lucide-react";
 import AuthGate from "@/components/auth-gate";
 import {api,type RevisionUnchanged,type Session} from "@/lib/api-client";
 import {readQueueSnapshotCache,writeQueueSnapshotCache} from "@/lib/queue-cache";
+import {operatorErrorFallback} from "@/lib/operator-error-language.mjs";
 
 type BatchMode="NONE"|"SEQUENTIAL"|"COMBINED";
 type PrepGroup={id:string;label:string;batchMode:BatchMode;qty:number;pendingQty?:number;items:{id:string;name:string;variant:string;qty:number;pendingQty?:number;compatibilityKey:string}[]};
@@ -103,7 +104,7 @@ function QueueView({session}:{session:Session}){
       try{
         const next=await api<QueueSnapshot|RevisionUnchanged>("/api/pos/queue",revisionRef.current===null?{}:{headers:{"X-Field-Revision":String(revisionRef.current)}});
         if(!disposed&&!busyRef.current)acceptSnapshot(next);
-      }catch(e:any){if(!disposed)setMsg(e.message==="network_unavailable"?"ขาดการเชื่อมต่อ · ตรวจคิวล่าสุดก่อนทำต่อ":e.message)}
+      }catch(e:any){if(!disposed)setMsg(e.message==="network_unavailable"?"เน็ตขาดการเชื่อมต่อ · ใช้คิวที่เห็นล่าสุดก่อน และอย่าข้ามลำดับ":operatorErrorFallback(e.message,"คิว"))}
       finally{inFlight=false;if(!disposed)setSyncing(false)}
     };
     refresh();
@@ -138,7 +139,7 @@ function QueueView({session}:{session:Session}){
       code==="recipe_unavailable"?"ไม่พบสูตรที่ใช้ตอนขาย จึงบันทึกชงเสียอัตโนมัติไม่ได้":
       code.startsWith("stock_shortage:")?"วัตถุดิบไม่พอสำหรับทำใหม่ 1 แก้ว · กรุณาตรวจ Stock":
       code.startsWith("ingredient_missing:")?"สูตรอ้างวัตถุดิบที่ไม่มีใน Stock Master":
-      code==="queue_state_changed"?"สถานะคิวเปลี่ยนแล้ว ระบบกำลังอัปเดต":code;
+      code==="queue_state_changed"?"สถานะคิวเปลี่ยนแล้ว · ระบบกำลังโหลดข้อมูลล่าสุด":operatorErrorFallback(code,"คิว");
   }
 
   async function completeNext(order:QOrder,item:QItem,itemIndex:number){
