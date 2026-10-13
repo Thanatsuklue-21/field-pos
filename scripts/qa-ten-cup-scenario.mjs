@@ -16,7 +16,7 @@ export async function seedTenCupDatabase(db){
 
 export async function runTenCupScenario(call){
   const date=bangkokDate(),receipts=[];
-  await call('cash-shift/open','POST',{openingCash:500},201);
+  await call('cash-shift/open','POST',{requestKey:'ten-cup-open',openingCash:500},201);
   await call('cash-shift/movements','POST',{requestKey:'ten-cup-cash-in',type:'CASH_IN',amount:100,reason:'QA extra change'},201);
   for(let i=1;i<=10;i++){
     const body={requestKey:'ten-cup-sale-'+i,date,cart:[{id:'qa-latte',variant:'100%',qty:1}],payment:'cash',received:100};
