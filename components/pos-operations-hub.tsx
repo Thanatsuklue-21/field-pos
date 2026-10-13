@@ -19,6 +19,7 @@ type Sale={id:string;billNo:string;date:string;time:number;total:number;payment:
 type ExpenseRow={id:string;date:string;time:number;category:string;description:string;amount:number;paymentMethod?:string;sourceType?:string};
 type TodaySummary={today:string;todayRevenue:number;todayOrders:number;grossMargin:number;lowStock?:{name:string}[];recommendations?:{level:string;title:string;detail:string}[]};
 type CloseStatus={businessDate:string;shift:any;paymentBlockers:any[];orderBlockers:any[];closeBlockedByPayments:boolean;closeBlockedByOrders:boolean;closes:any[]};
+type KitchenStatus={configured:boolean;pending:number;sending:number;retryable:number;blocked:number;stale:number;unresolved:number;oldestUnresolvedAt:number|null};
 type AdminReadiness={
   businessDate?:string;
   readyForCashSales:boolean;
@@ -50,10 +51,12 @@ export default function PosOperationsHub({session,bootstrap,open,onClose,onRefre
   const [todaySummary,setTodaySummary]=useState<TodaySummary|null>(null);
   const [closeStatus,setCloseStatus]=useState<CloseStatus|null>(null);
   const [readiness,setReadiness]=useState<AdminReadiness|null>(null);
+  const [kitchenStatus,setKitchenStatus]=useState<KitchenStatus|null>(null);
   const [loading,setLoading]=useState(false);
   const [message,setMessage]=useState("");
   const [expenseBusy,setExpenseBusy]=useState(false);
   const [queueBusy,setQueueBusy]=useState(false);
+  const [kitchenBusy,setKitchenBusy]=useState(false);
   const [kitchenRetryBusy,setKitchenRetryBusy]=useState(false);
   const [expenseAmount,setExpenseAmount]=useState("");
   const [expenseCategory,setExpenseCategory]=useState("OTHER");
@@ -114,10 +117,10 @@ export default function PosOperationsHub({session,bootstrap,open,onClose,onRefre
     if(!quiet){setLoading(true);setMessage("")}
     try{
       const tasks:Promise<any>[]=[];
-      const names:("todaySummary"|"closeStatus"|"readiness"|"queue"|"orders"|"expenses"|"stock")[]=[];
+      const names:("todaySummary"|"closeStatus"|"readiness"|"queue"|"kitchen"|"orders"|"expenses"|"stock")[]=[];
       if(canReport&&(scope==="all"||scope==="today")){tasks.push(api<any>("/api/management/dashboard"));names.push("todaySummary");tasks.push(api<any>("/api/close-day"));names.push("closeStatus")}
       if(canReadiness&&(scope==="all"||scope==="today")){tasks.push(api<any>("/api/admin/readiness"));names.push("readiness")}
-      if(canQueue&&(scope==="all"||scope==="queue")){tasks.push(api<any>("/api/pos/queue"));names.push("queue")}
+      if(canQueue&&(scope==="all"||scope==="queue")){tasks.push(api<any>("/api/pos/queue"));names.push("queue");tasks.push(api<KitchenStatus>("/api/pos/kitchen/status"));names.push("kitchen")}
       if(canOrder&&(scope==="all"||scope==="orders")){tasks.push(api<any>("/api/pos/history"));names.push("orders")}
       if(canExpense&&(scope==="all"||scope==="expenses")){tasks.push(api<any>("/api/expenses"));names.push("expenses")}
       if(canStock&&(scope==="all"||scope==="stock")&&onRefreshStock){tasks.push(onRefreshStock());names.push("stock")}
@@ -130,6 +133,7 @@ export default function PosOperationsHub({session,bootstrap,open,onClose,onRefre
         if(name==="closeStatus")setCloseStatus(value as CloseStatus);
         if(name==="readiness")setReadiness(value as AdminReadiness);
         if(name==="queue")setQueue(Array.isArray(value.orders)?value.orders:[]);
+        if(name==="kitchen")setKitchenStatus(value as KitchenStatus);
         if(name==="orders")setSales(Array.isArray(value.sales)?value.sales:[]);
         if(name==="expenses")setExpenses(Array.isArray(value.expenses)?value.expenses:[]);
         // Stock freshness is applied by the parent POS bootstrap loader via onRefreshStock.
@@ -397,6 +401,15 @@ export default function PosOperationsHub({session,bootstrap,open,onClose,onRefre
         </div>}
 
         {tab==="queue"&&canQueue&&<div className="space-y-2">
+          {kitchenStatus?.configured&&n(kitchenStatus.unresolved)>0&&<div className={"rounded-2xl border p-3 "+(n(kitchenStatus.blocked)+n(kitchenStatus.stale)>0?"border-red-300 bg-red-50":"border-amber-300 bg-amber-50")}>
+            <div className="flex items-start justify-between gap-3">
+              <div><b className="text-sm">แจ้งบาร์ผ่าน LINE ค้าง {n(kitchenStatus.unresolved)} รายการ</b><p className="mt-1 text-xs text-slate-600">{n(kitchenStatus.blocked)+n(kitchenStatus.stale)>0?"มีรายการที่ส่งซ้ำอัตโนมัติไม่ได้ · ต้องตรวจการตั้งค่า LINE ก่อน":"ยอดขายและคิวยืนยันแล้ว · เฉพาะข้อความแจ้งบาร์กำลังรอส่งซ้ำ"}</p></div>
+              <span className={"rounded-full px-2 py-1 text-[10px] font-black "+(n(kitchenStatus.blocked)+n(kitchenStatus.stale)>0?"bg-red-200 text-red-800":"bg-amber-200 text-amber-900")}>{n(kitchenStatus.blocked)+n(kitchenStatus.stale)>0?"ตรวจ LINE":"รอ Retry"}</span>
+            </div>
+            <div className="mt-3 grid grid-cols-3 gap-2 text-center"><Metric label="ส่งซ้ำได้" value={n(kitchenStatus.retryable)}/><Metric label="กำลังส่ง" value={n(kitchenStatus.sending)}/><Metric label="ต้องตรวจ" value={n(kitchenStatus.blocked)+n(kitchenStatus.stale)}/></div>
+            {session.user.role==="admin"&&n(kitchenStatus.retryable)>0&&<button disabled={kitchenBusy||!cloudAvailable} onClick={retryKitchenNotifications} className="mt-3 min-h-11 w-full rounded-xl bg-[#1F4D3A] px-3 text-xs font-black text-white disabled:opacity-40">{kitchenBusy?"กำลังส่ง request เดิม…":"ลองส่งแจ้งบาร์ที่ค้างอีกครั้ง"}</button>}
+            {session.user.role!=="admin"&&<p className="mt-2 text-[10px] font-semibold text-slate-600">แจ้ง Admin ให้กด Retry จากแท็บคิว · ไม่ต้องทำรายการขายหรือรับเงินซ้ำ</p>}
+          </div>}
           {queueRows.length===0?<Empty text={!cloudAvailable?"ออฟไลน์ · ยังไม่ดึงคิวจาก Server":"ไม่มีคิวที่กำลังทำ"}/>:queueRows.map(order=>{
             const total=(order.items||[]).reduce((s,x)=>s+n(x.qty),0),ready=(order.items||[]).reduce((s,x)=>s+Math.min(n(x.qty),n(x.readyQty)),0),called=(order.items||[]).reduce((s,x)=>s+Math.min(n(x.qty),n(x.calledQty)),0);
             const allCalled=total>0&&called>=total,isProduction=productionHead?.id===order.id;
