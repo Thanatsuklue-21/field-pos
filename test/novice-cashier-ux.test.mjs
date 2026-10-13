@@ -17,8 +17,23 @@ test("modifier dialog explains one next action and highlights the normal/default
 test("payment sheet gives a simple three-step mental model with accessible close control",async()=>{
   const pos=await read("app/pos/page.tsx");
   assert.match(pos,/aria-labelledby="field-payment-title"/);
-  assert.match(pos,/1 · ทวนรายการ/);
-  assert.match(pos,/2 · เลือกวิธีจ่าย/);
-  assert.match(pos,/3 · ยืนยันรับเงิน/);
+  assert.match(pos,/paymentStage/);
+  assert.match(pos,/\[\["1","ทวนรายการ"\],\["2","เลือกวิธีจ่าย"\],\["3","ยืนยันรับเงิน"\]\]/);
+  assert.match(pos,/active=paymentStage===step/);
   assert.match(pos,/aria-label="ปิดหน้าชำระเงิน"/);
+});
+
+
+test("routine shop work stays reachable from the POS workspace without destroying the active sale",async()=>{
+  const pos=await read("app/pos/page.tsx");
+  const hub=await read("components/pos-operations-hub.tsx");
+  assert.match(pos,/const \[opsOpen,setOpsOpen\]=useState\(false\)/);
+  assert.match(pos,/disabled=\{busy\|\|payOpen\}/);
+  assert.match(pos,/PosOperationsHub/);
+  assert.match(hub,/export type HubTab="today"\|"queue"\|"orders"\|"stock"\|"expenses"/);
+  assert.match(hub,/runQuickQueueAction/);
+  assert.match(hub,/quickQueueStep/);
+  assert.match(hub,/sendExpenseDurably/);
+  assert.match(hub,/onRefreshStock/);
+  assert.doesNotMatch(hub,/cart\.clearCart/);
 });
