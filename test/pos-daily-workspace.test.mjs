@@ -43,12 +43,18 @@ test("daily workspace quick expense reuses report permission and durable expense
   for(const href of ["/queue","/orders","/stock","/expenses","/control"])assert.match(hub,new RegExp('href="'+href.replaceAll("/","\\/")+'"'));
 });
 
-test("workspace exposes latest receipt through the existing Orders deep link",async()=>{
+test("workspace previews the latest receipt in-place and keeps deep actions on Orders",async()=>{
   const hub=await read("components/pos-daily-workspace.tsx");
-  assert.match(hub,/ดูใบเสร็จล่าสุด/);
-  assert.match(hub,/\/orders\?queue=/);
-  const orders=await read("app/orders/page.tsx");
-  assert.match(orders,/new URLSearchParams\(window\.location\.search\)\.get\("queue"\)/);
+  assert.match(hub,/ใบเสร็จล่าสุด/);
+  assert.match(hub,/<details className=/);
+  assert.match(hub,/latestOrder\.items/);
+  assert.match(hub,/latestOrder\.paymentMethods/);
+  assert.match(hub,/ดูบิลได้ตรงนี้โดยไม่ออกจากหน้า POS/);
+  assert.match(hub,/FullLink href="\/orders" label="เปิดประวัติ\/Refund\/VOID"/);
+  const receiptStart=hub.indexOf("ใบเสร็จล่าสุด");
+  const receiptEnd=hub.indexOf("เปิดประวัติ/Refund/VOID",receiptStart);
+  const receiptBlock=hub.slice(receiptStart,receiptEnd);
+  assert.doesNotMatch(receiptBlock,/href=\{latestOrder\.queueNo/);
 });
 
 test("workspace fails safe offline while still exposing cached stock signals",async()=>{
@@ -103,4 +109,19 @@ test("workspace renders one explicit recommended action above the detail tabs",a
   assert.match(hub,/แนะนำตอนนี้/);
   assert.match(hub,/aria-live="polite"/);
   assert.match(hub,/setTab\(nextAction\.tab as WorkspaceTab\)/);
+});
+
+
+test("inline receipt is read-only and uses the existing history payload",async()=>{
+  const hub=await read("components/pos-daily-workspace.tsx");
+  assert.match(hub,/items\?:Array<\{id:string;name:string;variant\?:string;qty:number;price:number\}>/);
+  assert.match(hub,/item\.qty} × ฿\{money\(item\.price\)\}/);
+  assert.match(hub,/money\(Number\(item\.price\)\*Number\(item\.qty\)\)/);
+  const api=await read("lib/api.mjs");
+  const start=api.indexOf("if(path==='/api/pos/history'&&method==='GET')");
+  const end=api.indexOf("\n      if(",start+10);
+  const history=api.slice(start,end);
+  assert.match(history,/paymentMethods/);
+  assert.match(history,/items:\(s\.items\|\|\[\]\)\.map/);
+  assert.doesNotMatch(hub,/method:"POST"[\s\S]{0,160}ใบเสร็จล่าสุด/);
 });
