@@ -98,17 +98,22 @@ test("malformed pending cash never becomes an empty recovery state",async()=>{
   assert.equal(result.blockers[0].kind,"storage_unreadable");
 });
 
-test("Close Day checks device state before review and again before final commit",async()=>{
+test("Close Day checks device state before review and rechecks after final confirmation",async()=>{
   const ui=await readFile(new URL("../app/close/page.tsx",import.meta.url),"utf8");
   const reviewStart=ui.indexOf("async function reviewCash");
   const closeStart=ui.indexOf("async function close()",reviewStart);
   const review=ui.slice(reviewStart,closeStart);
   const closing=ui.slice(closeStart,ui.indexOf("const movementAmountNumber",closeStart));
+  const firstPreflight=closing.indexOf("await refreshDevicePreflight()");
+  const confirm=closing.indexOf("window.confirm");
+  const finalPreflight=closing.indexOf("await refreshDevicePreflight()",firstPreflight+1);
+  const finalWrite=closing.indexOf('api<any>("/api/close-day"');
   assert.ok(review.indexOf("await refreshDevicePreflight()")>=0);
   assert.ok(review.indexOf("await refreshDevicePreflight()")<review.indexOf('api<any>("/api/close-day/review"'));
-  assert.ok(closing.indexOf("await refreshDevicePreflight()")>=0);
-  assert.ok(closing.indexOf("await refreshDevicePreflight()")<closing.indexOf("window.confirm"));
-  assert.ok(closing.indexOf("await refreshDevicePreflight()")<closing.indexOf('api<any>("/api/close-day"'));
+  assert.ok(firstPreflight>=0&&firstPreflight<confirm);
+  assert.ok(finalPreflight>confirm);
+  assert.ok(finalPreflight<finalWrite);
+  assert.match(closing,/setReview\(null\).*พบรายการค้างใหม่ในเครื่องหลังการยืนยัน/);
 });
 
 test("Close Day refreshes blockers after reconnect focus and visible resume and provides recovery routes",async()=>{
