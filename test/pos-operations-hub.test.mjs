@@ -8,7 +8,8 @@ test("POS exposes one in-place operations hub instead of forcing routine page sw
   const pos=await read("app/pos/page.tsx");
   assert.match(pos,/PosOperationsHub/);
   assert.match(pos,/setOpsOpen\(true\)/);
-  assert.match(pos,/>งานร้าน<\/button>/);
+  assert.match(pos,/คิว \/ งานร้าน/);
+  assert.match(pos,/setOpsInitialTab\(undefined\);setOpsOpen\(true\)/);
   assert.match(pos,/bootstrap=\{data\}/);
   assert.match(pos,/open=\{opsOpen\}/);
   assert.match(pos,/networkOnline=\{online\}/);
@@ -187,9 +188,9 @@ test("post-sale queue shortcut is shown only to operators with Queue permission"
   assert.match(pos,/const canQueueOps=session\.user\.role==="admin"\|\|session\.user\.permissions\?\.queue===true/);
   const saleStart=pos.indexOf("lastSale&&");
   const saleBlock=pos.slice(saleStart,pos.indexOf("<PosOperationsHub",saleStart));
-  assert.match(saleBlock,/!lastSale\.offline&&<div/);
-  assert.match(saleBlock,/\{canQueueOps&&<button/);
-  assert.match(saleBlock,/setOpsInitialTab\("queue"\)/);
+  assert.match(saleBlock,/!lastSale\.offline&&canQueueOps\?<><button/);
+  assert.match(saleBlock,/ไปทำคิว \{lastSale\.queueNo\}/);
+  assert.match(saleBlock,/setOpsInitialTab\("queue"\);setLastSale\(null\);setOpsOpen\(true\)/);
 });
 
 

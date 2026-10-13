@@ -9,7 +9,8 @@ test('POS shows live cash change and closes payment modal after success',async()
   assert.match(pos,/เงินทอน/);
   assert.match(pos,/setPayOpen\(false\)/);
   assert.match(pos,/ชำระเงินสำเร็จ/);
-  assert.match(pos,/ดูคิว \{lastSale\.queueNo\} ในงานร้าน/);
+  assert.match(pos,/ไปทำคิว \{lastSale\.queueNo\}/);
+  assert.match(pos,/setOpsInitialTab\("queue"\);setLastSale\(null\);setOpsOpen\(true\)/);
 });
 
 test('POS hides zero-price menus and reconciles stale persisted cart items',async()=>{
@@ -398,7 +399,7 @@ test('solo operator daily flow keeps routine queue checks in POS with full produ
   const shell=await read('components/app-shell.tsx'),pos=await read('app/pos/page.tsx'),hub=await read('components/pos-operations-hub.tsx'),queue=await read('app/queue/page.tsx'),close=await read('app/close/page.tsx');
   assert.match(shell,/const primaryMobile=\["\/pos"\]/);
   assert.match(shell,/mobileOverflow\(allowed\)/);
-  assert.match(pos,/ดูคิว \{lastSale\.queueNo\} ในงานร้าน/);
+  assert.match(pos,/ไปทำคิว \{lastSale\.queueNo\}/);
   assert.match(pos,/setOpsInitialTab\("queue"\);setLastSale\(null\);setOpsOpen\(true\)/);
   assert.match(pos,/รับออเดอร์ถัดไป/);
   assert.match(hub,/href="\/queue"/);
