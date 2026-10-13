@@ -52,14 +52,22 @@ async function fetchWithPolicy(path:string,init:RequestInit,method:string){
   const timeoutMs=path==="/api/auth/session"?AUTH_SESSION_TIMEOUT_MS:recoverableWrite?RECOVERABLE_WRITE_TIMEOUT_MS:GET_TIMEOUT_MS;
   const timeoutReason=path==="/api/auth/session"?"field_auth_session_timeout":recoverableWrite?"field_recoverable_write_timeout":"field_get_timeout";
   const timer=controller?setTimeout(()=>controller.abort(timeoutReason),timeoutMs):null;
+  const headers=new Headers(init.headers);
+  if(!headers.has("Content-Type"))headers.set("Content-Type","application/json");
   try{
-    return await fetch(path,{
+    const res=await fetch(path,{
       ...init,
-      headers:{"Content-Type":"application/json",...(init.headers||{})},
+      headers,
       credentials:"same-origin",
       cache:"no-store",
       signal:controller?.signal||init.signal,
     });
+    const data=await res.json().catch((cause)=>{
+      if(controller?.signal.aborted||init.signal?.aborted)throw cause;
+      if(res.ok)throw Object.assign(new Error("network_unavailable"),{status:0,cause,responseStatus:res.status});
+      return {};
+    });
+    return {res,data};
   }finally{
     if(timer)clearTimeout(timer);
   }
@@ -88,9 +96,22 @@ async function executeApi<T>(path:string,init:RequestInit,method:string){
   let httpStatus=0;
   const metric=method==="POST"&&path==="/api/pos/checkout"?"checkout_latency":method==="POST"&&path==="/api/pos/queue"?"queue_action_latency":"";
   try{
-    const res=await fetchWithPolicy(path,init,method);
+    const {res,data}=await fetchWithPolicy(path,init,method);
     httpStatus=res.status;
-    const data=await res.json().catch(()=>({}));
+
+    if(res.ok&&(!data||typeof data!=="object"||(method!=="GET"&&(Array.isArray(data)||Object.keys(data).length===0)))){
+      throw Object.assign(new Error("network_unavailable"),{status:0,responseStatus:res.status});
+    }
+    if(res.ok&&path==="/api/pos/checkout"&&method==="POST"){
+      const complete=data.ok===true
+        &&typeof data.orderId==="string"&&data.orderId.length>0
+        &&typeof data.queueNo==="string"
+        &&Array.isArray(data.saleIds)&&data.saleIds.length>0
+        &&data.saleIds.every((id:unknown)=>typeof id==="string"&&id.length>0)
+        &&[data.total,data.received,data.change].every((value:unknown)=>typeof value==="number"&&Number.isFinite(value)&&value>=0);
+      if(!complete)throw Object.assign(new Error("network_unavailable"),{status:0,responseStatus:res.status});
+    }
+
     if(res.status===401){
       clearSessionCache();
       if(typeof window!=="undefined")window.dispatchEvent(new Event("field:auth-expired"));
@@ -102,9 +123,10 @@ async function executeApi<T>(path:string,init:RequestInit,method:string){
     emit("online");
     return data as T;
   }catch(error:any){
+    if(init.signal?.aborted)throw init.signal.reason??error;
     if(error?.status===undefined){
       if(method==="GET"&&SAFE_GET_CACHE.has(path)){
-        const cached=await cacheGet<T>(path);
+        const cached=await cacheGet<T>(path).catch(()=>null);
         if(cached){emit("cached");return cached}
       }
       emit("offline");
@@ -123,6 +145,8 @@ export async function api<T>(path:string,init:RequestInit={}){
   // Reads are safe to coalesce. Writes are never deduplicated or retried here:
   // transaction endpoints own their idempotency semantics server-side.
   if(method==="GET"){
+    // A caller-owned signal must cancel only that caller, never a shared GET or stale-cache fallback.
+    if(init.signal)return executeApi<T>(path,init,method);
     const key=getRequestKey(path,init),existing=getInFlight.get(key);
     if(existing)return existing as Promise<T>;
     const request=executeApi<T>(path,init,method).finally(()=>getInFlight.delete(key));
