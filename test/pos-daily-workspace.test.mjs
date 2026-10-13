@@ -14,24 +14,40 @@ test("POS opens the daily workspace in-place and blocks it during payment mutati
   assert.match(pos,/online=\{online\}/);
 });
 
-test("daily workspace covers queue orders stock and owner readiness without route switching",async()=>{
+test("daily workspace covers queue orders stock quick expense and owner readiness",async()=>{
   const hub=await read("components/pos-daily-workspace.tsx");
   assert.match(hub,/FIELD DAILY WORKSPACE/);
-  for(const label of ["คิว","ออเดอร์","สต็อก","สถานะ"])assert.match(hub,new RegExp(label));
+  for(const label of ["คิว","ออเดอร์","สต็อก","รายจ่าย","สถานะ"])assert.match(hub,new RegExp(label));
   assert.match(hub,/\/api\/pos\/queue/);
   assert.match(hub,/\/api\/pos\/history/);
+  assert.match(hub,/\/api\/expenses/);
   assert.match(hub,/\/api\/control-center/);
   assert.match(hub,/bootstrap\?\.menu/);
 });
 
-test("daily workspace is permission-aware and keeps high-risk mutations on full flows",async()=>{
+test("daily workspace quick expense reuses report permission and durable expense recovery",async()=>{
   const hub=await read("components/pos-daily-workspace.tsx");
   assert.match(hub,/session\.user\.permissions\?\.queue===true/);
   assert.match(hub,/session\.user\.permissions\?\.order===true/);
   assert.match(hub,/session\.user\.permissions\?\.stock===true/);
-  assert.match(hub,/session\.user\.role==="admin"/);
-  assert.doesNotMatch(hub,/method:"POST"/);
-  for(const href of ["/queue","/orders","/stock","/control"])assert.match(hub,new RegExp('href="'+href.replaceAll("/","\\/")+'"'));
+  assert.match(hub,/session\.user\.permissions\?\.report===true/);
+  assert.match(hub,/prepareExpenseIntent/);
+  assert.match(hub,/readExpenseIntent/);
+  assert.match(hub,/sendExpenseIntent/);
+  assert.match(hub,/method:"POST"/);
+  assert.doesNotMatch(hub,/method:"DELETE"/);
+  assert.match(hub,/X-CSRF-Token/);
+  assert.match(hub,/highRiskExpense/);
+  assert.match(hub,/cashTooLarge/);
+  for(const href of ["/queue","/orders","/stock","/expenses","/control"])assert.match(hub,new RegExp('href="'+href.replaceAll("/","\\/")+'"'));
+});
+
+test("workspace exposes latest receipt through the existing Orders deep link",async()=>{
+  const hub=await read("components/pos-daily-workspace.tsx");
+  assert.match(hub,/ดูใบเสร็จล่าสุด/);
+  assert.match(hub,/\/orders\?queue=/);
+  const orders=await read("app/orders/page.tsx");
+  assert.match(orders,/new URLSearchParams\(window\.location\.search\)\.get\("queue"\)/);
 });
 
 test("workspace fails safe offline while still exposing cached stock signals",async()=>{
