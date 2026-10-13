@@ -3,8 +3,9 @@ import {listExpenseIntents,type ExpenseIntent} from "@/lib/expense-recovery";
 import {listCashMovementIntents,type CashMovementIntent} from "@/lib/cash-movement-recovery";
 import {listExpenseDeleteIntents,type ExpenseDeleteIntent} from "@/lib/expense-delete-recovery";
 import {listStockWriteIntents,type StockWriteIntent} from "@/lib/stock-write-recovery";
+import {listOrderMutationIntents,type OrderMutationIntent} from "@/lib/order-mutation-recovery";
 
-export type CloseDayDeviceBlockerKind="offline_cash"|"cash_unknown"|"promptpay_unknown"|"expense_unknown"|"expense_delete_unknown"|"cash_movement_unknown"|"stock_write_unknown"|"storage_unreadable";
+export type CloseDayDeviceBlockerKind="offline_cash"|"cash_unknown"|"promptpay_unknown"|"expense_unknown"|"expense_delete_unknown"|"cash_movement_unknown"|"stock_write_unknown"|"order_mutation_unknown"|"storage_unreadable";
 export type CloseDayDeviceBlocker={
   kind:CloseDayDeviceBlockerKind;
   title:string;
@@ -54,6 +55,7 @@ export function buildCloseDayDevicePreflight(input:{
   cashMovementIntents:CashMovementIntent[];
   expenseDeleteIntents:ExpenseDeleteIntent[];
   stockWriteIntents?:StockWriteIntent[];
+  orderMutationIntents?:OrderMutationIntent[];
   checkedAt?:number;
 }):CloseDayDevicePreflight{
   const {actorId,businessDate}=input;
@@ -115,6 +117,15 @@ export function buildCloseDayDevicePreflight(input:{
       route:intent.actorId===actorId?"/stock":undefined,date:businessDate,actorId:intent.actorId,count:1
     });
   }
+  for(const intent of (input.orderMutationIntents||[]).filter(x=>x.businessDate===businessDate)){
+    const action=intent.operation==="void"?"VOID":"Refund";
+    blockers.push({
+      kind:"order_mutation_unknown",
+      title:intent.actorId===actorId?action+" บิลที่ผลยังไม่ชัด":"มี "+action+" ค้างจากผู้ใช้อื่นบนเครื่องนี้",
+      detail:(intent.actorId===actorId?"รายการของผู้ใช้ปัจจุบัน":"ผู้ใช้ "+intent.actorId)+" · Sale "+intent.body.saleId+" · Request …"+intent.body.requestKey.slice(-8)+" · เงิน/Stock/ประวัติอาจถูกเปลี่ยนแล้ว ห้ามปิดวันจนกว่าจะตรวจ Request เดิม",
+      route:intent.actorId===actorId?"/orders":undefined,date:businessDate,actorId:intent.actorId,count:1
+    });
+  }
   return {ok:blockers.length===0,checkedAt:input.checkedAt??Date.now(),businessDate,blockers};
 }
 
@@ -125,26 +136,28 @@ export async function readCloseDayDevicePreflight(actorId:string,businessDate:st
   listCashMovements?:(storage?:any)=>CashMovementIntent[];
   listExpenseDeletes?:(storage?:any)=>ExpenseDeleteIntent[];
   listStockWrites?:(storage?:any)=>StockWriteIntent[];
+  listOrderMutations?:(storage?:any)=>OrderMutationIntent[];
   now?:()=>number;
 }):Promise<CloseDayDevicePreflight>{
   try{
     const storage=deps?.storage||(localStorage as DeviceStorage);
     // Force a storage read before treating missing keys as an empty recovery state.
     storage.getItem("__field_close_day_probe__");
-    const [offlineRows,cashPending,promptPending,expenseIntents,cashMovementIntents,expenseDeleteIntents,stockWriteIntents]=await Promise.all([
+    const [offlineRows,cashPending,promptPending,expenseIntents,cashMovementIntents,expenseDeleteIntents,stockWriteIntents,orderMutationIntents]=await Promise.all([
       (deps?.listOffline||offlineCashListStrict)(),
       Promise.resolve(parseCashPending(storage.getItem(CASH_PENDING_KEY))),
       Promise.resolve(parsePromptPending(storage.getItem(PROMPT_PENDING_KEY))),
       Promise.resolve((deps?.listExpenses||listExpenseIntents)(storage as any)),
       Promise.resolve((deps?.listCashMovements||listCashMovementIntents)(storage as any)),
       Promise.resolve((deps?.listExpenseDeletes||listExpenseDeleteIntents)(storage as any)),
-      Promise.resolve((deps?.listStockWrites||listStockWriteIntents)(storage as any))
+      Promise.resolve((deps?.listStockWrites||listStockWriteIntents)(storage as any)),
+      Promise.resolve((deps?.listOrderMutations||listOrderMutationIntents)(storage as any))
     ]);
-    return buildCloseDayDevicePreflight({actorId,businessDate,offlineRows,cashPending,promptPending,expenseIntents,cashMovementIntents,expenseDeleteIntents,stockWriteIntents,checkedAt:(deps?.now||Date.now)()});
+    return buildCloseDayDevicePreflight({actorId,businessDate,offlineRows,cashPending,promptPending,expenseIntents,cashMovementIntents,expenseDeleteIntents,stockWriteIntents,orderMutationIntents,checkedAt:(deps?.now||Date.now)()});
   }catch{
     return {
       ok:false,checkedAt:(deps?.now||Date.now)(),businessDate,
-      blockers:[{kind:"storage_unreadable",title:"อ่านรายการค้างในเครื่องไม่ได้",detail:"ยังยืนยันไม่ได้ว่าเครื่องนี้ไม่มีธุรกรรมค้าง เช่น บิล การชำระ รายจ่าย เงินเข้า/ออกลิ้นชัก หรือ Stock · ห้ามปิดวันจนกว่าจะอ่าน recovery storage ได้"}]
+      blockers:[{kind:"storage_unreadable",title:"อ่านรายการค้างในเครื่องไม่ได้",detail:"ยังยืนยันไม่ได้ว่าเครื่องนี้ไม่มีธุรกรรมค้าง เช่น บิล การชำระ รายจ่าย เงินเข้า/ออกลิ้นชัก Stock หรือ VOID/Refund · ห้ามปิดวันจนกว่าจะอ่าน recovery storage ได้"}]
     };
   }
 }
