@@ -231,13 +231,26 @@ function QueueView({session}:{session:Session}){
   const upcoming=orders.filter(order=>!orderCalled(order)&&order.id!==first?.id).slice(0,3);
   const extraUpcoming=Math.max(0,orders.filter(order=>!orderCalled(order)).length-1-upcoming.length);
   const waitingPickup=orders.filter(orderCalled);
+  const queueStage=task?1:firstReady&&!firstCalled?2:waitingPickup.length>0?3:1;
+  const queueInstruction=task
+    ?"ทำ "+task.item.name+" อีก "+Math.max(0,n(task.item.qty)-n(task.item.readyQty))+" แก้ว แล้วกด “เสร็จแล้ว”"
+    :firstReady&&!firstCalled
+      ?"ทำครบแล้ว · กดเรียกบัตร "+first?.pagerNo
+      :waitingPickup.length>0
+        ?"ตรวจบัตรและส่งมอบให้ลูกค้า แล้วกด “ลูกค้ารับแล้ว”"
+        :"รอออเดอร์ใหม่";
 
-  return <section className="soft-scroll h-full overflow-y-auto overscroll-contain p-2.5 pb-28 sm:p-4 sm:pb-24 md:p-6 md:pb-8">
+  return <section className="operator-surface soft-scroll h-full overflow-y-auto overscroll-contain p-2.5 pb-28 sm:p-4 sm:pb-24 md:p-6 md:pb-8">
     <div className="mx-auto w-full max-w-4xl space-y-3">
       <header className="sticky top-0 z-20 flex items-center justify-between gap-3 rounded-2xl bg-[#f3f5f7] py-2">
-        <div className="flex min-w-0 items-center gap-2"><Link href="/pos" className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-slate-300 bg-white text-slate-700 shadow-sm" aria-label="กลับหน้าเมนู"><ArrowLeft size={17}/></Link><div className="min-w-0"><p className="gold m-0 text-[9px] font-bold tracking-[.26em]">PRODUCTION RUN</p><h1 className="mt-0.5 truncate text-lg font-semibold sm:text-xl">ทำออเดอร์ / รันบัตร</h1></div></div>
+        <div className="flex min-w-0 items-center gap-2"><Link href="/pos" className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-slate-300 bg-white text-slate-700 shadow-sm" aria-label="กลับหน้าเมนู"><ArrowLeft size={17}/></Link><div className="min-w-0"><p className="gold m-0 text-[9px] font-bold tracking-[.26em]">คิวผลิต · FIFO</p><h1 className="mt-0.5 truncate text-lg font-semibold sm:text-xl">ทำคิวตามลำดับ</h1></div></div>
         <div className="flex items-center gap-2">{syncing&&<span className="hidden text-[10px] text-slate-400 sm:inline">กำลังซิงก์…</span>}<span className="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-[10px] font-semibold text-slate-600">กำลังทำ {orders.filter(o=>!orderCalled(o)).length}</span></div>
       </header>
+
+      <div className="rounded-[20px] border border-[#d4af37]/45 bg-[#fffaf0] p-3">
+        <div className="flex items-center justify-between gap-3"><div><p className="text-[9px] font-black tracking-[.14em] text-[#9a7a16]">ตอนนี้ทำอะไร</p><b className="mt-1 block text-sm text-slate-900">{queueInstruction}</b></div><span className="shrink-0 rounded-full bg-white px-2.5 py-1 text-[10px] font-black text-[#765b08]">ขั้น {queueStage}/3</span></div>
+        <div className="mt-2 grid grid-cols-3 gap-1.5 text-center text-[10px] font-bold">{["1 ทำเครื่องดื่ม","2 เรียกบัตร","3 ส่งมอบ"].map((label,index)=>{const step=index+1;return <div key={label} className={"rounded-xl border px-2 py-2 "+(queueStage===step?"border-[#d4af37] bg-[#fff3bf] text-[#6f5510]":queueStage>step?"border-emerald-200 bg-emerald-50 text-emerald-700":"border-slate-200 bg-white text-slate-400")}>{label}</div>})}</div>
+      </div>
 
       {msg&&<div className="rounded-2xl border border-red-300 bg-red-50 px-3 py-2 text-xs text-red-800">{msg}</div>}
       {notice&&<div className="flex items-start justify-between gap-3 rounded-2xl border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs text-emerald-800"><span>{notice}</span><button onClick={()=>setNotice("")}><X size={15}/></button></div>}
@@ -281,8 +294,8 @@ function QueueView({session}:{session:Session}){
         </div>}
 
         {task&&activeCategory&&<div className="mt-3 rounded-[20px] border-2 border-[#d4af37] bg-[#fffaf0] p-3">
-          <div className="flex flex-wrap items-start justify-between gap-2"><div><p className="text-[9px] font-bold tracking-[.16em] text-[#9a7a16]">ขั้นตอนปัจจุบัน</p><h3 className="mt-1 text-base font-black">{task.item.name}</h3><p className="mt-1 text-[11px] text-slate-500">{task.item.variant&&task.item.variant!=="Standard"?task.item.variant+" · ":""}ทำอีก {Math.max(0,n(task.item.qty)-n(task.item.readyQty))} แก้ว · {activeCategory.label}</p></div><span className="rounded-full bg-white px-2.5 py-1 text-[10px] font-bold text-[#765b08]">{activeMenu?activeMenu.name+" ×"+activeMenu.qty:task.item.name+" ×"+task.item.qty}</span></div>
-          <div className="mt-3 grid grid-cols-[auto_1fr] gap-2"><button disabled={busy!==""||itemCalled(task.item)} onClick={()=>wasteRemake(task.order,task.item,task.index)} className="min-h-12 rounded-2xl border border-red-200 bg-white px-3 text-[10px] font-bold text-red-600 disabled:opacity-40"><RotateCcw size={12} className="mr-1 inline"/>ชงเสีย / ทำใหม่</button><button disabled={busy!==""} onClick={()=>completeNext(task.order,task.item,task.index)} className="min-h-12 rounded-2xl bg-[#d4af37] px-4 text-sm font-black text-black disabled:opacity-40">ทำ {task.item.name} ครบ</button></div>
+          <div className="flex flex-wrap items-start justify-between gap-2"><div><p className="text-[9px] font-bold tracking-[.16em] text-[#9a7a16]">ทำรายการนี้ก่อน</p><h3 className="mt-1 text-base font-black">{task.item.name}</h3><p className="mt-1 text-[11px] text-slate-500">{task.item.variant&&task.item.variant!=="Standard"?task.item.variant+" · ":""}ทำอีก {Math.max(0,n(task.item.qty)-n(task.item.readyQty))} แก้ว · {activeCategory.label}</p></div><span className="rounded-full bg-white px-2.5 py-1 text-[10px] font-bold text-[#765b08]">{activeMenu?activeMenu.name+" ×"+activeMenu.qty:task.item.name+" ×"+task.item.qty}</span></div>
+          <div className="mt-3 grid grid-cols-[auto_1fr] gap-2"><button disabled={busy!==""||itemCalled(task.item)} onClick={()=>wasteRemake(task.order,task.item,task.index)} className="min-h-12 rounded-2xl border border-red-200 bg-white px-3 text-[10px] font-bold text-red-600 disabled:opacity-40"><RotateCcw size={12} className="mr-1 inline"/>ชงเสีย / ทำใหม่</button><button disabled={busy!==""} onClick={()=>completeNext(task.order,task.item,task.index)} className="min-h-12 rounded-2xl bg-[#d4af37] px-4 text-sm font-black text-black disabled:opacity-40">เสร็จแล้ว · {task.item.name} ครบ</button></div>
         </div>}
 
         {!task&&firstReady&&!firstCalled&&<div className="mt-3 grid gap-3 rounded-[20px] border border-emerald-300 bg-emerald-50 p-3 sm:grid-cols-[1fr_auto] sm:items-center"><div><span className="rounded-full bg-emerald-100 px-2.5 py-1 text-[10px] font-black text-emerald-700">ทำครบทั้งบัตรแล้ว</span><div className="mt-2 text-sm font-bold">พร้อมเรียกลูกค้ารับบัตร {first.pagerNo}</div></div><button disabled={busy!==""} onClick={()=>callOrder(first)} className="flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-[#d4af37] px-5 text-sm font-black text-black"><BellRing size={17}/>เรียกบัตร {first.pagerNo}</button></div>}
