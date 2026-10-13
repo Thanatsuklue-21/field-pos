@@ -69,3 +69,32 @@ test("stock UI recovers exact pending writes on reconnect focus and visible resu
   assert.match(ui,/มีรายการ Stock เดิมที่ยังไม่ทราบผล/);
   assert.match(ui,/ตรวจผล Request เดิม/);
 });
+
+
+test("purchase edit and cancel use the same durable Stock recovery channel",async t=>{
+  const x=await mod(t),store=storage();
+  const edit=x.prepareStockWriteIntent("owner","purchaseEdit","2026-10-13",{requestKey:"purchase-edit-local-0001",purchaseId:"pur-1",totalCost:250},store);
+  assert.equal(edit.operation,"purchaseEdit");
+  assert.throws(()=>x.prepareStockWriteIntent("owner","purchaseCancel","2026-10-13",{requestKey:"purchase-cancel-local-0001",purchaseId:"pur-1",confirm:"CANCEL PURCHASE",reason:"duplicate"},store),/pending_stock_write_exists/);
+});
+
+test("Stock UI persists Purchase Edit and Cancel before network send and requires exact ACK",async()=>{
+  const ui=await readFile(new URL("../app/stock/page.tsx",import.meta.url),"utf8");
+  assert.match(ui,/prepareStockWriteIntent\(session\.user\.id,"purchaseEdit",today\(\),body\)/);
+  assert.match(ui,/prepareStockWriteIntent\(session\.user\.id,"purchaseCancel",today\(\),body\)/);
+  assert.match(ui,/intent\.operation==="purchaseEdit"/);
+  assert.match(ui,/result\?\.performedBy===intent\.actorId/);
+  assert.match(ui,/purchaseEdit"\?\{path:"\/api\/stock\/purchases\//);
+  assert.match(ui,/purchaseCancel/);
+  const save=ui.slice(ui.indexOf("async function savePurchaseEdit"),ui.indexOf("async function cancelPurchase"));
+  const cancel=ui.slice(ui.indexOf("async function cancelPurchase"),ui.indexOf("async function purgeIngredient"));
+  assert.ok(save.indexOf("prepareStockWriteIntent")<save.indexOf("submitStockIntent"));
+  assert.ok(cancel.indexOf("prepareStockWriteIntent")<cancel.indexOf("submitStockIntent"));
+  assert.doesNotMatch(save,/api\("\/api\/stock\/purchases/);
+  assert.doesNotMatch(cancel,/api\("\/api\/stock\/purchases/);
+});
+
+test("Close Day stock blocker names purchase edit and cancel intents accurately",async()=>{
+  const preflight=await readFile(new URL("../lib/close-day-device-preflight.ts",import.meta.url),"utf8");
+  assert.match(preflight,/intent\.operation==="purchaseEdit"\?"การแก้รายการรับเข้า":"การยกเลิกรายการรับเข้า"/);
+});
