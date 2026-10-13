@@ -89,3 +89,14 @@ test("start-day endpoint gets bounded timeout only after durable recovery exists
   assert.match(recovery,/CASH_SHIFT_OPEN_PENDING_KEY/);
   assert.match(recovery,/shouldRetainCashShiftOpenPending/);
 });
+
+
+test("legacy stale PWA can still open one shift without requestKey during rollout",async t=>{
+  const {token,handler}=await setup(t);
+  const first=await send(handler,token,{openingCash:400});
+  assert.equal(first.status,201);
+  assert.equal(first.body.shift.requestKey,null);
+  const second=await send(handler,token,{openingCash:400});
+  assert.equal(second.status,409);
+  assert.equal(second.body.error,"cash_shift_already_opened");
+});
