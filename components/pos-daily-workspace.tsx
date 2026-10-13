@@ -34,6 +34,8 @@ const newExpenseRequestKey=()=>`expense:${typeof crypto!=="undefined"&&crypto.ra
 
 const n=(value:any)=>Number(value)||0;
 const money=(value:any)=>new Intl.NumberFormat("th-TH",{minimumFractionDigits:0,maximumFractionDigits:2}).format(n(value));
+const readinessLabel=(value:string)=>value==="READY"?"พร้อม":value==="WARN"?"มีจุดต้องดู":"ต้องแก้ก่อน";
+const checkStatusLabel=(value:string)=>value==="READY"?"พร้อม":value==="WARN"?"เตือน":"ต้องแก้";
 
 export default function PosDailyWorkspace({
   session,bootstrap,open,online,onClose
@@ -97,7 +99,7 @@ export default function PosDailyWorkspace({
 
   async function refresh(){
     if(!online){
-      setMessage("OFFLINE · ดูสัญญาณสต็อกจากข้อมูลล่าสุดได้ แต่คิว ออเดอร์ และสถานะระบบต้องรอเชื่อมต่อ");
+      setMessage("เน็ตหลุด · ยังดูสัญญาณสต็อกจากข้อมูลล่าสุดได้ แต่คิว ออเดอร์ และสถานะระบบต้องรอเชื่อมต่อ");
       return;
     }
     setBusy(true);setMessage("");
@@ -136,7 +138,7 @@ export default function PosDailyWorkspace({
         setExpenseRecoveryBlocked(false);
       }catch{
         setExpenseRecoveryBlocked(true);
-        setExpenseFeedback("อ่านรายการค่าใช้จ่ายค้างไม่ได้ · ระบบล็อก Quick Expense เพื่อป้องกันยอดซ้ำ");
+        setExpenseFeedback("อ่านข้อมูลค่าใช้จ่ายค้างไม่ได้ · ระบบปิดรายจ่ายด่วนชั่วคราวเพื่อป้องกันยอดซ้ำ");
       }
     }
   },[open]);
@@ -159,11 +161,11 @@ export default function PosDailyWorkspace({
       drawer_cash_shortage:"เงินในลิ้นชักตามระบบไม่พอ · รีเฟรชและตรวจยอดจริง",
       high_risk_confirmation_required:"รายจ่ายเงินสดตั้งแต่ ฿500 ต้องยืนยันรายการมูลค่าสูง",
       expense_reason_required:"รายจ่ายเงินสดมูลค่าสูงต้องระบุเหตุผลอย่างน้อย 2 ตัวอักษร",
-      request_key_conflict:"Request เดิมไม่ตรงกัน · ระบบล็อกรายการไว้ ห้ามสร้างยอดใหม่",
-      network_unavailable:"ยังไม่ทราบผลจาก Server · ระบบเก็บ Request เดิมไว้และจะตรวจซ้ำ",
-      offline_write_blocked:"ออฟไลน์ · ระบบยังไม่ส่งรายการและเก็บ Request เดิมไว้",
-      expense_ack_unknown:"Server ยังไม่ยืนยัน exact ACK · ระบบเก็บ Request เดิมไว้",
-      expense_recovery_unavailable:"อ่าน/บันทึก Recovery ไม่ได้ · Quick Expense ถูกล็อก",
+      request_key_conflict:"ข้อมูลรายการเดิมไม่ตรงกัน · ระบบล็อกรายการไว้ ห้ามสร้างยอดใหม่",
+      network_unavailable:"ยังไม่ทราบว่าระบบกลางบันทึกสำเร็จหรือไม่ · ระบบเก็บรายการเดิมไว้และจะตรวจซ้ำ",
+      offline_write_blocked:"เน็ตหลุด · ระบบยังไม่ส่งรายการและเก็บรายการเดิมไว้",
+      expense_ack_unknown:"ระบบกลางยังยืนยันรายการเดิมไม่ครบ · ระบบเก็บรายการเดิมไว้และจะตรวจซ้ำ",
+      expense_recovery_unavailable:"อ่าน/บันทึกข้อมูลรายการค้างไม่ได้ · ระบบปิดรายจ่ายด่วนชั่วคราว",
       pending_expense_exists:"มีค่าใช้จ่ายเดิมที่ยังไม่ทราบผล · ตรวจรายการเดิมก่อน",
       invalid_request_key:"รหัสกันรายการซ้ำไม่ถูกต้อง",
       invalid_expense_payment_method:"ช่องทางการจ่ายไม่ถูกต้อง",
@@ -210,7 +212,7 @@ export default function PosDailyWorkspace({
         if(intent&&!expenseSavingRef.current)submitQuickExpense(intent).catch(()=>{});
       }catch{
         setExpenseRecoveryBlocked(true);
-        setExpenseFeedback("อ่านรายการค่าใช้จ่ายค้างไม่ได้ · Quick Expense ถูกล็อก");
+        setExpenseFeedback("อ่านข้อมูลค่าใช้จ่ายค้างไม่ได้ · ระบบปิดรายจ่ายด่วนชั่วคราว");
       }
     };
     const visible=()=>{if(document.visibilityState==="visible")recover()};
@@ -283,7 +285,7 @@ export default function PosDailyWorkspace({
     >
       <header className="flex items-start justify-between gap-3 border-b border-slate-200 bg-white px-4 py-4 sm:px-5">
         <div>
-          <p className="m-0 text-[10px] font-black tracking-[.22em] text-[#765b08]">FIELD DAILY WORKSPACE</p>
+          <p className="m-0 text-[10px] font-black tracking-[.22em] text-[#765b08]">FIELD · งานวันนี้</p>
           <h2 className="mt-1 text-xl font-black text-slate-900">งานร้าน</h2>
           <p className="mt-1 text-xs text-slate-500">เช็กงานหลักโดยไม่ออกจากหน้า POS · งานแก้ไขเชิงลึกค่อยเปิดหน้าเต็ม</p>
         </div>
@@ -379,7 +381,7 @@ export default function PosDailyWorkspace({
             </div>
             <b className="shrink-0 text-[#765b08]">฿{money(sale.total)}</b>
           </div>)}
-          <FullLink href="/orders" label="เปิดประวัติ/Refund/VOID"/>
+          <FullLink href="/orders" label="เปิดประวัติ / คืนเงิน / ยกเลิกบิล"/>
         </div>}
 
         {tab==="stock"&&canStock&&<div className="space-y-2">
@@ -400,10 +402,10 @@ export default function PosDailyWorkspace({
         {tab==="expense"&&canExpense&&<div className="space-y-3">
           {expenseFeedback&&<div role="status" className={"rounded-xl border p-3 text-xs font-semibold "+(pendingExpense||expenseRecoveryBlocked?"border-amber-200 bg-amber-50 text-amber-900":"border-emerald-200 bg-emerald-50 text-emerald-800")}>{expenseFeedback}</div>}
           {pendingExpense&&<div className="rounded-2xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
-            <b>มีค่าใช้จ่ายเดิมรอยืนยัน</b><p className="mt-1">ระบบจะใช้ Request เดิมเท่านั้น · ห้ามสร้างยอดใหม่จนกว่า Server จะตอบ exact ACK</p>
+            <b>มีค่าใช้จ่ายเดิมรอยืนยัน</b><p className="mt-1">ระบบจะตรวจรายการเดิมเท่านั้น · ห้ามสร้างยอดใหม่จนกว่าระบบกลางจะยืนยันผล</p>
           </div>}
           <div className="rounded-2xl border border-slate-200 bg-white p-3">
-            <div className="flex items-center justify-between gap-3"><div><b className="text-sm">Quick Expense</b><p className="mt-1 text-[11px] text-slate-500">บันทึกรายจ่ายประจำวันด้วย API/Recovery เดียวกับหน้าค่าใช้จ่าย</p></div><Link href="/expenses" className="min-h-11 rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-600">หน้าเต็ม</Link></div>
+            <div className="flex items-center justify-between gap-3"><div><b className="text-sm">รายจ่ายด่วน</b><p className="mt-1 text-[11px] text-slate-500">บันทึกรายจ่ายประจำวันด้วยกลไกป้องกันยอดซ้ำเดียวกับหน้าค่าใช้จ่าย</p></div><Link href="/expenses" className="min-h-11 rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-600">หน้าเต็ม</Link></div>
             <div className="mt-3 grid grid-cols-3 gap-1 rounded-2xl bg-slate-100 p-1">
               {([["cash","เงินสด"],["bank","โอน"],["other","อื่น ๆ"]] as const).map(([value,label])=><button type="button" key={value} disabled={busy||!!pendingExpense||expenseRecoveryBlocked} onClick={()=>{setExpensePaymentMethod(value);setExpenseRiskConfirmed(false)}} className={"min-h-11 rounded-xl text-xs font-bold "+(expensePaymentMethod===value?"bg-white shadow-sm":"text-slate-600")}>{label}</button>)}
             </div>
@@ -424,20 +426,20 @@ export default function PosDailyWorkspace({
         </div>}
 
         {tab==="status"&&canStatus&&<div className="space-y-3">
-          {!readiness?<Empty text={!online?"ออฟไลน์ · ต้องเชื่อมต่อเพื่ออ่าน System Readiness":"ยังไม่มีข้อมูล System Readiness"}/>:<>
+          {!readiness?<Empty text={!online?"เน็ตหลุด · ต้องเชื่อมต่อเพื่อดูความพร้อมระบบ":"ยังไม่มีข้อมูลความพร้อมระบบ"}/>:<>
             <div className={"rounded-2xl border p-4 "+(readiness.status==="READY"?"border-emerald-200 bg-emerald-50":readiness.status==="WARN"?"border-amber-200 bg-amber-50":"border-red-200 bg-red-50")}>
               <div className="flex items-center justify-between gap-3">
-                <div><p className="text-[10px] font-black tracking-[.15em] text-slate-500">SYSTEM READINESS</p><b className="mt-1 block text-lg">{readiness.status}</b></div>
+                <div><p className="text-[10px] font-black tracking-[.15em] text-slate-500">ความพร้อมระบบ</p><b className="mt-1 block text-lg">{readinessLabel(readiness.status)}</b></div>
                 <div className="text-right"><b className="text-2xl">{readiness.score}</b><span className="text-xs text-slate-500">/100</span></div>
               </div>
               <div className="mt-3 grid grid-cols-3 gap-2 text-center"><Metric label="พร้อม" value={readiness.summary.ready}/><Metric label="เตือน" value={readiness.summary.warn}/><Metric label="บล็อก" value={readiness.summary.blocked}/></div>
             </div>
             <div className="space-y-2">{readiness.checks.map(check=><div key={check.id} className="flex items-start justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-3">
               <div><b className="text-sm">{check.label}</b><p className="mt-1 text-xs text-slate-500">{check.message}</p></div>
-              <span className={"rounded-full px-2 py-1 text-[9px] font-black "+(check.status==="READY"?"bg-emerald-100 text-emerald-700":check.status==="WARN"?"bg-amber-100 text-amber-800":"bg-red-100 text-red-700")}>{check.status}</span>
+              <span className={"rounded-full px-2 py-1 text-[9px] font-black "+(check.status==="READY"?"bg-emerald-100 text-emerald-700":check.status==="WARN"?"bg-amber-100 text-amber-800":"bg-red-100 text-red-700")}>{checkStatusLabel(check.status)}</span>
             </div>)}</div>
           </>}
-          <FullLink href="/control" label="เปิด AI Control / ตรวจรายละเอียด"/>
+          <FullLink href="/control" label="ตรวจระบบแบบละเอียด"/>
         </div>}
       </div>
     </aside>
