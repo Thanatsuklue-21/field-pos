@@ -11,6 +11,7 @@ test("POS opens the daily workspace in-place and blocks it during payment mutati
   assert.match(pos,/>งานร้าน<\/button>/);
   assert.match(pos,/disabled=\{busy\|\|payOpen\}/);
   assert.match(pos,/bootstrap=\{data\}/);
+  assert.match(pos,/online=\{online\}/);
 });
 
 test("daily workspace covers queue orders stock and owner readiness without route switching",async()=>{
@@ -36,7 +37,7 @@ test("daily workspace is permission-aware and keeps high-risk mutations on full 
 test("workspace fails safe offline while still exposing cached stock signals",async()=>{
   const hub=await read("components/pos-daily-workspace.tsx");
   assert.match(hub,/OFFLINE · ดูสัญญาณสต็อกจากข้อมูลล่าสุดได้/);
-  assert.match(hub,/disabled=\{busy\|\|session\.offline\}/);
+  assert.match(hub,/disabled=\{busy\|\|!online\}/);
   assert.match(hub,/เมนูที่เปิดขายยังไม่พบสัญญาณสต็อกต่ำ/);
 });
 
