@@ -25,6 +25,7 @@ type AdminReadiness={
   readyForPromptPay:boolean;
   readyForFullOperations:boolean;
   accounting?:{ok:boolean;level:string;blocking?:any[];totals?:Record<string,any>};
+  accountingCauses?:{code:string;confidence:string;severity:string;title:string;explanation:string;nextAction:string}[];
   warnings?:{code:string;message:string}[];
 };
 const n=(v:any)=>Number(v)||0;
@@ -356,7 +357,11 @@ export default function PosOperationsHub({session,bootstrap,open,onClose,onRefre
               <span className={"rounded-full px-2 py-1 text-[10px] font-black "+(readiness.readyForFullOperations?"bg-emerald-200 text-emerald-900":readiness.accounting?.ok===false?"bg-red-200 text-red-800":"bg-amber-200 text-amber-900")}>{readiness.readyForFullOperations?"READY":readiness.accounting?.ok===false?"BLOCK":"CHECK"}</span>
             </div>
             <div className="mt-3 grid grid-cols-3 gap-2 text-center"><Metric label="ขายเงินสด" value={readiness.readyForCashSales?1:0}/><Metric label="PromptPay" value={readiness.readyForPromptPay?1:0}/><Metric label="บัญชี" value={readiness.accounting?.ok===false?0:1}/></div>
-            {readiness.accounting?.ok===false&&<p className="mt-3 rounded-xl bg-white px-3 py-2 text-xs font-semibold text-red-700">พบ {n(readiness.accounting?.blocking?.length)} จุด Critical · ตรวจหลักฐานก่อนปิดวัน</p>}
+            {readiness.accounting?.ok===false&&<div className="mt-3 rounded-xl bg-white p-3 text-xs text-red-800">
+              <b>พบ {n(readiness.accounting?.blocking?.length)} จุด Critical · ระบบไม่ปิดวันให้จนกว่าจะตรง</b>
+              {readiness.accountingCauses?.[0]&&<div className="mt-2 border-t border-red-100 pt-2"><b>{readiness.accountingCauses[0].title}</b><p className="mt-1 text-red-700">{readiness.accountingCauses[0].explanation}</p></div>}
+              {canOrder&&<button type="button" onClick={()=>setTab("orders")} className="mt-3 min-h-11 w-full rounded-xl border border-red-200 bg-red-50 px-3 font-bold text-red-800">ตรวจออเดอร์ในงานร้าน</button>}
+            </div>}
           </div>}
           {!!todaySummary?.lowStock?.length&&<div className="rounded-2xl border border-amber-200 bg-white p-4"><b className="text-sm">สต็อกที่ควรดูวันนี้</b><p className="mt-2 text-xs text-slate-600">{todaySummary.lowStock.slice(0,4).map(x=>x.name).join(" · ")}</p><button onClick={()=>setTab("stock")} className="mt-3 min-h-11 w-full rounded-xl border border-slate-300 bg-white text-xs font-bold">ดูสต็อกในหน้านี้</button></div>}
           {!!todaySummary?.recommendations?.length&&<div className="rounded-2xl border border-slate-200 bg-white p-4"><b className="text-sm">ระบบแนะนำ</b><p className="mt-2 text-xs font-semibold text-slate-800">{todaySummary.recommendations[0].title}</p><p className="mt-1 text-xs text-slate-500">{todaySummary.recommendations[0].detail}</p></div>}
