@@ -9,7 +9,7 @@ test("close day deep-links each pending payment to its exact resolution session"
   assert.match(close,/\/orders\?resolution=/);
   assert.match(close,/encodeURIComponent\(paymentBlockers\[0\]\.id\)/);
   assert.match(close,/encodeURIComponent\(p\.id\)/);
-  assert.match(close,/ตรวจ Payment นี้โดยตรง/);
+  assert.match(close,/ตรวจรายการนี้/);
 });
 
 test("orders focuses and highlights a payment resolution selected from close day",async()=>{
