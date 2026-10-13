@@ -123,3 +123,33 @@ test("admin readiness is enforced by the server, not only hidden in the UI",asyn
   assert.equal(res.status,403);
   assert.equal(res.body.error,"admin_required");
 });
+
+
+test("admin readiness returns evidence-backed accounting causes for the operator",async t=>{
+  const date=bangkokDate();
+  const state={
+    menu:[],ingredients:{},paymentSessions:[],orders:[],expenses:[],cashMovements:[],closes:[],
+    sales:[{id:"sale-cause-1",date,status:"paid",total:100,payments:[{method:"cash",amount:80}],items:[]}]
+  };
+  const {db,token}=await setup(t,state);
+  const handler=createApi({db,origin});
+  const res=await send(handler,"GET","admin/readiness",token,undefined);
+  assert.equal(res.status,200);
+  assert.equal(res.body.accounting.ok,false);
+  assert.ok(Array.isArray(res.body.accountingCauses));
+  assert.equal(res.body.accountingCauses[0].code,"PAYMENT_AMOUNT_MISMATCH");
+  assert.equal(res.body.accountingCauses[0].confidence,"HIGH");
+  assert.match(res.body.accountingCauses[0].title,/ยอดรับชำระไม่ตรงกับยอดขาย/);
+  assert.equal(res.body.accountingCauses[0].nextAction,"REVIEW_SALE_PAYMENT");
+});
+
+test("Today workspace turns an accounting block into one in-place review action",async()=>{
+  const hub=await read("components/pos-operations-hub.tsx");
+  assert.match(hub,/accountingCauses\?:/);
+  assert.match(hub,/readiness\.accountingCauses\?\.\[0\]/);
+  assert.match(hub,/ตรวจออเดอร์ในงานร้าน/);
+  assert.match(hub,/onClick=\{\(\)=>setTab\("orders"\)\}/);
+  const start=hub.indexOf("ตรวจออเดอร์ในงานร้าน");
+  const around=hub.slice(Math.max(0,start-800),start+800);
+  assert.doesNotMatch(around,/href="\/orders"/);
+});
