@@ -6,7 +6,7 @@ for(const payload of ['', '<html>gateway</html>','null','"ok"','{}','[]','{"ok":
   const {api}=await load(t.name);
   const descriptor=Object.getOwnPropertyDescriptor(globalThis,'navigator');
   Object.defineProperty(globalThis,'navigator',{configurable:true,value:{onLine:true}});
-  t.after(()=>Object.defineProperty(globalThis,'navigator',descriptor));
+  t.after(()=>{if(descriptor)Object.defineProperty(globalThis,'navigator',descriptor);else delete globalThis.navigator});
   let calls=0;
   t.mock.method(globalThis,'fetch',async()=>{calls++;return new Response(payload,{status:200})});
   await assert.rejects(api('/api/pos/checkout',{method:'POST',body:'{}'}),{message:'network_unavailable',status:0});
@@ -16,7 +16,7 @@ test('complete server checkout ACK remains accepted',async t=>{
   const {api}=await load(t.name);
   const descriptor=Object.getOwnPropertyDescriptor(globalThis,'navigator');
   Object.defineProperty(globalThis,'navigator',{configurable:true,value:{onLine:true}});
-  t.after(()=>Object.defineProperty(globalThis,'navigator',descriptor));
+  t.after(()=>{if(descriptor)Object.defineProperty(globalThis,'navigator',descriptor);else delete globalThis.navigator});
   const ack={ok:true,orderId:'order-1',saleIds:['sale-1'],queueNo:'A001',total:55,received:100,change:45};
   t.mock.method(globalThis,'fetch',async()=>Response.json(ack));
   assert.deepEqual(await api('/api/pos/checkout',{method:'POST',body:'{}'}),ack);

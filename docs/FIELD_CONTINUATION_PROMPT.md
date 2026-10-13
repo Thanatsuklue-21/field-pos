@@ -35,6 +35,8 @@ Unknown response ไม่ใช่ failed; ห้าม generate new key/เป
 
 P0 ก่อน:
 1. Review/integrate pending shared API/IndexedDB fixes ใน PR #255 ด้วย baseline ใหม่; ไม่ duplicate implementation
+หาก PR #255 conflict ที่ api-client.ts ต้องรักษาทั้ง timeout/cancellation fixes และการ reject malformed/incomplete ACK ของ main ใหม่; ห้ามคืน res.json().catch(()=>({})) ให้ successful writes
+
 2. ตรวจ Close Day กับ local cash outbox, pending cash/PromptPay/expense intents บนเครื่องนี้: baseline close page ยังไม่มี device-local preflight; server ไม่รู้ยอด offline ที่ยังไม่ sync อย่าปิดวันจากข้อมูลไม่ครบ
 3. Audit recovery ของ cash drawer movement/delete/stock correction ทุกจุด; fix เฉพาะ evidence พร้อม test lost response/reload/reconnect/exact replay
 
