@@ -7,3 +7,30 @@ test('readiness cash flag is gated by actual stock availability',async()=>{const
 
 
 test('terminal orders do not create false readiness warnings',async()=>{const api=await read('lib/api.mjs');const start=api.indexOf("if(path==='/api/admin/readiness'"),end=api.indexOf("if(path==='/api/admin/business-settings'",start),seg=api.slice(start,end);assert.match(seg,/\['returned','void','refunded','cancelled'\]/)});
+
+
+test('AI system readiness includes accounting and module blockers',async()=>{
+  const api=await read('lib/api.mjs'),ui=await read('app/settings/page.tsx');
+  const start=api.indexOf("if(path==='/api/admin/readiness'");
+  const end=api.indexOf("if(path==='/api/admin/business-settings'",start);
+  const seg=api.slice(start,end);
+  assert.match(seg,/buildAccountingReconciliation/);
+  assert.match(seg,/aiSystemCheck/);
+  assert.match(seg,/status:aiBlockers\.length\?'NOT_READY':aiWarnings\.length\?'READY_WITH_WARNINGS':'READY'/);
+  assert.match(seg,/id:'accounting'/);
+  assert.match(seg,/id:'payment'/);
+  assert.match(seg,/id:'stock'/);
+  assert.match(seg,/id:'queue'/);
+  assert.match(ui,/AI SYSTEM CHECK/);
+  assert.match(ui,/BLOCKERS/);
+  assert.match(ui,/aiSystemCheck\.modules/);
+});
+
+test('full operation readiness is blocked by accounting reconciliation failure',async()=>{
+  const api=await read('lib/api.mjs');
+  const start=api.indexOf("if(path==='/api/admin/readiness'");
+  const end=api.indexOf("if(path==='/api/admin/business-settings'",start);
+  const seg=api.slice(start,end);
+  assert.match(seg,/readyForFullOperations=.*accounting\.ok/);
+  assert.match(seg,/accounting_reconciliation_failed/);
+});
