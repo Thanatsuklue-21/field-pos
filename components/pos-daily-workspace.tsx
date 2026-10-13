@@ -2,7 +2,7 @@
 
 import {useEffect,useMemo,useState} from "react";
 import Link from "next/link";
-import {Activity,Boxes,ClipboardList,ListOrdered,RefreshCw,ShieldCheck,X} from "lucide-react";
+import {Boxes,ClipboardList,ListOrdered,RefreshCw,ShieldCheck,X} from "lucide-react";
 import {api,type Bootstrap,type Session} from "@/lib/api-client";
 import {formatMoney} from "@/lib/money-format.mjs";
 
