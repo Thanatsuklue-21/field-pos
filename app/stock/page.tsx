@@ -70,13 +70,25 @@ function StockView({session}:{session:Session}){
       invalid_purchase_payment_method:"ช่องทางชำระค่าซื้อไม่ถูกต้อง",
       invalid_cycle_count:"ข้อมูลนับ Stock ไม่ถูกต้อง · กรุณาตรวจจำนวนก่อนส่ง",
       cycle_count_requires_confirmation:"ต้องยืนยันผลนับก่อนปรับ Stock",
-      day_closed:"วันนี้ปิดยอดแล้ว · ไม่สามารถปรับ Stock ย้อนหลังใน flow นี้"
+      day_closed:"วันนี้ปิดยอดแล้ว · ไม่สามารถปรับ Stock ย้อนหลังใน flow นี้",
+      cycle_count_approval_confirmation_required:"ต้องยืนยันการอนุมัติผลนับก่อนปรับ Stock",
+      cycle_count_reject_reason_required:"กรุณาระบุเหตุผลที่ตีกลับผลนับ",
+      cycle_count_proposal_not_found:"ไม่พบผลนับที่ต้องการตรวจ · ระบบยังไม่ได้ปรับ Stock จาก Request นี้",
+      cycle_count_proposal_id_mismatch:"รหัสผลนับใน Request ไม่ตรงกับรายการที่เปิดอยู่ · ระบบยังไม่เปลี่ยน Stock",
+      cycle_count_proposal_not_pending:"ผลนับนี้ถูกตรวจไปแล้ว · ระบบจะตรวจ Request เดิมก่อน ห้ามกดซ้ำด้วย Request ใหม่",
+      cycle_count_proposal_day_closed:"วันที่ของผลนับถูก Close Day แล้ว · ไม่อนุญาตให้ปรับ Stock ย้อนหลัง",
+      cycle_count_proposal_expired:"ผลนับหมดอายุ · Server บันทึกสถานะหมดอายุแล้ว ระบบเก็บ Request เดิมไว้เพื่อยืนยัน ACK เดิม",
+      cycle_count_proposal_stale:"Stock เปลี่ยนหลังพนักงานนับ · Server บันทึกผลนี้เป็นหมดอายุจากข้อมูลเปลี่ยนแล้ว ระบบเก็บ Request เดิมไว้เพื่อยืนยัน ACK เดิม"
     };
     return map[code]||code;
   }
 
-  function stockEndpoint(operation:StockWriteOperation){
-    return operation==="stockTransaction"?"/api/stock/transactions":operation==="cycleCountCommit"?"/api/stock/cycle-count":"/api/stock/cycle-count/proposals";
+  function stockRequest(operation:StockWriteOperation,body:any){
+    if(operation==="stockTransaction")return {path:"/api/stock/transactions",method:"POST"};
+    if(operation==="cycleCountCommit")return {path:"/api/stock/cycle-count",method:"POST"};
+    if(operation==="cycleCountProposal")return {path:"/api/stock/cycle-count/proposals",method:"POST"};
+    const proposalId=encodeURIComponent(String(body?.proposalId||""));
+    return {path:"/api/stock/cycle-count/proposals/"+proposalId+(operation==="cycleCountProposalApprove"?"/approve":"/reject"),method:"POST"};
   }
   function exactStockAck(result:any,body:any,intent:StockWriteIntent){
     if(intent.operation==="stockTransaction"){
@@ -84,7 +96,9 @@ function StockView({session}:{session:Session}){
       return result?.ok===true&&tx?.requestKey===body.requestKey&&tx?.createdBy===intent.actorId&&tx?.ingredientId===body.ingredientId&&tx?.type===body.type;
     }
     if(intent.operation==="cycleCountCommit")return result?.ok===true&&result?.requestKey===body.requestKey&&result?.cycleCount?.createdBy===intent.actorId;
-    return result?.ok===true&&result?.requestKey===body.requestKey&&result?.proposal?.requestKey===body.requestKey&&result?.proposal?.submittedBy===intent.actorId;
+    if(intent.operation==="cycleCountProposal")return result?.ok===true&&result?.requestKey===body.requestKey&&result?.proposal?.requestKey===body.requestKey&&result?.proposal?.submittedBy===intent.actorId;
+    if(intent.operation==="cycleCountProposalApprove")return result?.requestKey===body.requestKey&&result?.performedBy===intent.actorId&&result?.proposalId===body.proposalId&&["approved","stale","expired"].includes(String(result?.outcome||""));
+    return result?.requestKey===body.requestKey&&result?.performedBy===intent.actorId&&result?.proposalId===body.proposalId&&result?.outcome==="rejected";
   }
   function notCommittedErrors(operation:StockWriteOperation){
     if(operation==="stockTransaction")return new Set([
@@ -94,23 +108,36 @@ function StockView({session}:{session:Session}){
       "invalid_purchase_url","invalid_cost_status","confirmed_cost_required","invalid_purchase_payment_method","stock_shortage","day_closed","purchase_date_closed",
       "high_risk_confirmation_required","high_risk_reason_required"
     ]);
+    if(operation==="cycleCountProposalApprove")return new Set(["invalid_request_key","cycle_count_approval_confirmation_required","cycle_count_proposal_id_mismatch","cycle_count_proposal_not_found","cycle_count_proposal_not_pending","cycle_count_proposal_day_closed","request_key_conflict","admin_required"]);
+    if(operation==="cycleCountProposalReject")return new Set(["invalid_request_key","cycle_count_reject_reason_required","cycle_count_proposal_id_mismatch","cycle_count_proposal_not_found","cycle_count_proposal_not_pending","request_key_conflict","admin_required"]);
     return new Set(["invalid_cycle_count","cycle_count_requires_confirmation","day_closed"]);
+  }
+  function stockSuccessMessage(intent:StockWriteIntent,result:any,recovery:boolean){
+    const prefix=recovery?"กู้คืน Request เดิมสำเร็จ · ":"";
+    if(intent.operation==="stockTransaction")return prefix+"บันทึก Stock แล้ว";
+    if(intent.operation==="cycleCountCommit")return prefix+"Owner บันทึกยอดนับจริงแล้ว";
+    if(intent.operation==="cycleCountProposal")return prefix+"ส่งผลนับให้ Owner ตรวจแล้ว · Stock ยังไม่เปลี่ยนจนกว่า Owner อนุมัติ";
+    if(intent.operation==="cycleCountProposalReject")return prefix+"ตีกลับผลนับแล้ว · Stock ไม่ถูกเปลี่ยน";
+    if(result?.outcome==="approved")return prefix+"อนุมัติผลนับและปรับ Stock แล้ว";
+    if(result?.outcome==="stale")return prefix+"ยืนยันผล Request เดิมแล้ว · Stock เปลี่ยนหลังพนักงานนับ จึงไม่ปรับยอดและต้องนับใหม่";
+    return prefix+"ยืนยันผล Request เดิมแล้ว · ผลนับหมดอายุ จึงไม่ปรับ Stock และต้องนับใหม่";
   }
 
   async function submitStockIntent(intent:StockWriteIntent,recovery=false){
     setBusy(true);setMsg("");
     try{
-      const result=await sendStockWriteIntent(intent,body=>api<any>(stockEndpoint(intent.operation),{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify(body)}),exactStockAck,notCommittedErrors(intent.operation));
+      const req=stockRequest(intent.operation,intent.body);
+      const result=await sendStockWriteIntent(intent,body=>api<any>(req.path,{method:req.method,headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify(body)}),exactStockAck,notCommittedErrors(intent.operation));
       setPendingStockIntent(null);setStockRecoveryBlocked(false);
       if(intent.operation==="stockTransaction"){setTxOpen(null);setWasteQty("")}
-      else setCountOpen(false);
-      setMsg((recovery?"กู้คืน Request เดิมสำเร็จ · ":"")+(intent.operation==="stockTransaction"?"บันทึก Stock แล้ว":intent.operation==="cycleCountCommit"?"Owner บันทึกยอดนับจริงแล้ว":"ส่งผลนับให้ Owner ตรวจแล้ว · Stock ยังไม่เปลี่ยนจนกว่า Owner อนุมัติ"));
+      else if(intent.operation==="cycleCountCommit"||intent.operation==="cycleCountProposal")setCountOpen(false);
+      setMsg(stockSuccessMessage(intent,result,recovery));
       await load();
       return result;
     }catch(e:any){
       try{
         const current=readStockWriteIntent(session.user.id);setPendingStockIntent(current);
-        setMsg(current?stockError(e.message):stockError(e.message));
+        setMsg(stockError(e.message));
       }catch{
         setStockRecoveryBlocked(true);setMsg(stockError("stock_recovery_unavailable"));
       }
@@ -258,16 +285,24 @@ function StockView({session}:{session:Session}){
   async function reviewCountProposal(p:CountProposal,approve:boolean){
     if(!admin)return;
     if(pendingStockIntent||stockRecoveryBlocked){setMsg(stockError(stockRecoveryBlocked?"stock_recovery_unavailable":"pending_stock_write_exists"));return}
-    if(approve){
-      const changes=p.adjustments.filter(x=>Math.abs(Number(x.variance||0))>0.000001);
-      if(!window.confirm("อนุมัติผลนับ "+p.id+" ?\nพบส่วนต่าง "+changes.length+" รายการ · ระบบจะปรับ Stock และเขียน Audit Log"))return;
-      setBusy(true);setMsg("");
-      try{await api("/api/stock/cycle-count/proposals/"+encodeURIComponent(p.id)+"/approve",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({confirm:true,note:"Owner reviewed physical count"})});setMsg("อนุมัติผลนับและปรับ Stock แล้ว");await load()}
-      catch(e:any){setMsg(e.message==="cycle_count_proposal_stale"?"Stock เปลี่ยนหลังพนักงานนับ · ผลนับนี้หมดอายุ ต้องให้นับใหม่":e.message)}finally{setBusy(false)}
-    }else{
-      const reason=window.prompt("เหตุผลที่ไม่อนุมัติผลนับ")||"";if(reason.trim().length<2)return;
-      setBusy(true);setMsg("");
-      try{await api("/api/stock/cycle-count/proposals/"+encodeURIComponent(p.id)+"/reject",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({reason:reason.trim()})});setMsg("ตีกลับผลนับแล้ว");await load()}catch(e:any){setMsg(e.message)}finally{setBusy(false)}
+    try{
+      let operation:StockWriteOperation,body:any;
+      if(approve){
+        const changes=p.adjustments.filter(x=>Math.abs(Number(x.variance||0))>0.000001);
+        if(!window.confirm("อนุมัติผลนับ "+p.id+" ?\nพบส่วนต่าง "+changes.length+" รายการ · ระบบจะปรับ Stock และเขียน Audit Log"))return;
+        operation="cycleCountProposalApprove";
+        body={requestKey:crypto.randomUUID(),proposalId:p.id,confirm:true,note:"Owner reviewed physical count"};
+      }else{
+        const reason=window.prompt("เหตุผลที่ไม่อนุมัติผลนับ")||"";if(reason.trim().length<2)return;
+        operation="cycleCountProposalReject";
+        body={requestKey:crypto.randomUUID(),proposalId:p.id,reason:reason.trim()};
+      }
+      const intent=prepareStockWriteIntent(session.user.id,operation,p.date||today(),body);
+      setPendingStockIntent(intent);
+      await submitStockIntent(intent,false);
+    }catch(e:any){
+      setMsg(stockError(e.message));
+      if(e.message==="stock_recovery_unavailable")setStockRecoveryBlocked(true);
     }
   }
 
