@@ -2,6 +2,8 @@ name: FIELD Production Smoke
 
 on:
   deployment_status:
+  schedule:
+    - cron: '17 * * * *'
   workflow_dispatch:
     inputs:
       base_url:
@@ -14,12 +16,12 @@ permissions:
 
 jobs:
   smoke:
-    if: github.event_name == 'workflow_dispatch' || github.event.deployment_status.state == 'success'
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.event.deployment_status.state == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
-      BASE_URL: ${{ github.event_name == 'workflow_dispatch' && inputs.base_url || github.event.deployment_status.environment_url || 'https://field-pos.vercel.app' }}
-      EXPECTED_SHA: ${{ github.event_name == 'deployment_status' && github.event.deployment.sha || '' }}
+      BASE_URL: ${{ github.event_name == 'workflow_dispatch' && inputs.base_url || github.event_name == 'deployment_status' && github.event.deployment_status.environment_url || 'https://field-pos.vercel.app' }}
+      EXPECTED_SHA: ${{ github.event_name == 'deployment_status' && github.event.deployment.sha || github.sha }}
     steps:
       - name: Verify public health and core routes
         shell: bash
@@ -47,7 +49,7 @@ jobs:
             echo "$path OK"
           done
 
-      - name: Verify deployed commit matches deployment event
+      - name: Verify production commit matches expected main or deployment
         if: env.EXPECTED_SHA != ''
         shell: bash
         run: |
@@ -60,10 +62,10 @@ jobs:
             exit 1
           fi
           if [ "$actual" != "$EXPECTED_SHA" ]; then
-            echo "::error::Stale release: deployment event SHA $EXPECTED_SHA but production reports $actual"
+            echo "::error::Stale release: expected SHA $EXPECTED_SHA but production reports $actual"
             exit 1
           fi
-          echo "Production commit matches deployment event: $actual"
+          echo "Production commit matches expected release: $actual"
 
       - name: Publish smoke summary
         if: always()

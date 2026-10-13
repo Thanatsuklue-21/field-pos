@@ -96,3 +96,14 @@ test('production smoke workflow checks health routes and stale release without c
   assert.match(yml,/release_identity_missing/);
   assert.doesNotMatch(yml,/vercel deploy|create_deployment|deploy --prod/);
 });
+
+
+test('production smoke also monitors stale main release hourly without deploying',async()=>{
+  const yml=await read('.github/workflows/production-smoke.yml');
+  assert.match(yml,/schedule:/);
+  assert.match(yml,/cron: '17 \* \* \* \*'/);
+  assert.match(yml,/github\.event_name == 'schedule'/);
+  assert.match(yml,/github\.sha/);
+  assert.match(yml,/Stale release: expected SHA/);
+  assert.doesNotMatch(yml,/vercel deploy|create_deployment|deploy --prod/);
+});
