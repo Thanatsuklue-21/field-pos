@@ -3,6 +3,7 @@ import {useEffect,useState} from "react";
 import AuthGate from "@/components/auth-gate";
 import {api,type Session} from "@/lib/api-client";
 import {getOfflineCashClosePreflight,type OfflineCashSummary} from "@/lib/offline-sales";
+import {prepareCriticalWriteIntent,readCriticalWriteIntent,sendCriticalWriteIntent,type CriticalWriteIntent} from "@/lib/critical-write-recovery";
 
 type Close={id:string;date:string;revenue:number;cogs:number;expenses:number;purchaseSpend?:number;totalCashOut?:number;grossProfit:number;operatingProfit:number;cash:number;promptpay:number;bank?:number;card?:number;other:number;openingCash?:number;cashIn?:number;cashPaidOut?:number;cashOut?:number;expectedCash?:number;countedCash?:number;cashVariance?:number;orders:number;cups:number;time:number};
 type Shift={id:string;date:string;status:"open"|"closed";openingCash:number;openedAt:number;openedBy:string;closedAt?:number;cashVariance?:number};
@@ -10,13 +11,23 @@ type Movement={id:string;shiftId:string;date:string;type:"CASH_IN"|"CASH_OUT";am
 type DrawerSnapshot={openingCash:number;cashSales:number;cashIn:number;cashPaidOut:number;cashOut:number;availableCash:number};
 type CloseData={closes:Close[];shift:Shift|null;businessDate:string;cashMovements:Movement[];drawerSnapshot:DrawerSnapshot|null};
 type DeviceRecovery={status:"checking"|"clear"|"blocked"|"error";summary:OfflineCashSummary|null};
+type CashMovementBody={requestKey:string;type:"CASH_IN"|"CASH_OUT";amount:number;reason:string;riskConfirmed:boolean};
 
 export default function CloseDay(){return <AuthGate>{s=><View session={s}/>}</AuthGate>}
 
 function View({session}:{session:Session}){
-  const [rows,setRows]=useState<Close[]>([]),[shift,setShift]=useState<Shift|null>(null),[businessDate,setBusinessDate]=useState(""),[movements,setMovements]=useState<Movement[]>([]),[drawerSnapshot,setDrawerSnapshot]=useState<DrawerSnapshot|null>(null),[msg,setMsg]=useState(""),[busy,setBusy]=useState(false),[openingCash,setOpeningCash]=useState("0"),[firstCount,setFirstCount]=useState(""),[secondCount,setSecondCount]=useState(""),[review,setReview]=useState<any|null>(null),[varianceReason,setVarianceReason]=useState(""),[confirmVariance,setConfirmVariance]=useState(false),[drawerOpen,setDrawerOpen]=useState(false),[movementType,setMovementType]=useState<"CASH_IN"|"CASH_OUT">("CASH_OUT"),[movementAmount,setMovementAmount]=useState(""),[movementReason,setMovementReason]=useState(""),[movementRiskConfirmed,setMovementRiskConfirmed]=useState(false),[deviceRecovery,setDeviceRecovery]=useState<DeviceRecovery>({status:"checking",summary:null});
+  const [rows,setRows]=useState<Close[]>([]),[shift,setShift]=useState<Shift|null>(null),[businessDate,setBusinessDate]=useState(""),[movements,setMovements]=useState<Movement[]>([]),[drawerSnapshot,setDrawerSnapshot]=useState<DrawerSnapshot|null>(null),[msg,setMsg]=useState(""),[busy,setBusy]=useState(false),[openingCash,setOpeningCash]=useState("0"),[firstCount,setFirstCount]=useState(""),[secondCount,setSecondCount]=useState(""),[review,setReview]=useState<any|null>(null),[varianceReason,setVarianceReason]=useState(""),[confirmVariance,setConfirmVariance]=useState(false),[drawerOpen,setDrawerOpen]=useState(false),[movementType,setMovementType]=useState<"CASH_IN"|"CASH_OUT">("CASH_OUT"),[movementAmount,setMovementAmount]=useState(""),[movementReason,setMovementReason]=useState(""),[movementRiskConfirmed,setMovementRiskConfirmed]=useState(false),[deviceRecovery,setDeviceRecovery]=useState<DeviceRecovery>({status:"checking",summary:null}),[pendingMovement,setPendingMovement]=useState<CriticalWriteIntent<CashMovementBody>|null>(null);
   const load=()=>api<CloseData>("/api/close-day").then(x=>{setRows(x.closes||[]);setShift(x.shift||null);setBusinessDate(x.businessDate||"");setMovements(x.cashMovements||[]);setDrawerSnapshot(x.drawerSnapshot||null) });
   useEffect(()=>{load().catch(()=>{});refreshDevicePreflight()},[]);
+  useEffect(()=>{
+    try{
+      const intent=readCriticalWriteIntent<CashMovementBody>(session.user.id,"cashMovement");
+      setPendingMovement(intent);
+      if(intent)setMsg("มีรายการเงินสดเข้า/ออกที่ยังไม่ทราบผล · ระบบล็อกข้อมูลเดิมไว้ กรุณาตรวจผลรายการเดิมก่อนทำรายการใหม่");
+    }catch{
+      setMsg("ตรวจข้อมูล Recovery ของเงินสดเข้า/ออกไม่ได้ · งดทำรายการใหม่จนกว่าจะโหลด Recovery ได้");
+    }
+  },[session.user.id]);
   useEffect(()=>{
     if(!drawerOpen)return;
     const onKey=(e:KeyboardEvent)=>{if(e.key==="Escape"&&!busy)setDrawerOpen(false)};
@@ -61,28 +72,70 @@ function View({session}:{session:Session}){
     finally{setBusy(false)}
   }
 
+  const movementNotCommitted=new Set(["invalid_request_key","invalid_cash_movement_type","invalid_cash_movement_amount","cash_movement_reason_required","high_risk_confirmation_required","high_risk_reason_required","cash_shift_not_open","drawer_cash_shortage","day_already_closed"]);
+
+  async function sendMovementIntent(intent:CriticalWriteIntent<CashMovementBody>,recovered=false){
+    const r=await sendCriticalWriteIntent(
+      intent,
+      body=>api<any>("/api/cash-shift/movements",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify(body)}),
+      (result,body,current)=>{
+        const movement=result?.movement;
+        return result?.ok===true&&movement&&movement.requestKey===body.requestKey&&movement.createdBy===current.actorId&&movement.type===body.type&&Number(movement.amount)===body.amount&&String(movement.reason||"")===body.reason&&movement.date===businessDate;
+      },
+      movementNotCommitted
+    );
+    setPendingMovement(null);
+    setMovementAmount("");setMovementReason("");setMovementRiskConfirmed(false);setDrawerOpen(false);
+    setMsg((recovered?"ยืนยันผลรายการเดิมแล้ว · ":"")+(intent.body.type==="CASH_IN"?"บันทึกเติมเงินสดเข้าลิ้นชักแล้ว":"บันทึกนำเงินสดออกจากลิ้นชักแล้ว")+" · คงเหลือตามระบบ ฿"+Number(r.availableCash||0).toLocaleString());
+    await load();
+  }
+
+  async function recoverMovement(){
+    if(!pendingMovement)return;
+    setBusy(true);setMsg("");
+    try{await sendMovementIntent(pendingMovement,true)}
+    catch(e:any){
+      if(!e?.status||["network_unavailable","offline_write_blocked","critical_ack_unknown","critical_recovery_unavailable"].includes(String(e.message||""))){
+        setMsg("ยังยืนยันผลรายการเงินสดเดิมไม่ได้ · ระบบจะเก็บรายการเดิมไว้ ห้ามสร้างรายการใหม่จนกว่าจะตรวจพบ ACK จาก Server");
+      }else{
+        try{setPendingMovement(readCriticalWriteIntent<CashMovementBody>(session.user.id,"cashMovement"))}catch{}
+        const map:Record<string,string>={request_key_conflict:"ข้อมูลรายการเดิมไม่ตรงกับ Server · หยุดและตรวจ Audit ก่อนดำเนินการต่อ",day_already_closed:"วันนี้ถูกปิดวันแล้ว · ตรวจ Audit/รายการเงินสดเดิมก่อน",cash_shift_not_open:"กะเงินสดไม่เปิดแล้ว · ตรวจว่ารายการเดิมถูกบันทึกหรือไม่ก่อนทำรายการใหม่",drawer_cash_shortage:"ยอดเงินในลิ้นชักไม่พอ · Server ยืนยันว่าไม่บันทึกรายการนี้"};
+        setMsg(map[e.message]||"รายการเดิมถูกปฏิเสธโดย Server · ตรวจข้อมูลแล้วจึงทำรายการใหม่");
+      }
+    }finally{setBusy(false)}
+  }
+
   async function addMovement(){
     const amount=Number(movementAmount);
+    if(pendingMovement){setMsg("มีรายการเงินสดเดิมที่ยังไม่ทราบผล · กรุณากดตรวจผลรายการเดิมก่อน");return}
     if(!shift||shift.status!=="open"){setMsg("ต้องเปิดร้านก่อนบันทึกเงินเข้า/ออกลิ้นชัก");return}
     if(!Number.isFinite(amount)||amount<=0){setMsg("กรุณากรอกจำนวนเงินที่ถูกต้อง");return}
     if(movementReason.trim().length<2){setMsg("กรุณาระบุเหตุผล");return}
     if(movementType==="CASH_OUT"&&amount>=500&&!movementRiskConfirmed){setMsg("รายการนำเงินออกตั้งแต่ ฿500 ต้องยืนยัน High-Risk Action ก่อน");return}
     setBusy(true);setMsg("");
+    let intent:CriticalWriteIntent<CashMovementBody>|null=null;
     try{
-      const r=await api<any>("/api/cash-shift/movements",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({type:movementType,amount,reason:movementReason.trim(),riskConfirmed:movementRiskConfirmed})});
-      setMovementAmount("");setMovementReason("");setMovementRiskConfirmed(false);setDrawerOpen(false);
-      setMsg((movementType==="CASH_IN"?"บันทึกเติมเงินสดเข้าลิ้นชักแล้ว":"บันทึกนำเงินสดออกจากลิ้นชักแล้ว")+" · คงเหลือตามระบบ ฿"+Number(r.availableCash||0).toLocaleString());
-      await load();
+      intent=prepareCriticalWriteIntent(session.user.id,"cashMovement",{requestKey:crypto.randomUUID(),type:movementType,amount,reason:movementReason.trim(),riskConfirmed:movementRiskConfirmed});
+      setPendingMovement(intent);
+      await sendMovementIntent(intent);
     }catch(e:any){
-      const map:Record<string,string>={
-        drawer_cash_shortage:"เงินสดตามระบบไม่พอสำหรับนำออกจำนวนนี้ · ยอดอาจเปลี่ยนจากการขาย/ค่าใช้จ่ายล่าสุด กรุณารีเฟรชและตรวจใหม่",
-        cash_shift_not_open:"ต้องเปิดร้านก่อนบันทึกเงินเข้า/ออก",
-        high_risk_confirmation_required:"รายการนี้ต้องยืนยัน High-Risk Action ก่อน",
-        high_risk_reason_required:"กรุณาระบุเหตุผลให้ชัดเจน",
-        cash_movement_reason_required:"กรุณาระบุเหตุผลให้ชัดเจน",
-        invalid_cash_movement_amount:"จำนวนเงินไม่ถูกต้อง"
-      };
-      setMsg(map[e.message]||e.message);await load().catch(()=>{});
+      try{setPendingMovement(readCriticalWriteIntent<CashMovementBody>(session.user.id,"cashMovement"))}catch{}
+      if(!e?.status||["network_unavailable","offline_write_blocked","critical_ack_unknown","critical_recovery_unavailable","pending_critical_write_exists"].includes(String(e.message||""))){
+        setDrawerOpen(false);
+        setMsg("ยังไม่ทราบว่า Server บันทึกรายการเงินสดแล้วหรือไม่ · ระบบเก็บรายการเดิมและ Request Key ไว้ ห้ามกดสร้างรายการใหม่ ให้ใช้ “ตรวจผลรายการเดิม”");
+      }else{
+        const map:Record<string,string>={
+          drawer_cash_shortage:"เงินสดตามระบบไม่พอสำหรับนำออกจำนวนนี้ · Server ยืนยันว่าไม่ได้บันทึกรายการ",
+          cash_shift_not_open:"ต้องเปิดร้านก่อนบันทึกเงินเข้า/ออก · Server ยืนยันว่าไม่ได้บันทึกรายการ",
+          high_risk_confirmation_required:"รายการนี้ต้องยืนยัน High-Risk Action ก่อน",
+          high_risk_reason_required:"กรุณาระบุเหตุผลให้ชัดเจน",
+          cash_movement_reason_required:"กรุณาระบุเหตุผลให้ชัดเจน",
+          invalid_cash_movement_amount:"จำนวนเงินไม่ถูกต้อง",
+          request_key_conflict:"Request Key เดิมไม่ตรงกับข้อมูลเดิม · หยุดและตรวจ Audit ก่อน"
+        };
+        setMsg(map[e.message]||"Server ปฏิเสธรายการนี้ · ตรวจข้อมูลก่อนลองใหม่");
+      }
+      await load().catch(()=>{});
     }finally{setBusy(false)}
   }
 
@@ -153,6 +206,7 @@ function View({session}:{session:Session}){
 
     {drawerOpen&&<div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/35 p-0 backdrop-blur-[2px] sm:items-center sm:p-4" onClick={()=>{if(!busy)setDrawerOpen(false)}}><div role="dialog" aria-modal="true" aria-labelledby="cash-drawer-dialog-title" onClick={e=>e.stopPropagation()} className="w-full max-w-lg rounded-t-[28px] bg-white p-4 shadow-2xl sm:rounded-[28px] sm:p-5"><div className="flex items-start justify-between gap-3"><div><p className="m-0 text-[10px] font-black tracking-[.2em] text-[#765b08]">CASH DRAWER CONTROL</p><h2 id="cash-drawer-dialog-title" className="mt-1 text-xl font-bold text-slate-900">บันทึกเงินเข้า / ออกลิ้นชัก</h2><p className="mt-1 text-xs text-slate-500">ระบบจะตรวจยอดอีกครั้งที่ Server ตอนกดยืนยัน เพื่อกันยอดเปลี่ยนระหว่างทำรายการ</p></div><button type="button" disabled={busy} aria-label="ปิดหน้าต่างเงินสด" onClick={()=>setDrawerOpen(false)} className="grid h-11 w-11 shrink-0 place-items-center rounded-xl border border-slate-200 bg-white text-lg disabled:opacity-40">×</button></div><div className="mt-4 grid grid-cols-2 gap-2 rounded-2xl bg-slate-100 p-1"><button type="button" onClick={()=>{setMovementType("CASH_OUT");setMovementRiskConfirmed(false)}} className={"min-h-11 rounded-xl text-sm font-bold "+(movementType==="CASH_OUT"?"bg-white text-red-600 shadow-sm":"text-slate-600")}>นำเงินออก</button><button type="button" onClick={()=>{setMovementType("CASH_IN");setMovementRiskConfirmed(false)}} className={"min-h-11 rounded-xl text-sm font-bold "+(movementType==="CASH_IN"?"bg-white text-emerald-700 shadow-sm":"text-slate-600")}>เติมเงินเข้า</button></div><div className="mt-4 grid grid-cols-2 gap-2 text-center"><div className="rounded-2xl border border-slate-200 bg-slate-50 p-3"><small className="text-slate-500">ก่อนทำรายการ</small><div className="mt-1 text-lg font-semibold">฿{currentDrawerCash.toLocaleString()}</div></div><div className={"rounded-2xl border p-3 "+(movementTooLarge?"border-red-200 bg-red-50":"border-slate-200 bg-slate-50")}><small className="text-slate-500">หลังทำรายการ</small><div className={"mt-1 text-lg font-semibold "+(movementTooLarge?"text-red-600":movementType==="CASH_IN"?"text-emerald-700":"text-slate-900")}>฿{movementAfterCash.toLocaleString()}</div></div></div><label className="mt-4 block text-sm"><span className="font-semibold text-slate-700">จำนวนเงิน</span><input autoFocus inputMode="decimal" value={movementAmount} onChange={e=>setMovementAmount(e.target.value)} placeholder="0" className="mt-2 min-h-12 w-full rounded-2xl border border-slate-300 bg-white px-4 text-lg font-semibold"/></label>{movementTooLarge&&<div className="mt-2 rounded-xl border border-red-200 bg-red-50 p-3 text-xs font-semibold text-red-700">นำออกเกินยอดในลิ้นชักตามระบบ · ไม่อนุญาตให้บันทึก</div>}<label className="mt-3 block text-sm"><span className="font-semibold text-slate-700">เหตุผล</span><input value={movementReason} onChange={e=>setMovementReason(e.target.value)} placeholder={movementType==="CASH_OUT"?"เช่น นำเงินส่วนเกินไปเก็บ":"เช่น เติมเงินทอนเพิ่ม"} className="mt-2 min-h-12 w-full rounded-2xl border border-slate-300 bg-white px-4"/></label>{movementHighRisk&&<label className="mt-3 flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 p-3 text-sm text-red-700"><input type="checkbox" checked={movementRiskConfirmed} onChange={e=>setMovementRiskConfirmed(e.target.checked)} className="mt-1 h-4 w-4"/><span><b>High-Risk Action</b><br/><span className="text-xs">ฉันยืนยันการนำเงินสดออกตั้งแต่ ฿500 ขึ้นไป และเข้าใจว่ารายการนี้จะถูกบันทึก Audit Log ถาวร</span></span></label>}<div className="mt-4 grid grid-cols-2 gap-2"><button type="button" disabled={busy} onClick={()=>setDrawerOpen(false)} className="min-h-12 rounded-2xl border border-slate-300 bg-white text-sm font-bold text-slate-700 disabled:opacity-40">ยกเลิก</button><button type="button" disabled={busy||!movementCanSubmit} onClick={addMovement} className={"min-h-12 rounded-2xl text-sm font-bold text-white disabled:opacity-40 "+(movementType==="CASH_IN"?"bg-emerald-700":"bg-red-600")}>{busy?"กำลังบันทึก...":movementType==="CASH_IN"?"ยืนยันเติมเงิน":"ยืนยันนำเงินออก"}</button></div></div></div>}
 
+    {pendingMovement&&<div className="mt-4 rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900"><b>มีรายการเงินสดที่ยังไม่ทราบผล</b><p className="mt-1 text-xs">ระบบล็อก Request Key เดิมไว้: {pendingMovement.body.type==="CASH_IN"?"เติมเงิน":"นำเงินออก"} ฿{Number(pendingMovement.body.amount).toLocaleString()} · ห้ามสร้างรายการใหม่จนกว่าจะได้ผลยืนยันจาก Server</p><button type="button" disabled={busy} onClick={recoverMovement} className="mt-3 min-h-11 rounded-xl bg-amber-700 px-4 text-xs font-bold text-white disabled:opacity-40">ตรวจผลรายการเดิม</button></div>}
     {msg&&<div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-3 text-sm"><span>{msg}</span><div className="flex flex-wrap gap-2">{msg.includes("Payment")&&msg.includes("ค้าง")&&<button type="button" onClick={()=>window.location.assign("/orders")} className="min-h-10 rounded-xl bg-amber-600 px-3 text-xs font-bold text-white">ไป Payment Recovery</button>}{msg.includes("ออเดอร์")&&msg.includes("ยัง")&&<button type="button" onClick={()=>window.location.assign("/queue")} className="min-h-10 rounded-xl bg-slate-900 px-3 text-xs font-bold text-white">ไปจัดการคิว</button>}{msg.includes("สต๊อก")&&msg.includes("อนุมัติ")&&<button type="button" onClick={()=>window.location.assign("/stock")} className="min-h-10 rounded-xl bg-emerald-700 px-3 text-xs font-bold text-white">ไปหน้า Stock</button>}</div></div>}
     <div className="mt-5 grid gap-3">{rows.map(x=><div key={x.id} className="glass card p-4 sm:p-5"><div className="flex flex-wrap items-start justify-between gap-4"><div><small className="text-slate-500">{x.date}</small><div className="mt-1 text-2xl font-semibold gold">฿{x.revenue.toLocaleString()}</div><small className="text-slate-500">{x.orders} orders · {x.cups} cups</small></div><div className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm md:grid-cols-4"><div><small className="text-slate-500">Opening Cash</small><div>฿{Number(x.openingCash||0).toLocaleString()}</div></div><div><small className="text-slate-500">Cash Sales</small><div>฿{x.cash.toLocaleString()}</div></div><div><small className="text-slate-500">Cash In</small><div className="text-emerald-700">+฿{Number(x.cashIn||0).toLocaleString()}</div></div><div><small className="text-slate-500">Cash Paid Out</small><div className="text-red-600">−฿{Number(x.cashPaidOut||0).toLocaleString()}</div></div><div><small className="text-slate-500">Cash Out</small><div className="text-red-600">−฿{Number(x.cashOut||0).toLocaleString()}</div></div><div><small className="text-slate-500">Expected Drawer</small><div>฿{Number(x.expectedCash??x.cash).toLocaleString()}</div></div><div><small className="text-slate-500">Counted Cash</small><div>฿{Number(x.countedCash??x.cash).toLocaleString()}</div></div><div><small className="text-slate-500">Cash Variance</small><div className={Number(x.cashVariance||0)===0?"text-emerald-700":Number(x.cashVariance||0)>0?"text-amber-700":"text-red-600"}>{Number(x.cashVariance||0)>0?"+":""}฿{Number(x.cashVariance||0).toLocaleString()}</div></div><div><small className="text-slate-500">PromptPay</small><div>฿{x.promptpay.toLocaleString()}</div></div><div><small className="text-slate-500">โอนธนาคาร</small><div>฿{Number(x.bank||0).toLocaleString()}</div></div><div><small className="text-slate-500">บัตร</small><div>฿{Number(x.card||0).toLocaleString()}</div></div><div><small className="text-slate-500">COGS</small><div>฿{x.cogs.toLocaleString()}</div></div><div><small className="text-slate-500">Operating Expenses</small><div>฿{x.expenses.toLocaleString()}</div></div><div><small className="text-slate-500">Purchase Spend</small><div>฿{Number(x.purchaseSpend||0).toLocaleString()}</div></div><div><small className="text-slate-500">Gross Profit</small><div>฿{x.grossProfit.toLocaleString()}</div></div><div><small className="text-slate-500">Operating Profit</small><div className={x.operatingProfit>=0?"text-emerald-700":"text-red-600"}>฿{x.operatingProfit.toLocaleString()}</div></div></div></div></div>)}</div>
   </section>
