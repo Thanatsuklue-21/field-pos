@@ -1,10 +1,6 @@
 # Prompt ส่งต่อให้ FIELD
 
-> Current checkpoint (2026-10-13): `main cd896524c1415e1a6ea26439ede70c40ceab21ba` includes PR #269 cycle-count review durability and PR #270 strict offline-outbox read safety. PR #255 remains stale/open; only still-missing shared GET timeout/cancellation/header fixes and IndexedDB write acknowledgement should be ported on a fresh main branch. PR #266 remains draft/open for Purchase Edit/Cancel and must be re-audited against latest main before any integration.
-
-
-> Current checkpoint (2026-10-13): main baseline สำหรับรอบล่าสุดคือ `6e05d6a98edb017b77972e9962a427829e6d5671`. Close Day device preflight/TOCTOU, cash drawer, expense delete, stock critical writes และ VOID/refund durability ถูก merge บน main แล้วตาม PR หลัง #256. PR #266 ยัง draft/open สำหรับ Purchase Edit/Cancel. งาน P0 ที่รอบล่าสุดตรวจพบและกำลังแก้แยกคือ Cycle Count Proposal approve/reject durable recovery; ต้องตรวจสถานะ PR ล่าสุดก่อนทำซ้ำ.
-
+> Checkpoint 2026-10-13: baseline รอบ UX คือ `815d3c0def5ca490ac45ca885a72c44abfd20541` หลัง PR #271 ซึ่งรวม strict offline reads/writes และ shared GET hardening แล้ว ห้ามทำ patch เหล่านี้ซ้ำจาก PR #255 เก่า ตรวจ latest main/PR/CI อีกครั้งก่อนเริ่ม รอบ UX ปรับ touch targets และชื่อปุ่มในหน้ารับเงิน; ดู `FIELD_TOUCH_UX_HANDOFF.md` สำหรับขอบเขตและผลตรวจ
 
 คัดลอกข้อความด้านล่างเข้า task ใหม่ของ FIELD:
 
@@ -20,7 +16,7 @@ Repository: https://github.com/Thanatsuklue-21/field-pos
 2. บันทึก exact SHA `git rev-parse origin/main`; อ่าน latest merged PR, CI และ production release identity
 3. อ่าน README, INTEGRATION_AUDIT, FIELD_MAIN_AUDIT (ถ้ามีบน main), test suite และ business logic ที่จะเปลี่ยน
 4. สร้าง feature branch ใหม่จาก exact origin/main; ห้ามแก้ main หรือใช้ branch/PR เก่าเป็น baseline
-5. ตรวจสถานะ PR #255 และ PR ของ `fix/field-safe-ack-handoff` ก่อน เพื่อไม่ทำงานซ้ำ; ถ้ายังไม่ merged ห้ามถือว่าฟีเจอร์นั้นอยู่บน main
+5. ตรวจสถานะ PR ล่าสุดและ implementation จริงก่อน เพื่อไม่ทำงานซ้ำ; PR #271 port ส่วนที่จำเป็นจาก #255 เข้า main แล้ว
 
 ## สิ่งที่ต้องรักษา
 
