@@ -16,12 +16,12 @@ permissions:
 
 jobs:
   smoke:
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.event.deployment_status.state == 'success'
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || (github.event_name == 'deployment_status' && github.event.deployment_status.state == 'success' && (github.event.deployment.environment == 'Production' || github.event.deployment.environment == 'production'))
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
       BASE_URL: ${{ github.event_name == 'workflow_dispatch' && inputs.base_url || 'https://field-pos.vercel.app' }}
-      EXPECTED_SHA: ${{ github.event_name == 'deployment_status' && github.event.deployment.sha || '' }}
+      EXPECTED_SHA: ${{ github.event_name == 'deployment_status' && (github.event.deployment.environment == 'Production' || github.event.deployment.environment == 'production') && github.event.deployment.sha || '' }}
     steps:
       - name: Verify public health and core routes
         shell: bash
@@ -95,6 +95,7 @@ jobs:
             echo "## FIELD Production Smoke"
             echo "- URL: $BASE_URL"
             echo "- Trigger: ${{ github.event_name }}"
+            echo "- Deployment environment: ${{ github.event_name == 'deployment_status' && github.event.deployment.environment || 'n/a' }}"
             echo "- Expected SHA: ${EXPECTED_SHA:-manual}"
             echo "- Result: ${{ job.status }}"
           } >> "$GITHUB_STEP_SUMMARY"
