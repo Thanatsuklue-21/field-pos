@@ -2,7 +2,7 @@
 
 import {useEffect,useMemo,useRef,useState} from "react";
 import {useRouter} from "next/navigation";
-import {ArrowRight,CheckCircle2,Clock3,Minus,Plus,Search,Trash2,WalletCards,X} from "lucide-react";
+import {ArrowRight,CheckCircle2,ClipboardList,Clock3,Minus,Plus,Search,Trash2,WalletCards,X} from "lucide-react";
 import AuthGate from "@/components/auth-gate";
 import {api,type Bootstrap,type MenuItem,type RevisionUnchanged,type Session} from "@/lib/api-client";
 import {cacheGet,cachePut} from "@/lib/offline-db";
@@ -11,6 +11,7 @@ import {additionalServingsAvailable,cartAvailability} from "@/lib/domain/availab
 import {useCartStore} from "@/stores/cart-store";
 import {useHeldCartStore} from "@/stores/held-cart-store";
 import {writeQueueSnapshotCache} from "@/lib/queue-cache";
+import PosDailyWorkspace from "@/components/pos-daily-workspace";
 
 export default function Pos(){return <AuthGate>{s=><PosView session={s}/>}</AuthGate>}
 
@@ -61,6 +62,7 @@ function PosView({session}:{session:Session}){
   const [selected,setSelected]=useState<MenuItem|null>(null);
   const [payOpen,setPayOpen]=useState(false);
   const [heldOpen,setHeldOpen]=useState(false);
+  const [workspaceOpen,setWorkspaceOpen]=useState(false);
   const [method,setMethod]=useState<"cash"|"promptpay"|"bank"|"card"|"delivery">("cash");
   const [deliveryPlatform,setDeliveryPlatform]=useState<"grab"|"lineman"|"other_delivery">("grab");
   const [received,setReceived]=useState("");
@@ -702,7 +704,7 @@ function PosView({session}:{session:Session}){
         <div><p className="gold m-0 text-[10px] font-bold tracking-[.3em]">FIELD POS</p><h1 className="m-0 mt-1 text-xl font-semibold tracking-wide md:text-2xl">รับออเดอร์</h1><p className="mt-0.5 text-[11px] text-slate-500">แตะเมนู → ตรวจรายการ → รับเงิน</p></div>
         <div className="flex items-center gap-1.5 sm:gap-2">
           {(!online||offlineStats.total>0)&&<div className={"hidden rounded-full border px-2.5 py-1.5 text-[10px] font-bold sm:block sm:text-xs "+(!online?"border-amber-300 bg-amber-50 text-amber-800":offlineStats.needsReview>0?"border-red-300 bg-red-50 text-red-700":"border-emerald-300 bg-emerald-50 text-emerald-700")}>{!online?"OFFLINE · เงินสดเท่านั้น":offlineStats.needsReview>0?"Offline ต้องตรวจ "+offlineStats.needsReview:"Offline รอ Sync "+offlineStats.pending}</div>}
-          <button onClick={()=>setHeldOpen(true)} className="relative flex min-h-11 items-center gap-1.5 rounded-full border border-slate-300 bg-white px-2.5 text-[11px] font-semibold text-slate-700 sm:px-3 sm:text-xs"><Clock3 size={14}/>พักบิล{heldBills.held.length>0&&<span className="grid h-5 min-w-5 place-items-center rounded-full bg-[#d4af37] px-1 text-[10px] font-black text-black">{heldBills.held.length}</span>}</button>
+          <button disabled={busy||payOpen} onClick={()=>setWorkspaceOpen(true)} className="flex min-h-11 items-center gap-1.5 rounded-full border border-[#d4af37]/50 bg-[#fff8dc] px-2.5 text-[11px] font-bold text-[#6f5510] disabled:opacity-40 sm:px-3 sm:text-xs"><ClipboardList size={14}/>งานร้าน</button><button onClick={()=>setHeldOpen(true)} className="relative flex min-h-11 items-center gap-1.5 rounded-full border border-slate-300 bg-white px-2.5 text-[11px] font-semibold text-slate-700 sm:px-3 sm:text-xs"><Clock3 size={14}/>พักบิล{heldBills.held.length>0&&<span className="grid h-5 min-w-5 place-items-center rounded-full bg-[#d4af37] px-1 text-[10px] font-black text-black">{heldBills.held.length}</span>}</button>
           <div className="hidden rounded-full border border-slate-300 bg-white px-3 py-1.5 text-[11px] text-slate-600 sm:block sm:px-4 sm:py-2 sm:text-xs">{session.user.username}</div>
         </div>
       </div>
@@ -773,5 +775,6 @@ function PosView({session}:{session:Session}){
     </div></div>}
 
     {lastSale&&<div className={"fixed bottom-[92px] right-4 z-[70] w-[min(460px,calc(100vw-2rem))] rounded-[26px] border bg-white p-5 shadow-2xl md:bottom-6 md:right-6 "+(lastSale.offline?"border-amber-300":"border-emerald-300")}><div className="flex items-start gap-3"><div className={"grid h-10 w-10 shrink-0 place-items-center rounded-full "+(lastSale.offline?"bg-amber-100 text-amber-700":"bg-emerald-100 text-emerald-700")}><CheckCircle2 size={22}/></div><div className="min-w-0 flex-1"><div className="flex items-start justify-between gap-2"><div><b className="text-lg">{lastSale.offline?"บันทึกเงินสด Offline แล้ว":"ชำระเงินสำเร็จ"}</b><p className="mt-1 text-sm text-slate-600">{lastSale.offline?"เลขชั่วคราว "+lastSale.queueNo+" · รอ Sync Cloud":"คิว "+lastSale.queueNo+(lastSale.recovered?" · กู้คืนรายการเดิม":"")}</p></div><button onClick={()=>setLastSale(null)}><X size={18}/></button></div>{lastSale.offline?<div className="mt-3 rounded-[20px] border-2 border-amber-300 bg-amber-50 p-4 text-center"><div className="text-xs font-bold tracking-[.12em] text-amber-800">OFFLINE ORDER</div><div className="mt-1 text-3xl font-black leading-none text-amber-900">{lastSale.queueNo}</div><p className="mt-2 text-xs text-amber-800">ทำและส่งมอบออเดอร์นี้ตามลำดับที่รับ · เมื่อเน็ตกลับระบบจะลงบัญชี/Stock โดยไม่สร้างคิวผลิตซ้ำ</p></div>:<div className="mt-3 rounded-[20px] border-2 border-[#d4af37] bg-[#fff8dc] p-4 text-center"><div className="text-xs font-bold tracking-[.18em] text-[#765b08]">หยิบบัตรให้ลูกค้า</div><div className="mt-1 text-4xl font-black leading-none text-[#6f5510] md:text-5xl">บัตร {lastSale.pager||"—"}</div></div>}{lastSale.payment==="cash"&&<div className="mt-3 flex items-center justify-between rounded-2xl bg-emerald-50 p-3"><span className="text-sm font-semibold text-emerald-800">เงินทอน</span><div className="text-2xl font-bold text-emerald-800">฿{lastSale.change.toFixed(0)}</div></div>}<div className={"mt-3 grid gap-2 "+(lastSale.offline?"grid-cols-1":"grid-cols-2")}><button onClick={startNextOrder} className="flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-[#d4af37] px-3 text-sm font-bold text-black"><Plus size={16}/>รับออเดอร์ถัดไป</button>{!lastSale.offline&&<button onClick={()=>router.push("/queue")} className="flex min-h-12 items-center justify-center gap-2 rounded-2xl border border-slate-300 bg-white px-3 text-xs font-semibold text-slate-700">ไปทำคิว {lastSale.queueNo} <ArrowRight size={15}/></button>}</div><p className="mt-2 text-center text-[11px] text-slate-500">{lastSale.offline?"ยอดถูกเก็บในเครื่องแล้ว ห้ามล้างข้อมูล Browser จนกว่าจะ Sync สำเร็จ":"รับออเดอร์ถัดไปได้ทันทีโดยไม่ออกจากหน้า POS"}</p></div></div></div>}
+    <PosDailyWorkspace session={session} bootstrap={data} open={workspaceOpen} onClose={()=>setWorkspaceOpen(false)}/>
   </section>;
 }
