@@ -109,3 +109,17 @@ test("Close Day UI translates accounting reconciliation failure into a clear ope
   assert.match(close,/ตรวจยอดขายและยอดรับชำระ/);
   assert.match(close,/closeError\(e\.message,e\.data\)/);
 });
+
+
+test("admin readiness is enforced by the server, not only hidden in the UI",async t=>{
+  const date=bangkokDate();
+  const {db}=await setup(t,{menu:[],ingredients:{},sales:[],orders:[],expenses:[],cashMovements:[],paymentSessions:[],closes:[]});
+  await db.execute({sql:"INSERT INTO field_users(id,username,password_hash,role,permissions,active,failed_count,locked_until,created_at,updated_at) VALUES(?,?,?,?,?,1,0,0,0,0)",args:["staff-1","staff","unused","staff",'{"order":true,"report":true}']});
+  const token="staff-readiness-token";
+  await db.execute({sql:"INSERT INTO field_sessions(token_hash,user_id,csrf_token,expires_at) VALUES(?,?,?,?)",args:[digest(token),"staff-1","csrf-staff",Date.now()+60000]});
+  const handler=createApi({db,origin});
+  const res={writeHead(status,headers){this.status=status;this.headers=headers},end(raw){this.body=JSON.parse(raw)}};
+  await handler({method:"GET",query:{route:"admin/readiness"},headers:{origin,cookie:"field_session="+token},body:undefined},res);
+  assert.equal(res.status,403);
+  assert.equal(res.body.error,"admin_required");
+});
