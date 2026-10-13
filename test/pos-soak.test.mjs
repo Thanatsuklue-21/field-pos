@@ -739,3 +739,54 @@ test('PromptPay full reservation freezes CRM discount and provider amount at net
   const state=JSON.parse(db.storage.document),sale=state.sales[0],customer=state.customers[0];
   assert.equal(sale.total,45);assert.equal(sale.pointsRedeemed,5);assert.equal(customer.points,15);assert.equal(customer.totalSpend,45);
 });
+
+
+test('VOID durable replay is actor and payload bound and reverses stock only once',async()=>{
+  const db=fakeDb(),paid=await checkoutPos({db,user,now:12000,body:{requestKey:'void-bound-checkout-001',cart,date,payment:'cash',received:100}});
+  const body={requestKey:'void-bound-0001',saleId:paid.saleId||paid.saleIds[0],reason:'mistake',riskConfirmed:true};
+  const first=await voidSale({db,user,now:12010,body});
+  const stockAfterFirst=db.storage.stockTx.length,auditsAfterFirst=db.storage.audits.length;
+  const replay=await voidSale({db,user,now:12020,body});
+  await assert.rejects(
+    ()=>voidSale({db,user:{...user,id:'admin-2'},now:12030,body}),
+    e=>e?.status===409&&e?.message==='request_key_conflict'
+  );
+  await assert.rejects(
+    ()=>voidSale({db,user,now:12040,body:{...body,reason:'changed reason'}}),
+    e=>e?.status===409&&e?.message==='request_key_conflict'
+  );
+  assert.equal(first.requestKey,body.requestKey);assert.equal(first.performedBy,user.id);
+  assert.equal(replay.replayed,true);assert.equal(replay.requestKey,body.requestKey);
+  assert.equal(db.storage.stockTx.length,stockAfterFirst);
+  assert.equal(db.storage.audits.length,auditsAfterFirst);
+  assert.equal(JSON.parse(db.storage.document).ingredients.matcha.qty,1000);
+  assert.equal(db.storage.requests.filter(x=>x.key===body.requestKey).length,1);
+});
+
+test('Refund durable replay is actor and exact manual evidence bound with no duplicate effects',async()=>{
+  const db=fakeDb();
+  const paid=await checkoutPos({db,user,now:12100,body:{requestKey:'refund-bound-checkout-001',cart,date,payment:'bank',paymentReference:'bank-sale-ref'}});
+  const saleId=paid.saleId||paid.saleIds[0];
+  const body={requestKey:'refund-bound-0001',saleId,reason:'customer refund',riskConfirmed:true,manualConfirmed:true,manualReference:'bank-refund-001'};
+  const first=await refundSale({db,user,now:12110,body});
+  const stateAfterFirst=JSON.parse(db.storage.document),stockAfterFirst=db.storage.stockTx.length,auditsAfterFirst=db.storage.audits.length;
+  const replay=await refundSale({db,user,now:12120,body});
+  await assert.rejects(
+    ()=>refundSale({db,user:{...user,id:'admin-2'},now:12130,body}),
+    e=>e?.status===409&&e?.message==='request_key_conflict'
+  );
+  await assert.rejects(
+    ()=>refundSale({db,user,now:12140,body:{...body,manualReference:'changed-ref'}}),
+    e=>e?.status===409&&e?.message==='request_key_conflict'
+  );
+  assert.equal(first.requestKey,body.requestKey);assert.equal(first.performedBy,user.id);
+  assert.equal(replay.replayed,true);assert.equal(replay.refundAmount,first.refundAmount);
+  assert.equal(db.storage.stockTx.length,stockAfterFirst);
+  assert.equal(db.storage.audits.length,auditsAfterFirst);
+  const state=JSON.parse(db.storage.document);
+  assert.equal(state.sales[0].status,'refunded');
+  assert.equal(state.ingredients.matcha.qty,stateAfterFirst.ingredients.matcha.qty);
+  assert.equal(state.customers?.[0]?.totalSpend??0,stateAfterFirst.customers?.[0]?.totalSpend??0);
+  assert.equal((state.expenses||[]).length,(stateAfterFirst.expenses||[]).length);
+  assert.equal(db.storage.requests.filter(x=>x.key===body.requestKey).length,1);
+});
