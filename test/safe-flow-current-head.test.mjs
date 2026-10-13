@@ -50,7 +50,9 @@ test("one-minute coach teaches only POS and Queue and yields during transactions
   const coach=await read("components/operator-coach.tsx");
   const pos=await read("app/pos/page.tsx");
   assert.match(shell,/OperatorCoach/);
-  assert.match(coach,/field-operator-coach-v2/);
+  assert.match(coach,/field-operator-coach-v3:/);
+  assert.match(coach,/KEY_PREFIX\+mode/);
+  assert.match(coach,/localStorage\.getItem\(seenKey\)!=="seen"/);
   assert.match(coach,/ใช้เป็นใน 1 นาที/);
   assert.match(coach,/งานขายส่วนใหญ่จบจากหน้าเดียว/);
   assert.match(coach,/ทำบัตรแรกก่อนเสมอ/);
