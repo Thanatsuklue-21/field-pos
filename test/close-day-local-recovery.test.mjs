@@ -17,6 +17,7 @@ test("Close Day local recovery registry covers every durable transaction family 
     "field-pos-pending-stock-transaction-v1",
     "field-pos-pending-cycle-count-v1",
     "field-pos-pending-order-mutation-v1",
+    "field-pos-pending-cash-shift-open-v1",
     "field-pos-pending-cash-movement-v1",
     "field-pos-pending-delivery-settlement-v1",
     "field-pos-pending-crm-points-v1",
