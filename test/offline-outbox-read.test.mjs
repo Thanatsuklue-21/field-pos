@@ -70,8 +70,8 @@ test('POS validates existing offline bills before capturing another offline sale
   const block=source.slice(start,end);
   assert.ok(block.indexOf('await refreshOfflineStats()')>=0);
   assert.ok(block.indexOf('await refreshOfflineStats()')<block.indexOf('queueOfflineCashSale(body)'));
-  assert.match(source,/ยังอ่านบิล Offline ในเครื่องไม่ได้/);
-  assert.match(source,/อย่าล้างข้อมูลเบราว์เซอร์/);
+  assert.match(source,/ยังอ่านบิลที่เก็บในเครื่องไม่ได้/);
+  assert.match(source,/ห้ามล้างข้อมูลแอปหรือเบราว์เซอร์/);
 });
 
 test('unreadable outbox produces neither a zero summary nor sync mutations',async()=>{
