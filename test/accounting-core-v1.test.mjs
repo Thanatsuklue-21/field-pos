@@ -17,7 +17,7 @@ test('cash reconciliation subtracts only explicitly cash-paid expenses',async()=
   assert.match(api,/cashPaidOut=cashExpenseTotal\(expenses\)/);
   assert.match(api,/reconcileCash\(\{openingCash,cashSales:cash,cashIn,cashPaidOut,cashOut,countedCash\}\)/);
   assert.match(close,/Expected Cash = เงินตั้งต้น \+ ยอดขายเงินสด \+ เงินเติมเข้า − ค่าใช้จ่ายเงินสด − เงินนำออก/);
-  assert.match(close,/Cash Paid Out/);
+  assert.match(close,/รายจ่ายเงินสด/);
   assert.match(expenses,/เงินสดจากลิ้นชัก/);
   assert.match(expenses,/paymentMethod/);
 });
