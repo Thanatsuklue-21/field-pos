@@ -79,3 +79,24 @@ test("order history becomes card-based on phones while desktop keeps the table",
   assert.ok(orders.includes('h-11 w-11'));
   assert.ok(orders.includes('aria-label="ปิดรายละเอียด"'));
 });
+
+
+test("POS dialogs trap keyboard focus, restore focus, and respect mobile safe areas",async()=>{
+  const pos=await read("app/pos/page.tsx");
+  const modal=await read("components/modal-focus.tsx");
+  const css=await read("app/globals.css");
+  assert.ok(pos.includes('import ModalFocus from "@/components/modal-focus"'));
+  assert.ok(pos.includes('labelId="field-held-title"'));
+  assert.ok(pos.includes('labelId="field-modifier-title"'));
+  assert.ok(pos.includes('labelId="field-payment-title"'));
+  assert.ok(pos.includes('onEscape={busy?undefined:()=>setPayOpen(false)}'));
+  assert.ok(modal.includes('role="dialog"'));
+  assert.ok(modal.includes('aria-modal="true"'));
+  assert.ok(modal.includes('event.key==="Tab"'));
+  assert.ok(modal.includes('event.key==="Escape"'));
+  assert.ok(modal.includes('previous.focus({preventScroll:true})'));
+  assert.ok(css.includes(".field-modal-overlay"));
+  assert.ok(css.includes("env(safe-area-inset-bottom)"));
+  assert.ok(css.includes("100dvh"));
+  assert.ok(css.includes("100svh"));
+});
