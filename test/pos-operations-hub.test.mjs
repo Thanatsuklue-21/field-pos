@@ -188,9 +188,9 @@ test("post-sale queue shortcut is shown only to operators with Queue permission"
   assert.match(pos,/const canQueueOps=session\.user\.role==="admin"\|\|session\.user\.permissions\?\.queue===true/);
   const saleStart=pos.indexOf("lastSale&&");
   const saleBlock=pos.slice(saleStart,pos.indexOf("<PosOperationsHub",saleStart));
-  assert.match(saleBlock,/!lastSale\.offline&&<div/);
-  assert.match(saleBlock,/\{canQueueOps&&<button/);
-  assert.match(saleBlock,/setOpsInitialTab\("queue"\)/);
+  assert.match(saleBlock,/!lastSale\.offline&&canQueueOps\?<><button/);
+  assert.match(saleBlock,/ไปทำคิว \{lastSale\.queueNo\}/);
+  assert.match(saleBlock,/setOpsInitialTab\("queue"\);setLastSale\(null\);setOpsOpen\(true\)/);
 });
 
 
