@@ -79,7 +79,7 @@ test('queue shows pager number and one guided production action',async()=>{
   const queue=await read('app/queue/page.tsx');
   assert.match(queue,/บัตรเรียกคิว/);
   assert.match(queue,/บัตรผลิตปัจจุบัน/);
-  assert.match(queue,/ทำ \{task\.item\.name\} ครบ/);
+  assert.match(queue,/เสร็จแล้ว · \{task\.item\.name\} ครบ/);
   assert.match(queue,/ทำตอนนี้/);
   assert.match(queue,/text-4xl font-black/);
   assert.doesNotMatch(queue,/recommendedTask/);
@@ -120,7 +120,7 @@ test('queue production flow stays guided by FIFO while summary is menu-category 
   const queue=await read('app/queue/page.tsx');
   assert.match(queue,/สรุปตามหมวดเมนู/);
   assert.match(queue,/activeMenu/);
-  assert.match(queue,/ทำ \{task\.item\.name\} ครบ/);
+  assert.match(queue,/เสร็จแล้ว · \{task\.item\.name\} ครบ/);
   assert.match(queue,/action:"call_item"/);
   assert.doesNotMatch(queue,/รับเมนูนี้ก่อน/);
   assert.match(queue,/เรียกบัตร \{first\.pagerNo\}/);
@@ -315,7 +315,7 @@ test('CRM redemption makes the payment UI use net payable for cash and PromptPay
 
 test('queue production view centers one pager card with order summary and menu-category counts',async()=>{
   const queue=await read('app/queue/page.tsx');
-  assert.match(queue,/ทำออเดอร์ \/ รันบัตร/);
+  assert.match(queue,/ทำคิวตามลำดับ/);
   assert.match(queue,/บัตรผลิตปัจจุบัน/);
   assert.match(queue,/รายการรวมในบัตรนี้/);
   assert.match(queue,/สรุปตามหมวดเมนู/);
@@ -369,7 +369,7 @@ test('solo operator daily flow keeps sales and production as separate focused sc
   assert.match(pos,/ไปทำคิว \{lastSale\.queueNo\}/);
   assert.match(pos,/รับออเดอร์ถัดไป/);
   assert.match(queue,/คิวผลิต · FIFO/);
-  assert.match(queue,/ทำออเดอร์ \/ รันบัตร/);
+  assert.match(queue,/ทำคิวตามลำดับ/);
   assert.doesNotMatch(queue,/router\.push\("\/orders/);
   assert.doesNotMatch(queue,/router\.push\("\/pos/);
   assert.match(close,/OPEN \/ CLOSE DAY/);
