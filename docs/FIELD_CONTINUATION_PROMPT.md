@@ -1,5 +1,8 @@
 # Prompt ส่งต่อให้ FIELD
 
+> Current checkpoint (2026-10-13): `main cd896524c1415e1a6ea26439ede70c40ceab21ba` includes PR #269 cycle-count review durability and PR #270 strict offline-outbox read safety. PR #255 remains stale/open; only still-missing shared GET timeout/cancellation/header fixes and IndexedDB write acknowledgement should be ported on a fresh main branch. PR #266 remains draft/open for Purchase Edit/Cancel and must be re-audited against latest main before any integration.
+
+
 > Current checkpoint (2026-10-13): main baseline สำหรับรอบล่าสุดคือ `6e05d6a98edb017b77972e9962a427829e6d5671`. Close Day device preflight/TOCTOU, cash drawer, expense delete, stock critical writes และ VOID/refund durability ถูก merge บน main แล้วตาม PR หลัง #256. PR #266 ยัง draft/open สำหรับ Purchase Edit/Cancel. งาน P0 ที่รอบล่าสุดตรวจพบและกำลังแก้แยกคือ Cycle Count Proposal approve/reject durable recovery; ต้องตรวจสถานะ PR ล่าสุดก่อนทำซ้ำ.
 
 
