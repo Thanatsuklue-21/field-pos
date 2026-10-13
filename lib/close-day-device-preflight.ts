@@ -2,8 +2,9 @@ import {offlineCashListStrict,type OfflineCashRecord} from "@/lib/offline-db";
 import {listExpenseIntents,type ExpenseIntent} from "@/lib/expense-recovery";
 import {listCashMovementIntents,type CashMovementIntent} from "@/lib/cash-movement-recovery";
 import {listExpenseDeleteIntents,type ExpenseDeleteIntent} from "@/lib/expense-delete-recovery";
+import {listOrderMutationIntents,type OrderMutationIntent} from "@/lib/order-mutation-recovery";
 
-export type CloseDayDeviceBlockerKind="offline_cash"|"cash_unknown"|"promptpay_unknown"|"expense_unknown"|"expense_delete_unknown"|"cash_movement_unknown"|"storage_unreadable";
+export type CloseDayDeviceBlockerKind="offline_cash"|"cash_unknown"|"promptpay_unknown"|"expense_unknown"|"expense_delete_unknown"|"cash_movement_unknown"|"order_mutation_unknown"|"storage_unreadable";
 export type CloseDayDeviceBlocker={
   kind:CloseDayDeviceBlockerKind;
   title:string;
@@ -52,6 +53,7 @@ export function buildCloseDayDevicePreflight(input:{
   expenseIntents:ExpenseIntent[];
   cashMovementIntents:CashMovementIntent[];
   expenseDeleteIntents:ExpenseDeleteIntent[];
+  orderMutationIntents:OrderMutationIntent[];
   checkedAt?:number;
 }):CloseDayDevicePreflight{
   const {actorId,businessDate}=input;
@@ -104,6 +106,15 @@ export function buildCloseDayDevicePreflight(input:{
       route:intent.actorId===actorId?"/expenses":undefined,date:businessDate,actorId:intent.actorId,count:1
     });
   }
+  for(const intent of input.orderMutationIntents.filter(x=>String((x.body as any).expectedDate||"")===businessDate)){
+    const amount=intent.operation==="void"?Number((intent.body as any).expectedAmount):Number((intent.body as any).expectedRefundAmount);
+    blockers.push({
+      kind:"order_mutation_unknown",
+      title:intent.actorId===actorId?(intent.operation==="void"?"มี VOID ที่ยังไม่ทราบผล":"มี Refund ที่ยังไม่ทราบผล"):"มีการแก้ยอดขายค้างจากผู้ใช้อื่นบนเครื่องนี้",
+      detail:(intent.operation==="void"?"VOID ":"Refund ")+"฿"+amount.toLocaleString()+" · Request …"+intent.body.requestKey.slice(-8)+" · ห้ามปิดวันจนกว่า Server จะยืนยันผลเดิม",
+      route:intent.actorId===actorId?"/orders":undefined,date:businessDate,actorId:intent.actorId,count:1
+    });
+  }
   return {ok:blockers.length===0,checkedAt:input.checkedAt??Date.now(),businessDate,blockers};
 }
 
@@ -113,21 +124,23 @@ export async function readCloseDayDevicePreflight(actorId:string,businessDate:st
   listExpenses?:(storage?:any)=>ExpenseIntent[];
   listCashMovements?:(storage?:any)=>CashMovementIntent[];
   listExpenseDeletes?:(storage?:any)=>ExpenseDeleteIntent[];
+  listOrderMutations?:(storage?:any)=>OrderMutationIntent[];
   now?:()=>number;
 }):Promise<CloseDayDevicePreflight>{
   try{
     const storage=deps?.storage||(localStorage as DeviceStorage);
     // Force a storage read before treating missing keys as an empty recovery state.
     storage.getItem("__field_close_day_probe__");
-    const [offlineRows,cashPending,promptPending,expenseIntents,cashMovementIntents,expenseDeleteIntents]=await Promise.all([
+    const [offlineRows,cashPending,promptPending,expenseIntents,cashMovementIntents,expenseDeleteIntents,orderMutationIntents]=await Promise.all([
       (deps?.listOffline||offlineCashListStrict)(),
       Promise.resolve(parseCashPending(storage.getItem(CASH_PENDING_KEY))),
       Promise.resolve(parsePromptPending(storage.getItem(PROMPT_PENDING_KEY))),
       Promise.resolve((deps?.listExpenses||listExpenseIntents)(storage as any)),
       Promise.resolve((deps?.listCashMovements||listCashMovementIntents)(storage as any)),
-      Promise.resolve((deps?.listExpenseDeletes||listExpenseDeleteIntents)(storage as any))
+      Promise.resolve((deps?.listExpenseDeletes||listExpenseDeleteIntents)(storage as any)),
+      Promise.resolve((deps?.listOrderMutations||listOrderMutationIntents)(storage as any))
     ]);
-    return buildCloseDayDevicePreflight({actorId,businessDate,offlineRows,cashPending,promptPending,expenseIntents,cashMovementIntents,expenseDeleteIntents,checkedAt:(deps?.now||Date.now)()});
+    return buildCloseDayDevicePreflight({actorId,businessDate,offlineRows,cashPending,promptPending,expenseIntents,cashMovementIntents,expenseDeleteIntents,orderMutationIntents,checkedAt:(deps?.now||Date.now)()});
   }catch{
     return {
       ok:false,checkedAt:(deps?.now||Date.now)(),businessDate,
