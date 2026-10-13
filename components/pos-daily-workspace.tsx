@@ -1,6 +1,6 @@
 "use client";
 
-import {useEffect,useMemo,useState} from "react";
+import {useEffect,useMemo,useRef,useState} from "react";
 import Link from "next/link";
 import {Bot,Boxes,ClipboardList,ListOrdered,ReceiptText,RefreshCw,ShieldCheck,X} from "lucide-react";
 import {api,type Bootstrap,type Session} from "@/lib/api-client";
@@ -60,6 +60,7 @@ export default function PosDailyWorkspace({
   const [pendingExpense,setPendingExpense]=useState<ExpenseIntent|null>(null);
   const [expenseRecoveryBlocked,setExpenseRecoveryBlocked]=useState(false);
   const [expenseFeedback,setExpenseFeedback]=useState("");
+  const expenseSavingRef=useRef(false);
   const [busy,setBusy]=useState(false);
   const [message,setMessage]=useState("");
 
@@ -145,7 +146,8 @@ export default function PosDailyWorkspace({
   }
 
   async function submitQuickExpense(recovered?:ExpenseIntent){
-    if(!canExpense||busy||expenseRecoveryBlocked)return;
+    if(!canExpense||expenseSavingRef.current||expenseRecoveryBlocked)return;
+    expenseSavingRef.current=true;
     const amount=Number(expenseAmount)||0;
     if(!recovered&&!pendingExpense&&!canSaveExpense)return;
     setBusy(true);setExpenseFeedback("");
@@ -168,7 +170,7 @@ export default function PosDailyWorkspace({
       try{setPendingExpense(readExpenseIntent(session.user.id))}
       catch{setExpenseRecoveryBlocked(true)}
       await refresh().catch(()=>{});
-    }finally{setBusy(false)}
+    }finally{expenseSavingRef.current=false;setBusy(false)}
   }
 
   useEffect(()=>{
@@ -178,7 +180,7 @@ export default function PosDailyWorkspace({
       if(!active||typeof navigator!=="undefined"&&!navigator.onLine)return;
       try{
         const intent=readExpenseIntent(session.user.id);
-        if(intent&&!busy)submitQuickExpense(intent).catch(()=>{});
+        if(intent&&!expenseSavingRef.current)submitQuickExpense(intent).catch(()=>{});
       }catch{
         setExpenseRecoveryBlocked(true);
         setExpenseFeedback("อ่านรายการค่าใช้จ่ายค้างไม่ได้ · Quick Expense ถูกล็อก");
