@@ -69,3 +69,14 @@ test("new delete with stale confirmed amount is rejected before mutation",async 
   const state=JSON.parse((await db.execute("SELECT document FROM field_state WHERE singleton=1")).rows[0].document);
   assert.equal(state.expenses.length,1);
 });
+
+
+test("bodyless expense DELETE fails closed instead of bypassing durable identity",async t=>{
+  const {db,handler}=await setup(t);
+  const result=await send(handler,req("token-1","csrf-1","exp-1",undefined));
+  assert.equal(result.status,400);
+  assert.equal(result.body.error,"invalid_json");
+  const state=JSON.parse((await db.execute("SELECT document FROM field_state WHERE singleton=1")).rows[0].document);
+  assert.equal(state.expenses.length,1);
+  assert.equal(Number((await db.execute("SELECT COUNT(*) AS n FROM field_audit WHERE action='expense_delete'")).rows[0].n),0);
+});
