@@ -147,7 +147,7 @@ export default function PosOperationsHub({session,bootstrap,open,onClose,onRefre
       setMessage("กู้คืนค่าใช้จ่ายเดิมสำเร็จ · ไม่บันทึกซ้ำ");
       await refresh("expenses",true);
     }catch(e:any){
-      setMessage(shouldRetainExpensePending(e)?"ค่าใช้จ่ายเดิมยังไม่ทราบผล · ระบบเก็บ request เดิมไว้และจะตรวจซ้ำ":expenseErrorText(e.message));
+      setMessage(shouldRetainExpensePending(e)?"ค่าใช้จ่ายรายการก่อนหน้ายังตรวจสอบไม่เสร็จ · ระบบเก็บข้อมูลเดิมไว้และจะตรวจอีกครั้ง":expenseErrorText(e.message));
     }finally{expenseRecoveryRef.current=false;setExpenseBusy(false)}
   }
   async function recoverQueueAction(){
@@ -159,10 +159,10 @@ export default function PosOperationsHub({session,bootstrap,open,onClose,onRefre
     try{
       const result=await sendQueueActionDurably(session.csrf,pending.body);
       if(Array.isArray(result?.orders))setQueue(result.orders);
-      setMessage("กู้คืน Queue action เดิมสำเร็จ · ไม่ทำรายการซ้ำ");
+      setMessage("ตรวจสอบการกดคิวก่อนหน้าสำเร็จ · ระบบไม่ทำรายการซ้ำ");
     }catch(e:any){
       setMessage(shouldRetainQueuePending(e)
-        ?"Queue action เดิมยังไม่ทราบผล · ระบบเก็บ request เดิมไว้และจะตรวจซ้ำ"
+        ?"การกดคิวก่อนหน้ายังตรวจสอบไม่เสร็จ · ระบบเก็บข้อมูลเดิมไว้และจะตรวจอีกครั้ง"
         :queueActionErrorText(e.message));
       await refresh("queue",true).catch(()=>{});
     }finally{queueRecoveryRef.current=false;setQueueBusy(false)}
@@ -195,7 +195,7 @@ export default function PosOperationsHub({session,bootstrap,open,onClose,onRefre
       setMessage(successText);
     }catch(e:any){
       setMessage(shouldRetainQueuePending(e)
-        ?"ผล Queue action ยังไม่ชัดเจน · ระบบเก็บ request เดิมไว้ ห้ามกดซ้ำจนกว่าจะตรวจสำเร็จ"
+        ?"ผลการกดคิวครั้งก่อนยังไม่ชัดเจน · ระบบเก็บข้อมูลเดิมไว้ ห้ามกดซ้ำจนกว่าจะตรวจสำเร็จ"
         :queueActionErrorText(e.message));
       await refresh("queue",true).catch(()=>{});
     }finally{setQueueBusy(false)}
@@ -370,7 +370,7 @@ export default function PosOperationsHub({session,bootstrap,open,onClose,onRefre
         </div>}
 
         {tab==="queue"&&canQueue&&<div className="space-y-2">
-          {queueRows.length===0?<Empty text={!cloudAvailable?"ออฟไลน์ · ยังไม่ดึงคิวจาก Server":"ไม่มีคิวที่กำลังทำ"}/>:queueRows.map(order=>{
+          {queueRows.length===0?<Empty text={!cloudAvailable?"ออฟไลน์ · ยังดึงคิวล่าสุดไม่ได้":"ไม่มีคิวที่กำลังทำ"}/>:queueRows.map(order=>{
             const total=(order.items||[]).reduce((s,x)=>s+n(x.qty),0),ready=(order.items||[]).reduce((s,x)=>s+Math.min(n(x.qty),n(x.readyQty)),0),called=(order.items||[]).reduce((s,x)=>s+Math.min(n(x.qty),n(x.calledQty)),0);
             const allCalled=total>0&&called>=total,isProduction=productionHead?.id===order.id;
             const nextIndex=isProduction?(order.items||[]).findIndex(item=>n(item.readyQty)<n(item.qty)):-1;
@@ -390,7 +390,7 @@ export default function PosOperationsHub({session,bootstrap,open,onClose,onRefre
                 {isProduction&&nextItem&&<button disabled={queueBusy||!cloudAvailable} onClick={()=>runQuickWasteRemake(order,nextIndex)} className="flex min-h-12 items-center justify-center gap-1.5 rounded-xl border border-red-200 bg-white px-3 text-[11px] font-black text-red-700 disabled:opacity-40"><RotateCcw size={15}/>ชงเสีย / ทำใหม่</button>}
                 <button disabled={queueBusy||!cloudAvailable} onClick={()=>runQuickQueueAction(order)} className={"flex min-h-12 items-center justify-center gap-2 rounded-xl px-4 text-sm font-black disabled:opacity-40 "+(allCalled?"bg-emerald-600 text-white":"bg-[#1F4D3A] text-white")}><QuickIcon size={17}/>{queueBusy?"กำลังยืนยันคิวเดิม…":quick.label}</button>
               </div>}
-              {!isProduction&&!allCalled&&<p className="mt-2 rounded-xl bg-slate-50 px-3 py-2 text-[10px] font-semibold text-slate-500">รอคิวก่อนหน้า · Server บังคับ FIFO</p>}
+              {!isProduction&&!allCalled&&<p className="mt-2 rounded-xl bg-slate-50 px-3 py-2 text-[10px] font-semibold text-slate-500">รอคิวก่อนหน้า · ระบบไม่อนุญาตให้ข้ามคิว</p>}
             </div>
           })}
           <p className="rounded-xl bg-blue-50 px-3 py-2 text-[10px] text-blue-800">ปุ่มด่วนรองรับ flow ปกติ: ทำเมนูถัดไป → เรียกคิว → ส่งมอบ · ชงเสีย/ทำใหม่/เรียกแยกหมวด/ดูเบสละเอียด ให้เปิดหน้าคิวเต็ม</p>
