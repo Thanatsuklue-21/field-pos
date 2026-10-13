@@ -101,10 +101,10 @@ function OrdersView({session}:{session:Session}){
   },[resolutionTarget,resolutions]);
 
   function orderMutationErrorText(code:string){
-    return code==="order_mutation_pending"?"มี VOID/Refund เดิมที่ยังไม่ทราบผล · ระบบจะตรวจ request เดิมก่อน":
-      code==="order_mutation_unconfirmed"?"Server ยังไม่ยืนยัน VOID/Refund เดิมครบถ้วน · ระบบเก็บ request เดิมไว้เพื่อป้องกันคืน Stock/CRM ซ้ำ":
-      code==="order_mutation_recovery_corrupt"?"ข้อมูล recovery ของ VOID/Refund ในเครื่องเสีย · ห้ามทำรายการใหม่จนกว่าจะตรวจ Orders":
-      code==="order_mutation_recovery_storage_unavailable"?"เครื่องนี้เก็บ recovery ของ VOID/Refund ไม่ได้ · ระบบไม่ส่งรายการเพื่อป้องกันทำซ้ำ":
+    return code==="order_mutation_pending"?"มีการยกเลิกหรือคืนเงินก่อนหน้าที่ยังตรวจสอบไม่เสร็จ · ระบบจะตรวจรายการเดิมก่อน ห้ามกดซ้ำ":
+      code==="order_mutation_unconfirmed"?"ระบบยังยืนยันผลการยกเลิกหรือคืนเงินก่อนหน้าไม่ได้ · เก็บข้อมูลเดิมไว้เพื่อป้องกันคืนสต็อกหรือแต้มซ้ำ":
+      code==="order_mutation_recovery_corrupt"?"ข้อมูลป้องกันรายการซ้ำในเครื่องมีปัญหา · หยุดยกเลิกหรือคืนเงินชั่วคราวและตรวจรายการเดิมก่อน":
+      code==="order_mutation_recovery_storage_unavailable"?"เครื่องนี้เก็บข้อมูลป้องกันรายการซ้ำไม่ได้ · ระบบจึงยังไม่ยกเลิกหรือคืนเงินรายการใหม่":
       code;
   }
 
@@ -142,8 +142,8 @@ function OrdersView({session}:{session:Session}){
           setDetail(null);
           const count=Array.isArray(r.saleIds)?r.saleIds.length:1;
           setMsg(pending.kind==="void"
-            ?"กู้คืน VOID เดิมสำเร็จ · ใช้ request key เดิม · "+count+" บิล ไม่คืน Stock ซ้ำ"
-            :"กู้คืน Refund เดิมสำเร็จ · ใช้ request key เดิม · "+count+" บิล ไม่ย้อน Stock/CRM ซ้ำ");
+            ?"ตรวจสอบการยกเลิกรายการเดิมสำเร็จ · "+count+" บิล · ระบบไม่คืนสต็อกซ้ำ"
+            :"ตรวจสอบการคืนเงินรายการเดิมสำเร็จ · "+count+" บิล · ระบบไม่ย้อนสต็อกหรือแต้มซ้ำ");
           await load();
         }
       }catch(e:any){
