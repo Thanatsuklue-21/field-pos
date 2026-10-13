@@ -68,6 +68,19 @@ function StockView({session}:{session:Session}){
       stock_shortage:"จำนวนคงเหลือไม่พอ · ระบบยังไม่ได้บันทึกรายการใหม่นี้",
       incompatible_stock_unit:"หน่วยต่อบรรจุภัณฑ์ไม่เข้ากับหน่วยที่สูตรใช้",
       invalid_purchase_payment_method:"ช่องทางชำระค่าซื้อไม่ถูกต้อง",
+      purchase_not_found:"ไม่พบรายการรับเข้าต้นทาง · ระบบยังไม่ได้แก้ Stock/ต้นทุนจาก Request นี้",
+      purchase_already_cancelled:"รายการรับเข้านี้ถูกยกเลิกไปแล้ว · กรุณาตรวจประวัติก่อนทำต่อ",
+      purchase_before_reset_read_only:"รายการนี้อยู่ก่อนจุดล้างข้อมูลทดลอง จึงแก้ย้อนหลังไม่ได้",
+      invalid_purchase_date:"วันที่ซื้อไม่ถูกต้อง · กรุณาตรวจวันที่แล้วส่งใหม่",
+      invalid_purchase_cost:"ราคาซื้อไม่ถูกต้อง · กรุณาตรวจยอดรวม",
+      incomplete_purchase_packaging:"ข้อมูลจำนวนแพ็ก/ขนาดต่อแพ็กไม่ครบ · ยังไม่ได้แก้ Stock",
+      purchase_correction_stock_negative:"แก้จำนวนรับเข้าไม่ได้ เพราะจะทำให้ Stock ติดลบ · กรุณาตรวจนับ Stock จริงก่อน",
+      purchase_cancel_stock_negative:"ยกเลิกรับเข้าไม่ได้ เพราะวัตถุดิบถูกใช้ไปแล้วหรือยอดคงเหลือไม่พอ · กรุณาตรวจนับ Stock จริง",
+      purchase_cancel_has_later_movement:"ยกเลิกย้อนหลังอัตโนมัติไม่ได้ เพราะมีการขาย/ของเสีย/นับหรือปรับ Stock หลังรายการนี้ · ใช้ตรวจนับ Stock จริงแทน",
+      purchase_stock_transaction_missing:"ไม่พบ Stock Ledger ต้นทาง · ระบบหยุดการยกเลิกเพื่อป้องกัน Stock เพี้ยน",
+      purchase_cancel_confirmation_required:"การยืนยันยกเลิกรับเข้าไม่ถูกต้อง · ยังไม่มีการเปลี่ยน Stock",
+      purchase_cancel_reason_required:"กรุณาระบุเหตุผลยกเลิกรับเข้าเพื่อเก็บ Audit",
+      invalid_purchase_quantity:"ข้อมูลจำนวนรับเข้าต้นทางไม่ถูกต้อง · ระบบหยุดการยกเลิกเพื่อป้องกัน Stock เพี้ยน",
       invalid_cycle_count:"ข้อมูลนับ Stock ไม่ถูกต้อง · กรุณาตรวจจำนวนก่อนส่ง",
       cycle_count_requires_confirmation:"ต้องยืนยันผลนับก่อนปรับ Stock",
       day_closed:"วันนี้ปิดยอดแล้ว · ไม่สามารถปรับ Stock ย้อนหลังใน flow นี้",
@@ -87,6 +100,8 @@ function StockView({session}:{session:Session}){
     if(operation==="stockTransaction")return {path:"/api/stock/transactions",method:"POST"};
     if(operation==="cycleCountCommit")return {path:"/api/stock/cycle-count",method:"POST"};
     if(operation==="cycleCountProposal")return {path:"/api/stock/cycle-count/proposals",method:"POST"};
+    if(operation==="purchaseEdit")return {path:"/api/stock/purchases/"+encodeURIComponent(String(body?.purchaseId||"")),method:"PATCH"};
+    if(operation==="purchaseCancel")return {path:"/api/stock/purchases/"+encodeURIComponent(String(body?.purchaseId||""))+"/cancel",method:"POST"};
     const proposalId=encodeURIComponent(String(body?.proposalId||""));
     return {path:"/api/stock/cycle-count/proposals/"+proposalId+(operation==="cycleCountProposalApprove"?"/approve":"/reject"),method:"POST"};
   }
@@ -97,6 +112,8 @@ function StockView({session}:{session:Session}){
     }
     if(intent.operation==="cycleCountCommit")return result?.ok===true&&result?.requestKey===body.requestKey&&result?.cycleCount?.createdBy===intent.actorId;
     if(intent.operation==="cycleCountProposal")return result?.ok===true&&result?.requestKey===body.requestKey&&result?.proposal?.requestKey===body.requestKey&&result?.proposal?.submittedBy===intent.actorId;
+    if(intent.operation==="purchaseEdit")return result?.ok===true&&result?.requestKey===body.requestKey&&result?.performedBy===intent.actorId&&result?.id===body.purchaseId&&Number.isFinite(Number(result?.quantityReceived));
+    if(intent.operation==="purchaseCancel")return result?.ok===true&&result?.requestKey===body.requestKey&&result?.performedBy===intent.actorId&&result?.id===body.purchaseId&&typeof result?.reversalId==="string"&&result.reversalId.length>0;
     if(intent.operation==="cycleCountProposalApprove")return result?.requestKey===body.requestKey&&result?.performedBy===intent.actorId&&result?.proposalId===body.proposalId&&["approved","stale","expired"].includes(String(result?.outcome||""));
     return result?.requestKey===body.requestKey&&result?.performedBy===intent.actorId&&result?.proposalId===body.proposalId&&result?.outcome==="rejected";
   }
@@ -108,6 +125,16 @@ function StockView({session}:{session:Session}){
       "invalid_purchase_url","invalid_cost_status","confirmed_cost_required","invalid_purchase_payment_method","stock_shortage","day_closed","purchase_date_closed",
       "high_risk_confirmation_required","high_risk_reason_required"
     ]);
+    if(operation==="purchaseEdit")return new Set([
+      "invalid_request_key","admin_required","purchase_not_found","purchase_already_cancelled","ingredient_missing","purchase_before_reset_read_only",
+      "invalid_purchase_date","future_purchase_date","purchase_date_closed","invalid_purchase_cost","incomplete_purchase_packaging",
+      "unsupported_stock_unit","incompatible_stock_unit","purchase_correction_stock_negative","invalid_purchase_url","invalid_purchase_payment_method"
+    ]);
+    if(operation==="purchaseCancel")return new Set([
+      "invalid_request_key","admin_required","purchase_cancel_confirmation_required","purchase_cancel_reason_required","purchase_not_found","ingredient_missing",
+      "purchase_already_cancelled","purchase_before_reset_read_only","purchase_date_closed","purchase_stock_transaction_missing",
+      "purchase_cancel_has_later_movement","purchase_cancel_stock_negative","invalid_purchase_quantity"
+    ]);
     if(operation==="cycleCountProposalApprove")return new Set(["invalid_request_key","cycle_count_approval_confirmation_required","cycle_count_proposal_id_mismatch","cycle_count_proposal_not_found","cycle_count_proposal_not_pending","cycle_count_proposal_day_closed","request_key_conflict","admin_required"]);
     if(operation==="cycleCountProposalReject")return new Set(["invalid_request_key","cycle_count_reject_reason_required","cycle_count_proposal_id_mismatch","cycle_count_proposal_not_found","cycle_count_proposal_not_pending","request_key_conflict","admin_required"]);
     return new Set(["invalid_cycle_count","cycle_count_requires_confirmation","day_closed"]);
@@ -117,6 +144,8 @@ function StockView({session}:{session:Session}){
     if(intent.operation==="stockTransaction")return prefix+"บันทึก Stock แล้ว";
     if(intent.operation==="cycleCountCommit")return prefix+"Owner บันทึกยอดนับจริงแล้ว";
     if(intent.operation==="cycleCountProposal")return prefix+"ส่งผลนับให้ Owner ตรวจแล้ว · Stock ยังไม่เปลี่ยนจนกว่า Owner อนุมัติ";
+    if(intent.operation==="purchaseEdit")return prefix+"แก้ข้อมูลรับเข้าแล้ว · Stock/ต้นทุน/รายจ่ายอัปเดตใน transaction เดียว";
+    if(intent.operation==="purchaseCancel")return prefix+"ยกเลิกรับเข้าแล้ว · Stock และ Purchase Spend ถูกย้อนกลับ";
     if(intent.operation==="cycleCountProposalReject")return prefix+"ตีกลับผลนับแล้ว · Stock ไม่ถูกเปลี่ยน";
     if(result?.outcome==="approved")return prefix+"อนุมัติผลนับและปรับ Stock แล้ว";
     if(result?.outcome==="stale")return prefix+"ยืนยันผล Request เดิมแล้ว · Stock เปลี่ยนหลังพนักงานนับ จึงไม่ปรับยอดและต้องนับใหม่";
@@ -131,6 +160,8 @@ function StockView({session}:{session:Session}){
       setPendingStockIntent(null);setStockRecoveryBlocked(false);
       if(intent.operation==="stockTransaction"){setTxOpen(null);setWasteQty("")}
       else if(intent.operation==="cycleCountCommit"||intent.operation==="cycleCountProposal")setCountOpen(false);
+      else if(intent.operation==="purchaseEdit")setPurchaseEdit(null);
+      else if(intent.operation==="purchaseCancel"&&purchaseEdit?.purchase.id===intent.body.purchaseId)setPurchaseEdit(null);
       setMsg(stockSuccessMessage(intent,result,recovery));
       await load();
       return result;
@@ -307,37 +338,37 @@ function StockView({session}:{session:Session}){
   }
 
   async function savePurchaseEdit(){
-    if(!purchaseEdit)return;setBusy(true);setMsg("");
+    if(!purchaseEdit)return;
+    if(stockRecoveryBlocked){setMsg(stockError("stock_recovery_unavailable"));return}
+    if(pendingStockIntent){setMsg(stockError("pending_stock_write_exists"));return}
     try{
       const p=purchaseEdit.purchase;
-      await api("/api/stock/purchases/"+encodeURIComponent(p.id),{method:"PATCH",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({totalCost:p.totalCost,purchaseDate:p.purchaseDate,supplier:p.supplier,sourceUrl:p.sourceUrl,imageUrl:p.imageUrl,note:p.note,packageQty:p.packageQty,packageUnit:p.packageUnit,packSize:p.packSize,packSizeUnit:p.packSizeUnit,paymentMethod:p.paymentMethod||"bank"})});
-      setPurchaseEdit(null);setMsg("แก้ข้อมูลซื้อแล้ว");await load();
-    }catch(e:any){setMsg(e.message==="purchase_before_reset_read_only"?"รายการนี้อยู่ก่อนจุดล้างข้อมูลทดลอง จึงเก็บไว้อ่านอย่างเดียว":e.message==="invalid_purchase_url"?"ลิงก์ไม่ถูกต้อง":e.message)}finally{setBusy(false)}
+      const body:any={requestKey:crypto.randomUUID(),purchaseId:p.id,totalCost:p.totalCost,purchaseDate:p.purchaseDate,supplier:p.supplier,sourceUrl:p.sourceUrl,imageUrl:p.imageUrl,note:p.note,packageQty:p.packageQty,packageUnit:p.packageUnit,packSize:p.packSize,packSizeUnit:p.packSizeUnit,paymentMethod:p.paymentMethod||"bank"};
+      const intent=prepareStockWriteIntent(session.user.id,"purchaseEdit",today(),body);
+      setPendingStockIntent(intent);
+      await submitStockIntent(intent,false);
+    }catch(e:any){
+      setMsg(stockError(e.message));
+      if(e.message==="stock_recovery_unavailable")setStockRecoveryBlocked(true);
+    }
   }
 
   async function cancelPurchase(x:Ingredient,p:Purchase){
     if(p.cancelled)return;
+    if(stockRecoveryBlocked){setMsg(stockError("stock_recovery_unavailable"));return}
+    if(pendingStockIntent){setMsg(stockError("pending_stock_write_exists"));return}
     const reason=window.prompt("เหตุผลที่ยกเลิกรับเข้า "+x.name+"\nเช่น กรอกวัตถุดิบผิด / รับเข้าซ้ำ","");
     if(!reason?.trim())return;
     if(!window.confirm("ยกเลิกรายการรับเข้า?\n\n"+x.name+"\n"+p.quantityReceived.toLocaleString()+" "+p.usageUnit+" · ฿"+compactMoney(p.totalCost)+"\n\nระบบจะหัก Stock และ Purchase Spend ของรายการนี้ พร้อมคืนราคาซื้อก่อนหน้า"))return;
-    setBusy(true);setMsg("");
     try{
-      await api("/api/stock/purchases/"+encodeURIComponent(p.id)+"/cancel",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({confirm:"CANCEL PURCHASE",reason:reason.trim()})});
-      if(purchaseEdit?.purchase.id===p.id)setPurchaseEdit(null);
-      setMsg("ยกเลิกรับเข้า "+x.name+" แล้ว · Stock และ Purchase Spend ถูกย้อนกลับ");await load();
+      const body:any={requestKey:crypto.randomUUID(),purchaseId:p.id,confirm:"CANCEL PURCHASE",reason:reason.trim()};
+      const intent=prepareStockWriteIntent(session.user.id,"purchaseCancel",today(),body);
+      setPendingStockIntent(intent);
+      await submitStockIntent(intent,false);
     }catch(e:any){
-      const map:Record<string,string>={
-        purchase_cancel_stock_negative:"ยกเลิกไม่ได้ เพราะ Stock คงเหลือน้อยกว่าจำนวนรับเข้าเดิม รายการนี้อาจถูกใช้ไปแล้ว กรุณาตรวจนับ Stock ก่อน",
-        purchase_cancel_has_later_movement:"ยกเลิกย้อนหลังอัตโนมัติไม่ได้ เพราะวัตถุดิบนี้มีการขาย/ของเสีย/ตรวจนับหรือปรับ Stock หลังรับเข้าแล้ว เพื่อไม่ให้ Stock เพี้ยน กรุณาใช้การตรวจนับ Stock จริงหรือปรับยอดแทน",
-        purchase_stock_transaction_missing:"ไม่พบ Stock Ledger ต้นทางของรายการรับเข้านี้ จึงไม่ยกเลิกอัตโนมัติเพื่อป้องกันข้อมูลเพี้ยน",
-        purchase_already_cancelled:"รายการรับเข้านี้ถูกยกเลิกไปแล้ว",
-        purchase_before_reset_read_only:"รายการนี้อยู่ก่อนจุดล้างข้อมูลทดลอง จึงยกเลิกย้อนหลังไม่ได้",
-        purchase_date_closed:"วันที่ซื้อรายการนี้ถูก Close Day แล้ว จึงไม่ให้แก้ย้อนหลัง",
-        purchase_cancel_confirmation_required:"การยืนยันยกเลิกรายการไม่ถูกต้อง",
-        purchase_cancel_reason_required:"กรุณาระบุเหตุผลที่ยกเลิก"
-      };
-      setMsg(map[e.message]||e.message);
-    }finally{setBusy(false)}
+      setMsg(stockError(e.message));
+      if(e.message==="stock_recovery_unavailable")setStockRecoveryBlocked(true);
+    }
   }
 
   async function purgeIngredient(x:Ingredient,detachRecipes=false){
