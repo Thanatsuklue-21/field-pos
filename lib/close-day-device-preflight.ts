@@ -92,7 +92,7 @@ export function buildCloseDayDevicePreflight(input:{
     cycleCountCommit:{title:"มีผลนับ Stock ของ Owner ที่ยังไม่ทราบผล",route:"/stock"},
     cycleCountProposal:{title:"มีผลนับ Stock ที่ส่ง Owner แล้วแต่ยังไม่ทราบผล",route:"/stock"}
   };
-  for(const intent of input.criticalIntents){
+  for(const intent of input.criticalIntents||[]){
     const meta=criticalMeta[intent.operation];
     if(!meta)continue;
     const intentDate=String(intent.body?.date||intent.body?.purchaseDate||"");
