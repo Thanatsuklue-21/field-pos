@@ -13,7 +13,7 @@ test("cash drawer UI persists intent before POST and clears only through exact A
   assert.match(block,/requestKey:crypto\.randomUUID\(\)/);
   assert.match(ui,/sendCashMovementIntent\(intent/);
   assert.match(ui,/readCashMovementIntent\(session\.user\.id\)/);
-  assert.match(ui,/รายการเดิมยังรอคำยืนยันจาก Server/);
+  assert.match(ui,/รายการเดิมยังรอการยืนยันผล/);
   assert.match(ui,/ช่องข้อมูลถูกล็อก/);
   assert.match(ui,/ตรวจผลรายการเดิม/);
 });
