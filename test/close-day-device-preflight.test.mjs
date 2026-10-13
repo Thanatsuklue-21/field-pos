@@ -37,8 +37,11 @@ test("same-day device-local money and expense intents block Close Day",async()=>
   assert.equal(result.ok,false);
   assert.equal(result.checkedAt,123);
   assert.deepEqual(result.blockers.map(x=>x.kind),["offline_cash","cash_unknown","promptpay_unknown","expense_unknown","expense_unknown","cash_movement_unknown"]);
-  assert.equal(result.blockers.at(-1).route,undefined);
-  assert.match(result.blockers.at(-1).title,/ผู้ใช้อื่น/);
+  const otherExpense=result.blockers.find(x=>x.kind==="expense_unknown"&&x.actorId==="staff-2");
+  assert.equal(otherExpense?.route,undefined);
+  assert.match(otherExpense?.title||"",/ผู้ใช้อื่น/);
+  const movement=result.blockers.find(x=>x.kind==="cash_movement_unknown");
+  assert.match(movement?.title||"",/เงินเข้า\/ออกลิ้นชัก/);
 });
 
 test("resolved context from another business date does not block the current close",async()=>{
