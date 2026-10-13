@@ -5,6 +5,7 @@ import Link from "next/link";
 import {Bot,Boxes,ClipboardList,ListOrdered,ReceiptText,RefreshCw,ShieldCheck,X} from "lucide-react";
 import {api,type Bootstrap,type Session} from "@/lib/api-client";
 import {prepareExpenseIntent,readExpenseIntent,sendExpenseIntent,type ExpenseIntent} from "@/lib/expense-recovery";
+import {chooseWorkspaceNextAction} from "@/lib/workspace-guidance.mjs";
 
 type WorkspaceTab="queue"|"orders"|"stock"|"expense"|"status";
 type QueueOrder={
@@ -254,20 +255,13 @@ export default function PosDailyWorkspace({
   const outCount=stockRows.filter(x=>x.level==="out").length;
   const lowCount=stockRows.filter(x=>x.level==="low").length;
   const readiness=control?.readiness||null;
-  const nextAction:{tab:WorkspaceTab|null;label:string;detail:string;tone:"critical"|"work"|"warn"|"ready"}=
-    canExpense&&(pendingExpense||expenseRecoveryBlocked)
-      ?{tab:"expense",label:"ตรวจค่าใช้จ่ายค้างก่อน",detail:expenseRecoveryBlocked?"อ่าน Recovery ไม่ได้ · ห้ามสร้างรายการใหม่จนกว่าจะตรวจ":"มีค่าใช้จ่ายที่ยังไม่ทราบผล · ใช้ Request เดิมตรวจซ้ำเพื่อป้องกันยอดซ้ำ",tone:"critical"}
-      :canQueue&&queueRows.length>0
-        ?{tab:"queue",label:"ทำ "+String(queueRows[0].queueNo||"คิวแรก")+" ก่อน",detail:"มีลูกค้ารอ "+queueRows.length+" คิว · ระบบเรียง FIFO ให้แล้ว ไม่ต้องเลือกคิวเอง",tone:"work"}
-        :canStock&&outCount>0
-          ?{tab:"stock",label:"เติมสต็อกที่ทำให้เมนูหยุดขาย",detail:"มี "+outCount+" รายการที่ทำไม่ได้ · ตรวจของจริงก่อนรับเมนูนั้น",tone:"critical"}
-          :canStatus&&Number(readiness?.summary.blocked||0)>0
-            ?{tab:"status",label:"แก้สถานะระบบที่ถูกบล็อก",detail:"มี "+Number(readiness?.summary.blocked||0)+" จุดที่ต้องแก้ก่อนใช้งานครบทุกส่วน",tone:"critical"}
-            :canStock&&lowCount>0
-              ?{tab:"stock",label:"วางแผนเติมสต็อก",detail:"มี "+lowCount+" รายการใกล้หมด แต่ยังขายได้",tone:"warn"}
-              :canOrder&&latestOrder
-                ?{tab:"orders",label:"พร้อมรับออเดอร์ถัดไป",detail:"บิลล่าสุด "+String(latestOrder.queueNo||latestOrder.billNo||"")+" ถูกบันทึกแล้ว · เปิดดูได้โดยไม่ออกจาก POS",tone:"ready"}
-                :{tab:null,label:"พร้อมรับออเดอร์",detail:"ยังไม่มีงานเร่งด่วนจากคิว สต็อก หรือรายการค้าง",tone:"ready"};
+  const nextAction=chooseWorkspaceNextAction({
+    canExpense,pendingExpense:!!pendingExpense,expenseRecoveryBlocked,
+    canQueue,queueCount:queueRows.length,firstQueue:queueRows[0]?.queueNo||"",
+    canStock,outCount,lowCount,
+    canStatus,blockedCount:Number(readiness?.summary.blocked||0),
+    canOrder,latestOrderLabel:String(latestOrder?.queueNo||latestOrder?.billNo||"")
+  });
 
   const meta:Array<{key:WorkspaceTab;label:string;icon:any;allowed:boolean;count?:number}>=[
     {key:"queue",label:"คิว",icon:ListOrdered,allowed:canQueue,count:queue.length},
