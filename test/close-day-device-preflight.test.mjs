@@ -10,6 +10,7 @@ const loadPreflight=id=>loadBrowserModule("lib/close-day-device-preflight.ts",{
     .replace('import {listExpenseIntents,type ExpenseIntent} from "@/lib/expense-recovery";','type ExpenseIntent=any; const listExpenseIntents=()=>[];')
     .replace('import {listCashMovementIntents,type CashMovementIntent} from "@/lib/cash-movement-recovery";','type CashMovementIntent=any; const listCashMovementIntents=()=>[];')
     .replace('import {listExpenseDeleteIntents,type ExpenseDeleteIntent} from "@/lib/expense-delete-recovery";','type ExpenseDeleteIntent=any; const listExpenseDeleteIntents=()=>[];')
+    .replace('import {listStockWriteIntents,type StockWriteIntent} from "@/lib/stock-write-recovery";','type StockWriteIntent=any; const listStockWriteIntents=()=>[];')
 });
 const storage=(entries={})=>{
   const data=new Map(Object.entries(entries));
@@ -34,11 +35,12 @@ test("same-day device-local money and expense intents block Close Day",async()=>
       {version:1,actorId:"staff-2",createdAt:5,body:{requestKey:"expense-0002",date,amount:20,category:"OTHER",description:"parking",paymentMethod:"cash",riskConfirmed:false}}
     ],
     cashMovementIntents:[{version:1,actorId:"owner",createdAt:6,body:{requestKey:"cashmove-0001",date,type:"CASH_OUT",amount:100,reason:"เก็บเงิน",riskConfirmed:false}}],
-    expenseDeleteIntents:[{version:1,actorId:"owner",createdAt:7,body:{requestKey:"expdel-0001",expenseId:"exp-1",date,expectedAmount:30}}]
+    expenseDeleteIntents:[{version:1,actorId:"owner",createdAt:7,body:{requestKey:"expdel-0001",expenseId:"exp-1",date,expectedAmount:30}}],
+    stockWriteIntents:[{version:1,actorId:"owner",operation:"stockTransaction",businessDate:date,createdAt:8,body:{requestKey:"stock-write-0001",ingredientId:"matcha",type:"WASTE",qtyDelta:-5}}]
   });
   assert.equal(result.ok,false);
   assert.equal(result.checkedAt,123);
-  assert.deepEqual(result.blockers.map(x=>x.kind),["offline_cash","cash_unknown","promptpay_unknown","expense_unknown","expense_unknown","cash_movement_unknown","expense_delete_unknown"]);
+  assert.deepEqual(result.blockers.map(x=>x.kind),["offline_cash","cash_unknown","promptpay_unknown","expense_unknown","expense_unknown","cash_movement_unknown","expense_delete_unknown","stock_write_unknown"]);
   const otherExpense=result.blockers.find(x=>x.kind==="expense_unknown"&&x.actorId==="staff-2");
   assert.equal(otherExpense?.route,undefined);
   assert.match(otherExpense?.title||"",/ผู้ใช้อื่น/);
@@ -55,7 +57,8 @@ test("resolved context from another business date does not block the current clo
     promptPending:{requestKey:"prompt-old1",date:old,total:55,createdAt:3},
     expenseIntents:[{version:1,actorId:"owner",createdAt:4,body:{requestKey:"expense-old1",date:old,amount:30,category:"OTHER",description:"old",paymentMethod:"cash",riskConfirmed:false}}],
     cashMovementIntents:[{version:1,actorId:"owner",createdAt:5,body:{requestKey:"cashmove-old1",date:old,type:"CASH_IN",amount:20,reason:"old",riskConfirmed:false}}],
-    expenseDeleteIntents:[{version:1,actorId:"owner",createdAt:6,body:{requestKey:"expdel-old1",expenseId:"exp-old",date:old,expectedAmount:30}}]
+    expenseDeleteIntents:[{version:1,actorId:"owner",createdAt:6,body:{requestKey:"expdel-old1",expenseId:"exp-old",date:old,expectedAmount:30}}],
+    stockWriteIntents:[{version:1,actorId:"owner",operation:"cycleCountCommit",businessDate:old,createdAt:7,body:{requestKey:"stock-old-0001",confirm:true,counts:[]}}]
   });
   assert.equal(result.ok,true);
   assert.deepEqual(result.blockers,[]);
@@ -71,6 +74,7 @@ for(const scenario of ["local-storage-denied","indexeddb-unreadable"])test("devi
     listExpenses:()=>[],
     listCashMovements:()=>[],
     listExpenseDeletes:()=>[],
+    listStockWrites:()=>[],
     now:()=>99
   });
   assert.equal(result.ok,false);
@@ -86,7 +90,8 @@ test("malformed pending cash never becomes an empty recovery state",async()=>{
     listOffline:async()=>[],
     listExpenses:()=>[],
     listCashMovements:()=>[],
-    listExpenseDeletes:()=>[]
+    listExpenseDeletes:()=>[],
+    listStockWrites:()=>[]
   });
   assert.equal(result.ok,false);
   assert.equal(result.blockers[0].kind,"storage_unreadable");
@@ -122,4 +127,31 @@ test("strict offline outbox inspection distinguishes unreadable storage from an 
   assert.match(source,/r\.onblocked=finishError/);
   assert.match(source,/tx\.oncomplete=/);
   assert.match(source,/offline_storage_unavailable/);
+});
+
+
+test("same-day unresolved stock write blocks Close Day and routes current actor to Stock",async()=>{
+  const api=await loadPreflight("stock-write"),date="2026-10-13";
+  const result=api.buildCloseDayDevicePreflight({
+    actorId:"owner",businessDate:date,offlineRows:[],cashPending:null,promptPending:null,expenseIntents:[],cashMovementIntents:[],expenseDeleteIntents:[],
+    stockWriteIntents:[
+      {version:1,actorId:"owner",operation:"cycleCountCommit",businessDate:date,createdAt:1,body:{requestKey:"cycle-write-0001",confirm:true,counts:[{ingredientId:"matcha",countedQty:90}]}},
+      {version:1,actorId:"staff-2",operation:"stockTransaction",businessDate:date,createdAt:2,body:{requestKey:"stock-write-0002",ingredientId:"milk",type:"WASTE",qtyDelta:-10}}
+    ]
+  });
+  assert.equal(result.ok,false);
+  assert.equal(result.blockers[0].kind,"stock_write_unknown");
+  assert.equal(result.blockers[0].route,"/stock");
+  assert.equal(result.blockers[1].route,undefined);
+  assert.match(result.blockers[1].title,/ผู้ใช้อื่น/);
+});
+
+test("read preflight includes persisted stock write intents",async()=>{
+  const api=await loadPreflight("stock-read"),date="2026-10-13";
+  const result=await api.readCloseDayDevicePreflight("owner",date,{
+    storage:storage(),listOffline:async()=>[],listExpenses:()=>[],listCashMovements:()=>[],listExpenseDeletes:()=>[],
+    listStockWrites:()=>[{version:1,actorId:"owner",operation:"stockTransaction",businessDate:date,createdAt:1,body:{requestKey:"stock-read-0001"}}]
+  });
+  assert.equal(result.ok,false);
+  assert.equal(result.blockers[0].kind,"stock_write_unknown");
 });
