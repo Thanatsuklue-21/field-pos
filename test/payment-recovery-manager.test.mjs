@@ -20,13 +20,13 @@ test('split recovery metadata is safe and manager recovery stays server-authorit
   assert.match(resolveSegment,/user\.role!=='admin'/);
   assert.match(resolveSegment,/resolveSplitPayment/);
 
-  assert.match(orders,/OWNER PAYMENT RECOVERY/);
+  assert.match(orders,/เจ้าของร้าน · รายการรับเงินค้าง/);
   assert.match(orders,/session\.user\.role==="admin"/);
   assert.match(orders,/recoveryDetail\.mode==="promptpay_full"/);
   assert.match(orders,/!s\.resolvedAt/);
   assert.match(orders,/\/api\/pos\/split\/resolve/);
   assert.match(orders,/\/api\/pos\/split\/pay/);
   assert.match(orders,/allocations=\(s\.remainingQty\|\|\[\]\)/);
-  assert.match(orders,/Payment ถูกดำเนินการจากอีกเครื่องแล้ว ระบบไม่รับเงินซ้ำ/);
-  assert.match(orders,/ไม่อนุญาตให้ Owner เปลี่ยนรายการนี้เป็นเงินสด\/โอน\/บัตร/);
+  assert.match(orders,/รายการรับเงินนี้ถูกดำเนินการจากอีกเครื่องแล้ว/);
+  assert.match(orders,/เจ้าของร้านไม่สามารถเปลี่ยนรายการนี้เป็นเงินสด\/โอน\/บัตร/);
 });
