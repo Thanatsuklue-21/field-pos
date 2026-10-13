@@ -31,8 +31,8 @@ function ReportsView(){
     try{
       const x=await api<ExportData>("/api/reports/accounting-export");
       downloadCsv("FIELD_"+kind+"_"+new Date().toISOString().slice(0,10)+".csv",x[kind]||[]);
-      setMsg("Export "+kind+" สำเร็จ");
-    }catch(e:any){setMsg(e.message||"export_failed")}finally{setBusy(false)}
+      setMsg("ส่งออกรายงาน "+kind+" สำเร็จ");
+    }catch(e:any){setMsg(operatorErrorFallback(e.message,"การส่งออกรายงาน"))}finally{setBusy(false)}
   }
   return <section className="soft-scroll h-full overflow-auto p-3 sm:p-5 md:p-7">
     <div className="flex flex-wrap items-end justify-between gap-3"><div><p className="gold m-0 text-[10px] font-bold tracking-[.3em]">PERFORMANCE</p><h1 className="mt-1 text-xl font-semibold sm:text-2xl">REPORTS</h1><p className="mt-1 text-xs text-slate-500">ยอดขาย · กำไร · มูลค่าสต็อก · Export สำหรับบัญชี</p></div><div className="flex flex-wrap gap-2"><Link href="/settlements" className="flex min-h-10 items-center gap-1.5 rounded-full bg-[#d4af37] px-3 text-xs font-bold text-black"><Landmark size={14}/>Settlement</Link>{(["sales","expenses","stock","cashMovements"] as const).map(x=><button key={x} disabled={busy} onClick={()=>exportKind(x)} className="flex min-h-10 items-center gap-1.5 rounded-full border border-slate-300 bg-white px-3 text-xs font-semibold disabled:opacity-40"><Download size={14}/>{x==="sales"?"Sales CSV":x==="expenses"?"Expenses CSV":x==="stock"?"Stock CSV":"Cash Drawer CSV"}</button>)}</div></div>
