@@ -68,7 +68,7 @@ export async function sendStockWriteIntent<T extends StockWriteBody>(
   let result:any;
   try{result=await send({...intent.body})}
   catch(error:any){
-    if([400,404,409].includes(Number(error?.status))&&notCommitted.has(String(error?.message||"")))clearIntent(intent,store);
+    if([400,403,404,409].includes(Number(error?.status))&&notCommitted.has(String(error?.message||"")))clearIntent(intent,store);
     throw error;
   }
   if(!exactAck(result,intent.body,intent))throw recoveryError("stock_ack_unknown");
