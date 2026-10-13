@@ -31,7 +31,7 @@ test('queue completion is one tap while legacy selection remains supported',asyn
   const api=await read('lib/pos-api.mjs');
   const ui=await read('app/queue/page.tsx');
   assert.match(api,/prepSelected:!!x\.prepSelected/);
-  assert.match(ui,/ทำ \{task\.item\.name\} ครบ/);
+  assert.match(ui,/เสร็จแล้ว · \{task\.item\.name\} ครบ/);
   assert.match(ui,/ทำตอนนี้/);
   assert.match(ui,/action:"complete_item"/);
   assert.match(ui,/prepSelected/);
