@@ -1,3 +1,3 @@
 FIELD POS production release marker
-source_main=47b8fa043df0b2a3fe628f8bbe9b47a2218068aa
-purpose=production-go-live-readiness
+source_main=3430691400492841aacf2bba64ca9d62fff73e43
+purpose=production-go-live-readiness-smoke-fix
