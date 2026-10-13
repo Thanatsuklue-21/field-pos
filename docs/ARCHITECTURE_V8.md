@@ -1,6 +1,15 @@
 # FIELD POS v8 — Core Refactor Architecture
 
-## Source-of-truth observations from the current repository
+## Current architecture
+
+The active application is the Next.js frontend in `app/`. Authenticated server
+APIs now commit checkout, stock ledger entries, cost snapshots, loyalty points
+and queue updates together. Durable request keys protect transaction replay.
+See `README.md` and `docs/INTEGRATION_AUDIT.md` for current operating behavior.
+The phase-one observations and integration plan below are historical context;
+they must not be used as a description of the current production architecture.
+
+## Historical phase-one observations
 - Runtime: Node.js 20+, ESM.
 - Backend: Vercel Function + `@libsql/client` / Turso.
 - Current online backend stores authentication, a versioned state snapshot, and audit rows.

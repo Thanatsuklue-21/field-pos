@@ -24,12 +24,14 @@ function getRequestKey(path:string,init:RequestInit){
 }
 
 async function fetchWithPolicy(path:string,init:RequestInit,method:string){
+  const headers=new Headers(init.headers);
+  if(!headers.has("Content-Type"))headers.set("Content-Type","application/json");
   const controller=method==="GET"&&!init.signal?new AbortController():null;
   const timer=controller?setTimeout(()=>controller.abort("field_get_timeout"),GET_TIMEOUT_MS):null;
   try{
     return await fetch(path,{
       ...init,
-      headers:{"Content-Type":"application/json",...(init.headers||{})},
+      headers,
       credentials:"same-origin",
       cache:"no-store",
       signal:controller?.signal||init.signal,
@@ -91,6 +93,8 @@ export async function api<T>(path:string,init:RequestInit={}){
   // Reads are safe to coalesce. Writes are never deduplicated or retried here:
   // transaction endpoints own their idempotency semantics server-side.
   if(method==="GET"){
+    // A caller-owned signal must only cancel that caller's request.
+    if(init.signal)return executeApi<T>(path,init,method);
     const key=getRequestKey(path,init),existing=getInFlight.get(key);
     if(existing)return existing as Promise<T>;
     const request=executeApi<T>(path,init,method).finally(()=>getInFlight.delete(key));
