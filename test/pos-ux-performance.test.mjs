@@ -630,3 +630,11 @@ test('queue keeps novice focus on the primary action and progressively reveals d
   assert.match(queue,/showQueueDetails&&categoryFlow\.length>0/);
   assert.match(queue,/showQueueDetails&&<div className="mt-3"/);
 });
+
+test('payment method disclosure keeps novice choices bounded while preserving all methods',async()=>{
+  const pos=await read('app/pos/page.tsx');
+  assert.match(pos,/ขายทั่วไปใช้ 2 ปุ่มนี้/);
+  assert.match(pos,/วิธีอื่น · โอน \/ บัตร \/ เดลิเวอรี/);
+  for(const label of ['เงินสด','QR พร้อมเพย์','โอนธนาคาร','บัตร','เดลิเวอรี'])assert.ok(pos.includes(label),label);
+  assert.match(pos,/method==="bank"\|\|method==="card"\|\|method==="delivery"/);
+});
