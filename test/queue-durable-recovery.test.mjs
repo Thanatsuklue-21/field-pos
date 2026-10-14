@@ -49,18 +49,27 @@ test("pre-commit business rejection clears intent but unknown ACK does not",asyn
   assert.equal(exports.readQueueActionIntent("staff-1",unknownStore).body.requestKey,unknown.body.requestKey);
 });
 
-test("queue UI routes every operator mutation through durable recovery and reconnect replay",async()=>{
+test("shared queue recovery transport owns persistence timeout and reconnect replay",async()=>{
+  const hook=await readFile(new URL("../lib/use-queue-action-recovery.ts",import.meta.url),"utf8");
+  assert.match(hook,/prepareQueueActionIntent/);
+  assert.match(hook,/sendQueueActionIntent/);
+  assert.match(hook,/readQueueActionIntent/);
+  assert.match(hook,/timeoutMs=20_000/);
+  assert.match(hook,/controller\.abort\(\)/);
+  assert.match(hook,/window\.addEventListener\("online",replay\)/);
+  assert.match(hook,/window\.addEventListener\("focus",replay\)/);
+  assert.match(hook,/document\.addEventListener\("visibilitychange",visible\)/);
+  assert.match(hook,/queue_action_result_unknown/);
+});
+
+test("queue UI routes every operator mutation through the shared durable transport",async()=>{
   const ui=await readFile(new URL("../app/queue/page.tsx",import.meta.url),"utf8");
-  assert.match(ui,/prepareQueueActionIntent/);
-  assert.match(ui,/sendQueueActionIntent/);
-  assert.match(ui,/readQueueActionIntent/);
-  assert.match(ui,/controller\.abort\(\),20_000/);
-  assert.match(ui,/window\.addEventListener\("online",recover\)/);
-  assert.match(ui,/window\.addEventListener\("focus",recover\)/);
-  assert.match(ui,/document\.addEventListener\("visibilitychange",visible\)/);
+  assert.match(ui,/useQueueActionRecovery/);
+  assert.doesNotMatch(ui,/prepareQueueActionIntent|sendQueueActionIntent|readQueueActionIntent/);
   for(const action of ["complete_item","waste_remake","call","call_item","return"]){
     assert.match(ui,new RegExp('postQueueAction\\(\\{requestKey:crypto\\.randomUUID\\(\\)[\\s\\S]{0,140}action:"'+action+'"'));
   }
+  assert.match(ui,/queueActionLocked/);
   assert.match(ui,/ไม่ต้องกดปุ่มเดิมซ้ำ/);
   assert.match(ui,/role="status" aria-live="polite" aria-atomic="true"/);
   assert.match(ui,/ตรวจรายการเดิม/);

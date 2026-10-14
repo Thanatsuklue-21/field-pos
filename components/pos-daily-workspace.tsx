@@ -2,12 +2,13 @@
 
 import {useEffect,useMemo,useRef,useState} from "react";
 import Link from "next/link";
-import {Bot,Boxes,ClipboardList,ListOrdered,ReceiptText,RefreshCw,ShieldCheck,X} from "lucide-react";
+import {BellRing,Bot,Boxes,CheckCircle2,ClipboardList,ListOrdered,ReceiptText,RefreshCw,ShieldCheck,X} from "lucide-react";
 import {api,type Bootstrap,type Session} from "@/lib/api-client";
 import {prepareExpenseIntent,readExpenseIntent,sendExpenseIntent,type ExpenseIntent} from "@/lib/expense-recovery";
 import {prepareCashShiftOpenIntent,readCashShiftOpenIntent,sendCashShiftOpenIntent,type CashShiftOpenIntent} from "@/lib/cash-shift-open-recovery";
 import {chooseWorkspaceNextAction} from "@/lib/workspace-guidance.mjs";
 import {orderStatusLabel,paymentSummaryLabel,saleStatusLabel} from "@/lib/operator-labels.mjs";
+import {useQueueActionRecovery} from "@/lib/use-queue-action-recovery";
 
 type WorkspaceTab="queue"|"orders"|"stock"|"expense"|"status";
 type QueueOrder={
@@ -38,6 +39,18 @@ const n=(value:any)=>Number(value)||0;
 const money=(value:any)=>new Intl.NumberFormat("th-TH",{minimumFractionDigits:0,maximumFractionDigits:2}).format(n(value));
 const readinessLabel=(value:string)=>value==="READY"?"พร้อม":value==="WARN"?"มีจุดต้องดู":"ต้องแก้ก่อน";
 const checkStatusLabel=(value:string)=>value==="READY"?"พร้อม":value==="WARN"?"เตือน":"ต้องแก้";
+const queueOrderReady=(order:QueueOrder)=>(order.items||[]).length>0&&(order.items||[]).every(item=>n(item.readyQty)>=n(item.qty));
+const queueOrderCalled=(order:QueueOrder)=>(order.items||[]).length>0&&(order.items||[]).every(item=>n(item.calledQty)>=n(item.qty));
+function queueActionError(code:string){
+  return code==="fifo_violation"?"ต้องทำคิวก่อนหน้าให้เสร็จก่อน":
+    code==="order_not_ready"?"ยังทำเครื่องดื่มไม่ครบ จึงยังเรียกลูกค้าไม่ได้":
+    code==="order_not_complete"?"ยังเรียกลูกค้าไม่ครบ จึงยังบันทึกว่าส่งมอบไม่ได้":
+    code==="pending_queue_action_exists"?"มีปุ่มคิวก่อนหน้าที่ยังไม่ทราบผล · ระบบจะตรวจรายการเดิมก่อน":
+    code==="queue_action_ack_unknown"||code==="queue_action_result_unknown"||code==="network_unavailable"||code==="offline_write_blocked"?"ยังไม่ทราบผลของปุ่มก่อนหน้า · ไม่ต้องกดซ้ำ ระบบจะตรวจรายการเดิม":
+    code==="queue_action_recovery_unavailable"?"ระบบป้องกันการกดซ้ำใช้งานไม่ได้ · ปิดปุ่มคิวชั่วคราว":
+    code==="queue_action_busy"?"กำลังตรวจปุ่มคิวก่อนหน้า":
+    "ทำรายการคิวไม่สำเร็จ · เปิดโหมดทำเครื่องดื่มเพื่อตรวจ";
+}
 
 export default function PosDailyWorkspace({
   session,bootstrap,open,online,onClose
@@ -81,10 +94,41 @@ export default function PosDailyWorkspace({
   const [busy,setBusy]=useState(false);
   const [workspaceReady,setWorkspaceReady]=useState(false);
   const [message,setMessage]=useState("");
+  const [queueFeedback,setQueueFeedback]=useState("");
 
   useEffect(()=>{
     if(!tabs.includes(tab)&&tabs[0])setTab(tabs[0]);
   },[tabs.join("|"),tab]);
+
+  const {
+    pending:pendingQueueAction,
+    blocked:queueRecoveryBlocked,
+    recovering:queueRecoveryBusy,
+    locked:queueActionLocked,
+    send:sendQueueAction,
+    recover:recoverQueueAction
+  }=useQueueActionRecovery({
+    session,
+    enabled:open&&canQueue&&online,
+    onRecovered:result=>{
+      if(Array.isArray(result?.orders))setQueue(result.orders);
+      setQueueFeedback("ตรวจปุ่มคิวก่อนหน้าแล้ว · ระบบไม่ทำรายการซ้ำ");
+    },
+    onRecoveryError:error=>setQueueFeedback(queueActionError(error?.message||"queue_action_result_unknown"))
+  });
+
+  async function runQueueTailAction(order:QueueOrder,action:"call"|"return"){
+    if(!online||queueActionLocked||busy)return;
+    setQueueFeedback("");
+    try{
+      const result=await sendQueueAction({requestKey:crypto.randomUUID(),orderId:order.id,action});
+      if(Array.isArray(result?.orders))setQueue(result.orders);
+      setQueueFeedback(action==="call"?"เรียกลูกค้าแล้ว · รอส่งมอบเมื่อรับเครื่องดื่ม":"บันทึกส่งมอบแล้ว · ไปคิวถัดไปได้");
+    }catch(error:any){
+      setQueueFeedback(queueActionError(error?.message||"queue_action_result_unknown"));
+    }
+  }
+
 
   useEffect(()=>{
     if(!open)return;
@@ -332,7 +376,9 @@ export default function PosDailyWorkspace({
     return rows.slice(0,12);
   },[bootstrap?.revision]);
 
-  const queueRows=queue.slice().sort((a,b)=>n(a.time)-n(b.time)).slice(0,6);
+  const queueSorted=queue.slice().sort((a,b)=>n(a.time)-n(b.time));
+  const productionHead=queueSorted.find(order=>!queueOrderCalled(order))||null;
+  const queueRows=queueSorted.slice(0,6);
   const orderRows=sales.slice(0,7);
   const latestOrder=orderRows[0]||null;
   const expenseRows=(expenseData?.expenses||[]).filter(row=>!expenseData?.businessDate||row.date===expenseData.businessDate).slice(0,5);
@@ -457,11 +503,15 @@ export default function PosDailyWorkspace({
 
       <div className="soft-scroll min-h-0 flex-1 overflow-auto p-3 sm:p-4">
         {tab==="queue"&&canQueue&&<div className="space-y-2">
+          {(pendingQueueAction||queueRecoveryBlocked||queueFeedback)&&<div role="status" aria-live="polite" aria-atomic="true" className={"rounded-2xl border p-3 text-xs "+(pendingQueueAction||queueRecoveryBlocked?"border-amber-300 bg-amber-50 text-amber-950":"border-emerald-200 bg-emerald-50 text-emerald-800")}>
+            <div className="flex items-center justify-between gap-2"><div><b>{queueRecoveryBlocked?"ปุ่มคิวถูกพักชั่วคราว":pendingQueueAction?"กำลังตรวจปุ่มคิวก่อนหน้า":"คิวอัปเดตแล้ว"}</b><p className="mt-1">{queueRecoveryBlocked?"ระบบป้องกันการกดซ้ำอ่านข้อมูลไม่ได้ · เปิดโหมดทำเครื่องดื่มเพื่อตรวจ":pendingQueueAction?"ไม่ต้องกดซ้ำ · ระบบจะใช้คำสั่งเดิมจนกว่าจะรู้ผล":queueFeedback}</p></div>{pendingQueueAction&&<button type="button" disabled={queueRecoveryBusy||busy||!online} onClick={()=>recoverQueueAction()} className="min-h-11 shrink-0 rounded-xl bg-amber-900 px-3 font-bold text-white disabled:opacity-40">ตรวจรายการเดิม</button>}</div>
+          </div>}
           {queueRows.length===0?<Empty text={!online?"เน็ตหลุด · ยังดึงคิวล่าสุดจากระบบกลางไม่ได้":"ไม่มีคิวที่กำลังทำ"}/>:queueRows.map(order=>{
             const total=(order.items||[]).reduce((s,x)=>s+n(x.qty),0);
             const ready=(order.items||[]).reduce((s,x)=>s+Math.min(n(x.qty),n(x.readyQty)),0);
             const called=(order.items||[]).reduce((s,x)=>s+Math.min(n(x.qty),n(x.calledQty)),0);
-            return <div key={order.id} className="rounded-2xl border border-slate-200 bg-white p-3">
+            const readyAll=queueOrderReady(order),calledAll=queueOrderCalled(order),isProductionHead=productionHead?.id===order.id;
+            return <div key={order.id} className={"rounded-2xl border bg-white p-3 "+(isProductionHead?"border-[#d4af37]/60":"border-slate-200")}>
               <div className="flex items-center justify-between gap-3">
                 <div><b className="text-base">{order.queueNo}</b><span className="ml-2 text-xs text-slate-500">บัตร {order.pagerNo||"—"}</span></div>
                 <span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-bold text-slate-700">{orderStatusLabel(order.status)}</span>
@@ -470,9 +520,13 @@ export default function PosDailyWorkspace({
                 <Metric label="ทั้งหมด" value={total}/><Metric label="ทำแล้ว" value={ready}/><Metric label="เรียกแล้ว" value={called}/>
               </div>
               <p className="mt-2 line-clamp-2 text-xs text-slate-500">{(order.items||[]).map(x=>x.name+" ×"+x.qty).join(" · ")}</p>
+              {calledAll?<button type="button" disabled={!online||busy||queueActionLocked} onClick={()=>runQueueTailAction(order,"return")} className="mt-3 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#1F4D3A] px-4 text-sm font-black text-white disabled:opacity-40"><CheckCircle2 size={17}/>ลูกค้ารับแล้ว</button>:
+                isProductionHead&&readyAll?<button type="button" disabled={!online||busy||queueActionLocked} onClick={()=>runQueueTailAction(order,"call")} className="mt-3 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#d4af37] px-4 text-sm font-black text-black disabled:opacity-40"><BellRing size={17}/>เรียกบัตร {order.pagerNo||order.queueNo}</button>:
+                isProductionHead?<Link href="/queue" className="mt-3 flex min-h-12 w-full items-center justify-center rounded-xl border border-[#d4af37]/60 bg-[#fffaf0] px-4 text-sm font-black text-[#6f5510]">ทำคิวนี้ต่อ</Link>:
+                <p className="mt-3 rounded-xl bg-slate-50 px-3 py-2 text-center text-[11px] text-slate-500">รอคิวก่อนหน้า · ระบบเรียงลำดับให้แล้ว</p>}
             </div>;
           })}
-          <FullLink href="/queue" label="เปิดโหมดทำเครื่องดื่ม"/>
+          <FullLink href="/queue" label="เปิดโหมดทำเครื่องดื่ม / ดูคิวเต็ม"/>
         </div>}
 
         {tab==="orders"&&canOrder&&<div className="space-y-2">
