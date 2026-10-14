@@ -724,7 +724,7 @@ function PosView({session}:{session:Session}){
       </div>
 
       <div className="mb-3 grid grid-cols-3 gap-1.5 rounded-2xl border border-slate-200 bg-white p-1.5" aria-label="ขั้นตอนรับออเดอร์">
-        {[["1","เลือกเมนู"],["2","เพิ่ม / ตรวจ"],["3","รับเงิน"]].map(([n,label])=>{const step=Number(n),active=orderStep===step,done=orderStep>step;return <div key={n} className={"flex min-h-10 items-center justify-center gap-1.5 rounded-xl px-2 text-[10px] font-semibold sm:text-xs "+(active?"bg-[#d4af37] text-black shadow-sm":done?"bg-emerald-50 text-emerald-700":"text-slate-400")}><span className={"grid h-5 w-5 place-items-center rounded-full text-[10px] "+(active?"bg-black/10":done?"bg-emerald-100":"bg-slate-100")}>{done?"✓":n}</span><span>{label}</span></div>})}
+        {[["1","เลือกเมนู"],["2","ตรวจรายการ"],["3","รับเงิน"]].map(([n,label])=>{const step=Number(n),active=orderStep===step,done=orderStep>step;return <div key={n} className={"flex min-h-10 items-center justify-center gap-1.5 rounded-xl px-2 text-[10px] font-semibold sm:text-xs "+(active?"bg-[#d4af37] text-black shadow-sm":done?"bg-emerald-50 text-emerald-700":"text-slate-400")}><span className={"grid h-5 w-5 place-items-center rounded-full text-[10px] "+(active?"bg-black/10":done?"bg-emerald-100":"bg-slate-100")}>{done?"✓":n}</span><span>{label}</span></div>})}
       </div>
 
       {!payOpen&&<div role="status" aria-live="polite" className={"mb-3 rounded-2xl border px-3 py-2.5 "+(cashierGuide.tone==="warn"?"border-amber-300 bg-amber-50 text-amber-900":cashierGuide.tone==="ready"?"border-emerald-200 bg-emerald-50 text-emerald-900":"border-[#d4af37]/40 bg-[#fffaf0] text-slate-800")}>
