@@ -1,6 +1,7 @@
 "use client";
 import {useEffect,useRef,useState} from "react";
-import AuthGate from "@/components/auth-gate";\nimport ModalFocus from "@/components/modal-focus";
+import AuthGate from "@/components/auth-gate";
+import ModalFocus from "@/components/modal-focus";
 import {api,type Session} from "@/lib/api-client";
 import {readCloseDayDevicePreflight,type CloseDayDevicePreflight} from "@/lib/close-day-device-preflight";
 import {prepareCashMovementIntent,readCashMovementIntent,sendCashMovementIntent,type CashMovementIntent} from "@/lib/cash-movement-recovery";
