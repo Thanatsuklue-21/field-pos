@@ -59,7 +59,7 @@ test('production readiness keeps backup restore drill visible before opening',as
   const end=api.indexOf("if(path==='/api/admin/business-settings'",start);
   const seg=api.slice(start,end);
   assert.match(seg,/Full Backup \+ Restore Preview แบบ transactional/);
-  assert.match(seg,/ทดลอง Export Backup → Preview Restore ก่อนเปิดจริง/);
+  assert.match(seg,/ทดสอบ Full Backup → Restore และตรวจข้อมูลหลัง Restore/);
 });
 
 
