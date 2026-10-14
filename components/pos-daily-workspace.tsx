@@ -7,6 +7,7 @@ import {api,type Bootstrap,type Session} from "@/lib/api-client";
 import {prepareExpenseIntent,readExpenseIntent,sendExpenseIntent,type ExpenseIntent} from "@/lib/expense-recovery";
 import {prepareCashShiftOpenIntent,readCashShiftOpenIntent,sendCashShiftOpenIntent,type CashShiftOpenIntent} from "@/lib/cash-shift-open-recovery";
 import {chooseWorkspaceNextAction} from "@/lib/workspace-guidance.mjs";
+import {orderStatusLabel,paymentSummaryLabel,saleStatusLabel} from "@/lib/operator-labels.mjs";
 
 type WorkspaceTab="queue"|"orders"|"stock"|"expense"|"status";
 type QueueOrder={
@@ -463,7 +464,7 @@ export default function PosDailyWorkspace({
             return <div key={order.id} className="rounded-2xl border border-slate-200 bg-white p-3">
               <div className="flex items-center justify-between gap-3">
                 <div><b className="text-base">{order.queueNo}</b><span className="ml-2 text-xs text-slate-500">บัตร {order.pagerNo||"—"}</span></div>
-                <span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-bold uppercase">{order.status}</span>
+                <span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-bold text-slate-700">{orderStatusLabel(order.status)}</span>
               </div>
               <div className="mt-2 grid grid-cols-3 gap-2 text-center text-xs">
                 <Metric label="ทั้งหมด" value={total}/><Metric label="ทำแล้ว" value={ready}/><Metric label="เรียกแล้ว" value={called}/>
@@ -482,7 +483,7 @@ export default function PosDailyWorkspace({
             <div className="border-t border-[#d4af37]/25 bg-white p-3">
               <div className="flex items-center justify-between gap-3 text-xs text-slate-500">
                 <span>{latestOrder.date||"—"} · {latestOrder.billNo||latestOrder.queueNo||"บิล"}</span>
-                <span>{(latestOrder.paymentMethods?.length?latestOrder.paymentMethods:[latestOrder.payment]).filter(Boolean).join(" + ")||"—"}</span>
+                <span>{paymentSummaryLabel(latestOrder.payment,latestOrder.paymentMethods)||"—"}</span>
               </div>
               <div className="mt-3 space-y-2">
                 {(latestOrder.items||[]).length===0?<p className="rounded-xl bg-slate-50 p-3 text-xs text-slate-500">ไม่มีรายละเอียดเมนูในข้อมูลบิลนี้</p>:(latestOrder.items||[]).map((item,index)=><div key={item.id+"|"+item.variant+"|"+index} className="flex items-start justify-between gap-3 rounded-xl bg-slate-50 p-3 text-xs">
@@ -496,8 +497,8 @@ export default function PosDailyWorkspace({
           </details>}
           {orderRows.length===0?<Empty text="ยังไม่มีออเดอร์ล่าสุด"/>:orderRows.map(sale=><div key={sale.id} className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-3">
             <div className="min-w-0">
-              <div><b>{sale.queueNo||sale.billNo||"บิล"}</b><span className="ml-2 text-[10px] uppercase text-slate-500">{sale.payment}</span></div>
-              <p className="mt-1 truncate text-xs text-slate-500">{sale.itemCount} รายการ · {sale.status}{sale.orderStatus?" · "+sale.orderStatus:""}</p>
+              <div><b>{sale.queueNo||sale.billNo||"บิล"}</b><span className="ml-2 text-[10px] text-slate-500">{paymentSummaryLabel(sale.payment,sale.paymentMethods)}</span></div>
+              <p className="mt-1 truncate text-xs text-slate-500">{sale.itemCount} รายการ · {saleStatusLabel(sale.status)}{sale.orderStatus?" · "+orderStatusLabel(sale.orderStatus):""}</p>
             </div>
             <b className="shrink-0 text-[#765b08]">฿{money(sale.total)}</b>
           </div>)}
