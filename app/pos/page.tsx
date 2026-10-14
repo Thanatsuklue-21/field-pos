@@ -14,6 +14,9 @@ import {writeQueueSnapshotCache} from "@/lib/queue-cache";
 import PosDailyWorkspace from "@/components/pos-daily-workspace";
 import ModalFocus from "@/components/modal-focus";
 import {cashierNextAction} from "@/lib/cashier-guidance.mjs";
+import {chooseWorkspaceNextAction} from "@/lib/workspace-guidance.mjs";
+import {readExpenseIntent} from "@/lib/expense-recovery";
+import {readCashShiftOpenIntent} from "@/lib/cash-shift-open-recovery";
 
 export default function Pos(){return <AuthGate>{s=><PosView session={s}/>}</AuthGate>}
 
@@ -86,6 +89,7 @@ function PosView({session}:{session:Session}){
   const [online,setOnline]=useState(true);
   const [offlineStats,setOfflineStats]=useState<OfflineCashSummary>({pending:0,needsReview:0,total:0});
   const [offlineStorageError,setOfflineStorageError]=useState(false);
+  const [workspaceSignals,setWorkspaceSignals]=useState({pendingExpense:false,expenseRecoveryBlocked:false,pendingOpenShift:false,startDayRecoveryBlocked:false});
   const revisionRef=useRef<number|null>(null);
   const offlineSyncRef=useRef(false);
   const promptReconcileRef=useRef(false);
@@ -133,6 +137,29 @@ function PosView({session}:{session:Session}){
     window.addEventListener("offline",networkChanged);
     return()=>{window.removeEventListener("online",networkChanged);window.removeEventListener("offline",networkChanged)};
   },[]);
+
+  useEffect(()=>{
+    if(workspaceOpen)return;
+    const readSignals=()=>{
+      const canExpense=session.user.role==="admin"||session.user.permissions?.report===true;
+      const canStartDay=session.user.role==="admin";
+      let pendingExpense=false,expenseRecoveryBlocked=false,pendingOpenShift=false,startDayRecoveryBlocked=false;
+      if(canExpense){
+        try{pendingExpense=!!readExpenseIntent(session.user.id)}
+        catch{expenseRecoveryBlocked=true}
+      }
+      if(canStartDay){
+        try{pendingOpenShift=!!readCashShiftOpenIntent(session.user.id)}
+        catch{startDayRecoveryBlocked=true}
+      }
+      setWorkspaceSignals({pendingExpense,expenseRecoveryBlocked,pendingOpenShift,startDayRecoveryBlocked});
+    };
+    readSignals();
+    const onFocus=()=>readSignals(),onStorage=()=>readSignals();
+    window.addEventListener("focus",onFocus);
+    window.addEventListener("storage",onStorage);
+    return()=>{window.removeEventListener("focus",onFocus);window.removeEventListener("storage",onStorage)};
+  },[workspaceOpen,session.user.id,session.user.role,session.user.permissions?.report]);
 
   useEffect(()=>{
     if(!online||method!=="promptpay"||!payOpen)return;
@@ -724,8 +751,32 @@ function PosView({session}:{session:Session}){
     setPayOpen(true);
   }
 
-  const orderStep=payOpen?3:cart.items.length?2:1;
-  const cashierGuide=cashierNextAction({cartQty:cart.items.reduce((s,i)=>s+i.qty,0),payOpen,method,payable:netPayable,received,promptReady:!!prompt?.qrUrl});
+  const cartQty=cart.items.reduce((s,i)=>s+i.qty,0);
+  const orderStep=payOpen?3:cartQty?2:1;
+  const cashierGuide=cashierNextAction({cartQty,payOpen,method,payable:netPayable,received,promptReady:!!prompt?.qrUrl});
+  const operatorGuide=data?.operatorGuide;
+  const workspaceNextAction=chooseWorkspaceNextAction({
+    canExpense:session.user.role==="admin"||session.user.permissions?.report===true,
+    pendingExpense:workspaceSignals.pendingExpense,
+    expenseRecoveryBlocked:workspaceSignals.expenseRecoveryBlocked,
+    canQueue:session.user.role==="admin"||session.user.permissions?.queue===true,
+    queueCount:online?Number(operatorGuide?.queueCount)||0:0,
+    firstQueue:online?String(operatorGuide?.firstQueue||""):"",
+    canStock:session.user.role==="admin"||session.user.permissions?.stock===true,
+    outCount:online?Number(operatorGuide?.unavailableMenuCount)||0:0,
+    lowCount:online?Number(operatorGuide?.lowStockMenuCount)||0:0,
+    canStatus:session.user.role==="admin",
+    blockedCount:0,
+    canOrder:session.user.role==="admin"||session.user.permissions?.order===true,
+    latestOrderLabel:"",
+    canStartDay:session.user.role==="admin",
+    businessDateKnown:online&&!!operatorGuide?.businessDate,
+    shiftStatus:online&&operatorGuide?.shiftStatus!=="not_open"?String(operatorGuide?.shiftStatus||""):"",
+    pendingOpenShift:workspaceSignals.pendingOpenShift,
+    startDayRecoveryBlocked:workspaceSignals.startDayRecoveryBlocked
+  });
+  const workspaceActionVisible=!payOpen&&cartQty===0&&workspaceNextAction.tone!=="ready";
+  const workspaceActionLabel=workspaceNextAction.action==="start_day"?"เริ่มตรงนี้":workspaceNextAction.tab==="queue"?"เปิดคิว":workspaceNextAction.tab==="stock"?"ตรวจสต็อก":workspaceNextAction.tab==="expense"?"ตรวจรายการ":workspaceNextAction.tab==="status"?"ดูสถานะ":"เปิดงานร้าน";
   const hasPendingPrompt=!!pendingRead();
   const quickCashAmounts=Array.from(new Set([Math.ceil(netPayable/100)*100,100,500,1000])).filter(v=>v>=netPayable&&v>0).sort((a,b)=>a-b).slice(0,3);
 
@@ -744,10 +795,13 @@ function PosView({session}:{session:Session}){
         {[["1","เลือกเมนู"],["2","เพิ่ม / ตรวจ"],["3","รับเงิน"]].map(([n,label])=>{const step=Number(n),active=orderStep===step,done=orderStep>step;return <div key={n} className={"flex min-h-10 items-center justify-center gap-1.5 rounded-xl px-2 text-[10px] font-semibold sm:text-xs "+(active?"bg-[#d4af37] text-black shadow-sm":done?"bg-emerald-50 text-emerald-700":"text-slate-400")}><span className={"grid h-5 w-5 place-items-center rounded-full text-[10px] "+(active?"bg-black/10":done?"bg-emerald-100":"bg-slate-100")}>{done?"✓":n}</span><span>{label}</span></div>})}
       </div>
 
-      {!payOpen&&<div role="status" aria-live="polite" className={"mb-3 rounded-2xl border px-3 py-2.5 "+(cashierGuide.tone==="warn"?"border-amber-300 bg-amber-50 text-amber-900":cashierGuide.tone==="ready"?"border-emerald-200 bg-emerald-50 text-emerald-900":"border-[#d4af37]/40 bg-[#fffaf0] text-slate-800")}>
+      {!payOpen&&(workspaceActionVisible?<div role="status" aria-live="polite" className={"mb-3 flex items-center justify-between gap-3 rounded-2xl border px-3 py-2.5 "+(workspaceNextAction.tone==="critical"?"border-red-300 bg-red-50 text-red-900":workspaceNextAction.tone==="warn"?"border-amber-300 bg-amber-50 text-amber-900":"border-[#d4af37]/50 bg-[#fff8dc] text-slate-900")}>
+        <div className="min-w-0"><span className="text-[9px] font-black uppercase tracking-[.16em] text-slate-500">ทำต่อก่อน</span><b className="mt-0.5 block text-sm">{workspaceNextAction.label}</b><span className="mt-0.5 block text-[11px] leading-4">{workspaceNextAction.detail}</span></div>
+        <button type="button" disabled={busy||payOpen} onClick={()=>setWorkspaceOpen(true)} className="min-h-11 shrink-0 rounded-xl bg-[#1F4D3A] px-3 text-xs font-black text-white disabled:opacity-40">{workspaceActionLabel}</button>
+      </div>:<div role="status" aria-live="polite" className={"mb-3 rounded-2xl border px-3 py-2.5 "+(cashierGuide.tone==="warn"?"border-amber-300 bg-amber-50 text-amber-900":cashierGuide.tone==="ready"?"border-emerald-200 bg-emerald-50 text-emerald-900":"border-[#d4af37]/40 bg-[#fffaf0] text-slate-800")}>
         <b className="block text-sm">{cashierGuide.title}</b>
         <span className="mt-0.5 block text-[11px]">{cashierGuide.detail}</span>
-      </div>}
+      </div>)}
 
       {offlineStorageError&&<div role="alert" className="mb-3 shrink-0 rounded-2xl border border-red-200 bg-red-50 p-3 text-sm text-red-900"><b>ยังอ่านบิลที่เก็บในเครื่องไม่ได้</b><p className="mt-1 text-xs">ยังยืนยันไม่ได้ว่ามีบิลรอส่งกี่รายการ · หยุดรับเงินสดตอนเน็ตหลุด และอย่าล้างข้อมูลเบราว์เซอร์ กรุณาตรวจพื้นที่เก็บข้อมูลหรือให้เจ้าของร้านช่วย</p><button disabled={busy} onClick={()=>refreshOfflineStats().catch(()=>{})} className="mt-2 min-h-11 rounded-xl border border-red-300 bg-white px-3 text-xs font-bold disabled:opacity-40">อ่านรายการ Offline อีกครั้ง</button></div>}
       {notice&&<div className="mb-3 flex items-start justify-between gap-3 rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900"><span>{notice}</span><button onClick={()=>setNotice("")} className="shrink-0"><X size={16}/></button></div>}
