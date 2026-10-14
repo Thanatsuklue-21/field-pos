@@ -512,14 +512,23 @@ test('queue category call status derives from persisted calledQty rather than lo
 });
 
 
-test('variant modal reflects cart-aware remaining stock instead of raw availability only',async()=>{
+test('variant modal reuses memoized cart demand so taps do not rescan the whole cart',async()=>{
   const pos=await read('app/pos/page.tsx');
-  assert.match(pos,/additionalServingsAvailable\(\{cart:cart\.items/);
+  assert.match(pos,/const cartStockState=useMemo\(\(\)=>cartAvailability/);
+  assert.match(pos,/additionalServingsForVariant\(\{variant:v,demand:cartStockState\.demand/);
+  assert.match(pos,/additionalServingsForVariant\(\{variant,demand:cartStockState\.demand/);
   assert.match(pos,/const canAdd=!!v\.available&&remaining>0/);
   assert.match(pos,/disabled=\{!canAdd\}/);
   assert.match(pos,/เพิ่มได้อีกประมาณ \{remaining\} แก้ว/);
   assert.match(pos,/เพิ่มไม่ได้ · ตะกร้าใช้สต๊อกที่เหลือแล้ว/);
   assert.match(pos,/ลดจำนวนรายการในตะกร้า หรืออัปเดต Stock ก่อนเพิ่มเมนูนี้/);
+});
+
+test('POS menu filtering and totals are memoized away from unrelated modal state changes',async()=>{
+  const pos=await read('app/pos/page.tsx');
+  assert.match(pos,/const menu=useMemo\(\(\)=>/);
+  assert.match(pos,/\[data\?\.menu,cat,q\]/);
+  assert.match(pos,/const total=useMemo\(\(\)=>cart\.items\.reduce/);
 });
 
 
