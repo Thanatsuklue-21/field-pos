@@ -179,3 +179,24 @@ test("split-payment handoff keeps the cashier on the same queue until every paye
   assert.match(handoff,/อย่าเปิดออเดอร์ใหม่จนกว่าจะรับเงินคิวนี้ครบ/);
   assert.match(handoff,/!lastSale\.offline&&!splitPaymentPending&&<button onClick=\{\(\)=>router\.push\("\/queue"\)\}/);
 });
+
+
+test("payment screen shows common tenders first and hides rare methods behind one clear choice",async()=>{
+  const pos=await read("app/pos/page.tsx");
+  assert.match(pos,/const \[otherPaymentOpen,setOtherPaymentOpen\]=useState\(false\)/);
+  assert.match(pos,/const otherPaymentActive=\["bank","card","delivery"\]\.includes\(method\)/);
+  assert.match(pos,/const showOtherPayments=otherPaymentOpen\|\|otherPaymentActive/);
+  const start=pos.indexOf(">เลือกวิธีชำระ</p>");
+  const end=pos.indexOf("{hasPendingPrompt&&",start);
+  const paymentMethods=pos.slice(start,end);
+  assert.match(paymentMethods,/>เงินสด<\/button>/);
+  assert.match(paymentMethods,/>PromptPay/);
+  assert.match(paymentMethods,/>ช่องทางอื่น<\/button>/);
+  assert.match(paymentMethods,/aria-expanded=\{showOtherPayments\}/);
+  assert.match(paymentMethods,/\{showOtherPayments&&<div id="field-other-payment-methods"/);
+  assert.match(paymentMethods,/>โอน<\/button>/);
+  assert.match(paymentMethods,/>บัตร<\/button>/);
+  assert.match(paymentMethods,/>เดลิเวอรี<\/button>/);
+  assert.match(paymentMethods,/setMethod\("cash"\);setOtherPaymentOpen\(false\)/);
+  assert.match(paymentMethods,/setMethod\("promptpay"\);setOtherPaymentOpen\(false\)/);
+});
