@@ -21,7 +21,7 @@ test("PromptPay background reconciliation is serialized and reuses the existing 
   assert.match(block,/promptReconcileRef\.current=true/);
   assert.match(block,/promptReconcileRef\.current=false/);
   assert.match(block,/pendingRead\(\)/);
-  assert.match(block,/paymentReference:p\.paymentReference/);
+  assert.match(block,/chargeId:p\.paymentReference/);
 });
 
 test("an unresolved PromptPay locks order edits and alternate tenders",async()=>{
