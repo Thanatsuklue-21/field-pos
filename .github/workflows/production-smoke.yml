@@ -58,13 +58,16 @@ jobs:
           if(health?.ok!==true) throw new Error('health_not_ok');
           if(health?.storage!=='turso') throw new Error('storage_not_turso');
           if(!health?.release || typeof health.release.commit!=='string') throw new Error('release_identity_missing');
-          if(!health.release.branch || !health.release.environment) throw new Error('release_context_missing');
+          if(!health.release.branch || !health.release.environment || !health.release.deploymentId) throw new Error('release_context_missing');
+          if(health.release.branch!=='main') throw new Error('release_branch_not_main');
+          if(health.release.environment!=='production') throw new Error('release_environment_not_production');
           console.log('health ok',health.release);
           NODE
 
             grep -qi '^strict-transport-security:' /tmp/health.headers || { echo "::error::HSTS header missing"; exit 1; }
             grep -qi '^x-content-type-options:[[:space:]]*nosniff' /tmp/health.headers || { echo "::error::nosniff header missing"; exit 1; }
             grep -qi '^x-frame-options:[[:space:]]*DENY' /tmp/health.headers || { echo "::error::frame protection header missing"; exit 1; }
+            grep -qi '^content-security-policy:' /tmp/health.headers || { echo "::error::health CSP header missing"; exit 1; }
           done
 
           node --input-type=module <<'NODE'
@@ -76,12 +79,19 @@ jobs:
           if(max>5) throw new Error('health_latency_budget_exceeded');
           NODE
 
-          for path in / /pos /queue /stock /orders /settings /close; do
+          for path in / /pos /queue /stock /orders /settings /close /backup; do
             code="$(curl --silent --show-error --output /tmp/page.html --dump-header /tmp/page.headers --write-out '%{http_code}' --retry 4 --retry-all-errors --retry-delay 5 "$base$path")"
             test "$code" = "200" || { echo "::error::$path returned HTTP $code"; exit 1; }
             grep -q "FIELD POS" /tmp/page.html || { echo "::error::$path did not render FIELD POS shell"; exit 1; }
             grep -qi '^content-security-policy:' /tmp/page.headers || { echo "::error::$path missing CSP"; exit 1; }
+            grep -qi '^x-content-type-options:[[:space:]]*nosniff' /tmp/page.headers || { echo "::error::$path missing nosniff"; exit 1; }
             echo "$path OK"
+          done
+
+          for path in /api/pos/bootstrap /api/expenses; do
+            code="$(curl --silent --show-error --output /tmp/unauth.json --write-out '%{http_code}' --retry 2 --retry-all-errors --retry-delay 2 "$base$path")"
+            test "$code" = "401" || { echo "::error::$path must reject unauthenticated access with HTTP 401, got $code"; cat /tmp/unauth.json; exit 1; }
+            echo "$path unauthenticated guard OK"
           done
 
       - name: Verify production commit matches expected main or deployment
