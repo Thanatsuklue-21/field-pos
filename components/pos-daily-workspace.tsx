@@ -70,6 +70,7 @@ export default function PosDailyWorkspace({
   const dialogRef=useRef<HTMLElement|null>(null);
   const closeButtonRef=useRef<HTMLButtonElement|null>(null);
   const [busy,setBusy]=useState(false);
+  const [workspaceReady,setWorkspaceReady]=useState(false);
   const [message,setMessage]=useState("");
 
   useEffect(()=>{
@@ -132,8 +133,13 @@ export default function PosDailyWorkspace({
   }
 
   useEffect(()=>{
-    if(!open)return;
-    refresh().catch(()=>{});
+    if(!open){
+      setWorkspaceReady(false);
+      return;
+    }
+    let active=true;
+    setWorkspaceReady(false);
+    refresh().catch(()=>{}).finally(()=>{if(active)setWorkspaceReady(true)});
     if(canExpense){
       try{
         setPendingExpense(readExpenseIntent(session.user.id));
@@ -143,6 +149,7 @@ export default function PosDailyWorkspace({
         setExpenseFeedback("อ่านข้อมูลค่าใช้จ่ายค้างไม่ได้ · ระบบปิดรายจ่ายด่วนชั่วคราวเพื่อป้องกันยอดซ้ำ");
       }
     }
+    return()=>{active=false};
   },[open]);
 
   useEffect(()=>{
@@ -272,12 +279,12 @@ export default function PosDailyWorkspace({
       manualTabRef.current=false;
       return;
     }
-    if(busy||autoRouteRef.current||manualTabRef.current)return;
+    if(!workspaceReady||autoRouteRef.current||manualTabRef.current)return;
     if(nextAction.tab&&tabs.includes(nextAction.tab as WorkspaceTab)){
       setTab(nextAction.tab as WorkspaceTab);
-      autoRouteRef.current=true;
     }
-  },[open,busy,nextAction.tab,tabs.join("|")]);
+    autoRouteRef.current=true;
+  },[open,workspaceReady,nextAction.tab,tabs.join("|")]);
 
   if(!open)return null;
 
