@@ -68,11 +68,14 @@ test('queue actions consume compact write responses instead of blocking on a sec
 });
 
 
-test('payment success makes the physical pager card visually dominant',async()=>{
+test('payment success makes the physical pager card visually dominant only after the whole queue is paid',async()=>{
   const pos=await read('app/pos/page.tsx');
+  assert.match(pos,/splitPaymentPending\?<div[^>]*border-amber-300/);
+  assert.match(pos,/ยังไม่ต้องส่งคิวไปทำ/);
+  assert.match(pos,/!splitPaymentPending&&<button onClick=\{\(\)=>router\.push\("\/queue"\)\}/);
   assert.match(pos,/หยิบบัตรให้ลูกค้า/);
   assert.match(pos,/text-4xl font-black/);
-  assert.match(pos,/บัตร \{lastSale\.pager/);
+  assert.match(pos,/บัตร \{lastSale\.pager\|\|"—"\}/);
 });
 
 test('queue shows pager number and one guided production action',async()=>{
