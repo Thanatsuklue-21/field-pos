@@ -23,6 +23,21 @@ jobs:
       BASE_URL: ${{ github.event_name == 'workflow_dispatch' && inputs.base_url || 'https://field-pos.vercel.app' }}
       EXPECTED_SHA: ${{ github.event_name == 'deployment_status' && (github.event.deployment.environment == 'Production' || github.event.deployment.environment == 'production') && github.event.deployment.sha || '' }}
     steps:
+      - name: Checkout release history
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Resolve expected production release
+        if: env.EXPECTED_SHA == ''
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected="$(git log -1 --format=%H -- .vercel-release)"
+          test -n "$expected" || { echo "::error::No production release marker commit found"; exit 1; }
+          echo "EXPECTED_SHA=$expected" >> "$GITHUB_ENV"
+          echo "Expected production release from .vercel-release: $expected"
+
       - name: Verify public health and core routes
         shell: bash
         run: |
@@ -61,7 +76,7 @@ jobs:
           if(max>5) throw new Error('health_latency_budget_exceeded');
           NODE
 
-          for path in /pos /settings /close; do
+          for path in / /pos /queue /stock /orders /settings /close; do
             code="$(curl --silent --show-error --output /tmp/page.html --dump-header /tmp/page.headers --write-out '%{http_code}' --retry 4 --retry-all-errors --retry-delay 5 "$base$path")"
             test "$code" = "200" || { echo "::error::$path returned HTTP $code"; exit 1; }
             grep -q "FIELD POS" /tmp/page.html || { echo "::error::$path did not render FIELD POS shell"; exit 1; }
@@ -70,7 +85,6 @@ jobs:
           done
 
       - name: Verify production commit matches expected main or deployment
-        if: env.EXPECTED_SHA != ''
         shell: bash
         run: |
           set -euo pipefail

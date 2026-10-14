@@ -29,3 +29,15 @@ test("production identity verification still fails stale releases",()=>{
   assert.match(source,/if \[ "\$actual" != "\$EXPECTED_SHA" \]/);
   assert.match(source,/Stale release: expected SHA/);
 });
+
+
+test("smoke covers every go-live core route",()=>{
+  assert.match(source,/for path in \/ \/pos \/queue \/stock \/orders \/settings \/close; do/);
+});
+
+test("scheduled smoke resolves the approved production release marker",()=>{
+  assert.match(source,/Checkout release history/);
+  assert.match(source,/git log -1 --format=%H -- \.vercel-release/);
+  assert.match(source,/EXPECTED_SHA=\$expected.*GITHUB_ENV/);
+  assert.doesNotMatch(source,/if: env\.EXPECTED_SHA != ''\n\s*shell: bash/);
+});
