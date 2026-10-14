@@ -13,6 +13,7 @@ import {useHeldCartStore} from "@/stores/held-cart-store";
 import {writeQueueSnapshotCache} from "@/lib/queue-cache";
 import PosDailyWorkspace from "@/components/pos-daily-workspace";
 import ModalFocus from "@/components/modal-focus";
+import {cashierNextAction} from "@/lib/cashier-guidance.mjs";
 
 export default function Pos(){return <AuthGate>{s=><PosView session={s}/>}</AuthGate>}
 
@@ -708,6 +709,7 @@ function PosView({session}:{session:Session}){
   }
 
   const orderStep=payOpen?3:cart.items.length?2:1;
+  const cashierGuide=cashierNextAction({cartQty:cart.items.reduce((s,i)=>s+i.qty,0),payOpen,method,payable:netPayable,received,promptReady:!!prompt?.qrUrl});
   const quickCashAmounts=Array.from(new Set([Math.ceil(netPayable/100)*100,100,500,1000])).filter(v=>v>=netPayable&&v>0).sort((a,b)=>a-b).slice(0,3);
 
   return <section className="flex h-full min-h-0">
@@ -724,6 +726,11 @@ function PosView({session}:{session:Session}){
       <div className="mb-3 grid grid-cols-3 gap-1.5 rounded-2xl border border-slate-200 bg-white p-1.5" aria-label="ขั้นตอนรับออเดอร์">
         {[["1","เลือกเมนู"],["2","ตรวจรายการ"],["3","รับเงิน"]].map(([n,label])=>{const step=Number(n),active=orderStep===step,done=orderStep>step;return <div key={n} className={"flex min-h-10 items-center justify-center gap-1.5 rounded-xl px-2 text-[10px] font-semibold sm:text-xs "+(active?"bg-[#d4af37] text-black shadow-sm":done?"bg-emerald-50 text-emerald-700":"text-slate-400")}><span className={"grid h-5 w-5 place-items-center rounded-full text-[10px] "+(active?"bg-black/10":done?"bg-emerald-100":"bg-slate-100")}>{done?"✓":n}</span><span>{label}</span></div>})}
       </div>
+
+      {!payOpen&&<div role="status" aria-live="polite" className={"mb-3 rounded-2xl border px-3 py-2.5 "+(cashierGuide.tone==="warn"?"border-amber-300 bg-amber-50 text-amber-900":cashierGuide.tone==="ready"?"border-emerald-200 bg-emerald-50 text-emerald-900":"border-[#d4af37]/40 bg-[#fffaf0] text-slate-800")}>
+        <b className="block text-sm">{cashierGuide.title}</b>
+        <span className="mt-0.5 block text-[11px]">{cashierGuide.detail}</span>
+      </div>}
 
       {offlineStorageError&&<div role="alert" className="mb-3 shrink-0 rounded-2xl border border-red-200 bg-red-50 p-3 text-sm text-red-900"><b>ยังอ่านบิลที่เก็บในเครื่องไม่ได้</b><p className="mt-1 text-xs">ยังยืนยันไม่ได้ว่ามีบิลรอส่งกี่รายการ · หยุดรับเงินสดตอนเน็ตหลุด และอย่าล้างข้อมูลเบราว์เซอร์ กรุณาตรวจพื้นที่เก็บข้อมูลหรือให้เจ้าของร้านช่วย</p><button disabled={busy} onClick={()=>refreshOfflineStats().catch(()=>{})} className="mt-2 min-h-11 rounded-xl border border-red-300 bg-white px-3 text-xs font-bold disabled:opacity-40">อ่านรายการ Offline อีกครั้ง</button></div>}
       {notice&&<div className="mb-3 flex items-start justify-between gap-3 rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900"><span>{notice}</span><button onClick={()=>setNotice("")} className="shrink-0"><X size={16}/></button></div>}
@@ -755,6 +762,11 @@ function PosView({session}:{session:Session}){
     {selected&&<div className="field-modal-overlay fixed inset-0 z-50 grid place-items-center bg-black/55" onMouseDown={()=>setSelected(null)}><ModalFocus labelId="field-modifier-title" onEscape={()=>setSelected(null)} className="field-modal-panel card w-full max-w-md overflow-auto border border-slate-300 bg-white p-4 shadow-2xl sm:p-6" initialFocusSelector='[aria-label="ปิดตัวเลือกเมนู"]'><div onMouseDown={e=>e.stopPropagation()}><div className="flex items-start justify-between"><div><p className="gold text-[10px] tracking-[.25em]">{selected.category||"DRINK"}</p><h3 id="field-modifier-title" className="mt-1 text-lg sm:text-xl">{selected.name}</h3></div><button aria-label="ปิดตัวเลือกเมนู" onClick={()=>setSelected(null)} className="grid h-11 w-11 shrink-0 place-items-center rounded-xl hover:bg-slate-100"><X/></button></div><p className="mt-5 text-xs font-semibold text-slate-500">เลือกระดับหวาน / สูตร</p><div className="mt-3 grid gap-2">{selected.variants.map(v=>{const remaining=additionalServingsAvailable({cart:cart.items,menu:data?.menu||[],stock:data?.availabilityStock||{},menuId:selected.id,variantLabel:v.label});const canAdd=!!v.available&&remaining>0;return <button key={v.label} disabled={!canAdd} onClick={()=>addVariant(selected,v)} className="min-h-11 rounded-2xl border border-slate-300 bg-slate-50 px-3 py-2.5 text-left hover:border-[#c59b19] sm:px-4 sm:py-3 disabled:bg-slate-100 disabled:text-slate-400"><span>{orderOptionLabel(v.label)}{!v.available&&<small className="ml-2 text-red-600">หมดชั่วคราว</small>}{v.available&&remaining>0&&<small className="ml-2 text-amber-700">เพิ่มได้อีกประมาณ {remaining} แก้ว</small>}{v.available&&remaining<1&&<small className="ml-2 text-red-600">เพิ่มไม่ได้ · ตะกร้าใช้สต๊อกที่เหลือแล้ว</small>}</span><span className="float-right font-semibold text-[#765b08]">฿{selected.price.toFixed(0)}</span>{!v.available&&v.missingIngredients?.length>0&&<small className="mt-1 block text-xs text-red-500">ขาด: {v.missingIngredients.map(i=>i.name).join(", ")}</small>}{v.available&&remaining<1&&<small className="mt-1 block text-xs text-slate-500">ลดจำนวนรายการในตะกร้า หรืออัปเดต Stock ก่อนเพิ่มเมนูนี้</small>}</button>})}</div></div></ModalFocus></div>}
 
     {payOpen&&<div className="field-modal-overlay fixed inset-0 z-[90] flex items-end justify-center bg-black/55 sm:grid sm:place-items-center"><ModalFocus labelId="field-payment-title" onEscape={busy?undefined:()=>setPayOpen(false)} className="field-modal-panel soft-scroll card max-h-[calc(100dvh-1rem)] w-full max-w-md overflow-auto border border-slate-300 bg-white p-4 shadow-2xl sm:max-h-[94vh] sm:p-6" initialFocusSelector='[aria-label="กลับไปเลือกเมนู"]'><div className="flex justify-between gap-3"><div><p className="gold text-[10px] tracking-[.25em]">ขั้นตอน 3 · รับเงิน</p><h3 id="field-payment-title" className="mt-1 text-2xl font-semibold">รับเงิน ฿{netPayable.toFixed(0)}</h3><p className="mt-1 text-xs text-slate-500">{splitBill?"บิลนี้ "+payableQty+" แก้ว · เหลือ "+remainingAfterBill+" แก้ว":payableQty+" แก้ว · "+cart.items.length+" เมนู"}</p></div><button aria-label="กลับไปเลือกเมนู" disabled={busy} onClick={()=>setPayOpen(false)} className="grid h-11 w-11 shrink-0 place-items-center rounded-xl hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-30"><X/></button></div>
+
+      <div role="status" aria-live="polite" className={"mt-3 rounded-2xl border px-3 py-2.5 "+(cashierGuide.tone==="warn"?"border-amber-300 bg-amber-50 text-amber-900":cashierGuide.tone==="ready"?"border-emerald-200 bg-emerald-50 text-emerald-900":"border-[#d4af37]/40 bg-[#fffaf0] text-slate-800")}>
+        <b className="block text-sm">{cashierGuide.title}</b>
+        <span className="mt-0.5 block text-[11px]">{cashierGuide.detail}</span>
+      </div>
 
       <button type="button" disabled={busy||!online||method==="delivery"||cart.items.reduce((s,i)=>s+i.qty,0)<2} onClick={()=>{setSplitBill(v=>{const next=!v;setPaymentReviewOpen(next);return next});setSplitSelection({});setPointsRedeemed(0);setReceived("");setResult("")}} className={"mt-4 min-h-11 w-full rounded-2xl border px-4 text-sm font-semibold "+(splitBill?"border-[#d4af37] bg-[#fff8dc] text-[#765b08]":"border-slate-300 bg-white text-slate-700")+" disabled:opacity-40"}>{splitBill?"ยกเลิกแยกบิล":"แยกบิล / จ่ายแยกตามคน"}</button>
       {splitBill&&<div className="mt-2 rounded-2xl border border-[#d4af37]/40 bg-[#fffaf0] px-3 py-2 text-xs text-slate-700">เลือกจำนวนแก้วของ <b>คนที่กำลังจ่าย</b> · หลังชำระ รายการที่เหลือยังอยู่ในตะกร้าเพื่อรับเงินคนถัดไป</div>}
