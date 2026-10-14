@@ -236,12 +236,12 @@ function QueueView({session}:{session:Session}){
   return <section className="soft-scroll h-full overflow-y-auto overscroll-contain p-2.5 pb-28 sm:p-4 sm:pb-24 md:p-6 md:pb-8">
     <div className="mx-auto w-full max-w-4xl space-y-3">
       <header className="sticky top-0 z-20 flex items-center justify-between gap-3 rounded-2xl bg-[#f3f5f7] py-2">
-        <div className="flex min-w-0 items-center gap-2"><Link href="/pos" className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-slate-300 bg-white text-slate-700 shadow-sm" aria-label="กลับหน้าเมนู"><ArrowLeft size={17}/></Link><div className="min-w-0"><p className="gold m-0 text-[9px] font-bold tracking-[.26em]">PRODUCTION RUN</p><h1 className="mt-0.5 truncate text-lg font-semibold sm:text-xl">ทำออเดอร์ / รันบัตร</h1></div></div>
+        <div className="flex min-w-0 items-center gap-2"><Link href="/pos" className="grid h-11 w-11 shrink-0 place-items-center rounded-full border border-slate-300 bg-white text-slate-700 shadow-sm" aria-label="กลับหน้าเมนู"><ArrowLeft size={17}/></Link><div className="min-w-0"><p className="gold m-0 text-[9px] font-bold tracking-[.26em]">PRODUCTION RUN</p><h1 className="mt-0.5 truncate text-lg font-semibold sm:text-xl">ทำออเดอร์ / รันบัตร</h1></div></div>
         <div className="flex items-center gap-2">{syncing&&<span className="hidden text-[10px] text-slate-400 sm:inline">กำลังซิงก์…</span>}<span className="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-[10px] font-semibold text-slate-600">กำลังทำ {orders.filter(o=>!orderCalled(o)).length}</span></div>
       </header>
 
       {msg&&<div className="rounded-2xl border border-red-300 bg-red-50 px-3 py-2 text-xs text-red-800">{msg}</div>}
-      {notice&&<div className="flex items-start justify-between gap-3 rounded-2xl border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs text-emerald-800"><span>{notice}</span><button onClick={()=>setNotice("")}><X size={15}/></button></div>}
+      {notice&&<div className="flex items-start justify-between gap-3 rounded-2xl border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs text-emerald-800"><span>{notice}</span><button type="button" onClick={()=>setNotice("")} className="grid h-11 w-11 shrink-0 place-items-center rounded-xl" aria-label="ปิดข้อความแจ้งเตือน"><X size={15}/></button></div>}
 
       {orders.length===0&&<div className="grid min-h-[55vh] place-items-center rounded-[24px] border border-dashed border-slate-300 bg-white/70 p-6 text-center">
         <div><CheckCircle2 size={34} className="mx-auto text-emerald-600"/><h2 className="mt-3 text-lg font-bold">ไม่มีบัตรที่ต้องทำ</h2><p className="mt-1 text-sm text-slate-500">เมื่อมีออเดอร์ใหม่ บัตรผลิตจะแสดงตรงนี้อัตโนมัติ</p></div>
@@ -297,7 +297,7 @@ function QueueView({session}:{session:Session}){
         <div className="flex items-center justify-between"><h2 className="text-sm font-bold">รอลูกค้ารับ · {waitingPickup.length} บัตร</h2><span className="text-[10px] text-slate-400">ส่งมอบแล้วกดออกจากคิว</span></div>
         <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">{waitingPickup.map(order=>{const reviewOpen=pickupReviewId===order.id;return <div key={order.id} className="rounded-2xl border-2 border-emerald-400 bg-emerald-50 p-3 text-center">
           <small className="block text-[9px] font-bold text-emerald-700">บัตร</small><div className="mt-1 text-3xl font-black text-emerald-800">{order.pagerNo}</div><div className="mt-1 text-[10px] text-slate-500">{(order.items||[]).reduce((sum,item)=>sum+n(item.qty),0)} แก้ว</div>
-          <button type="button" aria-expanded={reviewOpen} onClick={()=>setPickupReviewId(reviewOpen?"":order.id)} className="mt-2 min-h-10 w-full rounded-xl border border-emerald-300 bg-white px-2 text-xs font-bold text-emerald-800">{reviewOpen?"ซ่อนรายการ":"ดูรายการ"}</button>
+          <button type="button" aria-expanded={reviewOpen} onClick={()=>setPickupReviewId(reviewOpen?"":order.id)} className="mt-2 min-h-11 w-full rounded-xl border border-emerald-300 bg-white px-2 text-xs font-bold text-emerald-800">{reviewOpen?"ซ่อนรายการ":"ดูรายการ"}</button>
           {reviewOpen&&<div className="mt-2 space-y-1.5 rounded-xl border border-emerald-200 bg-white p-2 text-left">
             {(order.items||[]).map((item,index)=><div key={item.id+"|"+item.variant+"|pickup|"+index} className="flex items-start justify-between gap-2 rounded-lg bg-slate-50 px-2.5 py-2">
               <div className="min-w-0"><b className="block text-[11px] text-slate-800">{item.name}</b>{item.variant&&item.variant!=="Standard"&&<span className="mt-0.5 block text-[10px] text-slate-500">{item.variant}</span>}</div><b className="shrink-0 text-[11px] text-slate-700">×{item.qty}</b>
