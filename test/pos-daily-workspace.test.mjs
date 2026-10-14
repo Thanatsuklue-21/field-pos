@@ -282,3 +282,17 @@ test("workspace queue tail actions share the same pending intent and fail closed
   assert.match(hub,/disabled=\{!online\|\|busy\|\|queueActionLocked\}/);
   assert.match(hub,/FullLink href="\/queue" label="เปิดโหมดทำเครื่องดื่ม \/ ดูคิวเต็ม"/);
 });
+
+
+test("workspace keeps FIFO obvious: only the production head can be called while later queues stay read-only",async()=>{
+  const hub=await read("components/pos-daily-workspace.tsx");
+  assert.match(hub,/productionHead=queueSorted\.find\(order=>!queueOrderCalled\(order\)\)\|\|null/);
+  assert.match(hub,/isProductionHead=productionHead\?\.id===order\.id/);
+  assert.match(hub,/isProductionHead&&readyAll/);
+  assert.match(hub,/รอคิวก่อนหน้า · ระบบเรียงลำดับให้แล้ว/);
+  const queueStart=hub.indexOf('tab==="queue"');
+  const queueEnd=hub.indexOf('tab==="orders"',queueStart);
+  const queueBlock=hub.slice(queueStart,queueEnd);
+  assert.equal((queueBlock.match(/runQueueTailAction\(order,"call"\)/g)||[]).length,1);
+  assert.equal((queueBlock.match(/runQueueTailAction\(order,"return"\)/g)||[]).length,1);
+});
