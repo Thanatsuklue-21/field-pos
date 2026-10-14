@@ -27,8 +27,11 @@ export default function ModalFocus({
     const previous=document.activeElement instanceof HTMLElement?document.activeElement:null;
     const focusables=()=>Array.from(node.querySelectorAll<HTMLElement>(FOCUSABLE)).filter(el=>!el.hasAttribute("disabled")&&el.tabIndex!==-1);
     const preferred=initialFocusSelector?node.querySelector<HTMLElement>(initialFocusSelector):null;
-    const first=preferred||focusables()[0]||node;
-    queueMicrotask(()=>first.focus({preventScroll:true}));
+    queueMicrotask(()=>{
+      const active=document.activeElement instanceof HTMLElement?document.activeElement:null;
+      const target=preferred||(active&&node.contains(active)?active:null)||focusables()[0]||node;
+      target.focus({preventScroll:true});
+    });
 
     const onKeyDown=(event:KeyboardEvent)=>{
       if(event.key==="Escape"&&escapeRef.current){
