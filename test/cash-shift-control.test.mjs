@@ -28,3 +28,34 @@ test('close day UI freezes opening float and requires blind reviewed count',asyn
   assert.doesNotMatch(ui,/body:JSON\.stringify\(\{openingCash:opening,countedCash:counted\}\)/);
   assert.match(ui,/เงินสดที่ควรมี = เงินตั้งต้น \+ ยอดขายเงินสด \+ เงินเติมเข้า − ค่าใช้จ่ายเงินสด − เงินนำออก/);
 });
+
+
+test('durable start-day replay precedes business-date and duplicate-open guards',async()=>{
+  const api=await read('lib/api.mjs');
+  const start=api.indexOf("if(path==='/api/cash-shift/open'");
+  const end=api.indexOf("if(path==='/api/cash-shift/movements'",start);
+  const block=api.slice(start,end);
+  assert.match(block,/replayDurableRequest\(tx,doc,requestKey,context\)/);
+  assert.ok(block.indexOf("replayDurableRequest")<block.indexOf("business_date_changed"));
+  assert.ok(block.indexOf("replayDurableRequest")<block.indexOf("day_already_closed"));
+  assert.ok(block.indexOf("replayDurableRequest")<block.indexOf("cash_shift_already_opened"));
+  assert.match(block,/rememberDurableRequestStatement\(doc,requestKey,response,context,now\)/);
+  assert.match(block,/requestKey:durableMode\?requestKey:null/);
+  assert.match(block,/performedBy:user\.id/);
+  assert.match(block,/const durableMode=requestKey\.length>0/);
+});
+
+test('Close Day and POS workspace share the same durable start-day recovery contract',async()=>{
+  const close=await read('app/close/page.tsx');
+  const workspace=await read('components/pos-daily-workspace.tsx');
+  for(const source of [close,workspace]){
+    assert.match(source,/prepareCashShiftOpenIntent/);
+    assert.match(source,/readCashShiftOpenIntent/);
+    assert.match(source,/sendCashShiftOpenIntent/);
+    assert.match(source,/\/api\/cash-shift\/open/);
+  }
+  assert.match(close,/ตรวจผลการเปิดร้านเดิม/);
+  assert.match(workspace,/เริ่มงานวันนี้/);
+  assert.match(workspace,/เปิดร้านวันนี้/);
+  assert.match(workspace,/เงินสดตั้งต้น/);
+});

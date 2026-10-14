@@ -5,6 +5,7 @@ import Link from "next/link";
 import {Bot,Boxes,ClipboardList,ListOrdered,ReceiptText,RefreshCw,ShieldCheck,X} from "lucide-react";
 import {api,type Bootstrap,type Session} from "@/lib/api-client";
 import {prepareExpenseIntent,readExpenseIntent,sendExpenseIntent,type ExpenseIntent} from "@/lib/expense-recovery";
+import {prepareCashShiftOpenIntent,readCashShiftOpenIntent,sendCashShiftOpenIntent,type CashShiftOpenIntent} from "@/lib/cash-shift-open-recovery";
 import {chooseWorkspaceNextAction} from "@/lib/workspace-guidance.mjs";
 
 type WorkspaceTab="queue"|"orders"|"stock"|"expense"|"status";
@@ -64,7 +65,12 @@ export default function PosDailyWorkspace({
   const [pendingExpense,setPendingExpense]=useState<ExpenseIntent|null>(null);
   const [expenseRecoveryBlocked,setExpenseRecoveryBlocked]=useState(false);
   const [expenseFeedback,setExpenseFeedback]=useState("");
+  const [openingCash,setOpeningCash]=useState("0");
+  const [pendingOpenShift,setPendingOpenShift]=useState<CashShiftOpenIntent|null>(null);
+  const [startDayRecoveryBlocked,setStartDayRecoveryBlocked]=useState(false);
+  const [startDayFeedback,setStartDayFeedback]=useState("");
   const expenseSavingRef=useRef(false);
+  const startDaySavingRef=useRef(false);
   const autoRouteRef=useRef(false);
   const manualTabRef=useRef(false);
   const dialogRef=useRef<HTMLElement|null>(null);
@@ -163,6 +169,60 @@ export default function PosDailyWorkspace({
     };
   },[open,online,session.csrf]);
 
+  function startDayError(code:string){
+    const map:Record<string,string>={
+      invalid_request_key:"รหัสกันรายการซ้ำไม่ถูกต้อง",
+      invalid_date:"วันทำการไม่ถูกต้อง · รีเฟรชก่อนเปิดร้าน",
+      invalid_opening_cash:"เงินตั้งต้นต้องไม่ติดลบและไม่เกิน 2 ตำแหน่งทศนิยม",
+      business_date_changed:"วันทำการเปลี่ยนแล้ว · รายการเดิมไม่ได้ถูกสร้างใหม่ กรุณารีเฟรชแล้วเปิดวันใหม่",
+      cash_shift_already_opened:"วันนี้เปิดร้านแล้ว · ระบบจะโหลดข้อมูลล่าสุด",
+      day_already_closed:"วันนี้ปิดยอดแล้ว · ไม่สามารถเปิดร้านซ้ำได้",
+      pending_cash_shift_open_exists:"มีคำสั่งเปิดร้านเดิมที่ยังไม่ทราบผล · ต้องตรวจรายการเดิมก่อน",
+      cash_shift_open_ack_unknown:"ระบบกลางยังยืนยันการเปิดร้านเดิมไม่ครบ · ระบบเก็บรายการเดิมไว้ ห้ามเปิดซ้ำ",
+      cash_shift_open_recovery_unavailable:"อ่าน/บันทึกข้อมูลป้องกันการเปิดร้านซ้ำไม่ได้ · ระบบปิดปุ่มเปิดร้านชั่วคราว",
+      network_unavailable:"เน็ตขาดการเชื่อมต่อ · ยังไม่ทราบว่าเปิดร้านสำเร็จหรือไม่ ระบบเก็บรายการเดิมไว้และจะตรวจซ้ำ",
+      offline_write_blocked:"ออฟไลน์อยู่ · ต้องเชื่อมต่อก่อนเปิดร้าน"
+    };
+    return map[code]||"ยังยืนยันการเปิดร้านไม่ได้ · ระบบเก็บรายการเดิมไว้เพื่อป้องกันเปิดซ้ำ";
+  }
+
+  async function submitStartDayIntent(intent:CashShiftOpenIntent,recovery=false){
+    if(startDaySavingRef.current)return false;
+    startDaySavingRef.current=true;setStartDayFeedback("");
+    try{
+      const result=await sendCashShiftOpenIntent(intent,body=>api<any>("/api/cash-shift/open",{
+        method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify(body)
+      }));
+      setPendingOpenShift(null);setStartDayRecoveryBlocked(false);
+      setStartDayFeedback((recovery?"ตรวจรายการเปิดร้านเดิมสำเร็จ · ":"")+"ร้านเปิดแล้ว · เงินตั้งต้น ฿"+money(result.shift?.openingCash)+" ถูกล็อกแล้ว");
+      await refresh();
+      return true;
+    }catch(error:any){
+      try{setPendingOpenShift(readCashShiftOpenIntent(session.user.id));setStartDayRecoveryBlocked(false)}
+      catch{setStartDayRecoveryBlocked(true)}
+      setStartDayFeedback(startDayError(error?.message));
+      await refresh().catch(()=>{});
+      return false;
+    }finally{startDaySavingRef.current=false}
+  }
+
+  async function openStartDay(){
+    if(!canStatus||!online||startDayRecoveryBlocked||startDaySavingRef.current)return;
+    let existing:CashShiftOpenIntent|null=null;
+    try{existing=readCashShiftOpenIntent(session.user.id)}
+    catch{setStartDayRecoveryBlocked(true);setStartDayFeedback(startDayError("cash_shift_open_recovery_unavailable"));return}
+    if(existing){setPendingOpenShift(existing);await submitStartDayIntent(existing,true);return}
+    const date=String(expenseData?.businessDate||"");
+    const amount=Number(openingCash);
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(date)){setStartDayFeedback("ยังไม่ได้วันทำการล่าสุด · รีเฟรชก่อนเปิดร้าน");return}
+    if(!Number.isFinite(amount)||amount<0||amount>1e7||Math.abs(amount*100-Math.round(amount*100))>1e-7){setStartDayFeedback(startDayError("invalid_opening_cash"));return}
+    if(!window.confirm("ยืนยันเปิดร้านด้วยเงินตั้งต้น ฿"+money(amount)+" ? หลังยืนยันจำนวนนี้จะถูกล็อกสำหรับการกระทบยอดวันนี้"))return;
+    try{
+      const intent=prepareCashShiftOpenIntent(session.user.id,{requestKey:crypto.randomUUID(),date,openingCash:amount});
+      setPendingOpenShift(intent);await submitStartDayIntent(intent,false);
+    }catch(error:any){setStartDayFeedback(startDayError(error?.message))}
+  }
+
   function quickExpenseError(code:string){
     const map:Record<string,string>={
       day_closed:"ปิดยอดวันนี้แล้ว ไม่สามารถเพิ่มค่าใช้จ่ายได้",
@@ -210,6 +270,24 @@ export default function PosDailyWorkspace({
       await refresh().catch(()=>{});
     }finally{expenseSavingRef.current=false;setBusy(false)}
   }
+
+  useEffect(()=>{
+    if(!open||!canStatus)return;
+    let active=true;
+    const recover=()=>{
+      if(!active||!online||startDaySavingRef.current)return;
+      let intent:CashShiftOpenIntent|null=null;
+      try{intent=readCashShiftOpenIntent(session.user.id);setStartDayRecoveryBlocked(false)}
+      catch{setStartDayRecoveryBlocked(true);setStartDayFeedback(startDayError("cash_shift_open_recovery_unavailable"));return}
+      if(!intent){setPendingOpenShift(null);return}
+      setPendingOpenShift(intent);
+      submitStartDayIntent(intent,true).catch(()=>{});
+    };
+    const visible=()=>{if(document.visibilityState==="visible")recover()};
+    recover();
+    window.addEventListener("online",recover);window.addEventListener("focus",recover);document.addEventListener("visibilitychange",visible);
+    return()=>{active=false;window.removeEventListener("online",recover);window.removeEventListener("focus",recover);document.removeEventListener("visibilitychange",visible)};
+  },[open,canStatus,online,session.user.id,session.csrf]);
 
   useEffect(()=>{
     if(!open||!canExpense)return;
@@ -326,6 +404,16 @@ export default function PosDailyWorkspace({
           </button>
         </div>
       </header>
+
+      {canStatus&&expenseData?.businessDate&&<div className="border-b border-slate-200 bg-white px-3 py-3 sm:px-4">
+        {!expenseData.shift?<div className="rounded-2xl border border-[#d4af37]/50 bg-[#fff8dc] p-3">
+          <div className="flex items-start justify-between gap-3"><div><b className="text-sm">เริ่มงานวันนี้</b><p className="mt-1 text-xs text-slate-600">ใส่เงินสดตั้งต้นครั้งเดียว แล้วรับออเดอร์ต่อจากหน้า POS ได้เลย</p></div><span className="rounded-full bg-amber-100 px-2 py-1 text-[10px] font-bold text-amber-800">ยังไม่เปิดร้าน</span></div>
+          {(pendingOpenShift||startDayRecoveryBlocked)&&<div className={"mt-3 rounded-xl border p-2 text-xs "+(startDayRecoveryBlocked?"border-red-300 bg-red-50 text-red-800":"border-amber-300 bg-amber-50 text-amber-900")}><b>{startDayRecoveryBlocked?"อ่านรายการเปิดร้านค้างไม่ได้":"มีคำสั่งเปิดร้านเดิมรอยืนยัน"}</b><p className="mt-1">{startDayRecoveryBlocked?"ระบบปิดปุ่มเปิดร้านชั่วคราวเพื่อป้องกันยอดเงินตั้งต้นซ้ำ":"ระบบจะตรวจรายการเปิดร้านเดิมเท่านั้น · ห้ามเปลี่ยนเงินตั้งต้นหรือสร้างรายการใหม่"}</p></div>}
+          <div className="mt-3 grid grid-cols-[1fr_auto] gap-2"><input aria-label="เงินสดตั้งต้น" inputMode="decimal" disabled={!!pendingOpenShift||startDayRecoveryBlocked} value={openingCash} onChange={e=>setOpeningCash(e.target.value)} placeholder="เช่น 500" className="min-h-12 rounded-xl border border-slate-300 bg-white px-3 text-base font-bold disabled:text-slate-400"/><button type="button" disabled={!online||startDaySavingRef.current||startDayRecoveryBlocked} onClick={openStartDay} className="min-h-12 rounded-xl bg-[#1F4D3A] px-4 text-sm font-black text-white disabled:opacity-40">{pendingOpenShift?"ตรวจผลเดิม":"เปิดร้านวันนี้"}</button></div>
+          <button type="button" disabled={!!pendingOpenShift||startDayRecoveryBlocked} onClick={()=>setOpeningCash("0")} className="mt-2 min-h-11 rounded-xl border border-slate-300 bg-white px-3 text-xs font-semibold text-slate-700 disabled:opacity-40">ไม่มีเงินทอน · ใช้ ฿0</button>
+          {startDayFeedback&&<p className="mt-2 rounded-xl bg-white/70 px-3 py-2 text-xs text-slate-700">{startDayFeedback}</p>}
+        </div>:<div className={"rounded-2xl border p-3 "+(expenseData.shift.status==="open"?"border-emerald-200 bg-emerald-50":"border-slate-200 bg-slate-100")}><div className="flex items-start justify-between gap-3"><div><b className="text-sm">{expenseData.shift.status==="open"?"ร้านเปิดแล้ว":"วันนี้ปิดยอดแล้ว"}</b><p className="mt-1 text-xs text-slate-600">{expenseData.shift.status==="open"?"เงินตั้งต้น ฿"+money(expenseData.shift.openingCash)+" ถูกล็อกแล้ว · รับออเดอร์ต่อได้":"วันทำการนี้ปิดแล้ว ระบบไม่เปิดซ้ำ"}</p></div><span className={"rounded-full px-2 py-1 text-[10px] font-bold "+(expenseData.shift.status==="open"?"bg-emerald-200 text-emerald-900":"bg-slate-200 text-slate-700")}>{expenseData.shift.status==="open"?"พร้อมขาย":"ปิดแล้ว"}</span></div></div>}
+      </div>}
 
       <div className={"grid gap-1 border-b border-slate-200 bg-white p-2 "+(meta.filter(x=>x.allowed).length>=5?"grid-cols-5":"grid-cols-4")}>
         {meta.filter(x=>x.allowed).map(({key,label,icon:Icon,count})=><button
