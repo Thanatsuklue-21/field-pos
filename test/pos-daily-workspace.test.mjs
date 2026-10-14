@@ -253,3 +253,32 @@ test("workspace start-day recommendation focuses the exact opening cash control 
   assert.match(hub,/"เริ่มงาน"/);
   assert.match(hub,/>ไปตรงนี้<\/button>/);
 });
+
+
+test("workspace finishes safe queue tail work in-place without exposing production mutations",async()=>{
+  const hub=await read("components/pos-daily-workspace.tsx");
+  assert.match(hub,/useQueueActionRecovery/);
+  assert.match(hub,/runQueueTailAction\(order,"call"\)/);
+  assert.match(hub,/runQueueTailAction\(order,"return"\)/);
+  assert.match(hub,/เรียกบัตร/);
+  assert.match(hub,/ลูกค้ารับแล้ว/);
+  assert.match(hub,/ทำคิวนี้ต่อ/);
+  assert.match(hub,/productionHead/);
+  assert.match(hub,/readyAll/);
+  assert.match(hub,/calledAll/);
+  assert.doesNotMatch(hub,/action:"complete_item"/);
+  assert.doesNotMatch(hub,/action:"waste_remake"/);
+  assert.doesNotMatch(hub,/action:"call_item"/);
+});
+
+test("workspace queue tail actions share the same pending intent and fail closed",async()=>{
+  const hub=await read("components/pos-daily-workspace.tsx");
+  assert.match(hub,/pendingQueueAction/);
+  assert.match(hub,/queueRecoveryBlocked/);
+  assert.match(hub,/queueActionLocked/);
+  assert.match(hub,/recoverQueueAction/);
+  assert.match(hub,/ไม่ต้องกดซ้ำ/);
+  assert.match(hub,/role="status" aria-live="polite" aria-atomic="true"/);
+  assert.match(hub,/disabled=\{!online\|\|busy\|\|queueActionLocked\}/);
+  assert.match(hub,/FullLink href="\/queue" label="เปิดโหมดทำเครื่องดื่ม \/ ดูคิวเต็ม"/);
+});
