@@ -752,7 +752,7 @@ function PosView({session}:{session:Session}){
   }
 
   const cartQty=cart.items.reduce((s,i)=>s+i.qty,0);
-  const orderStep=payOpen?3:cartQty?2:1;
+  const orderStep=payOpen?3:cart.items.length?2:1;
   const cashierGuide=cashierNextAction({cartQty,payOpen,method,payable:netPayable,received,promptReady:!!prompt?.qrUrl});
   const operatorGuide=data?.operatorGuide;
   const workspaceNextAction=chooseWorkspaceNextAction({
