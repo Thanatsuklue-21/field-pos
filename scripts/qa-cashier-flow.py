@@ -54,17 +54,21 @@ with sync_playwright() as p:
         locator.click()
 
     nonlocal_taps=[0]
+    expect(page.get_by_text("แตะเมนูที่ลูกค้าสั่ง",exact=True)).to_be_visible()
     tap(page.get_by_role("button",name="เมนูทดสอบ").first)
     variant=page.get_by_role("dialog")
     expect(variant).to_be_visible()
     tap(variant.get_by_role("button",name="50%",exact=True))
+    expect(page.get_by_text("ลูกค้าสั่งครบหรือยัง?",exact=True)).to_be_visible()
     tap(page.get_by_role("button",name="ชำระเงิน",exact=True))
     payment=page.get_by_role("dialog",name="รับเงิน ฿55")
     expect(payment).to_be_visible()
+    expect(payment.get_by_text("รับเงินจากลูกค้า",exact=True)).to_be_visible()
     tap(payment.get_by_role("button",name="รับพอดี ฿55",exact=True))
     # Use 100 to exercise the change path while keeping payment deterministic.
     payment.get_by_role("textbox",name="จำนวนเงินที่รับจากลูกค้า").fill("100")
     nonlocal_taps[0]+=1
+    expect(payment.get_by_text("ทอน 45 บาท แล้วกดยืนยัน",exact=True)).to_be_visible()
     expect(payment.get_by_text("เงินทอน",exact=True)).to_be_visible()
     expect(payment.get_by_text("฿45",exact=True)).to_be_visible()
     tap(payment.get_by_role("button",name="ยืนยันรับเงิน",exact=True))
