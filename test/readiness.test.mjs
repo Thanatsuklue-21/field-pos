@@ -91,20 +91,19 @@ test('production smoke workflow checks health routes and stale release without c
   assert.match(yml,/deployment_status:/);
   assert.match(yml,/workflow_dispatch:/);
   assert.match(yml,/\/api\/health/);
-  for(const route of ['/pos','/settings','/close'])assert.match(yml,new RegExp(route.replace('/','\\/')));
+  for(const route of ['/','/pos','/queue','/stock','/orders','/settings','/close','/backup'])assert.ok(yml.includes(route),route);
   assert.match(yml,/Stale release/);
   assert.match(yml,/release_identity_missing/);
   assert.doesNotMatch(yml,/vercel deploy|create_deployment|deploy --prod/);
 });
 
 
-test('scheduled production smoke checks health without comparing workflow revision to release SHA',async()=>{
+test('scheduled production smoke fails when production is stale behind default-branch main',async()=>{
   const yml=await read('.github/workflows/production-smoke.yml');
   assert.match(yml,/schedule:/);
-  assert.match(yml,/cron: '17 \* \* \* \*'/);
+  assert.match(yml,/cron: '17 \\* \\* \\* \\*'/);
   assert.match(yml,/github\.event_name == 'schedule'/);
-  assert.match(yml,/EXPECTED_SHA: .*deployment_status.*deployment\.sha.*\|\| ''/);
-  assert.doesNotMatch(yml,/deployment_status.*deployment\.sha.*\|\| github\.sha/);
+  assert.match(yml,/EXPECTED_SHA: .*deployment_status.*deployment\.sha.*github\.event_name == 'schedule'.*github\.sha/);
   assert.match(yml,/Stale release: expected SHA/);
   assert.doesNotMatch(yml,/vercel deploy|create_deployment|deploy --prod/);
 });
