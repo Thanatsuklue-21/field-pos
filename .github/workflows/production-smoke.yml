@@ -23,7 +23,30 @@ jobs:
       BASE_URL: ${{ github.event_name == 'workflow_dispatch' && inputs.base_url || 'https://field-pos.vercel.app' }}
       EXPECTED_SHA: ${{ github.event_name == 'deployment_status' && (github.event.deployment.environment == 'Production' || github.event.deployment.environment == 'production') && github.event.deployment.sha || '' }}
     steps:
-      - name: Verify public health and core routes
+      - name: Checkout release history
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Resolve intended production release
+        id: expected
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -n "$EXPECTED_SHA" ]; then
+            expected="$EXPECTED_SHA"
+          elif [ "${{ github.event_name }}" = "schedule" ]; then
+            expected="$(git log -1 --format=%H -- .vercel-release)"
+          else
+            expected=""
+          fi
+          if [ "${{ github.event_name }}" = "schedule" ] && [ -z "$expected" ]; then
+            echo "::error::Unable to resolve latest .vercel-release commit"
+            exit 1
+          fi
+          echo "sha=$expected" >> "$GITHUB_OUTPUT"
+
+      - name: Verify public health, routes, and auth guards
         shell: bash
         run: |
           set -euo pipefail
@@ -43,13 +66,16 @@ jobs:
           if(health?.ok!==true) throw new Error('health_not_ok');
           if(health?.storage!=='turso') throw new Error('storage_not_turso');
           if(!health?.release || typeof health.release.commit!=='string') throw new Error('release_identity_missing');
-          if(!health.release.branch || !health.release.environment) throw new Error('release_context_missing');
+          if(!health.release.branch || !health.release.environment || !health.release.deploymentId) throw new Error('release_context_missing');
+          if(health.release.branch!=='main') throw new Error('release_branch_not_main');
+          if(health.release.environment!=='production') throw new Error('release_environment_not_production');
           console.log('health ok',health.release);
           NODE
 
             grep -qi '^strict-transport-security:' /tmp/health.headers || { echo "::error::HSTS header missing"; exit 1; }
             grep -qi '^x-content-type-options:[[:space:]]*nosniff' /tmp/health.headers || { echo "::error::nosniff header missing"; exit 1; }
             grep -qi '^x-frame-options:[[:space:]]*DENY' /tmp/health.headers || { echo "::error::frame protection header missing"; exit 1; }
+            grep -qi '^content-security-policy:' /tmp/health.headers || { echo "::error::health CSP header missing"; exit 1; }
           done
 
           node --input-type=module <<'NODE'
@@ -61,17 +87,26 @@ jobs:
           if(max>5) throw new Error('health_latency_budget_exceeded');
           NODE
 
-          for path in /pos /settings /close; do
+          for path in / /pos /queue /stock /orders /settings /close /backup; do
             code="$(curl --silent --show-error --output /tmp/page.html --dump-header /tmp/page.headers --write-out '%{http_code}' --retry 4 --retry-all-errors --retry-delay 5 "$base$path")"
             test "$code" = "200" || { echo "::error::$path returned HTTP $code"; exit 1; }
             grep -q "FIELD POS" /tmp/page.html || { echo "::error::$path did not render FIELD POS shell"; exit 1; }
             grep -qi '^content-security-policy:' /tmp/page.headers || { echo "::error::$path missing CSP"; exit 1; }
+            grep -qi '^x-content-type-options:[[:space:]]*nosniff' /tmp/page.headers || { echo "::error::$path missing nosniff"; exit 1; }
             echo "$path OK"
           done
 
-      - name: Verify production commit matches expected main or deployment
-        if: env.EXPECTED_SHA != ''
+          for path in /api/pos/bootstrap /api/expenses; do
+            code="$(curl --silent --show-error --output /tmp/unauth.json --write-out '%{http_code}' --retry 2 --retry-all-errors --retry-delay 2 "$base$path")"
+            test "$code" = "401" || { echo "::error::$path must reject unauthenticated access with HTTP 401, got $code"; cat /tmp/unauth.json; exit 1; }
+            echo "$path unauthenticated guard OK"
+          done
+
+      - name: Verify production commit matches intended release
+        if: steps.expected.outputs.sha != ''
         shell: bash
+        env:
+          RESOLVED_EXPECTED_SHA: ${{ steps.expected.outputs.sha }}
         run: |
           set -euo pipefail
           base="${BASE_URL%/}"
@@ -81,11 +116,11 @@ jobs:
             echo "::error::Production health has no release commit"
             exit 1
           fi
-          if [ "$actual" != "$EXPECTED_SHA" ]; then
-            echo "::error::Stale release: expected SHA $EXPECTED_SHA but production reports $actual"
+          if [ "$actual" != "$RESOLVED_EXPECTED_SHA" ]; then
+            echo "::error::Stale release: expected SHA $RESOLVED_EXPECTED_SHA but production reports $actual"
             exit 1
           fi
-          echo "Production commit matches expected release: $actual"
+          echo "Production commit matches intended release: $actual"
 
       - name: Publish smoke summary
         if: always()
@@ -96,6 +131,6 @@ jobs:
             echo "- URL: $BASE_URL"
             echo "- Trigger: ${{ github.event_name }}"
             echo "- Deployment environment: ${{ github.event_name == 'deployment_status' && github.event.deployment.environment || 'n/a' }}"
-            echo "- Expected SHA: ${EXPECTED_SHA:-manual}"
+            echo "- Expected SHA: ${{ steps.expected.outputs.sha || 'manual' }}"
             echo "- Result: ${{ job.status }}"
           } >> "$GITHUB_STEP_SUMMARY"
