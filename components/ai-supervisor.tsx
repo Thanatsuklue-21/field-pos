@@ -2,6 +2,7 @@
 import {useEffect,useMemo,useState} from "react";
 import {useRouter,usePathname} from "next/navigation";
 import {Bot,RefreshCw,Send,ShieldAlert,Sparkles,X} from "lucide-react";
+import ModalFocus from "@/components/modal-focus";
 import {api,type Session} from "@/lib/api-client";
 
 type Alert={id:string;severity:"critical"|"high"|"medium"|"low"|"info";area:string;title:string;detail:string;href:string};
@@ -44,11 +45,11 @@ export default function AiSupervisor({session}:{session:Session|null}){
     <button type="button" onClick={()=>setOpen(v=>!v)} aria-label="FIELD AI Supervisor" className={"fixed bottom-[78px] right-3 z-[70] h-12 w-12 place-items-center rounded-full border shadow-lg md:bottom-6 md:right-6 "+(path==="/pos"?"hidden ":"grid ")+(critical?"border-red-300 bg-red-50 text-red-700":review?"border-amber-300 bg-amber-50 text-amber-700":"border-emerald-200 bg-white text-emerald-700")}>
       <Bot size={21}/>{badge>0&&<span className="absolute -right-1 -top-1 min-w-5 rounded-full bg-red-600 px-1.5 py-0.5 text-center text-[10px] font-bold text-white">{badge}</span>}
     </button>
-    {open&&<div className="fixed inset-0 z-[120] bg-slate-950/20 p-2 backdrop-blur-[2px] md:flex md:items-end md:justify-end" onClick={e=>{if(e.currentTarget===e.target)setOpen(false)}}>
-      <section className="ml-auto flex h-[min(760px,calc(100dvh-1rem))] w-full max-w-[430px] flex-col overflow-hidden rounded-[28px] border border-slate-200 bg-[#f8fafc] shadow-2xl">
+    {open&&<div className="field-modal-overlay fixed inset-0 z-[120] bg-slate-950/20 backdrop-blur-[2px] md:flex md:items-end md:justify-end" onClick={e=>{if(e.currentTarget===e.target)setOpen(false)}}>
+      <ModalFocus labelId="ai-supervisor-title" onEscape={()=>setOpen(false)} className="field-modal-panel ml-auto flex h-[min(760px,calc(100dvh-1rem))] w-full max-w-[430px] flex-col overflow-hidden rounded-[28px] border border-slate-200 bg-[#f8fafc] shadow-2xl">
         <header className="flex items-center justify-between border-b border-slate-200 bg-white px-4 py-3">
-          <div className="flex items-center gap-2"><div className="grid h-9 w-9 place-items-center rounded-full bg-[#d4af37]/15 text-[#765b08]"><Sparkles size={17}/></div><div><b className="text-sm">FIELD AI Supervisor</b><div className="text-[10px] text-slate-500">เฝ้าเงิน · สต๊อก · Flow · ความผิดปกติ</div></div></div>
-          <button onClick={()=>setOpen(false)} className="grid h-9 w-9 place-items-center rounded-full hover:bg-slate-100"><X size={17}/></button>
+          <div className="flex items-center gap-2"><div className="grid h-9 w-9 place-items-center rounded-full bg-[#d4af37]/15 text-[#765b08]"><Sparkles size={17}/></div><div><b id="ai-supervisor-title" className="text-sm">FIELD AI Supervisor</b><div className="text-[10px] text-slate-500">เฝ้าเงิน · สต๊อก · Flow · ความผิดปกติ</div></div></div>
+          <button aria-label="ปิด FIELD AI Supervisor" onClick={()=>setOpen(false)} className="grid h-11 w-11 place-items-center rounded-full hover:bg-slate-100"><X size={17}/></button>
         </header>
         <div className="soft-scroll flex-1 overflow-auto p-3">
           <div className={"rounded-2xl border p-3 "+(critical?"border-red-200 bg-red-50":review?"border-amber-200 bg-amber-50":"border-emerald-200 bg-emerald-50")}>
@@ -74,7 +75,7 @@ export default function AiSupervisor({session}:{session:Session|null}){
           <div className="flex gap-2"><input value={message} onChange={e=>setMessage(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();ask()}}} className="min-h-11 min-w-0 flex-1 rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm" placeholder="ถาม AI เกี่ยวกับงานร้าน..."/><button disabled={busy||!message.trim()} onClick={()=>ask()} className="grid h-11 w-11 place-items-center rounded-2xl bg-[#d4af37] text-black disabled:opacity-40">{busy?<RefreshCw size={17} className="animate-spin"/>:<Send size={17}/>}</button></div>
           <p className="mt-2 text-[10px] leading-4 text-slate-400">AI ทำอัตโนมัติได้เฉพาะ Navigate / Refresh / Explain · เงินออก Refund Void Stock Adjustment และ Close Day ต้องยืนยันโดยคน</p>
         </footer>
-      </section>
+      </ModalFocus>
     </div>}
   </>;
 }
