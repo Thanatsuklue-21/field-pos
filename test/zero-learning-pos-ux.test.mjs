@@ -151,3 +151,16 @@ test("open and close day keeps operator-facing guidance in plain Thai",async()=>
     assert.equal(close.includes(phrase),false,"close-day copy leaks "+phrase);
   }
 });
+
+
+test("payment modal locks every editable control while a checkout is committing",async()=>{
+  const pos=await read("app/pos/page.tsx");
+  const start=pos.indexOf("{payOpen&&");
+  const end=pos.indexOf("{lastSale&&",start);
+  const payment=pos.slice(start,end);
+  assert.match(payment,/<fieldset disabled=\{busy\} aria-busy=\{busy\}/);
+  assert.match(payment,/กำลังยืนยันรายการนี้ · ห้ามรับเงินซ้ำหรือเปลี่ยนยอดจนกว่าระบบจะแจ้งผล/);
+  assert.match(payment,/role="status" aria-live="assertive"/);
+  assert.match(payment,/disabled=\{busy\|\|!payableItems\.length/);
+  assert.match(pos,/if\(!cart\.items\.length\|\|busy\|\|!payableItems\.length\)return/);
+});
