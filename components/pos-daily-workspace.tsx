@@ -65,9 +65,12 @@ export default function PosDailyWorkspace({
   const [expenseRecoveryBlocked,setExpenseRecoveryBlocked]=useState(false);
   const [expenseFeedback,setExpenseFeedback]=useState("");
   const expenseSavingRef=useRef(false);
+  const autoRouteRef=useRef(false);
+  const manualTabRef=useRef(false);
   const dialogRef=useRef<HTMLElement|null>(null);
   const closeButtonRef=useRef<HTMLButtonElement|null>(null);
   const [busy,setBusy]=useState(false);
+  const [workspaceReady,setWorkspaceReady]=useState(false);
   const [message,setMessage]=useState("");
 
   useEffect(()=>{
@@ -130,8 +133,13 @@ export default function PosDailyWorkspace({
   }
 
   useEffect(()=>{
-    if(!open)return;
-    refresh().catch(()=>{});
+    if(!open){
+      setWorkspaceReady(false);
+      return;
+    }
+    let active=true;
+    setWorkspaceReady(false);
+    refresh().catch(()=>{}).finally(()=>{if(active)setWorkspaceReady(true)});
     if(canExpense){
       try{
         setPendingExpense(readExpenseIntent(session.user.id));
@@ -141,6 +149,7 @@ export default function PosDailyWorkspace({
         setExpenseFeedback("อ่านข้อมูลค่าใช้จ่ายค้างไม่ได้ · ระบบปิดรายจ่ายด่วนชั่วคราวเพื่อป้องกันยอดซ้ำ");
       }
     }
+    return()=>{active=false};
   },[open]);
 
   useEffect(()=>{
@@ -242,8 +251,6 @@ export default function PosDailyWorkspace({
     return rows.slice(0,12);
   },[bootstrap?.revision]);
 
-  if(!open)return null;
-
   const queueRows=queue.slice().sort((a,b)=>n(a.time)-n(b.time)).slice(0,6);
   const orderRows=sales.slice(0,7);
   const latestOrder=orderRows[0]||null;
@@ -265,6 +272,21 @@ export default function PosDailyWorkspace({
     canStatus,blockedCount:Number(readiness?.summary.blocked||0),
     canOrder,latestOrderLabel:String(latestOrder?.queueNo||latestOrder?.billNo||"")
   });
+
+  useEffect(()=>{
+    if(!open){
+      autoRouteRef.current=false;
+      manualTabRef.current=false;
+      return;
+    }
+    if(!workspaceReady||autoRouteRef.current||manualTabRef.current)return;
+    if(nextAction.tab&&tabs.includes(nextAction.tab as WorkspaceTab)){
+      setTab(nextAction.tab as WorkspaceTab);
+    }
+    autoRouteRef.current=true;
+  },[open,workspaceReady,nextAction.tab,tabs.join("|")]);
+
+  if(!open)return null;
 
   const meta:Array<{key:WorkspaceTab;label:string;icon:any;allowed:boolean;count?:number}>=[
     {key:"queue",label:"คิว",icon:ListOrdered,allowed:canQueue,count:queue.length},
@@ -308,7 +330,7 @@ export default function PosDailyWorkspace({
       <div className={"grid gap-1 border-b border-slate-200 bg-white p-2 "+(meta.filter(x=>x.allowed).length>=5?"grid-cols-5":"grid-cols-4")}>
         {meta.filter(x=>x.allowed).map(({key,label,icon:Icon,count})=><button
           key={key}
-          onClick={()=>setTab(key)}
+          onClick={()=>{manualTabRef.current=true;setTab(key)}}
           className={"relative flex min-h-12 flex-col items-center justify-center rounded-xl px-1 text-[10px] font-bold "+(tab===key?"bg-[#d4af37]/20 text-[#6f5510]":"text-slate-600 hover:bg-slate-100")}
         >
           <Icon size={17}/><span className="mt-0.5">{label}</span>
@@ -330,7 +352,7 @@ export default function PosDailyWorkspace({
             <b className="mt-1 block text-sm text-slate-900">{nextAction.label}</b>
             <p className="mt-1 text-xs leading-5 text-slate-600">{nextAction.detail}</p>
           </div>
-          {nextAction.tab&&<button type="button" onClick={()=>setTab(nextAction.tab as WorkspaceTab)} className="min-h-11 shrink-0 rounded-xl border border-slate-300 bg-white px-3 text-xs font-bold text-slate-800">เปิดดู</button>}
+          {nextAction.tab&&<button type="button" onClick={()=>{manualTabRef.current=true;setTab(nextAction.tab as WorkspaceTab)}} className="min-h-11 shrink-0 rounded-xl border border-slate-300 bg-white px-3 text-xs font-bold text-slate-800">เปิดดู</button>}
         </div>
       </div>
 
