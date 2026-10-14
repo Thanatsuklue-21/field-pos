@@ -309,7 +309,7 @@ function QueueView({session}:{session:Session}){
         <div className="flex items-center gap-2">{syncing&&<span className="hidden text-[10px] text-slate-400 sm:inline">กำลังซิงก์…</span>}<span className="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-[10px] font-semibold text-slate-600">กำลังทำ {orders.filter(o=>!orderCalled(o)).length}</span></div>
       </header>
 
-      {(pendingQueueAction||queueRecoveryBlocked)&&<div className="rounded-2xl border-2 border-amber-300 bg-amber-50 p-3 text-xs text-amber-950">
+      {(pendingQueueAction||queueRecoveryBlocked)&&<div role="status" aria-live="polite" aria-atomic="true" className="rounded-2xl border-2 border-amber-300 bg-amber-50 p-3 text-xs text-amber-950">
         <div className="flex flex-wrap items-center justify-between gap-2"><div><b>{queueRecoveryBlocked?"ระบบป้องกันการกดซ้ำใช้งานไม่ได้":"กำลังตรวจปุ่มที่กดก่อนหน้า"}</b><p className="mt-1">{queueRecoveryBlocked?"ระบบหยุดการเปลี่ยนสถานะคิวชั่วคราวเพื่อป้องกันรายการซ้ำ":"ไม่ต้องกดปุ่มเดิมซ้ำ · ระบบเก็บคำสั่งเดิมไว้จนกว่าจะยืนยันผลได้"}</p></div>{pendingQueueAction&&<button disabled={busy!==""} onClick={()=>recoverQueueAction()} className="min-h-11 rounded-xl bg-amber-900 px-4 font-bold text-white disabled:opacity-40">ตรวจรายการเดิม</button>}</div>
       </div>}
       {msg&&<div className="rounded-2xl border border-red-300 bg-red-50 px-3 py-2 text-xs text-red-800">{msg}</div>}
