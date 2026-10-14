@@ -31,8 +31,10 @@ test("production identity verification still fails stale releases",()=>{
 });
 
 
-test("smoke covers every go-live core route",()=>{
-  assert.match(source,/for path in \/ \/pos \/queue \/stock \/orders \/settings \/close; do/);
+test("smoke covers every go-live route and unauthenticated API guard",()=>{
+  assert.match(source,/for path in \/ \/pos \/queue \/stock \/orders \/settings \/close \/backup; do/);
+  assert.match(source,/for path in \/api\/pos\/bootstrap \/api\/expenses; do/);
+  assert.match(source,/must reject unauthenticated access with HTTP 401/);
 });
 
 test("scheduled smoke resolves the approved production release marker",()=>{
@@ -40,4 +42,13 @@ test("scheduled smoke resolves the approved production release marker",()=>{
   assert.match(source,/git log -1 --format=%H -- \.vercel-release/);
   assert.match(source,/EXPECTED_SHA=\$expected.*GITHUB_ENV/);
   assert.doesNotMatch(source,/if: env\.EXPECTED_SHA != ''\n\s*shell: bash/);
+});
+
+
+test("production health requires explicit release context and security headers",()=>{
+  assert.match(source,/release\.deploymentId/);
+  assert.match(source,/release\.branch!=='main'/);
+  assert.match(source,/release\.environment!=='production'/);
+  assert.match(source,/health CSP header missing/);
+  assert.match(source,/missing nosniff/);
 });
