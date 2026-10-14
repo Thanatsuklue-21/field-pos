@@ -37,10 +37,13 @@ test("cash guidance handles empty short exact and change states",()=>{
   assert.match(change.detail,/สร้างคิวหลังรับเงินสำเร็จ/);
 });
 
-test("PromptPay guidance explicitly avoids duplicate QR creation",()=>{
-  const g=cashierNextAction({cartQty:1,payOpen:true,method:"promptpay",payable:55});
-  assert.match(g.title,/สแกน QR/);
-  assert.match(g.detail,/ไม่ต้องสร้าง QR ใหม่/);
+test("PromptPay guidance distinguishes QR creation from waiting on the existing QR",()=>{
+  const before=cashierNextAction({cartQty:1,payOpen:true,method:"promptpay",payable:55,promptReady:false});
+  assert.match(before.title,/สร้าง QR/);
+  assert.match(before.detail,/อย่าสร้างรายการใหม่ซ้ำ/);
+  const after=cashierNextAction({cartQty:1,payOpen:true,method:"promptpay",payable:55,promptReady:true});
+  assert.match(after.title,/สแกน QR/);
+  assert.match(after.detail,/ไม่ต้องสร้าง QR ใหม่/);
 });
 
 test("POS renders the guidance in both ordering and payment contexts",async()=>{
