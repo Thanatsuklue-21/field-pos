@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {additionalServingsAvailable,buildPosAvailability,cartAvailability,variantAvailability} from '../lib/domain/availability.mjs';
+import {additionalServingsAvailable,additionalServingsForVariant,buildPosAvailability,cartAvailability,variantAvailability} from '../lib/domain/availability.mjs';
 
 const stock={matcha:{name:'มัทฉะ',qty:20},milk:{name:'นมสด',qty:150},cup:{name:'แก้ว',qty:10}};
 const recipe={items:{matcha:5,milk:100,cup:1}};
@@ -13,3 +13,5 @@ test('variant availability is independent within one product',()=>{const r=build
 test('cart quantity cannot exceed availability',()=>{const {menu,stock:clientStock}=buildPosAvailability({menu:[{id:'latte',variants:[{label:'A',recipe}]}],ingredients:stock});assert.equal(cartAvailability({cart:[{id:'latte',variant:'A',qty:2}],menu,stock:clientStock}).available,false);assert.equal(additionalServingsAvailable({cart:[{id:'latte',variant:'A',qty:1}],menu,stock:clientStock,menuId:'latte',variantLabel:'A'}),0)});
 test('two menus sharing an ingredient aggregate demand correctly',()=>{const payload=buildPosAvailability({menu:[{id:'a',variants:[{label:'S',recipe:{items:{milk:100}}}]},{id:'b',variants:[{label:'S',recipe:{items:{milk:80}}}]}],ingredients:{milk:{name:'นมสด',qty:150}}});const result=cartAvailability({cart:[{id:'a',variant:'S',qty:1},{id:'b',variant:'S',qty:1}],menu:payload.menu,stock:payload.stock});assert.equal(result.available,false);assert.deepEqual(result.shortages,[{id:'milk',name:'นมสด',required:180,available:150}])});
 test('stock deduction and void restore immediately change calculated availability',()=>{const before=variantAvailability({recipe:{items:{matcha:5}},ingredients:{matcha:{qty:5}}});const afterSale=variantAvailability({recipe:{items:{matcha:5}},ingredients:{matcha:{qty:0}}});const afterVoid=variantAvailability({recipe:{items:{matcha:5}},ingredients:{matcha:{qty:5}}});assert.equal(before.available,true);assert.equal(afterSale.available,false);assert.equal(afterVoid.available,true)});
+
+test('precomputed cart demand lets a menu tap check only the selected variant recipe',()=>{const payload=buildPosAvailability({menu:[{id:'latte',variants:[{label:'A',recipe}]}],ingredients:{...stock,milk:{name:'นมสด',qty:350}}});const current=cartAvailability({cart:[{id:'latte',variant:'A',qty:1}],menu:payload.menu,stock:payload.stock});const variant=payload.menu[0].variants[0];assert.equal(additionalServingsForVariant({variant,demand:current.demand,stock:payload.stock}),2);assert.equal(additionalServingsAvailable({cart:[],menu:payload.menu,stock:payload.stock,menuId:'latte',variantLabel:'A',demand:current.demand}),2)});

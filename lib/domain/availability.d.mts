@@ -23,10 +23,17 @@ export function cartAvailability(input:{
   shortages:{id:string;name:string;required:number;available:number}[];
 };
 
+export function additionalServingsForVariant(input:{
+  variant:AvailabilityVariant;
+  demand:Record<string,number>;
+  stock:AvailabilityStock;
+}):number;
+
 export function additionalServingsAvailable(input:{
   cart:AvailabilityCartItem[];
   menu:AvailabilityMenu[];
   stock:AvailabilityStock;
   menuId:string;
   variantLabel:string;
+  demand?:Record<string,number>;
 }):number;
