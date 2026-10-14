@@ -12,11 +12,14 @@ test("deployment-triggered production smoke ignores preview environments",()=>{
   assert.match(jobIf,/deployment\.environment == 'Production'/);
 });
 
-test("expected SHA is populated only for a production deployment event",()=>{
+test("expected SHA uses deployment SHA and scheduled release-marker history",()=>{
   const line=source.split("\n").find(x=>x.includes("EXPECTED_SHA:"))||"";
   assert.match(line,/deployment_status/);
   assert.match(line,/deployment\.environment == 'Production'/);
   assert.match(line,/deployment\.sha/);
+  assert.doesNotMatch(line,/github\.sha/);
+  assert.match(source,/git log -1 --format=%H -- \.vercel-release/);
+  assert.match(source,/Resolve intended production release/);
 });
 
 test("scheduled and manual smoke remain enabled against production URL",()=>{
@@ -25,19 +28,21 @@ test("scheduled and manual smoke remain enabled against production URL",()=>{
   assert.match(source,/https:\/\/field-pos\.vercel\.app/);
 });
 
-test("production identity verification still fails stale releases",()=>{
-  assert.match(source,/if \[ "\$actual" != "\$EXPECTED_SHA" \]/);
+test("production identity verification fails stale releases",()=>{
+  assert.match(source,/if \[ "\$actual" != "\$RESOLVED_EXPECTED_SHA" \]/);
   assert.match(source,/Stale release: expected SHA/);
+  assert.match(source,/release\.branch!=='main'/);
+  assert.match(source,/release\.environment!=='production'/);
+  assert.match(source,/release\.deploymentId/);
 });
 
-
-test("smoke covers every go-live core route",()=>{
-  assert.match(source,/for path in \/ \/pos \/queue \/stock \/orders \/settings \/close; do/);
-});
-
-test("scheduled smoke resolves the approved production release marker",()=>{
-  assert.match(source,/Checkout release history/);
-  assert.match(source,/git log -1 --format=%H -- \.vercel-release/);
-  assert.match(source,/EXPECTED_SHA=\$expected.*GITHUB_ENV/);
-  assert.doesNotMatch(source,/if: env\.EXPECTED_SHA != ''\n\s*shell: bash/);
+test("production smoke covers every go-live route and auth guard",()=>{
+  for(const path of ["/","/pos","/queue","/stock","/orders","/settings","/close","/backup"]){
+    assert.ok(source.includes(path),path);
+  }
+  assert.match(source,/for path in \/ \/pos \/queue \/stock \/orders \/settings \/close \/backup/);
+  assert.match(source,/for path in \/api\/pos\/bootstrap \/api\/expenses/);
+  assert.match(source,/must reject unauthenticated access with HTTP 401/);
+  assert.match(source,/content-security-policy/);
+  assert.match(source,/x-content-type-options/);
 });
