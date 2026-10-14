@@ -139,3 +139,15 @@ test("post-payment handoff cannot be dismissed before the cashier chooses the ne
   assert.match(pos,/function startNextOrder\(\)/);
   assert.match(pos,/setLastSale\(null\)/);
 });
+
+
+test("open and close day keeps operator-facing guidance in plain Thai",async()=>{
+  const close=await read("app/close/page.tsx");
+  assert.match(close,/งานประจำวัน/);
+  assert.match(close,/เปิดร้าน \/ ปิดร้าน/);
+  assert.match(close,/ระบบจะตรวจคำสั่งเดิมซ้ำ/);
+  assert.match(close,/อ่านข้อมูลรายการเดิม/);
+  for(const phrase of ["DAILY CONTROL","OPEN / CLOSE DAY","Request เดิม","ข้อมูล recovery"]){
+    assert.equal(close.includes(phrase),false,"close-day copy leaks "+phrase);
+  }
+});
