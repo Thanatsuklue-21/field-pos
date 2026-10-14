@@ -29,7 +29,7 @@ test("scheduled and manual smoke remain enabled against production URL",()=>{
 });
 
 test("production identity verification fails stale releases",()=>{
-  assert.match(source,/if \[ "\$actual" != "\$EXPECTED_SHA" \]/);
+  assert.match(source,/if \[ "\$actual" != "\$RESOLVED_EXPECTED_SHA" \]/);
   assert.match(source,/Stale release: expected SHA/);
   assert.match(source,/release\.branch!=='main'/);
   assert.match(source,/release\.environment!=='production'/);
