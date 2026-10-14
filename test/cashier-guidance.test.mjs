@@ -46,8 +46,9 @@ test("PromptPay guidance explicitly avoids duplicate QR creation",()=>{
 test("POS renders the guidance in both ordering and payment contexts",async()=>{
   const pos=await read("app/pos/page.tsx");
   assert.match(pos,/cashierNextAction/);
-  assert.match(pos,/ลูกค้าสั่งครบหรือยัง/);
-  assert.match(pos,/เพิ่ม \/ ตรวจ/);
+  const guidance=await read("lib/cashier-guidance.mjs");
+  assert.match(guidance,/ลูกค้าสั่งครบหรือยัง/);
+  assert.match(pos,/\["2","ตรวจรายการ"\]/);
   const matches=pos.match(/cashierGuide\.title/g)||[];
   assert.ok(matches.length>=2);
   assert.match(pos,/aria-live="polite"/);
