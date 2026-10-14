@@ -250,6 +250,6 @@ test("workspace start-day recommendation focuses the exact opening cash control 
   assert.match(hub,/nextAction\.action==="start_day"/);
   assert.match(hub,/scrollIntoView\(\{behavior:"smooth",block:"nearest"\}\)/);
   assert.match(hub,/openingCashRef\.current\?\.focus\(\)/);
-  assert.match(hub,/>เริ่มงาน<\/button>/);
+  assert.match(hub,/"เริ่มงาน"/);
   assert.match(hub,/>ไปตรงนี้<\/button>/);
 });
