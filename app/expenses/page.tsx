@@ -1,7 +1,8 @@
 "use client";
 import {useEffect,useRef,useState} from "react";
 import {Plus,Trash2,X} from "lucide-react";
-import AuthGate from "@/components/auth-gate";\nimport ModalFocus from "@/components/modal-focus";
+import AuthGate from "@/components/auth-gate";
+import ModalFocus from "@/components/modal-focus";
 import {api,type Session} from "@/lib/api-client";
 import {readExpenseIntent,prepareExpenseIntent,sendExpenseIntent,type ExpenseIntent} from "@/lib/expense-recovery";
 import {prepareExpenseDeleteIntent,readExpenseDeleteIntent,sendExpenseDeleteIntent,type ExpenseDeleteIntent} from "@/lib/expense-delete-recovery";
