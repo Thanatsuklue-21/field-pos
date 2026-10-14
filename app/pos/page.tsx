@@ -709,7 +709,7 @@ function PosView({session}:{session:Session}){
   }
 
   const orderStep=payOpen?3:cart.items.length?2:1;
-  const cashierGuide=cashierNextAction({cartQty:cart.items.reduce((s,i)=>s+i.qty,0),payOpen,method,payable:netPayable,received});
+  const cashierGuide=cashierNextAction({cartQty:cart.items.reduce((s,i)=>s+i.qty,0),payOpen,method,payable:netPayable,received,promptReady:!!prompt?.qrUrl});
   const quickCashAmounts=Array.from(new Set([Math.ceil(netPayable/100)*100,100,500,1000])).filter(v=>v>=netPayable&&v>0).sort((a,b)=>a-b).slice(0,3);
 
   return <section className="flex h-full min-h-0">
