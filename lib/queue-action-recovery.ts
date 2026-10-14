@@ -69,7 +69,7 @@ function clearIntent(intent:QueueActionIntent,storage:StorageLike){
 }
 
 const NOT_COMMITTED=new Set([
-  "invalid_request_key","invalid_queue_action","order_not_found","item_not_found","fifo_violation",
+  "login_required","csrf_denied","queue_permission_required","invalid_request_key","invalid_queue_action","order_not_found","item_not_found","fifo_violation",
   "queue_state_changed","order_not_ready","pager_already_called","item_not_ready_for_call",
   "waste_after_call_not_supported","recipe_unavailable","order_not_complete"
 ]);
