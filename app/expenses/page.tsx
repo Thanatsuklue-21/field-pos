@@ -1,7 +1,7 @@
 "use client";
 import {useEffect,useRef,useState} from "react";
 import {Plus,Trash2,X} from "lucide-react";
-import AuthGate from "@/components/auth-gate";
+import AuthGate from "@/components/auth-gate";\nimport ModalFocus from "@/components/modal-focus";
 import {api,type Session} from "@/lib/api-client";
 import {readExpenseIntent,prepareExpenseIntent,sendExpenseIntent,type ExpenseIntent} from "@/lib/expense-recovery";
 import {prepareExpenseDeleteIntent,readExpenseDeleteIntent,sendExpenseDeleteIntent,type ExpenseDeleteIntent} from "@/lib/expense-delete-recovery";
@@ -42,13 +42,6 @@ function View({session}:{session:Session}){
     document.addEventListener("visibilitychange",visible);
     return()=>{window.removeEventListener("online",reconnect);window.removeEventListener("focus",reconnect);document.removeEventListener("visibilitychange",visible)};
   },[session.user.id,session.user.role,session.csrf]);
-  useEffect(()=>{
-    if(!open)return;
-    const onKey=(e:KeyboardEvent)=>{if(e.key==="Escape"&&!busy)setOpen(false)};
-    window.addEventListener("keydown",onKey);
-    return()=>window.removeEventListener("keydown",onKey);
-  },[open,busy]);
-
   const amountNumber=Number(amount)||0;
   const isCash=paymentMethod==="cash";
   const currentDrawerCash=Number(drawerSnapshot?.availableCash||0);
@@ -179,7 +172,7 @@ function View({session}:{session:Session}){
 
     <div className="glass card soft-scroll overflow-auto p-2"><table className="w-full min-w-[720px] text-sm"><thead className="sticky top-0 bg-slate-50 text-left text-[10px] uppercase tracking-widest text-slate-500"><tr><th className="p-4">Date</th><th>Category</th><th>Description</th><th>Payment</th><th>Amount</th><th></th></tr></thead><tbody>{rows.map(x=>{const system=String(x.sourceType||"").startsWith("STOCK_")||["PURCHASE","WASTE"].includes(String(x.category||"").toUpperCase());return <tr key={x.id} className="border-t border-slate-100"><td className="p-4">{x.date}</td><td>{x.category}</td><td className="text-slate-600">{x.description||"—"}</td><td>{paymentLabel(x.paymentMethod)}</td><td className="gold">฿{x.amount.toLocaleString(undefined,{maximumFractionDigits:2})}</td><td>{session.user.role==="admin"&&!system&&<button aria-label="ลบค่าใช้จ่าย" disabled={busy||!!pending||recoveryBlocked||!!pendingDelete||deleteRecoveryBlocked} onClick={()=>del(x)} className="grid h-11 w-11 place-items-center rounded-xl text-red-600 hover:bg-red-50"><Trash2 size={15}/></button>}</td></tr>})}</tbody></table></div>
 
-    {open&&<div className="fixed inset-0 z-[80] flex items-end justify-center bg-black/35 p-0 backdrop-blur-[2px] sm:items-center sm:p-4" onClick={closeCreate}><div role="dialog" aria-modal="true" aria-labelledby="expense-dialog-title" onClick={e=>e.stopPropagation()} className="max-h-[90dvh] w-full max-w-lg overflow-y-auto rounded-t-[28px] bg-white p-4 shadow-2xl sm:rounded-[28px] sm:p-5">
+    {open&&<div className="field-modal-overlay fixed inset-0 z-[80] flex items-end justify-center bg-black/35 backdrop-blur-[2px] sm:items-center" onMouseDown={closeCreate}><ModalFocus labelId="expense-dialog-title" onEscape={busy?undefined:closeCreate} className="field-modal-panel soft-scroll w-full max-w-lg overflow-y-auto rounded-t-[28px] bg-white p-4 shadow-2xl sm:rounded-[28px] sm:p-5"><div onMouseDown={e=>e.stopPropagation()}>
       <div className="flex items-start justify-between gap-3"><div><p className="m-0 text-[10px] font-black tracking-[.2em] text-[#765b08]">GUIDED EXPENSE CONTROL</p><h2 id="expense-dialog-title" className="mt-1 text-xl font-bold">{pending?"ตรวจค่าใช้จ่ายเดิม":"เพิ่มค่าใช้จ่าย"}</h2><p className="mt-1 text-xs text-slate-500">เลือกช่องทางให้ตรงกับเงินจริง · ถ้าเป็นเงินสด ระบบจะตรวจยอดลิ้นชักซ้ำตอนกดยืนยัน</p></div><button disabled={busy} aria-label="ปิดหน้าต่างค่าใช้จ่าย" onClick={closeCreate} className="grid h-11 w-11 shrink-0 place-items-center rounded-xl border border-slate-200 bg-white disabled:opacity-40"><X size={18}/></button></div>
 
       {pending&&<p role="status" className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">กำลังรอยืนยันรายการเดิม · ระบบเก็บข้อมูลไว้แล้ว กรุณาตรวจผลโดยไม่สร้างรายการใหม่ ยอดลิ้นชักอาจรวมรายการนี้แล้วจึงยังไม่คำนวณหักซ้ำ</p>}
@@ -204,6 +197,6 @@ function View({session}:{session:Session}){
 
       <div className="mt-4 grid grid-cols-2 gap-2"><button type="button" disabled={busy} onClick={closeCreate} className="min-h-12 rounded-2xl border border-slate-300 bg-white text-sm font-bold text-slate-700 disabled:opacity-40">{pending?"ปิดหน้าต่าง · เก็บรายการไว้":"ยกเลิก"}</button><button disabled={busy||recoveryBlocked||(!pending&&!canSave)} onClick={()=>save()} className="min-h-12 rounded-2xl bg-[#d4af37] text-sm font-bold text-black disabled:opacity-40">{busy?"กำลังตรวจและบันทึก...":pending?"ตรวจผลรายการเดิม":"ยืนยันค่าใช้จ่าย"}</button></div>
       <p className="mt-3 text-center text-[10px] text-slate-400">หากยังไม่ทราบผล ระบบจะเก็บข้อมูลเดิมไว้จนตรวจยืนยันได้ แม้ปิดหน้าต่างหรือโหลดหน้าใหม่</p>
-    </div></div>}
+    </div></ModalFocus></div>}
   </section>
 }
