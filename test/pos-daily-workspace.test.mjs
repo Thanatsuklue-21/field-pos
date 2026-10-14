@@ -171,9 +171,11 @@ test("workspace auto-routes once to the highest-priority task without overriding
   const hub=await read("components/pos-daily-workspace.tsx");
   assert.match(hub,/autoRouteRef=useRef\(false\)/);
   assert.match(hub,/manualTabRef=useRef\(false\)/);
-  assert.match(hub,/if\(busy\|\|autoRouteRef\.current\|\|manualTabRef\.current\)return/);
+  assert.match(hub,/workspaceReady/);
+  assert.match(hub,/if\(!workspaceReady\|\|autoRouteRef\.current\|\|manualTabRef\.current\)return/);
   assert.match(hub,/nextAction\.tab&&tabs\.includes\(nextAction\.tab as WorkspaceTab\)/);
   assert.match(hub,/setTab\(nextAction\.tab as WorkspaceTab\)/);
+  assert.match(hub,/refresh\(\)\.catch\(\(\)=>\{\}\)\.finally/);
   assert.match(hub,/autoRouteRef\.current=true/);
   assert.match(hub,/manualTabRef\.current=true;setTab\(key\)/);
   assert.match(hub,/if\(!open\)[\s\S]{0,120}autoRouteRef\.current=false[\s\S]{0,120}manualTabRef\.current=false/);
