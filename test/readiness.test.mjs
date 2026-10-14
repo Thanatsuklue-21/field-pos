@@ -59,7 +59,7 @@ test('production readiness keeps backup restore drill visible before opening',as
   const end=api.indexOf("if(path==='/api/admin/business-settings'",start);
   const seg=api.slice(start,end);
   assert.match(seg,/Full Backup \+ Restore Preview แบบ transactional/);
-  assert.match(seg,/ทดลอง Export Backup → Preview Restore ก่อนเปิดจริง/);
+  assert.match(seg,/ทดสอบ Full Backup → Restore และตรวจข้อมูลหลัง Restore/);
 });
 
 
@@ -91,20 +91,20 @@ test('production smoke workflow checks health routes and stale release without c
   assert.match(yml,/deployment_status:/);
   assert.match(yml,/workflow_dispatch:/);
   assert.match(yml,/\/api\/health/);
-  for(const route of ['/pos','/settings','/close'])assert.match(yml,new RegExp(route.replace('/','\\/')));
+  for(const route of ['/','/pos','/queue','/stock','/orders','/settings','/close','/backup'])assert.ok(yml.includes(route),route);
   assert.match(yml,/Stale release/);
   assert.match(yml,/release_identity_missing/);
   assert.doesNotMatch(yml,/vercel deploy|create_deployment|deploy --prod/);
 });
 
 
-test('scheduled production smoke checks health without comparing workflow revision to release SHA',async()=>{
+test('scheduled production smoke compares production to the latest explicit release marker commit',async()=>{
   const yml=await read('.github/workflows/production-smoke.yml');
   assert.match(yml,/schedule:/);
-  assert.match(yml,/cron: '17 \* \* \* \*'/);
-  assert.match(yml,/github\.event_name == 'schedule'/);
-  assert.match(yml,/EXPECTED_SHA: .*deployment_status.*deployment\.sha.*\|\| ''/);
-  assert.doesNotMatch(yml,/deployment_status.*deployment\.sha.*\|\| github\.sha/);
+  assert.ok(yml.includes("cron: '17 * * * *'"));
+  assert.match(yml,/github\.event_name == "schedule"|github\.event_name }}\" = \"schedule/);
+  assert.match(yml,/git log -1 --format=%H -- \.vercel-release/);
+  assert.doesNotMatch(yml,/github\.sha/);
   assert.match(yml,/Stale release: expected SHA/);
   assert.doesNotMatch(yml,/vercel deploy|create_deployment|deploy --prod/);
 });
@@ -174,4 +174,22 @@ test('cashier-flow QA measures the guided checkout without weakening durable cas
   assert.match(qa,/payment\"\]==\"cash\"/);
   assert.match(qa,/received\"\]==100/);
   assert.doesNotMatch(qa,/field-pos\.vercel\.app/);
+});
+
+
+test('production readiness requires audit-backed go-live drill evidence before READY_FULL',async()=>{
+  const api=await read('lib/api.mjs');
+  const start=api.indexOf("if(path==='/api/admin/readiness'");
+  const end=api.indexOf("if(path==='/api/admin/business-settings'",start);
+  const seg=api.slice(start,end);
+  assert.match(seg,/full_backup_restore/);
+  assert.match(seg,/split_payment_resolution/);
+  assert.match(seg,/MAX\(created_at\) AS last_at/);
+  assert.match(seg,/goLiveDrillsReady=goLiveDrills\.backupRestore\.done&&goLiveDrills\.cashClose\.done&&goLiveDrills\.paymentRecovery\.done/);
+  assert.match(seg,/status:goLiveBlockers\.length\?'NOT_READY'/);
+  assert.match(seg,/backup_restore_drill',done:goLiveDrills\.backupRestore\.done/);
+  assert.match(seg,/cash_close_drill',done:goLiveDrills\.cashClose\.done/);
+  assert.match(seg,/payment_recovery_drill',done:goLiveDrills\.paymentRecovery\.done/);
+  assert.doesNotMatch(seg,/cash_close_drill',done:accounting\.ok/);
+  assert.doesNotMatch(seg,/payment_recovery_drill',done:splitRequiresResolution\.length===0/);
 });
