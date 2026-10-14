@@ -8,9 +8,9 @@ test("POS teaches the core sale flow with visible 1-2-3 guidance",async()=>{
   const pos=await read("app/pos/page.tsx");
   assert.ok(pos.includes('const orderStep=payOpen?3:cart.items.length?2:1'));
   assert.ok(pos.includes('["1","เลือกเมนู"]'));
-  assert.ok(pos.includes('["2","ตรวจรายการ"]'));
+  assert.ok(pos.includes('["2","เพิ่ม / ตรวจ"]'));
   assert.ok(pos.includes('["3","รับเงิน"]'));
-  assert.ok(pos.includes("แตะเมนู → ตรวจรายการ → รับเงิน"));
+  assert.ok(pos.includes("แตะเมนู → เพิ่ม / ตรวจ → รับเงิน"));
 });
 
 test("single-variant products add directly while multi-variant drinks still ask for a choice",async()=>{
@@ -35,7 +35,7 @@ test("normal payment stays compact while split bill keeps line-item controls exp
 
 test("primary POS actions use operator language instead of developer checkout jargon",async()=>{
   const pos=await read("app/pos/page.tsx");
-  assert.ok(pos.includes(">ชำระเงิน</button>"));
+  assert.match(pos,/aria-label="ชำระเงิน"[^>]*>รับเงิน/);
   assert.ok(pos.includes('"ยืนยันรับเงิน"'));
   assert.ok(pos.includes('"สร้าง QR ให้ลูกค้า"'));
   assert.ok(pos.includes("เลือกระดับหวาน / สูตร"));
