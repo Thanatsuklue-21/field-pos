@@ -59,7 +59,7 @@ test('production readiness keeps backup restore drill visible before opening',as
   const end=api.indexOf("if(path==='/api/admin/business-settings'",start);
   const seg=api.slice(start,end);
   assert.match(seg,/Full Backup \+ Restore Preview แบบ transactional/);
-  assert.match(seg,/ทดลอง Export Backup → Preview Restore ก่อนเปิดจริง/);
+  assert.match(seg,/ทดสอบ Full Backup → Restore และตรวจข้อมูลหลัง Restore/);
 });
 
 
@@ -174,4 +174,22 @@ test('cashier-flow QA measures the guided checkout without weakening durable cas
   assert.match(qa,/payment\"\]==\"cash\"/);
   assert.match(qa,/received\"\]==100/);
   assert.doesNotMatch(qa,/field-pos\.vercel\.app/);
+});
+
+
+test('production readiness requires audit-backed go-live drill evidence before READY_FULL',async()=>{
+  const api=await read('lib/api.mjs');
+  const start=api.indexOf("if(path==='/api/admin/readiness'");
+  const end=api.indexOf("if(path==='/api/admin/business-settings'",start);
+  const seg=api.slice(start,end);
+  assert.match(seg,/full_backup_restore/);
+  assert.match(seg,/split_payment_resolution/);
+  assert.match(seg,/MAX\(created_at\) AS last_at/);
+  assert.match(seg,/goLiveDrillsReady=goLiveDrills\.backupRestore\.done&&goLiveDrills\.cashClose\.done&&goLiveDrills\.paymentRecovery\.done/);
+  assert.match(seg,/status:goLiveBlockers\.length\?'NOT_READY'/);
+  assert.match(seg,/backup_restore_drill',done:goLiveDrills\.backupRestore\.done/);
+  assert.match(seg,/cash_close_drill',done:goLiveDrills\.cashClose\.done/);
+  assert.match(seg,/payment_recovery_drill',done:goLiveDrills\.paymentRecovery\.done/);
+  assert.doesNotMatch(seg,/cash_close_drill',done:accounting\.ok/);
+  assert.doesNotMatch(seg,/payment_recovery_drill',done:splitRequiresResolution\.length===0/);
 });
