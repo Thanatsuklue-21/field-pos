@@ -199,3 +199,57 @@ test("Today Workspace starts the business day in-place with durable exact-replay
   assert.match(hub,/document\.addEventListener\("visibilitychange",visible\)/);
   assert.doesNotMatch(hub,/method:"POST"[\s\S]{0,180}\/api\/close-day/);
 });
+
+
+test("workspace next-action guides start-day before declaring the shop ready",()=>{
+  const base={canStartDay:true,businessDateKnown:true,canExpense:true,canQueue:true,canStock:true,canStatus:true,canOrder:true};
+  const fresh=chooseWorkspaceNextAction(base);
+  assert.equal(fresh.action,"start_day");
+  assert.equal(fresh.tab,null);
+  assert.match(fresh.label,/เปิดร้านก่อน/);
+
+  const pending=chooseWorkspaceNextAction({...base,pendingOpenShift:true});
+  assert.equal(pending.action,"start_day");
+  assert.equal(pending.tone,"critical");
+  assert.match(pending.detail,/ป้องกันเงินตั้งต้นซ้ำ/);
+
+  const blocked=chooseWorkspaceNextAction({...base,startDayRecoveryBlocked:true});
+  assert.equal(blocked.action,"start_day");
+  assert.equal(blocked.tone,"critical");
+  assert.match(blocked.detail,/ห้ามสร้างคำสั่งเปิดร้านใหม่/);
+});
+
+test("customer queue still outranks a fresh start-day prompt once customers are already waiting",()=>{
+  const action=chooseWorkspaceNextAction({
+    canStartDay:true,businessDateKnown:true,
+    canQueue:true,queueCount:2,firstQueue:"Q9"
+  });
+  assert.equal(action.tab,"queue");
+  assert.equal(action.action,undefined);
+  assert.match(action.label,/Q9/);
+});
+
+test("closed business day never tells a new operator that the shop is ready",()=>{
+  const action=chooseWorkspaceNextAction({
+    canStartDay:true,businessDateKnown:true,shiftStatus:"closed",
+    canOrder:true,latestOrderLabel:"Q12"
+  });
+  assert.equal(action.tab,null);
+  assert.equal(action.action,null);
+  assert.equal(action.tone,"critical");
+  assert.match(action.label,/ปิดยอดแล้ว/);
+  assert.match(action.detail,/รอวันทำการถัดไป/);
+});
+
+test("workspace start-day recommendation focuses the exact opening cash control in-place",async()=>{
+  const hub=await read("components/pos-daily-workspace.tsx");
+  assert.match(hub,/startDayCardRef=useRef/);
+  assert.match(hub,/openingCashRef=useRef/);
+  assert.match(hub,/ref=\{startDayCardRef\}/);
+  assert.match(hub,/ref=\{openingCashRef\}/);
+  assert.match(hub,/nextAction\.action==="start_day"/);
+  assert.match(hub,/scrollIntoView\(\{behavior:"smooth",block:"nearest"\}\)/);
+  assert.match(hub,/openingCashRef\.current\?\.focus\(\)/);
+  assert.match(hub,/"เริ่มงาน"/);
+  assert.match(hub,/>ไปตรงนี้<\/button>/);
+});
