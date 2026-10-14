@@ -9,7 +9,7 @@ import AuthGate from "@/components/auth-gate";
 import {api,type RevisionUnchanged,type Session} from "@/lib/api-client";
 import {readQueueSnapshotCache,writeQueueSnapshotCache} from "@/lib/queue-cache";
 import {operatorErrorFallback} from "@/lib/operator-error-language.mjs";
-import {prepareQueueActionIntent,readQueueActionIntent,sendQueueActionIntent,type QueueActionBody,type QueueActionIntent} from "@/lib/queue-action-recovery";
+import {useQueueActionRecovery} from "@/lib/use-queue-action-recovery";
 
 type BatchMode="NONE"|"SEQUENTIAL"|"COMBINED";
 type PrepGroup={id:string;label:string;batchMode:BatchMode;qty:number;pendingQty?:number;items:{id:string;name:string;variant:string;qty:number;pendingQty?:number;compatibilityKey:string}[]};
@@ -78,12 +78,8 @@ function QueueView({session}:{session:Session}){
   const [notice,setNotice]=useState("");
   const [toast,setToast]=useState("");
   const [pickupReviewId,setPickupReviewId]=useState("");
-  const [pendingQueueAction,setPendingQueueAction]=useState<QueueActionIntent|null>(null);
-  const [queueRecoveryBlocked,setQueueRecoveryBlocked]=useState(false);
   const busyRef=useRef(false);
-  const queueRecoveryRef=useRef(false);
   const revisionRef=useRef<number|null>(null);
-  busyRef.current=busy!=="";
   useEffect(()=>{if(!toast)return;const timer=window.setTimeout(()=>setToast(""),2600);return()=>window.clearTimeout(timer)},[toast]);
   const pulse=(message:string)=>{setToast(message);try{navigator.vibrate?.(35)}catch{}};
   const optimistic=(mutate:(orders:QOrder[])=>QOrder[])=>setData(prev=>prev?{...prev,orders:mutate(prev.orders)}:prev);
@@ -151,65 +147,26 @@ function QueueView({session}:{session:Session}){
       operatorErrorFallback(code,"คิว");
   }
 
-  async function postQueueAction(body:QueueActionBody){
-    let intent:QueueActionIntent;
-    try{
-      intent=prepareQueueActionIntent(session.user.id,body);
-      setPendingQueueAction(intent);setQueueRecoveryBlocked(false);
-    }catch(error:any){
-      if(error?.message==="queue_action_recovery_unavailable")setQueueRecoveryBlocked(true);
-      throw error;
-    }
-    const controller=new AbortController();
-    const timer=window.setTimeout(()=>controller.abort(),20_000);
-    try{
-      const result=await sendQueueActionIntent(intent,payload=>api<any>("/api/pos/queue",{
-        method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify(payload),signal:controller.signal
-      }));
-      setPendingQueueAction(null);setQueueRecoveryBlocked(false);
-      return result;
-    }catch(error:any){
-      try{setPendingQueueAction(readQueueActionIntent(session.user.id));setQueueRecoveryBlocked(false)}
-      catch{setQueueRecoveryBlocked(true)}
-      if(controller.signal.aborted)throw Object.assign(new Error("queue_action_result_unknown"),{status:0,cause:error});
-      throw error;
-    }finally{window.clearTimeout(timer)}
-  }
-
-  async function recoverQueueAction(){
-    if(queueRecoveryRef.current||busyRef.current)return;
-    let intent:QueueActionIntent|null=null;
-    try{
-      intent=readQueueActionIntent(session.user.id);
-      setPendingQueueAction(intent);setQueueRecoveryBlocked(false);
-    }catch{
-      setQueueRecoveryBlocked(true);setMsg(errorText("queue_action_recovery_unavailable"));return;
-    }
-    if(!intent)return;
-    queueRecoveryRef.current=true;busyRef.current=true;setBusy("recover:"+intent.body.requestKey);setMsg("");
-    try{
-      const result=await postQueueAction(intent.body);
+  const {
+    pending:pendingQueueAction,
+    blocked:queueRecoveryBlocked,
+    recovering:queueRecoveryBusy,
+    locked:queueActionLocked,
+    send:postQueueAction,
+    recover:recoverQueueAction
+  }=useQueueActionRecovery({
+    session,
+    onRecovered:async result=>{
       if(!applyState(result))await load().catch(()=>{});
       setNotice("ตรวจปุ่มที่กดก่อนหน้าแล้ว · ระบบใช้รายการเดิม ไม่ทำซ้ำ");
       pulse("✓ ตรวจรายการเดิมเรียบร้อย");
-    }catch(error:any){
+    },
+    onRecoveryError:async error=>{
       setMsg(errorText(error?.message||"queue_action_result_unknown"));
       await load().catch(()=>{});
-    }finally{
-      queueRecoveryRef.current=false;busyRef.current=false;setBusy("");
     }
-  }
-
-  useEffect(()=>{
-    let disposed=false;
-    const recover=()=>{if(!disposed)recoverQueueAction().catch(()=>{})};
-    const visible=()=>{if(document.visibilityState==="visible")recover()};
-    recover();
-    window.addEventListener("online",recover);
-    window.addEventListener("focus",recover);
-    document.addEventListener("visibilitychange",visible);
-    return()=>{disposed=true;window.removeEventListener("online",recover);window.removeEventListener("focus",recover);document.removeEventListener("visibilitychange",visible)};
-  },[session.user.id,session.csrf]);
+  });
+  busyRef.current=busy!==""||queueActionLocked;
 
   async function completeNext(order:QOrder,item:QItem,itemIndex:number){
     if(busyRef.current)return;
@@ -310,7 +267,7 @@ function QueueView({session}:{session:Session}){
       </header>
 
       {(pendingQueueAction||queueRecoveryBlocked)&&<div role="status" aria-live="polite" aria-atomic="true" className="rounded-2xl border-2 border-amber-300 bg-amber-50 p-3 text-xs text-amber-950">
-        <div className="flex flex-wrap items-center justify-between gap-2"><div><b>{queueRecoveryBlocked?"ระบบป้องกันการกดซ้ำใช้งานไม่ได้":"กำลังตรวจปุ่มที่กดก่อนหน้า"}</b><p className="mt-1">{queueRecoveryBlocked?"ระบบหยุดการเปลี่ยนสถานะคิวชั่วคราวเพื่อป้องกันรายการซ้ำ":"ไม่ต้องกดปุ่มเดิมซ้ำ · ระบบเก็บคำสั่งเดิมไว้จนกว่าจะยืนยันผลได้"}</p></div>{pendingQueueAction&&<button disabled={busy!==""} onClick={()=>recoverQueueAction()} className="min-h-11 rounded-xl bg-amber-900 px-4 font-bold text-white disabled:opacity-40">ตรวจรายการเดิม</button>}</div>
+        <div className="flex flex-wrap items-center justify-between gap-2"><div><b>{queueRecoveryBlocked?"ระบบป้องกันการกดซ้ำใช้งานไม่ได้":"กำลังตรวจปุ่มที่กดก่อนหน้า"}</b><p className="mt-1">{queueRecoveryBlocked?"ระบบหยุดการเปลี่ยนสถานะคิวชั่วคราวเพื่อป้องกันรายการซ้ำ":"ไม่ต้องกดปุ่มเดิมซ้ำ · ระบบเก็บคำสั่งเดิมไว้จนกว่าจะยืนยันผลได้"}</p></div>{pendingQueueAction&&<button disabled={busy!==""||queueRecoveryBusy} onClick={()=>recoverQueueAction()} className="min-h-11 rounded-xl bg-amber-900 px-4 font-bold text-white disabled:opacity-40">ตรวจรายการเดิม</button>}</div>
       </div>}
       {msg&&<div className="rounded-2xl border border-red-300 bg-red-50 px-3 py-2 text-xs text-red-800">{msg}</div>}
       {notice&&<div className="flex items-start justify-between gap-3 rounded-2xl border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs text-emerald-800"><span>{notice}</span><button type="button" onClick={()=>setNotice("")} className="grid h-11 w-11 shrink-0 place-items-center rounded-xl" aria-label="ปิดข้อความแจ้งเตือน"><X size={15}/></button></div>}
@@ -349,16 +306,16 @@ function QueueView({session}:{session:Session}){
               <div className="flex items-center justify-between gap-2"><div className="min-w-0"><b className="block truncate text-[11px] text-slate-700">{menu.name}</b>{menu.variant&&menu.variant!=="Standard"&&<span className="text-[9px] text-slate-500">{menu.variant}</span>}</div><b className="shrink-0 text-[11px] text-[#765b08]">×{menu.qty}</b></div>
               <div className={"mt-1 text-right text-[9px] "+(menuCalled?"font-bold text-sky-700":"text-slate-400")}>{menuCalled?"เรียกแล้ว":menu.pendingQty>0?"เหลือทำ "+menu.pendingQty+" แก้ว":"พร้อมเรียก"}</div>
             </div>})}</div>
-            <button type="button" disabled={busy!==""||!ready||called} onClick={()=>callCategory(first,category)} className={"mt-2 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl px-3 text-xs font-black disabled:opacity-45 "+(called?"border border-sky-200 bg-sky-100 text-sky-700":"border border-[#d4af37] bg-white text-[#765b08]")}><BellRing size={14}/>{called?"เรียกลูกค้าหมวดนี้แล้ว":ready?"เรียกลูกค้ารับหมวดนี้":"ทำหมวดนี้ให้ครบก่อน"}</button>
+            <button type="button" disabled={busy!==""||queueActionLocked||!ready||called} onClick={()=>callCategory(first,category)} className={"mt-2 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl px-3 text-xs font-black disabled:opacity-45 "+(called?"border border-sky-200 bg-sky-100 text-sky-700":"border border-[#d4af37] bg-white text-[#765b08]")}><BellRing size={14}/>{called?"เรียกลูกค้าหมวดนี้แล้ว":ready?"เรียกลูกค้ารับหมวดนี้":"ทำหมวดนี้ให้ครบก่อน"}</button>
           </div>})}</div>
         </div>}
 
         {task&&activeCategory&&<div className="mt-3 rounded-[20px] border-2 border-[#d4af37] bg-[#fffaf0] p-3">
           <div className="flex flex-wrap items-start justify-between gap-2"><div><p className="text-[9px] font-bold tracking-[.16em] text-[#9a7a16]">ขั้นตอนปัจจุบัน</p><h3 className="mt-1 text-base font-black">{task.item.name}</h3><p className="mt-1 text-[11px] text-slate-500">{task.item.variant&&task.item.variant!=="Standard"?task.item.variant+" · ":""}ทำอีก {Math.max(0,n(task.item.qty)-n(task.item.readyQty))} แก้ว · {activeCategory.label}</p></div><span className="rounded-full bg-white px-2.5 py-1 text-[10px] font-bold text-[#765b08]">{activeMenu?activeMenu.name+" ×"+activeMenu.qty:task.item.name+" ×"+task.item.qty}</span></div>
-          <div className="mt-3 grid grid-cols-[auto_1fr] gap-2"><button disabled={busy!==""||itemCalled(task.item)} onClick={()=>wasteRemake(task.order,task.item,task.index)} className="min-h-12 rounded-2xl border border-red-200 bg-white px-3 text-[10px] font-bold text-red-600 disabled:opacity-40"><RotateCcw size={12} className="mr-1 inline"/>ชงเสีย / ทำใหม่</button><button disabled={busy!==""} onClick={()=>completeNext(task.order,task.item,task.index)} className="min-h-12 rounded-2xl bg-[#d4af37] px-4 text-sm font-black text-black disabled:opacity-40">ทำ {task.item.name} ครบ</button></div>
+          <div className="mt-3 grid grid-cols-[auto_1fr] gap-2"><button disabled={busy!==""||queueActionLocked||itemCalled(task.item)} onClick={()=>wasteRemake(task.order,task.item,task.index)} className="min-h-12 rounded-2xl border border-red-200 bg-white px-3 text-[10px] font-bold text-red-600 disabled:opacity-40"><RotateCcw size={12} className="mr-1 inline"/>ชงเสีย / ทำใหม่</button><button disabled={busy!==""||queueActionLocked} onClick={()=>completeNext(task.order,task.item,task.index)} className="min-h-12 rounded-2xl bg-[#d4af37] px-4 text-sm font-black text-black disabled:opacity-40">ทำ {task.item.name} ครบ</button></div>
         </div>}
 
-        {!task&&firstReady&&!firstCalled&&<div className="mt-3 grid gap-3 rounded-[20px] border border-emerald-300 bg-emerald-50 p-3 sm:grid-cols-[1fr_auto] sm:items-center"><div><span className="rounded-full bg-emerald-100 px-2.5 py-1 text-[10px] font-black text-emerald-700">ทำครบทั้งบัตรแล้ว</span><div className="mt-2 text-sm font-bold">พร้อมเรียกลูกค้ารับบัตร {first.pagerNo}</div></div><button disabled={busy!==""} onClick={()=>callOrder(first)} className="flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-[#d4af37] px-5 text-sm font-black text-black"><BellRing size={17}/>เรียกบัตร {first.pagerNo}</button></div>}
+        {!task&&firstReady&&!firstCalled&&<div className="mt-3 grid gap-3 rounded-[20px] border border-emerald-300 bg-emerald-50 p-3 sm:grid-cols-[1fr_auto] sm:items-center"><div><span className="rounded-full bg-emerald-100 px-2.5 py-1 text-[10px] font-black text-emerald-700">ทำครบทั้งบัตรแล้ว</span><div className="mt-2 text-sm font-bold">พร้อมเรียกลูกค้ารับบัตร {first.pagerNo}</div></div><button disabled={busy!==""||queueActionLocked} onClick={()=>callOrder(first)} className="flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-[#d4af37] px-5 text-sm font-black text-black"><BellRing size={17}/>เรียกบัตร {first.pagerNo}</button></div>}
       </section>}
 
       {first&&<section className="rounded-[18px] border border-slate-200 bg-white px-3 py-2">
@@ -375,7 +332,7 @@ function QueueView({session}:{session:Session}){
               <div className="min-w-0"><b className="block text-[11px] text-slate-800">{item.name}</b>{item.variant&&item.variant!=="Standard"&&<span className="mt-0.5 block text-[10px] text-slate-500">{item.variant}</span>}</div><b className="shrink-0 text-[11px] text-slate-700">×{item.qty}</b>
             </div>)}
           </div>}
-          <button disabled={busy!==""} onClick={()=>deliver(order.id)} className="mt-2 min-h-12 w-full rounded-xl bg-emerald-600 px-2 text-sm font-bold text-white disabled:opacity-50">ลูกค้ารับแล้ว</button>
+          <button disabled={busy!==""||queueActionLocked} onClick={()=>deliver(order.id)} className="mt-2 min-h-12 w-full rounded-xl bg-emerald-600 px-2 text-sm font-bold text-white disabled:opacity-50">ลูกค้ารับแล้ว</button>
         </div>})}</div>
       </section>}
     </div>
