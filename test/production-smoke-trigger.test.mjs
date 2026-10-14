@@ -12,13 +12,14 @@ test("deployment-triggered production smoke ignores preview environments",()=>{
   assert.match(jobIf,/deployment\.environment == 'Production'/);
 });
 
-test("expected SHA tracks production deployment and scheduled default-branch main",()=>{
+test("expected SHA uses deployment SHA and scheduled release-marker history",()=>{
   const line=source.split("\n").find(x=>x.includes("EXPECTED_SHA:"))||"";
   assert.match(line,/deployment_status/);
   assert.match(line,/deployment\.environment == 'Production'/);
   assert.match(line,/deployment\.sha/);
-  assert.match(line,/github\.event_name == 'schedule'/);
-  assert.match(line,/github\.sha/);
+  assert.doesNotMatch(line,/github\.sha/);
+  assert.match(source,/git log -1 --format=%H -- \.vercel-release/);
+  assert.match(source,/Resolve intended production release/);
 });
 
 test("scheduled and manual smoke remain enabled against production URL",()=>{
