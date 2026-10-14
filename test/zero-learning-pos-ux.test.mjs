@@ -58,7 +58,9 @@ test("menu rendering and touch ergonomics stay mobile friendly",async()=>{
   assert.ok(pos.includes('decoding="async"'));
   assert.ok(pos.includes("pos-menu-card"));
   assert.ok(css.includes(".pos-menu-card{content-visibility:auto"));
-  assert.ok(css.includes(".field-app-root button{min-block-size:44px;min-inline-size:44px}"));
+  assert.ok(css.includes('.field-app-root :is(button,a[href],[role="button"]){'));
+  assert.ok(css.includes("min-block-size:44px;"));
+  assert.ok(css.includes("min-inline-size:44px;"));
   assert.ok(css.includes("input,select,textarea{font-size:16px}"));
 });
 
