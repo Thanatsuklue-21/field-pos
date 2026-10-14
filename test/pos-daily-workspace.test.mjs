@@ -180,3 +180,22 @@ test("workspace auto-routes once to the highest-priority task without overriding
   assert.match(hub,/manualTabRef\.current=true;setTab\(key\)/);
   assert.match(hub,/if\(!open\)[\s\S]{0,120}autoRouteRef\.current=false[\s\S]{0,120}manualTabRef\.current=false/);
 });
+
+
+test("Today Workspace starts the business day in-place with durable exact-replay recovery",async()=>{
+  const hub=await read("components/pos-daily-workspace.tsx");
+  assert.match(hub,/prepareCashShiftOpenIntent/);
+  assert.match(hub,/readCashShiftOpenIntent/);
+  assert.match(hub,/sendCashShiftOpenIntent/);
+  assert.match(hub,/expenseData\?\.businessDate/);
+  assert.match(hub,/\/api\/cash-shift\/open/);
+  assert.match(hub,/เริ่มงานวันนี้/);
+  assert.match(hub,/เปิดร้านวันนี้/);
+  assert.match(hub,/aria-label="เงินสดตั้งต้น"/);
+  assert.match(hub,/pendingOpenShift/);
+  assert.match(hub,/disabled=\{!!pendingOpenShift\|\|startDayRecoveryBlocked\}/);
+  assert.match(hub,/window\.addEventListener\("online",recover\)/);
+  assert.match(hub,/window\.addEventListener\("focus",recover\)/);
+  assert.match(hub,/document\.addEventListener\("visibilitychange",visible\)/);
+  assert.doesNotMatch(hub,/method:"POST"[\s\S]{0,180}\/api\/close-day/);
+});
