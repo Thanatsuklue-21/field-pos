@@ -202,3 +202,19 @@ test("payment screen shows common tenders first and hides rare methods behind on
   assert.match(paymentMethods,/setMethod\("cash"\);setOtherPaymentOpen\(false\)/);
   assert.match(paymentMethods,/setMethod\("promptpay"\);setOtherPaymentOpen\(false\)/);
 });
+
+
+test("split bill and loyalty stay out of the normal payment path but reopen automatically when needed",async()=>{
+  const pos=await read("app/pos/page.tsx");
+  assert.match(pos,/const \[orderOptionsOpen,setOrderOptionsOpen\]=useState\(false\)/);
+  assert.match(pos,/setOrderOptionsOpen\(!!splitGroup\|\|!!customerId\)/);
+  assert.match(pos,/const orderOptionsVisible=orderOptionsOpen\|\|splitBill\|\|!!customerId\|\|!!splitGroup/);
+  const start=pos.indexOf('aria-controls="field-order-payment-options"');
+  const end=pos.indexOf('<div className="mt-3 rounded-[20px] border border-slate-200 bg-slate-50 p-3">',start);
+  const options=pos.slice(start,end);
+  assert.match(options,/ตัวเลือกบิล \/ สมาชิก/);
+  assert.match(options,/\{orderOptionsVisible&&<div id="field-order-payment-options"/);
+  assert.match(options,/แยกบิล \/ จ่ายแยกตามคน/);
+  assert.match(options,/ลูกค้าทั่วไป \/ ไม่สะสมแต้ม/);
+  assert.match(options,/กลุ่มเดียวกัน · คิว \{splitGroup\.queueNo\}/);
+});
