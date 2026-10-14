@@ -46,6 +46,10 @@ with sync_playwright() as p:
             assert box['width']>=44 and box['height']>=44, box
         increase.click()
         expect(page.get_by_role('heading',name='รับเงิน ฿110',exact=True)).to_be_visible()
+        order_options=dialog.get_by_role('button',name='ตัวเลือกบิล / สมาชิก',exact=True)
+        box=order_options.bounding_box()
+        assert box['width']>=44 and box['height']>=44, box
+        order_options.click()
         dialog.get_by_role('button',name='แยกบิล / จ่ายแยกตามคน',exact=True).click()
         splitPlus=dialog.get_by_role('button',name='เพิ่มจำนวนในบิลนี้ เมนูทดสอบ',exact=True)
         splitMinus=dialog.get_by_role('button',name='ลดจำนวนในบิลนี้ เมนูทดสอบ',exact=True)
