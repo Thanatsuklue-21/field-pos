@@ -87,7 +87,14 @@ jobs:
           if(max>5) throw new Error('health_latency_budget_exceeded');
           NODE
 
-          for path in / /pos /queue /stock /orders /settings /close /backup; do
+          root_code="$(curl --silent --show-error --output /tmp/root.html --dump-header /tmp/root.headers --write-out '%{http_code}' --retry 4 --retry-all-errors --retry-delay 5 "$base/")"
+          test "$root_code" = "307" || { echo "::error::/ must redirect to /pos with HTTP 307, got $root_code"; exit 1; }
+          grep -qi '^location:[[:space:]]*/pos' /tmp/root.headers || { echo "::error::/ redirect target is not /pos"; exit 1; }
+          grep -qi '^content-security-policy:' /tmp/root.headers || { echo "::error::/ missing CSP"; exit 1; }
+          grep -qi '^x-content-type-options:[[:space:]]*nosniff' /tmp/root.headers || { echo "::error::/ missing nosniff"; exit 1; }
+          echo "/ redirect OK"
+
+          for path in /pos /queue /stock /orders /settings /close /backup; do
             code="$(curl --silent --show-error --output /tmp/page.html --dump-header /tmp/page.headers --write-out '%{http_code}' --retry 4 --retry-all-errors --retry-delay 5 "$base$path")"
             test "$code" = "200" || { echo "::error::$path returned HTTP $code"; exit 1; }
             grep -q "FIELD POS" /tmp/page.html || { echo "::error::$path did not render FIELD POS shell"; exit 1; }
