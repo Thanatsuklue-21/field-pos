@@ -11,7 +11,7 @@ const ingredients={
 const fixed={cup16:1,lid:1,straw:1,sticker:1,ice:1};
 const recipe=items=>({items:{...items,...fixed}});
 const menu=[
-  {id:'pure-matcha',name:'Pure Matcha Iced 16 oz',price:45,enabled:true,variants:[{label:'Standard',recipe:recipe({matcha:4,water:170})}]},
+  {id:'pure-matcha',name:'Pure Matcha Iced 16 oz',price:45,enabled:true,variants:[{label:'Standard',recipe:recipe({matcha:5,water:180})}]},
   {id:'matcha-latte',name:'Matcha Latte 16 oz',price:55,enabled:true,variants:[{label:'Standard',recipe:recipe({matcha:5,water:40,milk:110,syrup:15})}]},
   {id:'matcha-signature',name:'FIELD Matcha Signature',price:55,enabled:true,variants:[
     {label:'100%',recipe:recipe({matcha:5,water:40,condensed:30,evaporated:30,milk:70})},
@@ -28,7 +28,7 @@ test('every APPROVED recipe has regression-locked COGS, margin and contribution'
     cogs:Number(row.actualCogs.toFixed(6)),grossProfit:Number(row.grossProfit.toFixed(6)),grossMargin:Number(row.grossMargin.toFixed(3)),contribution:Number(row.contributionProfit.toFixed(6)),status:row.costStatus
   }]));
   assert.deepEqual(actual,{
-    'pure-matcha:Standard':{cogs:13.104,grossProfit:31.896,grossMargin:70.88,contribution:29.396,status:'CONFIRMED'},
+    'pure-matcha:Standard':{cogs:15.255,grossProfit:29.745,grossMargin:66.1,contribution:27.245,status:'CONFIRMED'},
     'matcha-latte:Standard':{cogs:20.708438,grossProfit:34.291562,grossMargin:62.348,contribution:31.791562,status:'CONFIRMED'},
     'matcha-signature:100%':{cogs:22.785,grossProfit:32.215,grossMargin:58.573,contribution:29.715,status:'CONFIRMED'},
     'matcha-signature:50%':{cogs:21.8175,grossProfit:33.1825,grossMargin:60.332,contribution:30.6825,status:'CONFIRMED'},
