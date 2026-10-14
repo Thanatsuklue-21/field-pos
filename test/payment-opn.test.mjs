@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createPromptPayCharge,getPromptPayCharge,promptPayConfig} from '../lib/payment-opn.mjs';
+import {createPromptPayCharge,getPromptPayCharge,promptPayConfig,verifyPromptPayWebhook} from '../lib/payment-opn.mjs';
 
 const originalFetch=globalThis.fetch;
 const originalKey=process.env.OMISE_SECRET_KEY;
@@ -58,4 +58,41 @@ test('PromptPay rejects unsafe charge ids before network access',async()=>{
   let called=false;globalThis.fetch=async()=>{called=true;throw new Error('should not call')};
   await assert.rejects(()=>getPromptPayCharge('../bad'),/invalid_charge_id/);
   assert.equal(called,false);
+});
+
+
+test('Opn webhook normalizes successful live charge to charge.succeeded',async()=>{
+  process.env.OMISE_SECRET_KEY='skey_test_123';
+  globalThis.fetch=async()=>new Response(JSON.stringify({
+    id:'chrg_success123',status:'successful',paid:true,amount:5500,currency:'THB',
+    description:'FIELD split-123'
+  }),{status:200,headers:{'content-type':'application/json'}});
+  const out=await verifyPromptPayWebhook({data:{id:'chrg_success123'}});
+  assert.equal(out.eventType,'charge.succeeded');
+  assert.equal(out.ignored,undefined);
+  assert.equal(out.charge.referenceId,'split-123');
+});
+
+for(const terminalStatus of ['failed','expired','reversed']){
+  test(`Opn webhook normalizes ${terminalStatus} live charge to charge.failed`,async()=>{
+    process.env.OMISE_SECRET_KEY='skey_test_123';
+    globalThis.fetch=async()=>new Response(JSON.stringify({
+      id:'chrg_terminal123',status:terminalStatus,paid:false,amount:5500,currency:'THB',
+      description:'FIELD split-123'
+    }),{status:200,headers:{'content-type':'application/json'}});
+    const out=await verifyPromptPayWebhook({data:{id:'chrg_terminal123'}});
+    assert.equal(out.eventType,'charge.failed');
+    assert.equal(out.charge.status,terminalStatus);
+  });
+}
+
+test('Opn webhook keeps non-terminal live charge ignored',async()=>{
+  process.env.OMISE_SECRET_KEY='skey_test_123';
+  globalThis.fetch=async()=>new Response(JSON.stringify({
+    id:'chrg_pending123',status:'pending',paid:false,amount:5500,currency:'THB',
+    description:'FIELD split-123'
+  }),{status:200,headers:{'content-type':'application/json'}});
+  const out=await verifyPromptPayWebhook({data:{id:'chrg_pending123'}});
+  assert.equal(out.ignored,true);
+  assert.equal(out.eventType,null);
 });
