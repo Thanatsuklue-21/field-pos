@@ -32,7 +32,7 @@ The server remains authoritative for shared transactions. IndexedDB caches POS b
 
 Use the full backup page for state plus stock, purchase, recipe, cost and durable request ledgers. Version 2 backups include request keys; version 1 backups remain readable. Export reads all tables in a consistent transaction. Restore requires an owner confirmation and matching revision. Test recovery on a separate database before using it for an emergency.
 
-`public/index.html` and `public/online*.js` are legacy migration/reference fixtures, not the primary application. Their public entry routes are quarantined to `/pos` in production. Do not use their local state as the source of truth for current shared sales or assume that legacy JSON exports contain the full accounting ledgers. Obsolete standalone telemetry/insights/root-HTML assets were removed from the active repository.
+Legacy standalone POS assets (`public/index.html`, `public/online*.js`, `public/fast-ui.js`) were removed from the active repository after the Next.js app became authoritative. Vercel keeps redirects from those historical entry paths to `/pos` so old bookmarks fail safe instead of reviving local legacy state. Snapshot import remains supported through the server migration API and is tested independently.
 
 ## Deployment and practical limits
 
