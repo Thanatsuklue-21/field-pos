@@ -1,3 +1,3 @@
 FIELD POS production release marker
-source_main=8ef379620f34ff8bad2924b10d3cb53497d208e0
-purpose=release-pos-next-safe-action-zero-learning-guidance
+source_main=d7c9c01165bba3901dfbc840075b300e67c12ed3
+purpose=release-direct-queue-next-action-one-tap
