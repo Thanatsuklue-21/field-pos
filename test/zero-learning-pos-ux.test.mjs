@@ -139,3 +139,16 @@ test("post-payment handoff cannot be dismissed before the cashier chooses the ne
   assert.match(pos,/function startNextOrder\(\)/);
   assert.match(pos,/setLastSale\(null\)/);
 });
+
+
+test("split-payment handoff keeps the cashier on the current queue until every payer is done",async()=>{
+  const pos=await read("app/pos/page.tsx");
+  const start=pos.indexOf("{lastSale&&");
+  const end=pos.indexOf("<PosDailyWorkspace",start);
+  const handoff=pos.slice(start,end);
+  assert.match(handoff,/splitGroup&&cart\.items\.length\?"คิวนี้ยังรับเงินไม่ครบ":"หยิบบัตรให้ลูกค้า"/);
+  assert.match(handoff,/splitGroup&&cart\.items\.length\?"รับเงินคนถัดไปในคิวนี้":"รับออเดอร์ถัดไป"/);
+  assert.match(handoff,/!lastSale\.offline&&!\(splitGroup&&cart\.items\.length\)&&<button onClick=\{\(\)=>router\.push\("\/queue"\)\}/);
+  assert.match(handoff,/รับเงินของคิว "/);
+  assert.match(handoff,/ให้ครบก่อน/);
+});
