@@ -76,7 +76,7 @@ with sync_playwright() as p:
 
     success=page.get_by_text("ชำระเงินสำเร็จ",exact=True)
     expect(success).to_be_visible()
-    expect(page.get_by_text("คิว Q001",exact=False)).to_be_visible()
+    expect(page.get_by_text("คิว Q001",exact=True)).to_be_visible()
     expect(page.get_by_text("บัตร 7",exact=True)).to_be_visible()
     expect(page.get_by_text("฿45",exact=True)).to_be_visible()
 
