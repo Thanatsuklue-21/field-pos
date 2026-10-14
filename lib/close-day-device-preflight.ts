@@ -53,7 +53,7 @@ export function buildCloseDayDevicePreflight(input:{
   cashPending:CashPending|null;
   promptPending:PromptPending|null;
   expenseIntents:ExpenseIntent[];
-  cashShiftOpenIntents:CashShiftOpenIntent[];
+  cashShiftOpenIntents?:CashShiftOpenIntent[];
   cashMovementIntents:CashMovementIntent[];
   expenseDeleteIntents:ExpenseDeleteIntent[];
   stockWriteIntents?:StockWriteIntent[];
@@ -94,7 +94,7 @@ export function buildCloseDayDevicePreflight(input:{
       route:intent.actorId===actorId?"/expenses":undefined,date:businessDate,actorId:intent.actorId,count:1
     });
   }
-  for(const intent of input.cashShiftOpenIntents.filter(x=>x.body.date===businessDate)){
+  for(const intent of (input.cashShiftOpenIntents||[]).filter(x=>x.body.date===businessDate)){
     blockers.push({
       kind:"cash_shift_open_unknown",
       title:intent.actorId===actorId?"มีคำสั่งเปิดร้านที่ยังรอคำยืนยัน":"มีคำสั่งเปิดร้านค้างจากผู้ใช้อื่นบนเครื่องนี้",
