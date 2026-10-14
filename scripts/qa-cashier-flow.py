@@ -5,6 +5,7 @@ human training speed. Human time-to-learn must be measured separately on real ha
 """
 import argparse
 import json
+import re
 import time
 from pathlib import Path
 from playwright.sync_api import sync_playwright, expect
@@ -58,7 +59,7 @@ with sync_playwright() as p:
     tap(page.get_by_role("button",name="เมนูทดสอบ").first)
     variant=page.get_by_role("dialog")
     expect(variant).to_be_visible()
-    tap(variant.get_by_role("button",name="50%",exact=True))
+    tap(variant.get_by_role("button",name=re.compile(r"หวานน้อย.*50%")).first)
     expect(page.get_by_text("ลูกค้าสั่งครบหรือยัง?",exact=True)).to_be_visible()
     tap(page.get_by_role("button",name="ชำระเงิน",exact=True))
     payment=page.get_by_role("dialog",name="รับเงิน ฿55")
