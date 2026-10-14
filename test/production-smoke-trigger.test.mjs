@@ -36,11 +36,14 @@ test("production identity verification fails stale releases",()=>{
   assert.match(source,/release\.deploymentId/);
 });
 
-test("production smoke covers every go-live route and auth guard",()=>{
-  for(const path of ["/","/pos","/queue","/stock","/orders","/settings","/close","/backup"]){
+test("production smoke covers root redirect, go-live routes and auth guard",()=>{
+  for(const path of ["/pos","/queue","/stock","/orders","/settings","/close","/backup"]){
     assert.ok(source.includes(path),path);
   }
-  assert.match(source,/for path in \/ \/pos \/queue \/stock \/orders \/settings \/close \/backup/);
+  assert.match(source,/root_code=.*\$base\//);
+  assert.match(source,/root_code" = "307"/);
+  assert.match(source,/location:\[\[:space:\]\]\*\/pos/);
+  assert.match(source,/for path in \/pos \/queue \/stock \/orders \/settings \/close \/backup/);
   assert.match(source,/for path in \/api\/pos\/bootstrap \/api\/expenses/);
   assert.match(source,/must reject unauthenticated access with HTTP 401/);
   assert.match(source,/content-security-policy/);
