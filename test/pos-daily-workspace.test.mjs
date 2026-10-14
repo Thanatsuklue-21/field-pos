@@ -152,3 +152,16 @@ test("readiness machine states are translated before operators see them",async()
   assert.match(hub,/value==="WARN"\?"มีจุดต้องดู"/);
   assert.match(hub,/value==="WARN"\?"เตือน"/);
 });
+
+
+test("workspace expense browser QA proves lost-response recovery reuses the exact intent",async()=>{
+  const qa=await read("scripts/qa-workspace-expense-recovery.py");
+  assert.match(qa,/route\.abort\("failed"\)/);
+  assert.match(qa,/มีค่าใช้จ่ายเดิมรอยืนยัน/);
+  assert.match(qa,/ตรวจผลรายการเดิม/);
+  assert.match(qa,/second==first/);
+  assert.match(qa,/requestKey/);
+  assert.match(qa,/paymentMethod/);
+  assert.match(qa,/liveWrites.*False/);
+  assert.doesNotMatch(qa,/field-pos\.vercel\.app/);
+});
