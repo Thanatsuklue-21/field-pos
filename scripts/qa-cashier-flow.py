@@ -39,7 +39,7 @@ with sync_playwright() as p:
         elif path=="payments/promptpay/config": data={"ready":False,"configured":False}
         elif path=="pos/checkout" and method=="POST":
             body=json.loads(route.request.post_data or "{}"); checkout_bodies.append(body)
-            data={"orderId":"order-test-1","queueNo":"Q001","pager":7,"billNo":"B001","total":55,"received":100,"change":45,"revision":2}
+            data={"ok":True,"orderId":"order-test-1","queueNo":"Q001","pager":7,"billNo":"B001","saleIds":["sale-test-1"],"total":55,"received":100,"change":45,"revision":2}
         elif path=="queue":
             data={"queue":[]}
         else:
