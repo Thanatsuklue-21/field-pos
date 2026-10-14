@@ -34,6 +34,13 @@ with sync_playwright() as p:
             route.fulfill(status=200,content_type='application/json',body=json.dumps(data))
         page.route('**/api/**',handler)
         page.goto(args.base_url+'/pos',wait_until='domcontentloaded',timeout=60000)
+        nav_controls=page.locator('nav a, nav button')
+        for index in range(nav_controls.count()):
+            control=nav_controls.nth(index)
+            if not control.is_visible():
+                continue
+            box=control.bounding_box()
+            assert box and box['width']>=44 and box['height']>=44, {'nav_index':index,'box':box}
         page.get_by_role('button',name=re.compile('เมนูทดสอบ')).first.click()
         page.get_by_role('button',name='ชำระเงิน',exact=True).click()
         dialog=page.get_by_role('dialog',name=re.compile('รับเงิน ฿'))
@@ -76,7 +83,7 @@ with sync_playwright() as p:
         expect(page.get_by_role('dialog',name='รับเงิน ฿55',exact=True)).to_have_count(0)
         assert not writes, writes
         assert not errors, errors
-        results.append({'viewport':f'{width}x{height}','touch44':True,'quantityUpdates':True,'cashUnderpaymentBlocked':True,'noFinancialWrites':True})
+        results.append({'viewport':f'{width}x{height}','touch44':True,'navTouch44':True,'quantityUpdates':True,'cashUnderpaymentBlocked':True,'noFinancialWrites':True})
         print(json.dumps(results[-1]),flush=True)
         context.close()
     browser.close()
