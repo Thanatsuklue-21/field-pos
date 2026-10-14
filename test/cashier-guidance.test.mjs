@@ -51,8 +51,11 @@ test("POS renders the guidance in both ordering and payment contexts",async()=>{
   assert.match(pos,/cashierNextAction/);
   const guidance=await read("lib/cashier-guidance.mjs");
   assert.match(guidance,/ลูกค้าสั่งครบหรือยัง/);
-  assert.match(pos,/\["2","ตรวจรายการ"\]/);
+  assert.match(pos,/\["2","เพิ่ม \/ ตรวจ"\]/);
   const matches=pos.match(/cashierGuide\.title/g)||[];
   assert.ok(matches.length>=2);
   assert.match(pos,/aria-live="polite"/);
+  assert.match(pos,/แตะเมนู → เพิ่ม \/ ตรวจ → รับเงิน/);
+  assert.match(pos,/aria-label="ชำระเงิน"[^>]*>รับเงิน ฿\{cart\.getTotal\(\)\.toFixed\(0\)\}/);
+  assert.match(pos,/ขั้นตอน 2 · เพิ่ม \/ ตรวจ/);
 });
