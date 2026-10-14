@@ -131,8 +131,8 @@ test("post-payment handoff cannot be dismissed before the cashier chooses the ne
   const start=pos.indexOf("{lastSale&&");
   const end=pos.indexOf("<PosDailyWorkspace",start);
   const handoff=pos.slice(start,end);
-  assert.match(handoff,/role="status"/);
-  assert.match(handoff,/aria-live="assertive"/);
+  assert.match(handoff,/fixed inset-0 z-\[70\]/);\n  assert.match(handoff,/role="alertdialog"/);\n  assert.match(handoff,/aria-modal="true"/);\n  assert.match(handoff,/เลือกขั้นตอนถัดไป/);
+  assert.match(handoff,/aria-live="assertive"/);\n  assert.match(handoff,/pb-\[max\(5\.75rem,env\(safe-area-inset-bottom\)\)\]/);
   assert.match(handoff,/รับออเดอร์ถัดไป/);
   assert.match(handoff,/ไปทำคิว/);
   assert.doesNotMatch(handoff,/setLastSale\(null\)/);
