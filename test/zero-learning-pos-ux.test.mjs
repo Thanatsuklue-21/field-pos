@@ -151,3 +151,18 @@ test("open and close day keeps operator-facing guidance in plain Thai",async()=>
     assert.equal(close.includes(phrase),false,"close-day copy leaks "+phrase);
   }
 });
+
+
+test("split-payment handoff keeps the cashier on the same queue until every payer is done",async()=>{
+  const pos=await read("app/pos/page.tsx");
+  assert.match(pos,/const splitPaymentPending=!!splitGroup&&cart\.items\.length>0/);
+  assert.match(pos,/const splitRemainingQty=splitPaymentPending\?cart\.items\.reduce/);
+  const start=pos.indexOf("{lastSale&&");
+  const end=pos.indexOf("<PosDailyWorkspace",start);
+  const handoff=pos.slice(start,end);
+  assert.match(handoff,/รับเงินคนนี้สำเร็จ · คิวเดิมยังไม่จบ/);
+  assert.match(handoff,/ยังไม่ต้องส่งคิวไปทำ/);
+  assert.match(handoff,/รับเงินคนถัดไปในคิวนี้/);
+  assert.match(handoff,/อย่าเปิดออเดอร์ใหม่จนกว่าจะรับเงินคิวนี้ครบ/);
+  assert.match(handoff,/!lastSale\.offline&&!splitPaymentPending&&<button onClick=\{\(\)=>router\.push\("\/queue"\)\}/);
+});
