@@ -79,6 +79,16 @@ with sync_playwright() as p:
     expect(page.get_by_text("คิว Q001",exact=True)).to_be_visible()
     expect(page.get_by_text("บัตร 7",exact=True)).to_be_visible()
     expect(page.get_by_text("฿45",exact=True)).to_be_visible()
+    handoff=page.get_by_role("status").filter(has_text="ชำระเงินสำเร็จ")
+    expect(handoff).to_be_visible()
+    expect(handoff.get_by_role("button",name="รับออเดอร์ถัดไป",exact=True)).to_be_visible()
+    expect(handoff.get_by_role("button",name=re.compile(r"ไปทำคิว Q001"))).to_be_visible()
+    # Payment handoff is intentionally non-dismissible: cashier must choose the next safe action.
+    assert handoff.get_by_role("button",name=re.compile(r"ปิด|Close|Dismiss")).count()==0
+    tap(handoff.get_by_role("button",name="รับออเดอร์ถัดไป",exact=True))
+    expect(page.get_by_text("ชำระเงินสำเร็จ",exact=True)).to_have_count(0)
+    expect(page.get_by_text("แตะเมนูที่ลูกค้าสั่ง",exact=True)).to_be_visible()
+    assert len(checkout_bodies)==1, checkout_bodies
 
     elapsed_ms=round((time.perf_counter()-started)*1000)
     assert len(checkout_bodies)==1, checkout_bodies
@@ -99,6 +109,8 @@ with sync_playwright() as p:
         "cashChangeVerified":45,
         "queueVerified":"Q001",
         "pagerVerified":7,
+        "handoffRequiresNextAction":True,
+        "nextCustomerResetVerified":True,
         "pageErrors":errors,
         "note":"Automation timing is regression telemetry only; it is not a human training-time claim."
     }

@@ -124,3 +124,18 @@ test("cashier-facing POS status copy avoids infrastructure jargon",async()=>{
   assert.match(pos,/บิลรอส่ง/);
   assert.match(pos,/ห้ามล้างข้อมูลแอปหรือเบราว์เซอร์/);
 });
+
+
+test("post-payment handoff cannot be dismissed before the cashier chooses the next safe action",async()=>{
+  const pos=await read("app/pos/page.tsx");
+  const start=pos.indexOf("{lastSale&&");
+  const end=pos.indexOf("<PosDailyWorkspace",start);
+  const handoff=pos.slice(start,end);
+  assert.match(handoff,/role="status"/);
+  assert.match(handoff,/aria-live="assertive"/);
+  assert.match(handoff,/รับออเดอร์ถัดไป/);
+  assert.match(handoff,/ไปทำคิว/);
+  assert.doesNotMatch(handoff,/setLastSale\(null\)/);
+  assert.match(pos,/function startNextOrder\(\)/);
+  assert.match(pos,/setLastSale\(null\)/);
+});
