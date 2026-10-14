@@ -517,7 +517,11 @@ function PosView({session}:{session:Session}){
   async function cancelPendingReservation(p:PendingPrompt){
     if(!p.sessionId)return;
     try{
-      await api<any>("/api/pos/split/cancel",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({requestKey:crypto.randomUUID(),sessionId:p.sessionId})});
+      if(p.paymentReference){
+        await api<any>("/api/pos/split/provider-release",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({requestKey:crypto.randomUUID(),sessionId:p.sessionId,paymentReference:p.paymentReference})});
+      }else{
+        await api<any>("/api/pos/split/cancel",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({requestKey:crypto.randomUUID(),sessionId:p.sessionId})});
+      }
     }catch(e:any){
       if(!["split_session_unavailable","split_session_not_found"].includes(e.message))throw e;
     }
@@ -534,7 +538,7 @@ function PosView({session}:{session:Session}){
     }
     let st:any=null;
     if(!next.paymentReference){
-      st=await api<any>("/api/payments/promptpay/create",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({amount:next.total,reference:next.sessionId})});
+      st=await api<any>("/api/payments/promptpay/create",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({reference:next.sessionId})});
       if(!st?.chargeId)throw new Error("promptpay_qr_unavailable");
       next={...next,paymentReference:st.chargeId};
       pendingWrite(next);
