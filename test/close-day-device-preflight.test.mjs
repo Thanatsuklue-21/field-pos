@@ -8,6 +8,7 @@ const loadPreflight=id=>loadBrowserModule("lib/close-day-device-preflight.ts",{
   replace:source=>source
     .replace('import {offlineCashListStrict,type OfflineCashRecord} from "@/lib/offline-db";','type OfflineCashRecord=any; const offlineCashListStrict=async()=>[];')
     .replace('import {listExpenseIntents,type ExpenseIntent} from "@/lib/expense-recovery";','type ExpenseIntent=any; const listExpenseIntents=()=>[];')
+    .replace('import {listCashShiftOpenIntents,type CashShiftOpenIntent} from "@/lib/cash-shift-open-recovery";','type CashShiftOpenIntent=any; const listCashShiftOpenIntents=()=>[];')
     .replace('import {listCashMovementIntents,type CashMovementIntent} from "@/lib/cash-movement-recovery";','type CashMovementIntent=any; const listCashMovementIntents=()=>[];')
     .replace('import {listExpenseDeleteIntents,type ExpenseDeleteIntent} from "@/lib/expense-delete-recovery";','type ExpenseDeleteIntent=any; const listExpenseDeleteIntents=()=>[];')
     .replace('import {listStockWriteIntents,type StockWriteIntent} from "@/lib/stock-write-recovery";','type StockWriteIntent=any; const listStockWriteIntents=()=>[];')
@@ -213,4 +214,35 @@ test("Close Day renders the correct Orders recovery action for unresolved VOID o
   const ui=await readFile(new URL("../app/close/page.tsx",import.meta.url),"utf8");
   assert.match(ui,/order_mutation_unknown/);
   assert.match(ui,/ไปหน้า Orders/);
+});
+
+
+test("same-day unresolved start-day intent blocks Close Day and routes the current owner to Close",async()=>{
+  const api=await loadPreflight("start-day"),date="2026-10-14";
+  const result=api.buildCloseDayDevicePreflight({
+    actorId:"owner",businessDate:date,
+    offlineRows:[],cashPending:null,promptPending:null,expenseIntents:[],cashMovementIntents:[],expenseDeleteIntents:[],
+    stockWriteIntents:[],orderMutationIntents:[],
+    cashShiftOpenIntents:[{
+      version:1,actorId:"owner",createdAt:1,
+      body:{requestKey:"start-day-close-0001",date,openingCash:500}
+    }]
+  });
+  assert.equal(result.ok,false);
+  assert.equal(result.blockers.length,1);
+  assert.equal(result.blockers[0].kind,"cash_shift_open_unknown");
+  assert.equal(result.blockers[0].route,"/close");
+  assert.match(result.blockers[0].detail,/เงินตั้งต้น/);
+  assert.match(result.blockers[0].detail,/ห้ามเปิดร้านซ้ำหรือปิดวัน/);
+});
+
+test("read preflight includes persisted start-day intents",async()=>{
+  const api=await loadPreflight("start-day-read"),date="2026-10-14";
+  const result=await api.readCloseDayDevicePreflight("owner",date,{
+    storage:storage(),listOffline:async()=>[],listExpenses:()=>[],listCashMovements:()=>[],listExpenseDeletes:()=>[],
+    listStockWrites:()=>[],listOrderMutations:()=>[],
+    listCashShiftOpens:()=>[{version:1,actorId:"owner",createdAt:1,body:{requestKey:"start-day-read-01",date,openingCash:300}}]
+  });
+  assert.equal(result.ok,false);
+  assert.equal(result.blockers[0].kind,"cash_shift_open_unknown");
 });
