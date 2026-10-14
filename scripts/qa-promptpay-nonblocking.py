@@ -73,9 +73,10 @@ with sync_playwright() as p:
     expect(payment.get_by_text("กำลังรอผล PromptPay เดิม",exact=False)).to_be_visible()
     expect(payment.get_by_role("button",name="กลับไปเลือกเมนู")).to_be_disabled()
     expect(payment.get_by_role("button",name="เงินสด",exact=True)).to_be_disabled()
-    expect(payment.get_by_role("button",name="โอน",exact=True)).to_be_disabled()
-    expect(payment.get_by_role("button",name="บัตร",exact=True)).to_be_disabled()
-    expect(payment.get_by_role("button",name="เดลิเวอรี",exact=True)).to_be_disabled()
+    expect(payment.get_by_role("button",name="ช่องทางอื่น",exact=True)).to_be_disabled()
+    expect(payment.get_by_role("button",name="โอน",exact=True)).to_have_count(0)
+    expect(payment.get_by_role("button",name="บัตร",exact=True)).to_have_count(0)
+    expect(payment.get_by_role("button",name="เดลิเวอรี",exact=True)).to_have_count(0)
     expect(payment.get_by_role("button",name="กำลังรอผล QR เดิม...",exact=True)).to_be_disabled()
 
     expect(page.get_by_text("ชำระเงินสำเร็จ",exact=True)).to_be_visible(timeout=12000)
