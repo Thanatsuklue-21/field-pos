@@ -79,7 +79,7 @@ with sync_playwright() as p:
     expect(payment.get_by_role("button",name="กำลังรอผล QR เดิม...",exact=True)).to_be_disabled()
 
     expect(page.get_by_text("ชำระเงินสำเร็จ",exact=True)).to_be_visible(timeout=12000)
-    expect(page.get_by_text("คิว QPP1",exact=True)).to_be_visible()
+    expect(page.get_by_text("คิว QPP1 · กู้คืนรายการเดิม",exact=True)).to_be_visible()
     expect(page.get_by_text("บัตร 8",exact=True)).to_be_visible()
 
     pending=page.evaluate("localStorage.getItem('field-pos-pending-promptpay-v1')")
