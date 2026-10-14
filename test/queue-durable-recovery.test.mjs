@@ -62,7 +62,9 @@ test("queue UI routes every operator mutation through durable recovery and recon
     assert.match(ui,new RegExp('postQueueAction\\(\\{requestKey:crypto\\.randomUUID\\(\\)[\\s\\S]{0,140}action:"'+action+'"'));
   }
   assert.match(ui,/ไม่ต้องกดปุ่มเดิมซ้ำ/);
+  assert.match(ui,/role="status" aria-live="polite" aria-atomic="true"/);
   assert.match(ui,/ตรวจรายการเดิม/);
+  assert.match(ui,/min-h-11[^"]*rounded-xl[^"]*bg-amber-900/);
 });
 
 test("server queue acknowledgement echoes durable request identity before replay storage",async()=>{
