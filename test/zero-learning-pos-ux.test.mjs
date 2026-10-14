@@ -89,7 +89,8 @@ test("POS dialogs trap keyboard focus, restore focus, and respect mobile safe ar
   assert.ok(pos.includes('labelId="field-held-title"'));
   assert.ok(pos.includes('labelId="field-modifier-title"'));
   assert.ok(pos.includes('labelId="field-payment-title"'));
-  assert.ok(pos.includes('onEscape={busy?undefined:()=>setPayOpen(false)}'));
+  assert.ok(pos.includes('onEscape={busy||hasPendingPrompt?undefined:()=>setPayOpen(false)}'));
+  assert.match(pos,/disabled=\{busy\|\|hasPendingPrompt\} onClick=\{\(\)=>setPayOpen\(false\)\}/);
   assert.ok(modal.includes('role="dialog"'));
   assert.ok(modal.includes('aria-modal="true"'));
   assert.ok(modal.includes('event.key==="Tab"'));
