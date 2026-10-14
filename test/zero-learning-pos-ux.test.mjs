@@ -174,6 +174,8 @@ test("split-payment handoff keeps the cashier on the same queue until every paye
   const end=pos.indexOf("<PosDailyWorkspace",start);
   const handoff=pos.slice(start,end);
   assert.match(handoff,/รับเงินคนนี้สำเร็จ · คิวเดิมยังไม่จบ/);
+  assert.match(pos,/กลุ่มเดียวกัน · คิว \{splitGroup\.queueNo\}/);
+  assert.doesNotMatch(pos,/คิว \$\{splitGroup\.queueNo\}/);
   assert.match(handoff,/ยังไม่ต้องส่งคิวไปทำ/);
   assert.match(handoff,/รับเงินคนถัดไปในคิวนี้/);
   assert.match(handoff,/อย่าเปิดออเดอร์ใหม่จนกว่าจะรับเงินคิวนี้ครบ/);
