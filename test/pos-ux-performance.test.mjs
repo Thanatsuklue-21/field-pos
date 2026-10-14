@@ -371,7 +371,7 @@ test('solo operator daily flow keeps sales and production as separate focused sc
   assert.match(queue,/ทำออเดอร์ \/ รันบัตร/);
   assert.doesNotMatch(queue,/router\.push\("\/orders/);
   assert.doesNotMatch(queue,/router\.push\("\/pos/);
-  assert.match(close,/OPEN \/ CLOSE DAY/);
+  assert.match(close,/เปิดร้าน \/ ปิดร้าน/);
   assert.match(close,/เปิดร้านวันนี้/);
   assert.match(close,/ปิดร้านวันนี้/);
 });
