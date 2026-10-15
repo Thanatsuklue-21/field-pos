@@ -160,6 +160,9 @@ test("Stock UI persists a new Master before network send and requires exact ACK"
   assert.match(ui,/result\?\.requestKey===body\.requestKey/);
   assert.match(ui,/result\?\.performedBy===intent\.actorId/);
   const save=ui.slice(ui.indexOf("async function saveMaster"),ui.indexOf("async function ingredientAction"));
-  assert.ok(save.indexOf("prepareStockWriteIntent")<save.indexOf("submitStockIntent"));
+  const prepared=save.indexOf('const intent=prepareStockWriteIntent(session.user.id,"ingredientCreate",today(),body)');
+  const persisted=save.indexOf("setPendingStockIntent(intent)",prepared);
+  const sent=save.indexOf("await submitStockIntent(intent,false)",persisted);
+  assert.ok(prepared>=0&&persisted>prepared&&sent>persisted);
   assert.doesNotMatch(save,/else await api\("\/api\/stock\/ingredients"/);
 });
