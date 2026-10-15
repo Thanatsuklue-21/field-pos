@@ -1,6 +1,6 @@
 # FIELD Recipe mutation durability handoff
 
-Baseline: `a1bb494eb9238cfd4e0696f414dfe62c28adae4b`.
+Baseline: `4521abef6053f5aeae74213fac06e1fab2e6f4cf` (latest main after synchronous checkout-submit locking).
 
 ## Evidence
 
