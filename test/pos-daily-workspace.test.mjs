@@ -316,3 +316,14 @@ test("guided workspace no longer uses a one-shot auto-route lock",async()=>{
   assert.doesNotMatch(hub,/manualTabRef/);
   assert.match(hub,/\[open,workspaceReady,guidedMode,nextAction\.tab,tabs\.join\("\|"\),tab\]/);
 });
+
+
+test("workspace fails closed when the latest queue snapshot cannot be confirmed",async()=>{
+  const hub=await read("components/pos-daily-workspace.tsx");
+  assert.match(hub,/const \[queueFresh,setQueueFresh\]=useState\(false\)/);
+  assert.match(hub,/if\(!online\|\|!queueFresh\|\|queueActionLocked\|\|busy\)return/);
+  assert.match(hub,/if\(key==="queue"\)\{setQueue\(Array\.isArray\(value\.orders\)\?value\.orders:\[\]\);setQueueFresh\(true\)\}/);
+  assert.match(hub,/queueJobIndex>=0&&results\[queueJobIndex\]\?\.status==="rejected"\)setQueueFresh\(false\)/);
+  assert.match(hub,/ข้อมูลคิวยังไม่ยืนยัน · ปิดปุ่มทำ\/เรียก\/ส่งมอบชั่วคราว/);
+  assert.ok((hub.match(/disabled=\{!online\|\|!queueFresh\|\|busy\|\|queueActionLocked/g)||[]).length>=3);
+});
