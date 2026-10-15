@@ -181,9 +181,9 @@ test("workspace continuously follows the highest-priority task until the operato
   assert.match(hub,/nextAction\.tab&&tabs\.includes\(nextAction\.tab as WorkspaceTab\)&&tab!==nextAction\.tab/);
   assert.match(hub,/setTab\(nextAction\.tab as WorkspaceTab\)/);
   assert.match(hub,/refresh\(\)\.catch\(\(\)=>\{\}\)\.finally/);
-  assert.match(hub,/onClick=\{\(\)=>\{setGuidedMode\(false\);setTab\(key\)\}\}/);
+  assert.match(hub,/onClick=\{\(\)=>\{setGuidedMode\(false\);setTab\(key\);setBrowseOpen\(false\)\}\}/);
   assert.match(hub,/กลับให้ระบบพาไปงานถัดไป/);
-  assert.match(hub,/onClick=\{\(\)=>\{setGuidedMode\(true\);setTab\(nextAction\.tab as WorkspaceTab\)\}\}/);
+  assert.match(hub,/onClick=\{\(\)=>\{setGuidedMode\(true\);setTab\(nextAction\.tab as WorkspaceTab\);setBrowseOpen\(false\)\}\}/);
   assert.match(hub,/if\(!open\)[\s\S]{0,80}setGuidedMode\(true\)/);
 });
 
@@ -257,7 +257,7 @@ test("workspace start-day recommendation focuses the exact opening cash control 
   assert.match(hub,/scrollIntoView\(\{behavior:"smooth",block:"nearest"\}\)/);
   assert.match(hub,/openingCashRef\.current\?\.focus\(\)/);
   assert.match(hub,/"เริ่มงาน"/);
-  assert.match(hub,/>ไปตรงนี้<\/button>/);
+  assert.match(hub,/>ทำตามนี้<\/button>/);
 });
 
 
@@ -315,4 +315,34 @@ test("guided workspace no longer uses a one-shot auto-route lock",async()=>{
   assert.doesNotMatch(hub,/autoRouteRef/);
   assert.doesNotMatch(hub,/manualTabRef/);
   assert.match(hub,/\[open,workspaceReady,guidedMode,nextAction\.tab,tabs\.join\("\|"\),tab\]/);
+});
+
+
+test("secondary workspace tasks are progressively disclosed instead of competing with the recommended action",async()=>{
+  const hub=await read("components/pos-daily-workspace.tsx");
+  assert.match(hub,/const \[browseOpen,setBrowseOpen\]=useState\(false\)/);
+  assert.match(hub,/aria-expanded=\{browseOpen\}/);
+  assert.match(hub,/aria-controls="field-workspace-other-tasks"/);
+  assert.match(hub,/\{browseOpen\?"ซ่อนงานอื่น":"ดูงานอื่น"\}/);
+  assert.match(hub,/\{browseOpen&&<div id="field-workspace-other-tasks"/);
+  assert.match(hub,/setBrowseOpen\(false\)/);
+});
+
+test("ready workspace returns to selling with one obvious primary action",async()=>{
+  const hub=await read("components/pos-daily-workspace.tsx");
+  assert.match(hub,/nextAction\.tone==="ready"\?<button type="button" onClick=\{onClose\}/);
+  assert.match(hub,/>รับออเดอร์<\/button>/);
+  assert.match(hub,/>ทำตามนี้<\/button>/);
+});
+
+test("progressive disclosure is presentation-only and cannot mutate money queue or stock",async()=>{
+  const hub=await read("components/pos-daily-workspace.tsx");
+  const start=hub.indexOf('aria-expanded={browseOpen}');
+  const end=hub.indexOf('<div className="soft-scroll',start);
+  const navigation=hub.slice(start,end);
+  assert.ok(start>0&&end>start);
+  assert.doesNotMatch(navigation,/method:"POST"/);
+  assert.doesNotMatch(navigation,/\/api\/pos\/queue/);
+  assert.doesNotMatch(navigation,/\/api\/expenses/);
+  assert.doesNotMatch(navigation,/\/api\/stock/);
 });
