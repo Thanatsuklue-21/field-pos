@@ -182,10 +182,10 @@ test("workspace continuously follows the highest-priority task until the operato
   assert.match(hub,/nextAction\.tab&&tabs\.includes\(nextAction\.tab as WorkspaceTab\)&&tab!==nextAction\.tab/);
   assert.match(hub,/setTab\(nextAction\.tab as WorkspaceTab\)/);
   assert.match(hub,/refresh\(\)\.catch\(\(\)=>\{\}\)\.finally/);
-  assert.match(hub,/onClick=\{\(\)=>\{setGuidedMode\(false\);setTab\(key\)\}\}/);
-  assert.match(hub,/กลับให้ระบบพาไปงานถัดไป/);
-  assert.match(hub,/onClick=\{\(\)=>\{setGuidedMode\(true\);setTab\(nextAction\.tab as WorkspaceTab\)\}\}/);
-  assert.match(hub,/if\(!open\)[\s\S]{0,80}setGuidedMode\(true\)/);
+  assert.match(hub,/onClick=\{\(\)=>\{setGuidedMode\(false\);setTab\(key\);setBrowseOpen\(false\)\}\}/);
+  assert.match(hub,/ทำตามนี้/);
+  assert.match(hub,/onClick=\{\(\)=>\{setGuidedMode\(true\);setBrowseOpen\(false\);setTab\(nextAction\.tab as WorkspaceTab\)\}\}/);
+  assert.match(hub,/if\(!open\)[\s\S]{0,120}setGuidedMode\(true\)[\s\S]{0,120}setBrowseOpen\(false\)/);
 });
 
 
