@@ -12,7 +12,8 @@ test("operational overlays use the shared modal keyboard and safe-area contract"
     ["app/settlements/page.tsx",["settlement-reconcile-title"],1],
     ["components/ai-supervisor.tsx",["ai-supervisor-title"],1],
     ["app/expenses/page.tsx",["expense-dialog-title"],1],
-    ["app/close/page.tsx",["cash-drawer-dialog-title"],1]
+    ["app/close/page.tsx",["cash-drawer-dialog-title"],1],
+    ["app/customers/page.tsx",["customer-create-title"],1]
   ];
   for(const [path,labels,count] of cases){
     const source=await read(path);
@@ -50,4 +51,18 @@ test("Today Workspace retains its complete custom focus trap",async()=>{
   assert.ok(workspace.includes('document.addEventListener("keydown",onKey)'));
   assert.ok(workspace.includes('document.removeEventListener("keydown",onKey)'));
   assert.ok(workspace.includes('previous?.focus()'));
+});
+
+
+test("customer create dialog traps focus, restores focus and stays above mobile navigation",async()=>{
+  const customers=await read("app/customers/page.tsx");
+  assert.match(customers,/import ModalFocus from "@\/components\/modal-focus"/);
+  assert.match(customers,/field-modal-overlay fixed inset-0 z-\[80\]/);
+  assert.match(customers,/labelId="customer-create-title"/);
+  assert.match(customers,/initialFocusSelector='\[aria-label="ชื่อลูกค้า"\]'/);
+  assert.match(customers,/onEscape=\{creatingCustomer\|\|!!pendingCustomerCreate\?undefined:\(\)=>setOpen\(false\)\}/);
+  assert.match(customers,/aria-label="ปิดหน้าต่างเพิ่มลูกค้า"/);
+  assert.match(customers,/aria-label="ชื่อลูกค้า"/);
+  assert.match(customers,/aria-label="เบอร์โทรลูกค้า"/);
+  assert.match(customers,/inputMode="tel"/);
 });
