@@ -92,12 +92,16 @@ function StockView({session}:{session:Session}){
       cycle_count_proposal_not_pending:"ผลนับนี้ถูกตรวจไปแล้ว · ระบบจะตรวจ Request เดิมก่อน ห้ามกดซ้ำด้วย Request ใหม่",
       cycle_count_proposal_day_closed:"วันที่ของผลนับถูก Close Day แล้ว · ไม่อนุญาตให้ปรับ Stock ย้อนหลัง",
       cycle_count_proposal_expired:"ผลนับหมดอายุ · Server บันทึกสถานะหมดอายุแล้ว ระบบเก็บ Request เดิมไว้เพื่อยืนยัน ACK เดิม",
-      cycle_count_proposal_stale:"Stock เปลี่ยนหลังพนักงานนับ · Server บันทึกผลนี้เป็นหมดอายุจากข้อมูลเปลี่ยนแล้ว ระบบเก็บ Request เดิมไว้เพื่อยืนยัน ACK เดิม"
+      cycle_count_proposal_stale:"Stock เปลี่ยนหลังพนักงานนับ · Server บันทึกผลนี้เป็นหมดอายุจากข้อมูลเปลี่ยนแล้ว ระบบเก็บ Request เดิมไว้เพื่อยืนยัน ACK เดิม",
+      invalid_ingredient:"ข้อมูล Stock Master ไม่ถูกต้อง · ตรวจชื่อ หน่วย และ Safety Stock",
+      invalid_cost_kind:"ประเภทต้นทุนไม่ถูกต้อง · กรุณาเลือกจากรายการที่ระบบรองรับ",
+      invalid_waste_margin:"Waste margin ต้องอยู่ระหว่าง 0% ถึง 50%"
     };
     return map[code]||code;
   }
 
   function stockRequest(operation:StockWriteOperation,body:any){
+    if(operation==="ingredientCreate")return {path:"/api/stock/ingredients",method:"POST"};
     if(operation==="stockTransaction")return {path:"/api/stock/transactions",method:"POST"};
     if(operation==="cycleCountCommit")return {path:"/api/stock/cycle-count",method:"POST"};
     if(operation==="cycleCountProposal")return {path:"/api/stock/cycle-count/proposals",method:"POST"};
@@ -107,6 +111,11 @@ function StockView({session}:{session:Session}){
     return {path:"/api/stock/cycle-count/proposals/"+proposalId+(operation==="cycleCountProposalApprove"?"/approve":"/reject"),method:"POST"};
   }
   function exactStockAck(result:any,body:any,intent:StockWriteIntent){
+    if(intent.operation==="ingredientCreate"){
+      const ingredient=result?.ingredient;
+      const expectedWasteMargin=["syrup","concentrate"].includes(String(body.costKind||""))?Number(body.wasteMargin||0):0;
+      return result?.ok===true&&result?.requestKey===body.requestKey&&result?.performedBy===intent.actorId&&typeof ingredient?.id==="string"&&ingredient.id.length>0&&ingredient?.name===body.name&&ingredient?.unit===body.unit&&Number(ingredient?.safetyStock)===Number(body.safetyStock)&&ingredient?.costKind===body.costKind&&Number(ingredient?.wasteMargin)===expectedWasteMargin;
+    }
     if(intent.operation==="stockTransaction"){
       const tx=result?.transaction;
       return result?.ok===true&&tx?.requestKey===body.requestKey&&tx?.createdBy===intent.actorId&&tx?.ingredientId===body.ingredientId&&tx?.type===body.type;
@@ -119,6 +128,7 @@ function StockView({session}:{session:Session}){
     return result?.requestKey===body.requestKey&&result?.performedBy===intent.actorId&&result?.proposalId===body.proposalId&&result?.outcome==="rejected";
   }
   function notCommittedErrors(operation:StockWriteOperation){
+    if(operation==="ingredientCreate")return new Set(["invalid_request_key","admin_required","invalid_ingredient","invalid_cost_kind","invalid_waste_margin"]);
     if(operation==="stockTransaction")return new Set([
       "invalid_stock_transaction","invalid_request_key","ingredient_required","invalid_stock_transaction_type","invalid_qty_delta","invalid_stock_text",
       "purchase_must_increase_stock","waste_must_decrease_stock","ingredient_missing","invalid_purchase_cost","invalid_purchase_date","future_purchase_date",
@@ -142,6 +152,7 @@ function StockView({session}:{session:Session}){
   }
   function stockSuccessMessage(intent:StockWriteIntent,result:any,recovery:boolean){
     const prefix=recovery?"กู้คืน Request เดิมสำเร็จ · ":"";
+    if(intent.operation==="ingredientCreate")return prefix+"สร้าง Stock Master แล้ว · "+String(result?.ingredient?.name||intent.body.name||"");
     if(intent.operation==="stockTransaction")return prefix+"บันทึก Stock แล้ว";
     if(intent.operation==="cycleCountCommit")return prefix+"Owner บันทึกยอดนับจริงแล้ว";
     if(intent.operation==="cycleCountProposal")return prefix+"ส่งผลนับให้ Owner ตรวจแล้ว · Stock ยังไม่เปลี่ยนจนกว่า Owner อนุมัติ";
@@ -159,7 +170,8 @@ function StockView({session}:{session:Session}){
       const req=stockRequest(intent.operation,intent.body);
       const result=await sendStockWriteIntent(intent,body=>api<any>(req.path,{method:req.method,headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify(body)}),exactStockAck,notCommittedErrors(intent.operation));
       setPendingStockIntent(null);setStockRecoveryBlocked(false);
-      if(intent.operation==="stockTransaction"){setTxOpen(null);setWasteQty("")}
+      if(intent.operation==="ingredientCreate")setMaster(null);
+      else if(intent.operation==="stockTransaction"){setTxOpen(null);setWasteQty("")}
       else if(intent.operation==="cycleCountCommit"||intent.operation==="cycleCountProposal")setCountOpen(false);
       else if(intent.operation==="purchaseEdit")setPurchaseEdit(null);
       else if(intent.operation==="purchaseCancel"&&purchaseEdit?.purchase.id===intent.body.purchaseId)setPurchaseEdit(null);
@@ -264,18 +276,29 @@ function StockView({session}:{session:Session}){
     try{
       const payload:any={name:String(master.name||"").trim(),safetyStock:Number(master.safetyStock)||0,costKind:master.costKind||"other",wasteMargin:Number(master.wasteMargin)||0};
       if(!master.id||master.unit!==master.originalUnit)payload.unit=master.unit||"piece";
-      if(master.id)await api("/api/stock/ingredients/"+encodeURIComponent(master.id),{method:"PATCH",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify(payload)});
-      else await api("/api/stock/ingredients",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify(payload)});
+      if(!master.id){
+        if(stockRecoveryBlocked){setMsg(stockError("stock_recovery_unavailable"));return}
+        if(pendingStockIntent){await submitStockIntent(pendingStockIntent,true);return}
+        const body={requestKey:crypto.randomUUID(),...payload};
+        const intent=prepareStockWriteIntent(session.user.id,"ingredientCreate",today(),body);
+        setPendingStockIntent(intent);
+        await submitStockIntent(intent,false);
+        return;
+      }
+      await api("/api/stock/ingredients/"+encodeURIComponent(master.id),{method:"PATCH",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify(payload)});
       const latest=await api<Overview>("/api/stock/overview");setData(latest);
-      const saved=master.id?latest.ingredients.find(item=>item.id===master.id):null;
+      const saved=latest.ingredients.find(item=>item.id===master.id);
       setMaster(null);setMsg(saved?"บันทึก Master แล้ว · "+saved.name:"บันทึก Stock Master แล้ว");
     }catch(e:any){
       const map:Record<string,string>={
         unit_change_requires_zero_stock:"เปลี่ยนหน่วยตัดสูตรไม่ได้ เพราะยังมี Stock คงเหลืออยู่ · แต่การเปลี่ยนชื่อทำได้โดยไม่ต้องเปลี่ยนหน่วย",
         unit_change_recipe_in_use:"เปลี่ยนหน่วยตัดสูตรไม่ได้ เพราะรายการนี้ถูกใช้ในสูตรอยู่ · แก้ชื่อได้ตามปกติ",
-        invalid_ingredient_name:"ชื่อรายการไม่ถูกต้อง กรุณากรอกอย่างน้อย 2 ตัวอักษร"
+        invalid_ingredient_name:"ชื่อรายการไม่ถูกต้อง กรุณากรอกอย่างน้อย 2 ตัวอักษร",
+        stock_recovery_unavailable:stockError("stock_recovery_unavailable"),
+        pending_stock_write_exists:stockError("pending_stock_write_exists")
       };
-      setMasterMsg(map[e.message]||e.message)
+      setMasterMsg(map[e.message]||e.message);
+      if(e.message==="stock_recovery_unavailable")setStockRecoveryBlocked(true);
     }finally{setBusy(false)}
   }
   async function ingredientAction(x:Ingredient,action:"archive"|"restore"|"reset"){
