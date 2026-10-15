@@ -98,7 +98,7 @@ test('close-day review blocks while a same-day stock count proposal is pending',
   assert.equal(opened.status,201);
   const proposed=await call(api,{token:'staff-token',csrf:'staff-csrf',route:'stock/cycle-count/proposals',body:{requestKey:'count-proposal-close-gate',counts:[{ingredientId:'matcha',countedQty:95}]}});
   assert.equal(proposed.status,201);
-  const review=await call(api,{token:'owner-token',csrf:'owner-csrf',route:'close-day/review',body:{firstCount:100,secondCount:100}});
+  const review=await call(api,{token:'owner-token',csrf:'owner-csrf',route:'close-day/review',body:{requestKey:'close-review-stock-gate-01',date:opened.body.shift.date,firstCount:100,secondCount:100}});
   assert.equal(review.status,409);
   assert.equal(review.body.error,'close_day_pending_stock_count_approval');
   assert.equal(review.body.count,1);
