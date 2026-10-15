@@ -64,13 +64,21 @@ test("menu rendering and touch ergonomics stay mobile friendly",async()=>{
   assert.ok(css.includes("input,select,textarea{font-size:16px}"));
 });
 
-test("phone navigation shows four daily actions plus More without horizontal scrolling",async()=>{
+test("navigation keeps sale and production primary while secondary work stays one tap away",async()=>{
   const shell=await read("components/app-shell.tsx");
-  assert.ok(shell.includes('const primaryMobile=["/pos","/queue","/orders","/stock"]'));
-  assert.ok(shell.includes('const overflowMobile=["/expenses","/close","/settings"]'));
+  assert.ok(shell.includes('const focusPrimary=["/pos","/queue","/orders","/stock","/close"]'));
+  assert.ok(shell.includes('const primaryMobile=["/pos","/queue"]'));
+  assert.ok(shell.includes('const mobileMorePriority=["/orders","/stock","/expenses","/close","/settings"]'));
+  assert.ok(shell.includes("desktopPrimary"));
+  assert.ok(shell.includes("desktopManage"));
+  assert.ok(shell.includes('aria-controls="field-desktop-manage"'));
+  assert.ok(shell.includes('aria-label="จัดการร้านและตั้งค่า"'));
+  assert.ok(shell.includes("manageOpen&&"));
   assert.ok(shell.includes("mobilePrimary"));
   assert.ok(shell.includes("mobileMore"));
   assert.ok(shell.includes("MoreHorizontal"));
+  assert.ok(shell.includes('aria-controls="field-mobile-more"'));
+  assert.ok(shell.includes("max-h-[calc(100dvh-110px)] overflow-y-auto overscroll-contain"));
   assert.ok(shell.includes("overflow-hidden rounded-[20px]"));
 });
 
@@ -143,7 +151,8 @@ test("post-payment handoff blocks the sale screen until the cashier chooses the 
   assert.match(handoff,/ไปทำคิว/);
   assert.match(handoff,/เลือกขั้นตอนถัดไปก่อนกลับหน้าขาย/);
   assert.doesNotMatch(handoff,/onEscape=/);
-  assert.doesNotMatch(handoff,/setLastSale\(null\)/);
+  assert.match(handoff,/onClick=\{\(\)=>\{setLastSale\(null\);openWorkspace\(\)\}\}/);
+  assert.doesNotMatch(handoff,/router\.push\("\/queue"\)/);
   assert.match(pos,/function startNextOrder\(\)/);
   assert.match(pos,/setLastSale\(null\)/);
 });
@@ -188,7 +197,7 @@ test("split-payment handoff keeps the cashier on the same queue until every paye
   assert.match(handoff,/เลือกของคนถัดไป/);
   assert.match(handoff,/อย่าเปิดออเดอร์ใหม่จนกว่าจะรับเงินคิวนี้ครบ/);
   assert.match(handoff,/เลือกแก้วของคนถัดไป แล้วกดรับเงินเมื่อพร้อม/);
-  assert.match(handoff,/!lastSale\.offline&&!splitPaymentPending&&<button onClick=\{\(\)=>router\.push\("\/queue"\)\}/);
+  assert.match(handoff,/!lastSale\.offline&&!splitPaymentPending&&<button onClick=\{\(\)=>\{setLastSale\(null\);openWorkspace\(\)\}\}/);
 });
 
 
