@@ -113,7 +113,8 @@ function StockView({session}:{session:Session}){
   function exactStockAck(result:any,body:any,intent:StockWriteIntent){
     if(intent.operation==="ingredientCreate"){
       const ingredient=result?.ingredient;
-      const expectedWasteMargin=["syrup","concentrate"].includes(String(body.costKind||""))?Number(body.wasteMargin||0):0;\n      return result?.ok===true&&result?.requestKey===body.requestKey&&result?.performedBy===intent.actorId&&typeof ingredient?.id==="string"&&ingredient.id.length>0&&ingredient?.name===body.name&&ingredient?.unit===body.unit&&Number(ingredient?.safetyStock)===Number(body.safetyStock)&&ingredient?.costKind===body.costKind&&Number(ingredient?.wasteMargin)===expectedWasteMargin;
+      const expectedWasteMargin=["syrup","concentrate"].includes(String(body.costKind||""))?Number(body.wasteMargin||0):0;
+      return result?.ok===true&&result?.requestKey===body.requestKey&&result?.performedBy===intent.actorId&&typeof ingredient?.id==="string"&&ingredient.id.length>0&&ingredient?.name===body.name&&ingredient?.unit===body.unit&&Number(ingredient?.safetyStock)===Number(body.safetyStock)&&ingredient?.costKind===body.costKind&&Number(ingredient?.wasteMargin)===expectedWasteMargin;
     }
     if(intent.operation==="stockTransaction"){
       const tx=result?.transaction;
