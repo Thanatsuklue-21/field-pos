@@ -274,13 +274,15 @@ export default function PosDailyWorkspace({
       refresh().catch(()=>{if(canQueue)setQueueFresh(false)});
     };
     const visible=()=>{if(document.visibilityState==="visible")refreshAfterPause()};
+    const wentOffline=()=>setQueueFresh(false);
     window.addEventListener("focus",refreshAfterPause);
     window.addEventListener("online",refreshAfterPause);
-    window.addEventListener("offline",()=>setQueueFresh(false));
+    window.addEventListener("offline",wentOffline);
     document.addEventListener("visibilitychange",visible);
     return()=>{
       window.removeEventListener("focus",refreshAfterPause);
       window.removeEventListener("online",refreshAfterPause);
+      window.removeEventListener("offline",wentOffline);
       document.removeEventListener("visibilitychange",visible);
     };
   },[open,online,session.csrf,canQueue]);
