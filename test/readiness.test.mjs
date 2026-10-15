@@ -103,7 +103,7 @@ test('scheduled production smoke compares production to the latest explicit rele
   assert.match(yml,/schedule:/);
   assert.ok(yml.includes("cron: '17 * * * *'"));
   assert.match(yml,/github\.event_name == "schedule"|github\.event_name }}\" = \"schedule/);
-  assert.match(yml,/git log -1 --format=%H -- \.vercel-release/);
+  assert.match(yml,/git log --first-parent -1 --format=%H -- \.vercel-release/);
   assert.doesNotMatch(yml,/github\.sha/);
   assert.match(yml,/Stale release: expected SHA/);
   assert.doesNotMatch(yml,/vercel deploy|create_deployment|deploy --prod/);
