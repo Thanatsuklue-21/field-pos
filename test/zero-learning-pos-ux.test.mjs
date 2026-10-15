@@ -128,15 +128,21 @@ test("cashier-facing POS status copy avoids infrastructure jargon",async()=>{
 });
 
 
-test("post-payment handoff cannot be dismissed before the cashier chooses the next safe action",async()=>{
+test("post-payment handoff blocks the sale screen until the cashier chooses the next safe action",async()=>{
   const pos=await read("app/pos/page.tsx");
   const start=pos.indexOf("{lastSale&&");
-  const end=pos.indexOf("<PosDailyWorkspace",start);
+  const end=pos.indexOf("{workspaceMounted&&",start);
   const handoff=pos.slice(start,end);
-  assert.match(handoff,/role="status"/);
-  assert.match(handoff,/aria-live="assertive"/);
+  assert.match(handoff,/fixed inset-0 z-\[95\]/);
+  assert.match(handoff,/bg-slate-950\/20/);
+  assert.doesNotMatch(handoff,/bg-black\/30/);
+  assert.match(handoff,/ModalFocus labelId="field-payment-handoff-title"/);
+  assert.match(handoff,/initialFocusSelector='\[data-handoff-primary\]'/);
+  assert.match(handoff,/data-handoff-primary/);
   assert.match(handoff,/รับออเดอร์ถัดไป/);
   assert.match(handoff,/ไปทำคิว/);
+  assert.match(handoff,/เลือกขั้นตอนถัดไปก่อนกลับหน้าขาย/);
+  assert.doesNotMatch(handoff,/onEscape=/);
   assert.doesNotMatch(handoff,/setLastSale\(null\)/);
   assert.match(pos,/function startNextOrder\(\)/);
   assert.match(pos,/setLastSale\(null\)/);
@@ -179,8 +185,9 @@ test("split-payment handoff keeps the cashier on the same queue until every paye
   assert.match(pos,/กลุ่มเดียวกัน · คิว \{splitGroup\.queueNo\}/);
   assert.doesNotMatch(pos,/คิว \$\{splitGroup\.queueNo\}/);
   assert.match(handoff,/ยังไม่ต้องส่งคิวไปทำ/);
-  assert.match(handoff,/รับเงินคนถัดไปในคิวนี้/);
+  assert.match(handoff,/เลือกของคนถัดไป/);
   assert.match(handoff,/อย่าเปิดออเดอร์ใหม่จนกว่าจะรับเงินคิวนี้ครบ/);
+  assert.match(handoff,/เลือกแก้วของคนถัดไป แล้วกดรับเงินเมื่อพร้อม/);
   assert.match(handoff,/!lastSale\.offline&&!splitPaymentPending&&<button onClick=\{\(\)=>router\.push\("\/queue"\)\}/);
 });
 
