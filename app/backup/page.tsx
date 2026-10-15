@@ -1,9 +1,125 @@
 "use client";
-import {useState} from "react"; import {Download,ShieldCheck,Upload} from "lucide-react"; import AuthGate from "@/components/auth-gate"; import {api,type Session} from "@/lib/api-client";
-type Preview={recordCounts:Record<string,number>;dataVersion?:string;schemaVersion:number};
+import {useEffect,useState} from "react";
+import {Download,ShieldCheck,Upload} from "lucide-react";
+import AuthGate from "@/components/auth-gate";
+import {api,type Session} from "@/lib/api-client";
+import {assertBackupRestoreAck,clearBackupRestoreIntent,prepareBackupRestoreIntent,readBackupRestoreIntent,restoreBody} from "@/lib/backup-restore-recovery.mjs";
+
+type Preview={recordCounts:Record<string,number>;dataVersion?:string;schemaVersion:number;fingerprint:string};
+type Pending={version:1;actorId:string;requestKey:string;fingerprint:string;expectedRevision:number;createdAt:number};
+
 export default function Backup(){return <AuthGate>{s=><View session={s}/>}</AuthGate>}
-function View({session}:{session:Session}){const [file,setFile]=useState<File|null>(null),[preview,setPreview]=useState<Preview|null>(null),[backup,setBackup]=useState<any>(null),[revision,setRevision]=useState(0),[replace,setReplace]=useState(false),[msg,setMsg]=useState(""),[busy,setBusy]=useState(false);if(session.user.role!=="admin")return <div className="grid h-full place-items-center text-slate-500">Admin permission required</div>;
-async function exportData(){setBusy(true);setMsg("");try{const r=await api<any>("/api/admin/backup/export");const blob=new Blob([JSON.stringify(r,null,2)],{type:"application/json"}),url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download="field-pos-full-backup-"+new Date().toISOString().slice(0,10)+".json";a.click();URL.revokeObjectURL(url);setMsg("ส่งออก Full Backup สำเร็จ")}finally{setBusy(false)}}
-async function inspect(f:File){setFile(f);setPreview(null);setMsg("");try{const candidate=JSON.parse(await f.text());const p=await api<Preview>("/api/admin/backup/preview",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({backup:candidate})});const meta=await api<any>("/api/state/meta");setBackup(candidate);setPreview(p);setRevision(Number(meta.revision)||0)}catch(e:any){setMsg("ไฟล์ไม่ถูกต้อง: "+e.message)}}
-async function restore(){if(!backup||!preview||!replace)return;setBusy(true);setMsg("");try{const r=await api<any>("/api/admin/backup/restore",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({backup,expectedRevision:revision,confirm:true})});setMsg("กู้คืน Full Backup สำเร็จ · revision "+r.revision);setPreview(null);setFile(null);setBackup(null);setReplace(false)}catch(e:any){setMsg(e.message==="revision_conflict"?"ข้อมูลบนเซิร์ฟเวอร์เปลี่ยนแล้ว กรุณาตรวจไฟล์ใหม่":e.message)}finally{setBusy(false)}}
-return <section className="soft-scroll h-full overflow-auto p-5 md:p-7"><p className="gold m-0 text-[10px] font-bold tracking-[.3em]">DISASTER RECOVERY</p><h1 className="mt-1 text-2xl font-semibold">FULL BACKUP / RESTORE</h1><div className="mt-5 grid max-w-4xl gap-4 lg:grid-cols-2"><div className="glass card p-6"><Download className="gold"/><h2 className="mt-4 text-lg">Export Full Backup</h2><p className="mt-2 text-sm text-slate-600">รวม State, Stock Ledger, Cost Snapshots, Recipe Versions, Purchase Records และ Cost History ในไฟล์เดียว</p><button disabled={busy} onClick={exportData} className="mt-5 w-full rounded-full bg-[#d4af37] py-3 font-bold text-black disabled:opacity-40">DOWNLOAD FULL BACKUP</button></div><div className="glass card p-6"><Upload className="gold"/><h2 className="mt-4 text-lg">Restore Preview</h2><p className="mt-2 text-sm text-slate-600">ตรวจ Schema, จำนวนข้อมูล และความสัมพันธ์ก่อนเขียนทุกตารางพร้อมกันใน Transaction เดียว</p><label className="mt-5 block cursor-pointer rounded-[22px] border border-dashed border-slate-300 p-5 text-center text-sm text-slate-600"><input type="file" accept="application/json,.json" className="hidden" onChange={e=>e.target.files?.[0]&&inspect(e.target.files[0])}/>{file?.name||"เลือกไฟล์ Full Backup JSON"}</label>{preview&&<div className="mt-4 rounded-[22px] bg-slate-50 p-4"><div className="flex items-center gap-2 text-emerald-700"><ShieldCheck size={16}/><b>FULL DR PREVIEW PASSED · Schema {preview.schemaVersion}</b></div><div className="mt-3 grid grid-cols-2 gap-2 text-xs text-slate-600">{Object.entries(preview.recordCounts||{}).map(([k,v])=><div key={k} className="flex justify-between"><span>{k}</span><b className="text-slate-900">{v}</b></div>)}</div><label className="mt-4 flex items-center gap-2 text-sm"><input type="checkbox" checked={replace} onChange={e=>setReplace(e.target.checked)}/>ยืนยันแทน State และ Ledger ปัจจุบัน revision {revision}</label><button disabled={busy||!replace} onClick={restore} className="mt-4 w-full rounded-full border border-red-400/30 py-3 font-bold text-red-700 disabled:opacity-30">RESTORE FULL BACKUP</button></div>}</div></div>{msg&&<div className="mt-4 max-w-4xl rounded-2xl border border-slate-200 p-4 text-sm">{msg}</div>}</section>}
+
+function View({session}:{session:Session}){
+  const [file,setFile]=useState<File|null>(null);
+  const [preview,setPreview]=useState<Preview|null>(null);
+  const [backup,setBackup]=useState<any>(null);
+  const [revision,setRevision]=useState(0);
+  const [replace,setReplace]=useState(false);
+  const [msg,setMsg]=useState("");
+  const [busy,setBusy]=useState(false);
+  const [pending,setPending]=useState<Pending|null>(null);
+
+  useEffect(()=>{
+    try{setPending(readBackupRestoreIntent(session.user.id) as Pending|null)}
+    catch{setMsg("ยังอ่านสถานะกู้คืนเดิมไม่ได้ · ห้ามเริ่ม Restore ใหม่จนกว่าจะตรวจพื้นที่เก็บข้อมูลของเบราว์เซอร์")}
+  },[session.user.id]);
+
+  if(session.user.role!=="admin")return <div className="grid h-full place-items-center text-slate-500">Admin permission required</div>;
+
+  async function exportData(){
+    setBusy(true);setMsg("");
+    try{
+      const r=await api<any>("/api/admin/backup/export");
+      const blob=new Blob([JSON.stringify(r,null,2)],{type:"application/json"}),url=URL.createObjectURL(blob),a=document.createElement("a");
+      a.href=url;a.download="field-pos-full-backup-"+new Date().toISOString().slice(0,10)+".json";a.click();URL.revokeObjectURL(url);
+      setMsg("ส่งออก Full Backup สำเร็จ");
+    }finally{setBusy(false)}
+  }
+
+  async function inspect(f:File){
+    setFile(f);setPreview(null);setMsg("");
+    try{
+      const candidate=JSON.parse(await f.text());
+      const p=await api<Preview>("/api/admin/backup/preview",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({backup:candidate})});
+      const existing=readBackupRestoreIntent(session.user.id) as Pending|null;
+      setPending(existing);
+      setBackup(candidate);setPreview(p);
+      if(existing){
+        if(existing.fingerprint!==p.fingerprint){
+          setRevision(existing.expectedRevision);
+          setMsg("มี Restore เดิมที่ยังไม่ทราบผล · ไฟล์นี้ไม่ใช่ไฟล์เดิม จึงห้ามเริ่ม Restore ใหม่");
+          return;
+        }
+        setRevision(existing.expectedRevision);
+        setMsg("พบ Restore เดิมที่ยังไม่ทราบผล · ตรวจไฟล์ตรงกันแล้ว กด Restore เพื่อ replay คำขอเดิมอย่างปลอดภัย");
+        return;
+      }
+      const meta=await api<any>("/api/state/meta");
+      setRevision(Number(meta.revision)||0);
+    }catch(e:any){setMsg("ไฟล์ไม่ถูกต้อง: "+e.message)}
+  }
+
+  async function restore(){
+    if(!backup||!preview||!replace)return;
+    setBusy(true);setMsg("");
+    let intent:Pending|null=null;
+    try{
+      const existing=readBackupRestoreIntent(session.user.id) as Pending|null;
+      if(existing&&existing.fingerprint!==preview.fingerprint)throw new Error("pending_backup_restore_exists");
+      intent=(existing||prepareBackupRestoreIntent(session.user.id,{
+        requestKey:crypto.randomUUID(),fingerprint:preview.fingerprint,expectedRevision:revision
+      })) as Pending;
+      setPending(intent);
+      const r=await api<any>("/api/admin/backup/restore",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify(restoreBody(intent,backup))});
+      assertBackupRestoreAck(intent,r);
+      clearBackupRestoreIntent(session.user.id,intent.requestKey);
+      setPending(null);setMsg("กู้คืน Full Backup สำเร็จ · revision "+r.revision+(r.replayed?" · ยืนยันผลคำขอเดิมแล้ว":""));
+      setPreview(null);setFile(null);setBackup(null);setReplace(false);
+    }catch(e:any){
+      if(intent&&([400].includes(Number(e?.status))||e?.message==="revision_conflict")){
+        try{clearBackupRestoreIntent(session.user.id,intent.requestKey);setPending(null)}catch{}
+      }
+      const code=String(e?.message||"");
+      setMsg(code==="pending_backup_restore_exists"
+        ?"มี Restore เดิมที่ยังไม่ทราบผล · ต้องใช้ไฟล์เดิมเพื่อตรวจซ้ำ ห้ามสร้าง Restore ใหม่"
+        :code==="backup_restore_ack_unknown"||code==="network_unavailable"
+          ?"การเชื่อมต่อขาดหรือ ACK ไม่ชัดเจน · เก็บ request เดิมไว้แล้ว กรุณาใช้ไฟล์เดิมกด Restore ซ้ำเพื่อตรวจผล ห้ามเริ่มคำขอใหม่"
+          :code==="revision_conflict"
+            ?"ข้อมูลบนเซิร์ฟเวอร์เปลี่ยนแล้วและไม่พบ replay ของคำขอนี้ · กรุณาตรวจไฟล์ใหม่"
+            :code);
+    }finally{setBusy(false)}
+  }
+
+  const pendingMismatch=!!pending&&!!preview&&pending.fingerprint!==preview.fingerprint;
+  return <section className="soft-scroll h-full overflow-auto p-5 md:p-7">
+    <p className="gold m-0 text-[10px] font-bold tracking-[.3em]">DISASTER RECOVERY</p>
+    <h1 className="mt-1 text-2xl font-semibold">FULL BACKUP / RESTORE</h1>
+    {pending&&<div role="alert" className="mt-4 max-w-4xl rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
+      <b>มี Restore เดิมที่ยังต้องยืนยันผล</b>
+      <p className="mt-1 text-xs">Request {pending.requestKey} · ห้ามเริ่ม Restore ด้วยไฟล์อื่น ให้เลือกไฟล์เดิมแล้ว replay คำขอเดิม</p>
+    </div>}
+    <div className="mt-5 grid max-w-4xl gap-4 lg:grid-cols-2">
+      <div className="glass card p-6">
+        <Download className="gold"/><h2 className="mt-4 text-lg">Export Full Backup</h2>
+        <p className="mt-2 text-sm text-slate-600">รวม State, Stock Ledger, Cost Snapshots, Recipe Versions, Purchase Records และ Cost History ในไฟล์เดียว</p>
+        <button disabled={busy} onClick={exportData} className="mt-5 w-full rounded-full bg-[#d4af37] py-3 font-bold text-black disabled:opacity-40">DOWNLOAD FULL BACKUP</button>
+      </div>
+      <div className="glass card p-6">
+        <Upload className="gold"/><h2 className="mt-4 text-lg">Restore Preview</h2>
+        <p className="mt-2 text-sm text-slate-600">ตรวจ Schema, จำนวนข้อมูล, fingerprint และความสัมพันธ์ก่อนเขียนทุกตารางพร้อมกันใน Transaction เดียว</p>
+        <label className="mt-5 block cursor-pointer rounded-[22px] border border-dashed border-slate-300 p-5 text-center text-sm text-slate-600">
+          <input type="file" accept="application/json,.json" className="hidden" onChange={e=>e.target.files?.[0]&&inspect(e.target.files[0])}/>
+          {file?.name||"เลือกไฟล์ Full Backup JSON"}
+        </label>
+        {preview&&<div className="mt-4 rounded-[22px] bg-slate-50 p-4">
+          <div className="flex items-center gap-2 text-emerald-700"><ShieldCheck size={16}/><b>FULL DR PREVIEW PASSED · Schema {preview.schemaVersion}</b></div>
+          <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-slate-600">{Object.entries(preview.recordCounts||{}).map(([k,v])=><div key={k} className="flex justify-between"><span>{k}</span><b className="text-slate-900">{v}</b></div>)}</div>
+          <label className="mt-4 flex items-center gap-2 text-sm"><input type="checkbox" checked={replace} disabled={pendingMismatch} onChange={e=>setReplace(e.target.checked)}/>ยืนยันแทน State และ Ledger ปัจจุบัน revision {revision}</label>
+          <button disabled={busy||!replace||pendingMismatch} onClick={restore} className="mt-4 w-full rounded-full border border-red-400/30 py-3 font-bold text-red-700 disabled:opacity-30">{pending?"RETRY SAME RESTORE":"RESTORE FULL BACKUP"}</button>
+        </div>}
+      </div>
+    </div>
+    {msg&&<div className="mt-4 max-w-4xl rounded-2xl border border-slate-200 p-4 text-sm">{msg}</div>}
+  </section>
+}
