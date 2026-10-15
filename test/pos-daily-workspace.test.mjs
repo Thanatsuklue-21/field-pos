@@ -173,18 +173,18 @@ test("workspace expense browser QA proves lost-response recovery reuses the exac
 });
 
 
-test("workspace auto-routes once to the highest-priority task without overriding the operator",async()=>{
+test("workspace continuously follows the highest-priority task until the operator chooses manual browsing",async()=>{
   const hub=await read("components/pos-daily-workspace.tsx");
-  assert.match(hub,/autoRouteRef=useRef\(false\)/);
-  assert.match(hub,/manualTabRef=useRef\(false\)/);
+  assert.match(hub,/guidedMode,setGuidedMode/);
   assert.match(hub,/workspaceReady/);
-  assert.match(hub,/if\(!workspaceReady\|\|autoRouteRef\.current\|\|manualTabRef\.current\)return/);
-  assert.match(hub,/nextAction\.tab&&tabs\.includes\(nextAction\.tab as WorkspaceTab\)/);
+  assert.match(hub,/if\(!workspaceReady\|\|!guidedMode\)return/);
+  assert.match(hub,/nextAction\.tab&&tabs\.includes\(nextAction\.tab as WorkspaceTab\)&&tab!==nextAction\.tab/);
   assert.match(hub,/setTab\(nextAction\.tab as WorkspaceTab\)/);
   assert.match(hub,/refresh\(\)\.catch\(\(\)=>\{\}\)\.finally/);
-  assert.match(hub,/autoRouteRef\.current=true/);
-  assert.match(hub,/manualTabRef\.current=true;setTab\(key\)/);
-  assert.match(hub,/if\(!open\)[\s\S]{0,120}autoRouteRef\.current=false[\s\S]{0,120}manualTabRef\.current=false/);
+  assert.match(hub,/onClick=\{\(\)=>\{setGuidedMode\(false\);setTab\(key\)\}\}/);
+  assert.match(hub,/กลับให้ระบบพาไปงานถัดไป/);
+  assert.match(hub,/onClick=\{\(\)=>\{setGuidedMode\(true\);setTab\(nextAction\.tab as WorkspaceTab\)\}\}/);
+  assert.match(hub,/if\(!open\)[\s\S]{0,80}setGuidedMode\(true\)/);
 });
 
 
@@ -307,4 +307,12 @@ test("workspace keeps FIFO obvious: only the production head can be called while
   const queueBlock=hub.slice(queueStart,queueEnd);
   assert.equal((queueBlock.match(/runQueueTailAction\(order,"call"\)/g)||[]).length,1);
   assert.equal((queueBlock.match(/runQueueTailAction\(order,"return"\)/g)||[]).length,1);
+});
+
+
+test("guided workspace no longer uses a one-shot auto-route lock",async()=>{
+  const hub=await read("components/pos-daily-workspace.tsx");
+  assert.doesNotMatch(hub,/autoRouteRef/);
+  assert.doesNotMatch(hub,/manualTabRef/);
+  assert.match(hub,/\[open,workspaceReady,guidedMode,nextAction\.tab,tabs\.join\("\|"\),tab\]/);
 });
