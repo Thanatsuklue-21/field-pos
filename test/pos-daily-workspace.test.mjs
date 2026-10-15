@@ -50,7 +50,12 @@ test("workspace previews the latest receipt in-place and keeps deep actions on O
   assert.match(hub,/<details className=/);
   assert.match(hub,/latestOrder\.items/);
   assert.match(hub,/latestOrder\.paymentMethods/);
-  assert.match(hub,/ดูบิลได้ตรงนี้โดยไม่ออกจากหน้า POS/);
+  assert.match(hub,/พิมพ์บิลล่าสุดได้ตรงนี้โดยไม่ออกจากหน้า POS/);
+  assert.match(hub,/SaleReceipt/);
+  assert.match(hub,/onClick=\{\(\)=>window\.print\(\)\}/);
+  assert.match(hub,/พิมพ์ใบเสร็จล่าสุด/);
+  assert.match(hub,/billNo:String\(latestOrder\.billNo\|\|latestOrder\.id\)/);
+  assert.match(hub,/items:\(latestOrder\.items\|\|\[\]\)\.map/);
   assert.match(hub,/FullLink href="\/orders" label="เปิดประวัติ \/ คืนเงิน \/ ยกเลิกบิล"/);
   const receiptStart=hub.indexOf("ใบเสร็จล่าสุด");
   const receiptEnd=hub.indexOf("เปิดประวัติ / คืนเงิน / ยกเลิกบิล",receiptStart);
