@@ -293,10 +293,11 @@ function StockView({session}:{session:Session}){
       const map:Record<string,string>={
         unit_change_requires_zero_stock:"เปลี่ยนหน่วยตัดสูตรไม่ได้ เพราะยังมี Stock คงเหลืออยู่ · แต่การเปลี่ยนชื่อทำได้โดยไม่ต้องเปลี่ยนหน่วย",
         unit_change_recipe_in_use:"เปลี่ยนหน่วยตัดสูตรไม่ได้ เพราะรายการนี้ถูกใช้ในสูตรอยู่ · แก้ชื่อได้ตามปกติ",
-        invalid_ingredient_name:"ชื่อรายการไม่ถูกต้อง กรุณากรอกอย่างน้อย 2 ตัวอักษร"
+        invalid_ingredient_name:"ชื่อรายการไม่ถูกต้อง กรุณากรอกอย่างน้อย 2 ตัวอักษร",
+        stock_recovery_unavailable:stockError("stock_recovery_unavailable"),
+        pending_stock_write_exists:stockError("pending_stock_write_exists")
       };
-      const message=map[e.message]||stockError(e.message);
-      setMasterMsg(message);
+      setMasterMsg(map[e.message]||e.message);
       if(e.message==="stock_recovery_unavailable")setStockRecoveryBlocked(true);
     }finally{setBusy(false)}
   }
