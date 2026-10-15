@@ -414,12 +414,15 @@ test('queue mobile page uses a single primary scroll surface so bottom content r
   assert.doesNotMatch(main,/h-\[100dvh\]/);
 });
 
-test('queue production card advances past called orders while pickup cards remain visible',async()=>{
+test('queue production card memoizes active and pickup partitions while preserving FIFO',async()=>{
   const queue=await read('app/queue/page.tsx');
   const view=queue.slice(queue.indexOf('function QueueView'));
-  assert.ok(view.includes('const first=orders.find(order=>!orderCalled(order));'));
-  assert.ok(!view.includes('const first=orders[0]'));
-  assert.ok(view.includes('const waitingPickup=orders.filter(orderCalled);'));
+  assert.match(view,/const queueView=useMemo\(\(\)=>/);
+  assert.match(view,/const activeOrders:QOrder\[\]=\[\],waitingPickup:QOrder\[\]=\[\]/);
+  assert.match(view,/orderCalled\(order\)\?waitingPickup:activeOrders/);
+  assert.match(view,/const first=activeOrders\[0\]\|\|null/);
+  assert.match(view,/activeQueueCount:activeOrders\.length/);
+  assert.doesNotMatch(view,/orders\.filter\(order=>!orderCalled/);
   assert.ok(view.includes('รอลูกค้ารับ'));
   assert.ok(view.includes('ลูกค้ารับแล้ว'));
 });
@@ -503,12 +506,15 @@ test('queue can return to POS and call finished categories independently',async(
   assert.match(queue,/เรียกแล้ว ✓/);
 });
 
-test('queue category call status derives from persisted calledQty rather than local-only flags',async()=>{
+test('queue category call status derives from persisted calledQty in one category pass',async()=>{
   const queue=await read('app/queue/page.tsx');
-  assert.match(queue,/menu\.calledQty\+=Math\.min\(n\(item\.qty\),n\(item\.calledQty\)\)/);
-  assert.match(queue,/const calledQty=items\.reduce/);
+  assert.match(queue,/const itemQty=n\(item\.qty\),itemPending=/);
+  assert.match(queue,/itemCalled=Math\.min\(itemQty,n\(item\.calledQty\)\)/);
+  assert.match(queue,/menu\.calledQty\+=itemCalled/);
+  assert.match(queue,/calledQty\+=itemCalled/);
   assert.match(queue,/menu\.calledQty>=menu\.qty/);
   assert.doesNotMatch(queue,/categoryCalledIds/);
+  assert.doesNotMatch(queue,/const calledQty=items\.reduce/);
 });
 
 
@@ -531,6 +537,18 @@ test('POS menu filtering and totals are memoized away from unrelated modal state
   assert.match(pos,/const total=useMemo\(\(\)=>cart\.items\.reduce/);
 });
 
+
+test('Today Workspace memoizes queue cards and reuses one money formatter',async()=>{
+  const hub=await read('components/pos-daily-workspace.tsx');
+  assert.match(hub,/const THAI_MONEY_FORMATTER=new Intl\.NumberFormat/);
+  assert.match(hub,/const queueView=useMemo\(\(\)=>/);
+  assert.match(hub,/const queueCards=queueRows\.map\(order=>/);
+  assert.match(hub,/queueCards\.map\(\(\{order,total,ready,called,readyAll,calledAll,isProductionHead\}\)=>/);
+  assert.match(hub,/const orderRows=useMemo\(\(\)=>sales\.slice\(0,7\),\[sales\]\)/);
+  assert.match(hub,/const expenseRows=useMemo/);
+  assert.match(hub,/const stockCounts=useMemo/);
+  assert.doesNotMatch(hub,/const money=\(value:any\)=>new Intl\.NumberFormat/);
+});
 
 test('payment mapping v2 exposes bank and card as first-class channels',async()=>{
   const pos=await read('app/pos/page.tsx'),api=await read('lib/api.mjs'),core=await read('lib/pos-api.mjs'),close=await read('app/close/page.tsx'),reports=await read('app/reports/page.tsx');

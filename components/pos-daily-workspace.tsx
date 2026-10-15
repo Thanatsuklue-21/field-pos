@@ -36,10 +36,10 @@ type ExpenseData={
 const newExpenseRequestKey=()=>`expense:${typeof crypto!=="undefined"&&crypto.randomUUID?crypto.randomUUID():Date.now().toString(36)+"-"+Math.random().toString(36).slice(2)}`;
 
 const n=(value:any)=>Number(value)||0;
-const money=(value:any)=>new Intl.NumberFormat("th-TH",{minimumFractionDigits:0,maximumFractionDigits:2}).format(n(value));
+const THAI_MONEY_FORMATTER=new Intl.NumberFormat("th-TH",{minimumFractionDigits:0,maximumFractionDigits:2});
+const money=(value:any)=>THAI_MONEY_FORMATTER.format(n(value));
 const readinessLabel=(value:string)=>value==="READY"?"พร้อม":value==="WARN"?"มีจุดต้องดู":"ต้องแก้ก่อน";
 const checkStatusLabel=(value:string)=>value==="READY"?"พร้อม":value==="WARN"?"เตือน":"ต้องแก้";
-const queueOrderReady=(order:QueueOrder)=>(order.items||[]).length>0&&(order.items||[]).every(item=>n(item.readyQty)>=n(item.qty));
 const queueOrderCalled=(order:QueueOrder)=>(order.items||[]).length>0&&(order.items||[]).every(item=>n(item.calledQty)>=n(item.qty));
 function queueActionError(code:string){
   return code==="fifo_violation"?"ต้องทำคิวก่อนหน้าให้เสร็จก่อน":
@@ -376,12 +376,26 @@ export default function PosDailyWorkspace({
     return rows.slice(0,12);
   },[bootstrap?.revision]);
 
-  const queueSorted=queue.slice().sort((a,b)=>n(a.time)-n(b.time));
-  const productionHead=queueSorted.find(order=>!queueOrderCalled(order))||null;
-  const queueRows=queueSorted.slice(0,6);
-  const orderRows=sales.slice(0,7);
+  const queueView=useMemo(()=>{
+    const queueSorted=queue.slice().sort((a,b)=>n(a.time)-n(b.time));
+    const productionHead=queueSorted.find(order=>!queueOrderCalled(order))||null;
+    const queueRows=queueSorted.slice(0,6);
+    const queueCards=queueRows.map(order=>{
+      let total=0,ready=0,called=0;
+      for(const item of order.items||[]){
+        const qty=n(item.qty);
+        total+=qty;
+        ready+=Math.min(qty,n(item.readyQty));
+        called+=Math.min(qty,n(item.calledQty));
+      }
+      return {order,total,ready,called,readyAll:total>0&&ready>=total,calledAll:total>0&&called>=total,isProductionHead:productionHead?.id===order.id};
+    });
+    return {productionHead,queueRows,queueCards};
+  },[queue]);
+  const {productionHead,queueRows,queueCards}=queueView;
+  const orderRows=useMemo(()=>sales.slice(0,7),[sales]);
   const latestOrder=orderRows[0]||null;
-  const expenseRows=(expenseData?.expenses||[]).filter(row=>!expenseData?.businessDate||row.date===expenseData.businessDate).slice(0,5);
+  const expenseRows=useMemo(()=>(expenseData?.expenses||[]).filter(row=>!expenseData?.businessDate||row.date===expenseData.businessDate).slice(0,5),[expenseData?.expenses,expenseData?.businessDate]);
   const expenseAmountNumber=Number(expenseAmount)||0;
   const expenseIsCash=expensePaymentMethod==="cash";
   const drawerCash=Number(expenseData?.drawerSnapshot?.availableCash||0);
@@ -389,8 +403,9 @@ export default function PosDailyWorkspace({
   const cashTooLarge=expenseIsCash&&expenseAmountNumber>drawerCash;
   const highRiskExpense=expenseIsCash&&expenseAmountNumber>=500;
   const canSaveExpense=!!expenseData?.businessDate&&expenseAmountNumber>0&&(!expenseIsCash||(cashShiftReady&&!cashTooLarge))&&(!highRiskExpense||(expenseRiskConfirmed&&expenseDescription.trim().length>=2));
-  const outCount=stockRows.filter(x=>x.level==="out").length;
-  const lowCount=stockRows.filter(x=>x.level==="low").length;
+  const stockCounts=useMemo(()=>{let out=0,low=0;for(const row of stockRows){if(row.level==="out")out++;else if(row.level==="low")low++}return {out,low}},[stockRows]);
+  const outCount=stockCounts.out;
+  const lowCount=stockCounts.low;
   const readiness=control?.readiness||null;
   const nextAction=chooseWorkspaceNextAction({
     canExpense,pendingExpense:!!pendingExpense,expenseRecoveryBlocked,
@@ -506,11 +521,7 @@ export default function PosDailyWorkspace({
           {(pendingQueueAction||queueRecoveryBlocked||queueFeedback)&&<div role="status" aria-live="polite" aria-atomic="true" className={"rounded-2xl border p-3 text-xs "+(pendingQueueAction||queueRecoveryBlocked?"border-amber-300 bg-amber-50 text-amber-950":"border-emerald-200 bg-emerald-50 text-emerald-800")}>
             <div className="flex items-center justify-between gap-2"><div><b>{queueRecoveryBlocked?"ปุ่มคิวถูกพักชั่วคราว":pendingQueueAction?"กำลังตรวจปุ่มคิวก่อนหน้า":"คิวอัปเดตแล้ว"}</b><p className="mt-1">{queueRecoveryBlocked?"ระบบป้องกันการกดซ้ำอ่านข้อมูลไม่ได้ · เปิดโหมดทำเครื่องดื่มเพื่อตรวจ":pendingQueueAction?"ไม่ต้องกดซ้ำ · ระบบจะใช้คำสั่งเดิมจนกว่าจะรู้ผล":queueFeedback}</p></div>{pendingQueueAction&&<button type="button" disabled={queueRecoveryBusy||busy||!online} onClick={()=>recoverQueueAction()} className="min-h-11 shrink-0 rounded-xl bg-amber-900 px-3 font-bold text-white disabled:opacity-40">ตรวจรายการเดิม</button>}</div>
           </div>}
-          {queueRows.length===0?<Empty text={!online?"เน็ตหลุด · ยังดึงคิวล่าสุดจากระบบกลางไม่ได้":"ไม่มีคิวที่กำลังทำ"}/>:queueRows.map(order=>{
-            const total=(order.items||[]).reduce((s,x)=>s+n(x.qty),0);
-            const ready=(order.items||[]).reduce((s,x)=>s+Math.min(n(x.qty),n(x.readyQty)),0);
-            const called=(order.items||[]).reduce((s,x)=>s+Math.min(n(x.qty),n(x.calledQty)),0);
-            const readyAll=queueOrderReady(order),calledAll=queueOrderCalled(order),isProductionHead=productionHead?.id===order.id;
+          {queueRows.length===0?<Empty text={!online?"เน็ตหลุด · ยังดึงคิวล่าสุดจากระบบกลางไม่ได้":"ไม่มีคิวที่กำลังทำ"}/>:queueCards.map(({order,total,ready,called,readyAll,calledAll,isProductionHead})=>{
             return <div key={order.id} className={"rounded-2xl border bg-white p-3 "+(isProductionHead?"border-[#d4af37]/60":"border-slate-200")}>
               <div className="flex items-center justify-between gap-3">
                 <div><b className="text-base">{order.queueNo}</b><span className="ml-2 text-xs text-slate-500">บัตร {order.pagerNo||"—"}</span></div>
