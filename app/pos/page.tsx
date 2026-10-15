@@ -928,7 +928,7 @@ function PosView({session}:{session:Session}){
             {lastSale.payment==="cash"&&<div className="mt-3 flex items-center justify-between rounded-2xl bg-emerald-50 p-3"><span className="text-sm font-semibold text-emerald-800">เงินทอน</span><div className="text-2xl font-bold text-emerald-800">฿{lastSale.change.toFixed(0)}</div></div>}
             <div className={"mt-3 grid gap-2 "+(lastSale.offline||splitPaymentPending?"grid-cols-1":"grid-cols-2")}>
               <button data-handoff-primary onClick={startNextOrder} className="flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-[#d4af37] px-3 text-sm font-bold text-black"><Plus size={16}/>{splitPaymentPending?"เลือกของคนถัดไป":"รับออเดอร์ถัดไป"}</button>
-              {!lastSale.offline&&!splitPaymentPending&&<button onClick={()=>router.push("/queue")} className="flex min-h-12 items-center justify-center gap-2 rounded-2xl border border-slate-300 bg-white px-3 text-xs font-semibold text-slate-700">ไปทำคิว {lastSale.queueNo} <ArrowRight size={15}/></button>}
+              {!lastSale.offline&&!splitPaymentPending&&<button onClick={()=>{setLastSale(null);openWorkspace()}} className="flex min-h-12 items-center justify-center gap-2 rounded-2xl border border-slate-300 bg-white px-3 text-xs font-semibold text-slate-700">ไปทำคิว {lastSale.queueNo} <ArrowRight size={15}/></button>}
             </div>
             <p className="mt-2 text-center text-[11px] text-slate-500">{lastSale.offline?"ยอดถูกเก็บในเครื่องแล้ว · ห้ามล้างข้อมูลแอปหรือเบราว์เซอร์ จนกว่าระบบจะแจ้งว่าส่งบิลสำเร็จ":splitPaymentPending?"อย่าเปิดออเดอร์ใหม่จนกว่าจะรับเงินคิวนี้ครบ · เลือกแก้วของคนถัดไป แล้วกดรับเงินเมื่อพร้อม":"เลือกขั้นตอนถัดไปก่อนกลับหน้าขาย เพื่อไม่ลืมหยิบบัตรหรือเงินทอน"}</p>
           </div>
