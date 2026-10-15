@@ -116,8 +116,7 @@ export default function PosDailyWorkspace({
   const [startDayFeedback,setStartDayFeedback]=useState("");
   const expenseSavingRef=useRef(false);
   const startDaySavingRef=useRef(false);
-  const autoRouteRef=useRef(false);
-  const manualTabRef=useRef(false);
+  const [guidedMode,setGuidedMode]=useState(true);
   const dialogRef=useRef<HTMLElement|null>(null);
   const closeButtonRef=useRef<HTMLButtonElement|null>(null);
   const startDayCardRef=useRef<HTMLDivElement|null>(null);
@@ -480,16 +479,14 @@ export default function PosDailyWorkspace({
 
   useEffect(()=>{
     if(!open){
-      autoRouteRef.current=false;
-      manualTabRef.current=false;
+      setGuidedMode(true);
       return;
     }
-    if(!workspaceReady||autoRouteRef.current||manualTabRef.current)return;
-    if(nextAction.tab&&tabs.includes(nextAction.tab as WorkspaceTab)){
+    if(!workspaceReady||!guidedMode)return;
+    if(nextAction.tab&&tabs.includes(nextAction.tab as WorkspaceTab)&&tab!==nextAction.tab){
       setTab(nextAction.tab as WorkspaceTab);
     }
-    autoRouteRef.current=true;
-  },[open,workspaceReady,nextAction.tab,tabs.join("|")]);
+  },[open,workspaceReady,guidedMode,nextAction.tab,tabs.join("|"),tab]);
 
   if(!open)return null;
 
@@ -545,7 +542,7 @@ export default function PosDailyWorkspace({
       <div className={"grid gap-1 border-b border-slate-200 bg-white p-2 "+(meta.filter(x=>x.allowed).length>=5?"grid-cols-5":"grid-cols-4")}>
         {meta.filter(x=>x.allowed).map(({key,label,icon:Icon,count})=><button
           key={key}
-          onClick={()=>{manualTabRef.current=true;setTab(key)}}
+          onClick={()=>{setGuidedMode(false);setTab(key)}}
           className={"relative flex min-h-12 flex-col items-center justify-center rounded-xl px-1 text-[10px] font-bold "+(tab===key?"bg-[#d4af37]/20 text-[#6f5510]":"text-slate-600 hover:bg-slate-100")}
         >
           <Icon size={17}/><span className="mt-0.5">{label}</span>
@@ -568,10 +565,12 @@ export default function PosDailyWorkspace({
             <p className="mt-1 text-xs leading-5 text-slate-600">{nextAction.detail}</p>
           </div>
           {nextAction.action==="start_day"?<button type="button" onClick={()=>{
+            setGuidedMode(true);
             startDayCardRef.current?.scrollIntoView({behavior:"smooth",block:"nearest"});
             requestAnimationFrame(()=>openingCashRef.current?.focus());
-          }} className="min-h-11 shrink-0 rounded-xl bg-[#1F4D3A] px-3 text-xs font-bold text-white">{pendingOpenShift?"ตรวจรายการเดิม":"เริ่มงาน"}</button>:nextAction.tab?<button type="button" onClick={()=>{manualTabRef.current=true;setTab(nextAction.tab as WorkspaceTab)}} className="min-h-11 shrink-0 rounded-xl border border-slate-300 bg-white px-3 text-xs font-bold text-slate-800">ไปตรงนี้</button>:null}
+          }} className="min-h-11 shrink-0 rounded-xl bg-[#1F4D3A] px-3 text-xs font-bold text-white">{pendingOpenShift?"ตรวจรายการเดิม":"เริ่มงาน"}</button>:nextAction.tab?<button type="button" onClick={()=>{setGuidedMode(true);setTab(nextAction.tab as WorkspaceTab)}} className="min-h-11 shrink-0 rounded-xl border border-slate-300 bg-white px-3 text-xs font-bold text-slate-800">ไปตรงนี้</button>:null}
         </div>
+        {!guidedMode&&nextAction.tab&&tabs.includes(nextAction.tab as WorkspaceTab)&&<button type="button" onClick={()=>{setGuidedMode(true);setTab(nextAction.tab as WorkspaceTab)}} className="mt-3 min-h-11 w-full rounded-xl border border-[#d4af37]/50 bg-white px-3 text-xs font-bold text-[#6f5510]">กลับให้ระบบพาไปงานถัดไป</button>}
       </div>
 
       <div className="soft-scroll min-h-0 flex-1 overflow-auto p-3 sm:p-4">
