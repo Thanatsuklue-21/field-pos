@@ -2,13 +2,14 @@
 
 import {useEffect,useMemo,useRef,useState} from "react";
 import Link from "next/link";
-import {BellRing,Bot,Boxes,CheckCircle2,ClipboardList,ListOrdered,ReceiptText,RefreshCw,ShieldCheck,X} from "lucide-react";
+import {BellRing,Bot,Boxes,CheckCircle2,ClipboardList,ListOrdered,Printer,ReceiptText,RefreshCw,ShieldCheck,X} from "lucide-react";
 import {api,type Bootstrap,type Session} from "@/lib/api-client";
 import {prepareExpenseIntent,readExpenseIntent,sendExpenseIntent,type ExpenseIntent} from "@/lib/expense-recovery";
 import {prepareCashShiftOpenIntent,readCashShiftOpenIntent,sendCashShiftOpenIntent,type CashShiftOpenIntent} from "@/lib/cash-shift-open-recovery";
 import {chooseWorkspaceNextAction} from "@/lib/workspace-guidance.mjs";
 import {orderStatusLabel,paymentSummaryLabel,saleStatusLabel} from "@/lib/operator-labels.mjs";
 import {useQueueActionRecovery} from "@/lib/use-queue-action-recovery";
+import SaleReceipt from "@/components/sale-receipt";
 
 type WorkspaceTab="queue"|"orders"|"stock"|"expense"|"status";
 type QueueRecipeUsage={id:string;name:string;perCup:number;unit:string};
@@ -23,7 +24,9 @@ type QueueOrder={
   items:QueueItem[];prepGroups?:QueuePrepGroup[];
 };
 type Sale={
-  id:string;billNo?:string;date:string;time:number;total:number;payment:string;paymentMethods?:string[];
+  id:string;billNo?:string;date:string;time:number;
+  subtotal?:number;discountTotal?:number;crmDiscount?:number;pointsRedeemed?:number;pointsAwarded?:number;
+  total:number;received?:number;change?:number;payment:string;paymentMethods?:string[];
   status:string;queueNo?:string;itemCount:number;orderStatus?:string|null;
   items?:Array<{id:string;name:string;variant?:string;qty:number;price:number}>;
 };
@@ -625,9 +628,26 @@ export default function PosDailyWorkspace({
                 </div>)}
               </div>
               <div className="mt-3 flex items-center justify-between border-t border-slate-200 pt-3"><span className="text-sm font-semibold">ยอดชำระ</span><b className="text-lg text-[#765b08]">฿{money(latestOrder.total)}</b></div>
-              <p className="mt-2 text-[10px] text-slate-500">ดูบิลได้ตรงนี้โดยไม่ออกจากหน้า POS · หากต้อง Refund/VOID ให้เปิดประวัติเต็มด้านล่าง</p>
+              <button type="button" onClick={()=>window.print()} className="mt-3 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-4 text-sm font-bold text-slate-800"><Printer size={16}/>พิมพ์ใบเสร็จล่าสุด</button>
+              <p className="mt-2 text-[10px] text-slate-500">พิมพ์บิลล่าสุดได้ตรงนี้โดยไม่ออกจากหน้า POS · หากต้อง Refund/VOID ให้เปิดประวัติเต็มด้านล่าง</p>
             </div>
           </details>}
+          {latestOrder&&<SaleReceipt sale={{
+            billNo:String(latestOrder.billNo||latestOrder.id),
+            queueNo:String(latestOrder.queueNo||"—"),
+            time:Number(latestOrder.time)||Date.now(),
+            subtotal:Number(latestOrder.subtotal??latestOrder.total)||0,
+            discountTotal:Number(latestOrder.discountTotal)||0,
+            crmDiscount:Number(latestOrder.crmDiscount)||0,
+            pointsRedeemed:Number(latestOrder.pointsRedeemed)||0,
+            pointsAwarded:Number(latestOrder.pointsAwarded)||0,
+            total:Number(latestOrder.total)||0,
+            payment:String(latestOrder.payment||""),
+            status:String(latestOrder.status||""),
+            received:Number(latestOrder.received??latestOrder.total)||0,
+            change:Number(latestOrder.change)||0,
+            items:(latestOrder.items||[]).map(item=>({name:item.name,variant:String(item.variant||""),qty:Number(item.qty)||0,price:Number(item.price)||0}))
+          }}/>} 
           {orderRows.length===0?<Empty text="ยังไม่มีออเดอร์ล่าสุด"/>:orderRows.map(sale=><div key={sale.id} className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-3">
             <div className="min-w-0">
               <div><b>{sale.queueNo||sale.billNo||"บิล"}</b><span className="ml-2 text-[10px] text-slate-500">{paymentSummaryLabel(sale.payment,sale.paymentMethods)}</span></div>
