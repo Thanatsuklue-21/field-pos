@@ -77,6 +77,8 @@ test("navigation keeps sale and production primary while secondary work stays on
   assert.ok(shell.includes("mobilePrimary"));
   assert.ok(shell.includes("mobileMore"));
   assert.ok(shell.includes("MoreHorizontal"));
+  assert.ok(shell.includes('aria-controls="field-mobile-more"'));
+  assert.ok(shell.includes("max-h-[calc(100dvh-110px)] overflow-y-auto overscroll-contain"));
   assert.ok(shell.includes("overflow-hidden rounded-[20px]"));
 });
 
