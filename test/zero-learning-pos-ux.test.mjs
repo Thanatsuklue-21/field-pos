@@ -185,8 +185,9 @@ test("split-payment handoff keeps the cashier on the same queue until every paye
   assert.match(pos,/กลุ่มเดียวกัน · คิว \{splitGroup\.queueNo\}/);
   assert.doesNotMatch(pos,/คิว \$\{splitGroup\.queueNo\}/);
   assert.match(handoff,/ยังไม่ต้องส่งคิวไปทำ/);
-  assert.match(handoff,/รับเงินคนถัดไปในคิวนี้/);
+  assert.match(handoff,/เลือกของคนถัดไป/);
   assert.match(handoff,/อย่าเปิดออเดอร์ใหม่จนกว่าจะรับเงินคิวนี้ครบ/);
+  assert.match(handoff,/เลือกแก้วของคนถัดไป แล้วกดรับเงินเมื่อพร้อม/);
   assert.match(handoff,/!lastSale\.offline&&!splitPaymentPending&&<button onClick=\{\(\)=>router\.push\("\/queue"\)\}/);
 });
 
