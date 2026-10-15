@@ -13,6 +13,7 @@ const loadPreflight=id=>loadBrowserModule("lib/close-day-device-preflight.ts",{
     .replace('import {listExpenseDeleteIntents,type ExpenseDeleteIntent} from "@/lib/expense-delete-recovery";','type ExpenseDeleteIntent=any; const listExpenseDeleteIntents=()=>[];')
     .replace('import {listStockWriteIntents,type StockWriteIntent} from "@/lib/stock-write-recovery";','type StockWriteIntent=any; const listStockWriteIntents=()=>[];')
     .replace('import {listOrderMutationIntents,type OrderMutationIntent} from "@/lib/order-mutation-recovery";','type OrderMutationIntent=any; const listOrderMutationIntents=()=>[];')
+    .replace('import {listCloseDayWriteIntents,type CloseDayWriteIntent} from "@/lib/close-day-write-recovery";','type CloseDayWriteIntent=any; const listCloseDayWriteIntents=()=>[];')
 });
 const storage=(entries={})=>{
   const data=new Map(Object.entries(entries));
@@ -126,12 +127,16 @@ test("Close Day checks device state before review and rechecks after final confi
   const firstPreflight=closing.indexOf("await refreshDevicePreflight()");
   const confirm=closing.indexOf("window.confirm");
   const finalPreflight=closing.indexOf("await refreshDevicePreflight()",firstPreflight+1);
-  const finalWrite=closing.indexOf('api<any>("/api/close-day"');
+  const reviewPersist=review.indexOf("prepareCloseDayWriteIntent");
+  const reviewSend=review.indexOf("submitCloseDayIntent",reviewPersist);
+  const finalPersist=closing.indexOf("prepareCloseDayWriteIntent",finalPreflight);
+  const finalSend=closing.indexOf("submitCloseDayIntent",finalPersist);
   assert.ok(review.indexOf("await refreshDevicePreflight()")>=0);
-  assert.ok(review.indexOf("await refreshDevicePreflight()")<review.indexOf('api<any>("/api/close-day/review"'));
+  assert.ok(review.indexOf("await refreshDevicePreflight()")<reviewPersist);
+  assert.ok(reviewPersist>=0&&reviewSend>reviewPersist);
   assert.ok(firstPreflight>=0&&firstPreflight<confirm);
   assert.ok(finalPreflight>confirm);
-  assert.ok(finalPreflight<finalWrite);
+  assert.ok(finalPersist>finalPreflight&&finalSend>finalPersist);
   assert.match(closing,/setReview\(null\).*พบรายการค้างใหม่ในเครื่องหลังการยืนยัน/);
 });
 
