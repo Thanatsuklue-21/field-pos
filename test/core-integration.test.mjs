@@ -200,10 +200,15 @@ test('real libSQL: full backup restores ledger and durable retry together',async
   const handler=createApi({db,origin:'https://field.test'});
   async function request(method,route,body){const res={writeHead(status){this.status=status},end(raw){this.body=JSON.parse(raw)}};await handler({method,query:{route},headers:{origin:'https://field.test',cookie:'field_session='+token,'x-csrf-token':'csrf'},body},res);return res}
   const exported=await request('GET','admin/backup/export');assert.equal(exported.status,200);assert.equal(exported.body.tables.posRequests.length,1);
+  const preview=await request('POST','admin/backup/preview',{backup:exported.body});assert.equal(preview.status,200);assert.match(preview.body.fingerprint,/^[0-9a-f]{64}$/);
   await act(db,sale.orderId,'select',{itemIndex:0,selected:true});
-  const revision=Number((await db.execute('SELECT revision FROM field_state')).rows[0].revision);
-  const restored=await request('POST','admin/backup/restore',{backup:exported.body,expectedRevision:revision,confirm:true});
-  assert.equal(restored.status,200);assert.equal((await sell(db,'backed-up-request')).replayed,true);
+  const revision=Number((await db.execute('SELECT revision FROM field_state')).rows[0].revision),requestKey='restore-backup-request';
+  const body={requestKey,backup:exported.body,backupFingerprint:preview.body.fingerprint,expectedRevision:revision,confirm:true};
+  const restored=await request('POST','admin/backup/restore',body);
+  assert.equal(restored.status,200);assert.equal(restored.body.requestKey,requestKey);assert.equal(restored.body.replayed,false);
+  const replayed=await request('POST','admin/backup/restore',body);
+  assert.equal(replayed.status,200);assert.equal(replayed.body.requestKey,requestKey);assert.equal(replayed.body.replayed,true);
+  assert.equal((await sell(db,'backed-up-request')).replayed,true);
   assert.equal((await state(db)).sales.length,1);assert.equal((await db.execute('SELECT * FROM field_stock_transactions')).rows.length,2);
 });
 
