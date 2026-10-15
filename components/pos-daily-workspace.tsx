@@ -126,6 +126,7 @@ export default function PosDailyWorkspace({
   const [browseOpen,setBrowseOpen]=useState(false);
   const [message,setMessage]=useState("");
   const [queueFeedback,setQueueFeedback]=useState("");
+  const [queueFresh,setQueueFresh]=useState(false);
 
   useEffect(()=>{
     if(!tabs.includes(tab)&&tabs[0])setTab(tabs[0]);
@@ -142,14 +143,14 @@ export default function PosDailyWorkspace({
     session,
     enabled:open&&canQueue&&online,
     onRecovered:result=>{
-      if(Array.isArray(result?.orders))setQueue(result.orders);
+      if(Array.isArray(result?.orders)){setQueue(result.orders);setQueueFresh(true)}
       setQueueFeedback("ตรวจปุ่มคิวก่อนหน้าแล้ว · ระบบไม่ทำรายการซ้ำ");
     },
     onRecoveryError:error=>setQueueFeedback(queueActionError(error?.message||"queue_action_result_unknown"))
   });
 
   async function runQueueTailAction(order:QueueOrder,action:"call"|"return"){
-    if(!online||queueActionLocked||busy)return;
+    if(!online||!queueFresh||queueActionLocked||busy)return;
     setQueueFeedback("");
     try{
       const result=await sendQueueAction({requestKey:crypto.randomUUID(),orderId:order.id,action});
@@ -161,7 +162,7 @@ export default function PosDailyWorkspace({
   }
 
   async function runQueueProductionAction(order:QueueOrder,item:QueueItem,itemIndex:number,action:"complete_item"|"waste_remake"){
-    if(!online||queueActionLocked||busy)return;
+    if(!online||!queueFresh||queueActionLocked||busy)return;
     if(action==="waste_remake"){
       const confirmed=window.confirm("บันทึกชงเสีย / ทำใหม่ "+item.name+" 1 แก้ว?\nระบบจะหักวัตถุดิบเพิ่มตามสูตรและบันทึก WASTE อัตโนมัติ");
       if(!confirmed)return;
@@ -225,7 +226,7 @@ export default function PosDailyWorkspace({
       results.forEach((result,index)=>{
         if(result.status!=="fulfilled")return;
         const key=jobs[index].key,value=result.value;
-        if(key==="queue")setQueue(Array.isArray(value.orders)?value.orders:[]);
+        if(key==="queue"){setQueue(Array.isArray(value.orders)?value.orders:[]);setQueueFresh(true)}
         if(key==="orders")setSales(Array.isArray(value.sales)?value.sales:[]);
         if(key==="expense")setExpenseData({
           expenses:Array.isArray(value.expenses)?value.expenses:[],
@@ -235,8 +236,11 @@ export default function PosDailyWorkspace({
         });
         if(key==="status")setControl(value.analysis||null);
       });
+      const queueJobIndex=jobs.findIndex(x=>x.key==="queue");
+      if(queueJobIndex>=0&&results[queueJobIndex]?.status==="rejected")setQueueFresh(false);
       if(results.some(x=>x.status==="rejected"))setMessage("บางข้อมูลโหลดไม่ได้ แต่หน้า POS และตะกร้ายังใช้งานต่อได้ตามปกติ");
     }catch{
+      if(canQueue)setQueueFresh(false);
       setMessage("โหลดงานร้านไม่สำเร็จ · หน้า POS ยังใช้งานต่อได้ตามปกติ");
     }finally{setBusy(false)}
   }
@@ -244,6 +248,7 @@ export default function PosDailyWorkspace({
   useEffect(()=>{
     if(!open){
       setWorkspaceReady(false);
+      setQueueFresh(false);
       return;
     }
     let active=true;
@@ -263,14 +268,24 @@ export default function PosDailyWorkspace({
 
   useEffect(()=>{
     if(!open)return;
-    const refreshOnFocus=()=>refresh().catch(()=>{});
-    window.addEventListener("focus",refreshOnFocus);
-    window.addEventListener("online",refreshOnFocus);
-    return()=>{
-      window.removeEventListener("focus",refreshOnFocus);
-      window.removeEventListener("online",refreshOnFocus);
+    if(!online)setQueueFresh(false);
+    const refreshAfterPause=()=>{
+      if(canQueue)setQueueFresh(false);
+      refresh().catch(()=>{if(canQueue)setQueueFresh(false)});
     };
-  },[open,online,session.csrf]);
+    const visible=()=>{if(document.visibilityState==="visible")refreshAfterPause()};
+    const wentOffline=()=>setQueueFresh(false);
+    window.addEventListener("focus",refreshAfterPause);
+    window.addEventListener("online",refreshAfterPause);
+    window.addEventListener("offline",wentOffline);
+    document.addEventListener("visibilitychange",visible);
+    return()=>{
+      window.removeEventListener("focus",refreshAfterPause);
+      window.removeEventListener("online",refreshAfterPause);
+      window.removeEventListener("offline",wentOffline);
+      document.removeEventListener("visibilitychange",visible);
+    };
+  },[open,online,session.csrf,canQueue]);
 
   function startDayError(code:string){
     const map:Record<string,string>={
@@ -584,6 +599,7 @@ export default function PosDailyWorkspace({
 
       <div className="soft-scroll min-h-0 flex-1 overflow-auto p-3 sm:p-4">
         {tab==="queue"&&canQueue&&<div className="space-y-2">
+          {!queueFresh&&<div role="status" aria-live="polite" className="rounded-2xl border border-amber-300 bg-amber-50 p-3 text-xs font-bold text-amber-900">ข้อมูลคิวยังไม่ยืนยัน · ปิดปุ่มทำ/เรียก/ส่งมอบชั่วคราว ระบบจะเปิดอีกครั้งเมื่อโหลดคิวล่าสุดสำเร็จ</div>}
           {(pendingQueueAction||queueRecoveryBlocked||queueFeedback)&&<div role="status" aria-live="polite" aria-atomic="true" className={"rounded-2xl border p-3 text-xs "+(pendingQueueAction||queueRecoveryBlocked?"border-amber-300 bg-amber-50 text-amber-950":"border-emerald-200 bg-emerald-50 text-emerald-800")}>
             <div className="flex items-center justify-between gap-2"><div><b>{queueRecoveryBlocked?"ปุ่มคิวถูกพักชั่วคราว":pendingQueueAction?"กำลังตรวจปุ่มคิวก่อนหน้า":"คิวอัปเดตแล้ว"}</b><p className="mt-1">{queueRecoveryBlocked?"ระบบป้องกันการกดซ้ำอ่านข้อมูลไม่ได้ · เปิดโหมดทำเครื่องดื่มเพื่อตรวจ":pendingQueueAction?"ไม่ต้องกดซ้ำ · ระบบจะใช้คำสั่งเดิมจนกว่าจะรู้ผล":queueFeedback}</p></div>{pendingQueueAction&&<button type="button" disabled={queueRecoveryBusy||busy||!online} onClick={()=>recoverQueueAction()} className="min-h-11 shrink-0 rounded-xl bg-amber-900 px-3 font-bold text-white disabled:opacity-40">ตรวจรายการเดิม</button>}</div>
           </div>}
@@ -597,8 +613,8 @@ export default function PosDailyWorkspace({
                 <Metric label="ทั้งหมด" value={total}/><Metric label="ทำแล้ว" value={ready}/><Metric label="เรียกแล้ว" value={called}/>
               </div>
               <p className="mt-2 line-clamp-2 text-xs text-slate-500">{(order.items||[]).map(x=>x.name+" ×"+x.qty).join(" · ")}</p>
-              {calledAll?<button type="button" disabled={!online||busy||queueActionLocked} onClick={()=>runQueueTailAction(order,"return")} className="mt-3 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#1F4D3A] px-4 text-sm font-black text-white disabled:opacity-40"><CheckCircle2 size={17}/>ลูกค้ารับแล้ว</button>:
-                isProductionHead&&readyAll?<button type="button" disabled={!online||busy||queueActionLocked} onClick={()=>runQueueTailAction(order,"call")} className="mt-3 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#d4af37] px-4 text-sm font-black text-black disabled:opacity-40"><BellRing size={17}/>เรียกบัตร {order.pagerNo||order.queueNo}</button>:
+              {calledAll?<button type="button" disabled={!online||!queueFresh||busy||queueActionLocked} onClick={()=>runQueueTailAction(order,"return")} className="mt-3 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#1F4D3A] px-4 text-sm font-black text-white disabled:opacity-40"><CheckCircle2 size={17}/>ลูกค้ารับแล้ว</button>:
+                isProductionHead&&readyAll?<button type="button" disabled={!online||!queueFresh||busy||queueActionLocked} onClick={()=>runQueueTailAction(order,"call")} className="mt-3 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#d4af37] px-4 text-sm font-black text-black disabled:opacity-40"><BellRing size={17}/>เรียกบัตร {order.pagerNo||order.queueNo}</button>:
                 isProductionHead&&currentPrepTask?<div className="mt-3 rounded-2xl border-2 border-[#d4af37] bg-[#fffaf0] p-3">
                   <div className="flex items-start justify-between gap-3">
                     <div><p className="text-[9px] font-black tracking-[.14em] text-[#9a7a16]">ทำต่อขั้นนี้</p><b className="mt-1 block text-sm text-slate-900">{currentPrepTask.item.name}</b><p className="mt-1 text-[11px] text-slate-600">{currentPrepTask.item.variant&&currentPrepTask.item.variant!=="Standard"?currentPrepTask.item.variant+" · ":""}ทำอีก {currentPrepTask.remaining} แก้ว</p></div>
@@ -609,8 +625,8 @@ export default function PosDailyWorkspace({
                     <div className="grid gap-1.5">{currentPrepRecipe.map(row=><div key={row.id} className="flex items-center justify-between gap-3 text-xs"><span className="min-w-0 truncate text-slate-600">{row.name}</span><b className="shrink-0 text-slate-900">{row.perCup} {row.unit}</b></div>)}</div>
                   </div>:<p className="mt-3 rounded-xl bg-white px-3 py-2 text-[11px] text-slate-500">สูตรละเอียดไม่พร้อมใน snapshot นี้ · หากไม่แน่ใจให้เปิดโหมดทำเครื่องดื่ม</p>}
                   <div className="mt-3 grid grid-cols-[auto_1fr] gap-2">
-                    <button type="button" disabled={!online||busy||queueActionLocked||queueItemCalled(currentPrepTask.item)} onClick={()=>runQueueProductionAction(order,currentPrepTask.item,currentPrepTask.index,"waste_remake")} className="min-h-12 rounded-xl border border-red-200 bg-white px-3 text-[10px] font-bold text-red-700 disabled:opacity-40">ชงเสีย / ทำใหม่</button>
-                    <button type="button" disabled={!online||busy||queueActionLocked} onClick={()=>runQueueProductionAction(order,currentPrepTask.item,currentPrepTask.index,"complete_item")} className="min-h-12 rounded-xl bg-[#d4af37] px-4 text-sm font-black text-black disabled:opacity-40">ทำ {currentPrepTask.item.name} ครบ</button>
+                    <button type="button" disabled={!online||!queueFresh||busy||queueActionLocked||queueItemCalled(currentPrepTask.item)} onClick={()=>runQueueProductionAction(order,currentPrepTask.item,currentPrepTask.index,"waste_remake")} className="min-h-12 rounded-xl border border-red-200 bg-white px-3 text-[10px] font-bold text-red-700 disabled:opacity-40">ชงเสีย / ทำใหม่</button>
+                    <button type="button" disabled={!online||!queueFresh||busy||queueActionLocked} onClick={()=>runQueueProductionAction(order,currentPrepTask.item,currentPrepTask.index,"complete_item")} className="min-h-12 rounded-xl bg-[#d4af37] px-4 text-sm font-black text-black disabled:opacity-40">ทำ {currentPrepTask.item.name} ครบ</button>
                   </div>
                 </div>:
                 <p className="mt-3 rounded-xl bg-slate-50 px-3 py-2 text-center text-[11px] text-slate-500">รอคิวก่อนหน้า · ระบบเรียงลำดับให้แล้ว</p>}

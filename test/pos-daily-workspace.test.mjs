@@ -291,7 +291,7 @@ test("workspace queue tail actions share the same pending intent and fail closed
   assert.match(hub,/recoverQueueAction/);
   assert.match(hub,/ไม่ต้องกดซ้ำ/);
   assert.match(hub,/role="status" aria-live="polite" aria-atomic="true"/);
-  assert.match(hub,/disabled=\{!online\|\|busy\|\|queueActionLocked\}/);
+  assert.match(hub,/disabled=\{!online\|\|!queueFresh\|\|busy\|\|queueActionLocked\}/);
   assert.match(hub,/FullLink href="\/queue" label="เปิดโหมดทำเครื่องดื่ม \/ ดูคิวเต็ม"/);
 });
 
@@ -345,4 +345,34 @@ test("progressive disclosure is presentation-only and cannot mutate money queue 
   assert.doesNotMatch(navigation,/\/api\/pos\/queue/);
   assert.doesNotMatch(navigation,/\/api\/expenses/);
   assert.doesNotMatch(navigation,/\/api\/stock/);
+});
+
+
+test("workspace fails closed when the latest queue snapshot cannot be confirmed",async()=>{
+  const hub=await read("components/pos-daily-workspace.tsx");
+  assert.match(hub,/const \[queueFresh,setQueueFresh\]=useState\(false\)/);
+  assert.match(hub,/if\(!online\|\|!queueFresh\|\|queueActionLocked\|\|busy\)return/);
+  assert.match(hub,/if\(key==="queue"\)\{setQueue\(Array\.isArray\(value\.orders\)\?value\.orders:\[\]\);setQueueFresh\(true\)\}/);
+  assert.match(hub,/queueJobIndex>=0&&results\[queueJobIndex\]\?\.status==="rejected"\)setQueueFresh\(false\)/);
+  assert.match(hub,/ข้อมูลคิวยังไม่ยืนยัน · ปิดปุ่มทำ\/เรียก\/ส่งมอบชั่วคราว/);
+  assert.ok((hub.match(/disabled=\{!online\|\|!queueFresh\|\|busy\|\|queueActionLocked/g)||[]).length>=3);
+});
+
+test("workspace invalidates queue freshness across connectivity and app-resume boundaries",async()=>{
+  const hub=await read("components/pos-daily-workspace.tsx");
+  assert.match(hub,/if\(!online\)setQueueFresh\(false\)/);
+  assert.match(hub,/const refreshAfterPause=\(\)=>\{/);
+  assert.match(hub,/if\(canQueue\)setQueueFresh\(false\);/);
+  assert.match(hub,/window\.addEventListener\("focus",refreshAfterPause\)/);
+  assert.match(hub,/window\.addEventListener\("online",refreshAfterPause\)/);
+  assert.match(hub,/const wentOffline=\(\)=>setQueueFresh\(false\)/);
+  assert.match(hub,/window\.addEventListener\("offline",wentOffline\)/);
+  assert.match(hub,/window\.removeEventListener\("offline",wentOffline\)/);
+  assert.match(hub,/document\.addEventListener\("visibilitychange",visible\)/);
+  assert.match(hub,/document\.visibilityState==="visible"/);
+});
+
+test("queue recovery response can restore freshness only when it includes a server queue snapshot",async()=>{
+  const hub=await read("components/pos-daily-workspace.tsx");
+  assert.match(hub,/onRecovered:result=>\{[\s\S]{0,160}if\(Array\.isArray\(result\?\.orders\)\)\{setQueue\(result\.orders\);setQueueFresh\(true\)\}/);
 });
