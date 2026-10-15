@@ -257,7 +257,7 @@ test("workspace start-day recommendation focuses the exact opening cash control 
   assert.match(hub,/scrollIntoView\(\{behavior:"smooth",block:"nearest"\}\)/);
   assert.match(hub,/openingCashRef\.current\?\.focus\(\)/);
   assert.match(hub,/"เริ่มงาน"/);
-  assert.match(hub,/>ไปตรงนี้<\/button>/);
+  assert.match(hub,/>ทำตามนี้<\/button>/);
 });
 
 
@@ -307,4 +307,34 @@ test("workspace keeps FIFO obvious: only the production head can be called while
   const queueBlock=hub.slice(queueStart,queueEnd);
   assert.equal((queueBlock.match(/runQueueTailAction\(order,"call"\)/g)||[]).length,1);
   assert.equal((queueBlock.match(/runQueueTailAction\(order,"return"\)/g)||[]).length,1);
+});
+
+
+test("Today Workspace hides secondary task tabs until the operator asks for them",async()=>{
+  const hub=await read("components/pos-daily-workspace.tsx");
+  assert.match(hub,/const \[browseOpen,setBrowseOpen\]=useState\(false\)/);
+  assert.match(hub,/aria-expanded=\{browseOpen\}/);
+  assert.match(hub,/aria-controls="field-workspace-other-tasks"/);
+  assert.match(hub,/\{browseOpen\?"ซ่อนงานอื่น":"ดูงานอื่น"\}/);
+  assert.match(hub,/\{browseOpen&&<div id="field-workspace-other-tasks"/);
+  assert.match(hub,/setBrowseOpen\(false\)/);
+});
+
+test("guided workspace has one obvious exit back to selling when no corrective work outranks sales",async()=>{
+  const hub=await read("components/pos-daily-workspace.tsx");
+  assert.match(hub,/nextAction\.tone==="ready"\?<button type="button" onClick=\{onClose\}/);
+  assert.match(hub,/>รับออเดอร์<\/button>/);
+  assert.match(hub,/nextAction\.tab\?<button type="button"/);
+  assert.match(hub,/>ทำตามนี้<\/button>/);
+});
+
+test("guided navigation changes only presentation and preserves financial and stock authority",async()=>{
+  const hub=await read("components/pos-daily-workspace.tsx");
+  const guideStart=hub.indexOf('aria-expanded={browseOpen}');
+  const guideEnd=hub.indexOf('<div className="soft-scroll',guideStart);
+  const guide=hub.slice(guideStart,guideEnd);
+  assert.doesNotMatch(guide,/method:"POST"/);
+  assert.doesNotMatch(guide,/\/api\/pos\/queue/);
+  assert.doesNotMatch(guide,/\/api\/expenses/);
+  assert.doesNotMatch(guide,/\/api\/stock/);
 });
