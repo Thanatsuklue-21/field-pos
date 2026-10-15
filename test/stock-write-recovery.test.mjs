@@ -140,7 +140,26 @@ test("Stock UI persists Purchase Edit and Cancel before network send and require
   assert.doesNotMatch(cancel,/api\("\/api\/stock\/purchases/);
 });
 
-test("Close Day stock blocker names purchase edit and cancel intents accurately",async()=>{
+test("Close Day stock blocker names master creation and purchase corrections accurately",async()=>{
   const preflight=await readFile(new URL("../lib/close-day-device-preflight.ts",import.meta.url),"utf8");
+  assert.match(preflight,/intent\.operation==="ingredientCreate"\?"การสร้าง Stock Master"/);
   assert.match(preflight,/intent\.operation==="purchaseEdit"\?"การแก้รายการรับเข้า":"การยกเลิกรายการรับเข้า"/);
+});
+
+test("ingredient creation shares the same durable Stock recovery channel",async t=>{
+  const x=await mod(t),store=storage();
+  const intent=x.prepareStockWriteIntent("owner","ingredientCreate","2026-10-15",{requestKey:"ingredient-create-0001",name:"Matcha",unit:"g",safetyStock:100,costKind:"powder",wasteMargin:0},store);
+  assert.equal(intent.operation,"ingredientCreate");
+  assert.equal(x.readStockWriteIntent("owner",store)?.body.name,"Matcha");
+});
+
+test("Stock UI persists a new Master before network send and requires exact ACK",async()=>{
+  const ui=await readFile(new URL("../app/stock/page.tsx",import.meta.url),"utf8");
+  assert.match(ui,/operation==="ingredientCreate"\)return \{path:"\/api\/stock\/ingredients",method:"POST"\}/);
+  assert.match(ui,/prepareStockWriteIntent\(session\.user\.id,"ingredientCreate",today\(\),body\)/);
+  assert.match(ui,/result\?\.requestKey===body\.requestKey/);
+  assert.match(ui,/result\?\.performedBy===intent\.actorId/);
+  const save=ui.slice(ui.indexOf("async function saveMaster"),ui.indexOf("async function ingredientAction"));
+  assert.ok(save.indexOf("prepareStockWriteIntent")<save.indexOf("submitStockIntent"));
+  assert.doesNotMatch(save,/else await api\("\/api\/stock\/ingredients"/);
 });
