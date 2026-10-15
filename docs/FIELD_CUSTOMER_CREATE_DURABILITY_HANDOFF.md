@@ -1,6 +1,6 @@
 # FIELD Customer Master create durability handoff
 
-Baseline: `04ee27e7d61421821835202d2ec5fa3ecf9639bd`.
+Baseline: `668326a4386eb52f16334bec70ce77082d3f659d` (latest main after release-marker updates).
 
 ## Evidence
 
