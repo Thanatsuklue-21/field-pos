@@ -259,10 +259,12 @@ test("workspace start-day recommendation focuses the exact opening cash control 
 test("workspace completes the normal first-queue production flow in-place",async()=>{
   const hub=await read("components/pos-daily-workspace.tsx");
   assert.match(hub,/useQueueActionRecovery/);
-  assert.match(hub,/runQueueProductionAction/);
-  assert.match(hub,/action:"complete_item"/);
-  assert.match(hub,/action:"waste_remake"/);
+  assert.match(hub,/runQueueProductionAction\(order:QueueOrder,item:QueueItem,itemIndex:number,action:"complete_item"\|"waste_remake"\)/);
+  assert.match(hub,/action==="complete_item"/);
+  assert.match(hub,/action==="waste_remake"/);
   assert.match(hub,/expectedReadyQty:n\(item\.readyQty\)/);
+  assert.match(hub,/reason:"ชงเสีย \/ ทำใหม่"/);
+  assert.match(hub,/const result=await sendQueueAction\(body\)/);
   assert.match(hub,/สูตรต่อแก้ว/);
   assert.match(hub,/ห้ามข้ามคิว/);
   assert.match(hub,/ทำ \{currentPrepTask\.item\.name\} ครบ/);
