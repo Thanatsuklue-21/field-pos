@@ -72,3 +72,11 @@ test("backup restore UI keeps the original request on unknown acknowledgement",a
   assert.match(ui,/ห้ามเริ่ม Restore ด้วยไฟล์อื่น/);
   assert.match(ui,/backup_restore_ack_unknown/);
 });
+
+
+test("backup UI keeps ambiguous pending restore instead of clearing on generic HTTP 400",async()=>{
+  const ui=await readFile(new URL("../app/backup/page.tsx",import.meta.url),"utf8");
+  assert.match(ui,/e\?\.message==="revision_conflict"/);
+  assert.doesNotMatch(ui,/\[400\]\.includes\(Number\(e\?\.status\)\)/);
+  assert.match(ui,/Only clear automatically when the server proves the request never committed/);
+});
