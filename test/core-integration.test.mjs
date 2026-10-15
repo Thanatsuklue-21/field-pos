@@ -39,12 +39,13 @@ async function apiPost(handler,token,route,body){
   return res;
 }
 async function reviewedClose(handler,token,countedCash,{openingCash=100,varianceReason='test reconciliation',confirmVariance=true}={}){
-  if(countedCash===''||countedCash===null||countedCash===undefined)return apiPost(handler,token,'close-day',{countedCash});
-  const opened=await apiPost(handler,token,['cash-shift','open'],{openingCash});
+  const date=bangkokDate();
+  if(countedCash===''||countedCash===null||countedCash===undefined)return apiPost(handler,token,'close-day',{requestKey:crypto.randomUUID(),date,openingCash,countedCash});
+  const opened=await apiPost(handler,token,['cash-shift','open'],{requestKey:crypto.randomUUID(),date,openingCash});
   if(opened.status!==201&&opened.body?.error!=='cash_shift_already_opened')return opened;
-  const review=await apiPost(handler,token,['close-day','review'],{firstCount:countedCash,secondCount:countedCash});
+  const review=await apiPost(handler,token,['close-day','review'],{requestKey:crypto.randomUUID(),date,firstCount:countedCash,secondCount:countedCash});
   if(review.status!==200)return review;
-  return apiPost(handler,token,'close-day',{countedCash,reviewId:review.body.review.id,varianceReason,confirmVariance});
+  return apiPost(handler,token,'close-day',{requestKey:crypto.randomUUID(),date,openingCash,countedCash,reviewId:review.body.review.id,varianceReason,confirmVariance});
 }
 
 test('real libSQL: checkout → grouped preparation → early/full call → handoff → close day',async t=>{
