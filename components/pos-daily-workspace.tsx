@@ -11,9 +11,16 @@ import {orderStatusLabel,paymentSummaryLabel,saleStatusLabel} from "@/lib/operat
 import {useQueueActionRecovery} from "@/lib/use-queue-action-recovery";
 
 type WorkspaceTab="queue"|"orders"|"stock"|"expense"|"status";
+type QueueRecipeUsage={id:string;name:string;perCup:number;unit:string};
+type QueuePrepGroupItem={id:string;name:string;variant?:string;qty:number;pendingQty?:number;recipeUsage?:QueueRecipeUsage[]};
+type QueuePrepGroup={id:string;label:string;batchMode?:"NONE"|"SEQUENTIAL"|"COMBINED";items:QueuePrepGroupItem[]};
+type QueueItem={
+  id:string;name:string;variant?:string;qty:number;readyQty?:number;calledQty?:number;prepSelected?:boolean;wasteCount?:number;
+  prepGroup?:{id:string;label?:string;batchMode?:string;compatibilityKey?:string};
+};
 type QueueOrder={
   id:string;queueNo:string;pagerNo:number;status:string;time:number;
-  items:Array<{name:string;qty:number;readyQty?:number;calledQty?:number}>;
+  items:QueueItem[];prepGroups?:QueuePrepGroup[];
 };
 type Sale={
   id:string;billNo?:string;date:string;time:number;total:number;payment:string;paymentMethods?:string[];
@@ -41,8 +48,29 @@ const money=(value:any)=>THAI_MONEY_FORMATTER.format(n(value));
 const readinessLabel=(value:string)=>value==="READY"?"พร้อม":value==="WARN"?"มีจุดต้องดู":"ต้องแก้ก่อน";
 const checkStatusLabel=(value:string)=>value==="READY"?"พร้อม":value==="WARN"?"เตือน":"ต้องแก้";
 const queueOrderCalled=(order:QueueOrder)=>(order.items||[]).length>0&&(order.items||[]).every(item=>n(item.calledQty)>=n(item.qty));
+const queueItemDone=(item:QueueItem)=>n(item.readyQty)>=n(item.qty);
+const queueItemCalled=(item:QueueItem)=>n(item.calledQty)>=n(item.qty);
+function nextWorkspacePrepTask(order:QueueOrder|null){
+  if(!order)return null;
+  for(let index=0;index<(order.items||[]).length;index++){
+    const item=order.items[index];
+    if(!queueItemDone(item))return {item,index,remaining:Math.max(0,n(item.qty)-n(item.readyQty))};
+  }
+  return null;
+}
+function workspaceRecipeUsage(order:QueueOrder|null,item:QueueItem|null){
+  if(!order||!item)return [] as QueueRecipeUsage[];
+  const group=(order.prepGroups||[]).find(row=>String(row.id)===String(item.prepGroup?.id||""));
+  const match=(group?.items||[]).find(row=>String(row.id)===String(item.id)&&String(row.variant||"")===String(item.variant||""));
+  return Array.isArray(match?.recipeUsage)?match!.recipeUsage!:[];
+}
 function queueActionError(code:string){
   return code==="fifo_violation"?"ต้องทำคิวก่อนหน้าให้เสร็จก่อน":
+    code==="queue_state_changed"?"สถานะคิวเปลี่ยนแล้ว · ระบบโหลดข้อมูลล่าสุดก่อน":
+    code==="recipe_unavailable"?"ไม่พบสูตรที่ใช้ตอนขาย · เปิดโหมดทำเครื่องดื่มเพื่อตรวจ":
+    code==="waste_after_call_not_supported"?"เมนูนี้เรียกลูกค้าแล้ว จึงย้อนเป็นชงเสียไม่ได้":
+    code.startsWith("stock_shortage:")?"วัตถุดิบไม่พอสำหรับทำใหม่ · ตรวจ Stock ก่อน":
+    code.startsWith("ingredient_missing:")?"สูตรอ้างวัตถุดิบที่ไม่มีใน Stock Master":
     code==="order_not_ready"?"ยังทำเครื่องดื่มไม่ครบ จึงยังเรียกลูกค้าไม่ได้":
     code==="order_not_complete"?"ยังเรียกลูกค้าไม่ครบ จึงยังบันทึกว่าส่งมอบไม่ได้":
     code==="pending_queue_action_exists"?"มีปุ่มคิวก่อนหน้าที่ยังไม่ทราบผล · ระบบจะตรวจรายการเดิมก่อน":
@@ -124,6 +152,31 @@ export default function PosDailyWorkspace({
       const result=await sendQueueAction({requestKey:crypto.randomUUID(),orderId:order.id,action});
       if(Array.isArray(result?.orders))setQueue(result.orders);
       setQueueFeedback(action==="call"?"เรียกลูกค้าแล้ว · รอส่งมอบเมื่อรับเครื่องดื่ม":"บันทึกส่งมอบแล้ว · ไปคิวถัดไปได้");
+    }catch(error:any){
+      setQueueFeedback(queueActionError(error?.message||"queue_action_result_unknown"));
+    }
+  }
+
+  async function runQueueProductionAction(order:QueueOrder,item:QueueItem,itemIndex:number,action:"complete_item"|"waste_remake"){
+    if(!online||queueActionLocked||busy)return;
+    if(action==="waste_remake"){
+      const confirmed=window.confirm("บันทึกชงเสีย / ทำใหม่ "+item.name+" 1 แก้ว?\nระบบจะหักวัตถุดิบเพิ่มตามสูตรและบันทึก WASTE อัตโนมัติ");
+      if(!confirmed)return;
+    }
+    setQueueFeedback("");
+    try{
+      const body=action==="complete_item"
+        ?{requestKey:crypto.randomUUID(),orderId:order.id,itemIndex,action,expectedReadyQty:n(item.readyQty)}
+        :{requestKey:crypto.randomUUID(),orderId:order.id,itemIndex,action,reason:"ชงเสีย / ทำใหม่"};
+      const result=await sendQueueAction(body);
+      if(Array.isArray(result?.orders))setQueue(result.orders);
+      if(action==="complete_item"){
+        const updated=(result?.orders||[]).find((row:any)=>row.id===order.id);
+        const next=nextWorkspacePrepTask(updated||null);
+        setQueueFeedback(next?"เสร็จแล้ว · ทำ "+next.item.name+" ต่อ":"ทำครบทั้งบัตรแล้ว · เรียกลูกค้าได้");
+      }else{
+        setQueueFeedback("บันทึกชงเสียแล้ว · ระบบหัก Stock เพิ่มตามสูตร · ทำเมนูเดิมใหม่ต่อ");
+      }
     }catch(error:any){
       setQueueFeedback(queueActionError(error?.message||"queue_action_result_unknown"));
     }
@@ -393,6 +446,8 @@ export default function PosDailyWorkspace({
     return {productionHead,queueRows,queueCards};
   },[queue]);
   const {productionHead,queueRows,queueCards}=queueView;
+  const currentPrepTask=useMemo(()=>nextWorkspacePrepTask(productionHead),[productionHead]);
+  const currentPrepRecipe=useMemo(()=>workspaceRecipeUsage(productionHead,currentPrepTask?.item||null),[productionHead,currentPrepTask?.item]);
   const orderRows=useMemo(()=>sales.slice(0,7),[sales]);
   const latestOrder=orderRows[0]||null;
   const expenseRows=useMemo(()=>(expenseData?.expenses||[]).filter(row=>!expenseData?.businessDate||row.date===expenseData.businessDate).slice(0,5),[expenseData?.expenses,expenseData?.businessDate]);
@@ -533,7 +588,20 @@ export default function PosDailyWorkspace({
               <p className="mt-2 line-clamp-2 text-xs text-slate-500">{(order.items||[]).map(x=>x.name+" ×"+x.qty).join(" · ")}</p>
               {calledAll?<button type="button" disabled={!online||busy||queueActionLocked} onClick={()=>runQueueTailAction(order,"return")} className="mt-3 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#1F4D3A] px-4 text-sm font-black text-white disabled:opacity-40"><CheckCircle2 size={17}/>ลูกค้ารับแล้ว</button>:
                 isProductionHead&&readyAll?<button type="button" disabled={!online||busy||queueActionLocked} onClick={()=>runQueueTailAction(order,"call")} className="mt-3 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#d4af37] px-4 text-sm font-black text-black disabled:opacity-40"><BellRing size={17}/>เรียกบัตร {order.pagerNo||order.queueNo}</button>:
-                isProductionHead?<Link href="/queue" className="mt-3 flex min-h-12 w-full items-center justify-center rounded-xl border border-[#d4af37]/60 bg-[#fffaf0] px-4 text-sm font-black text-[#6f5510]">ทำคิวนี้ต่อ</Link>:
+                isProductionHead&&currentPrepTask?<div className="mt-3 rounded-2xl border-2 border-[#d4af37] bg-[#fffaf0] p-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div><p className="text-[9px] font-black tracking-[.14em] text-[#9a7a16]">ทำต่อขั้นนี้</p><b className="mt-1 block text-sm text-slate-900">{currentPrepTask.item.name}</b><p className="mt-1 text-[11px] text-slate-600">{currentPrepTask.item.variant&&currentPrepTask.item.variant!=="Standard"?currentPrepTask.item.variant+" · ":""}ทำอีก {currentPrepTask.remaining} แก้ว</p></div>
+                    <span className="rounded-full bg-white px-2.5 py-1 text-[10px] font-black text-[#765b08]">ห้ามข้ามคิว</span>
+                  </div>
+                  {currentPrepRecipe.length>0?<div className="mt-3 rounded-xl border border-[#d4af37]/30 bg-white p-2.5">
+                    <p className="mb-1.5 text-[10px] font-black text-slate-600">สูตรต่อแก้ว</p>
+                    <div className="grid gap-1.5">{currentPrepRecipe.map(row=><div key={row.id} className="flex items-center justify-between gap-3 text-xs"><span className="min-w-0 truncate text-slate-600">{row.name}</span><b className="shrink-0 text-slate-900">{row.perCup} {row.unit}</b></div>)}</div>
+                  </div>:<p className="mt-3 rounded-xl bg-white px-3 py-2 text-[11px] text-slate-500">สูตรละเอียดไม่พร้อมใน snapshot นี้ · หากไม่แน่ใจให้เปิดโหมดทำเครื่องดื่ม</p>}
+                  <div className="mt-3 grid grid-cols-[auto_1fr] gap-2">
+                    <button type="button" disabled={!online||busy||queueActionLocked||queueItemCalled(currentPrepTask.item)} onClick={()=>runQueueProductionAction(order,currentPrepTask.item,currentPrepTask.index,"waste_remake")} className="min-h-12 rounded-xl border border-red-200 bg-white px-3 text-[10px] font-bold text-red-700 disabled:opacity-40">ชงเสีย / ทำใหม่</button>
+                    <button type="button" disabled={!online||busy||queueActionLocked} onClick={()=>runQueueProductionAction(order,currentPrepTask.item,currentPrepTask.index,"complete_item")} className="min-h-12 rounded-xl bg-[#d4af37] px-4 text-sm font-black text-black disabled:opacity-40">ทำ {currentPrepTask.item.name} ครบ</button>
+                  </div>
+                </div>:
                 <p className="mt-3 rounded-xl bg-slate-50 px-3 py-2 text-center text-[11px] text-slate-500">รอคิวก่อนหน้า · ระบบเรียงลำดับให้แล้ว</p>}
             </div>;
           })}
