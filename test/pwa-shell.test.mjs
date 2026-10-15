@@ -23,6 +23,18 @@ test("PWA registration is attached to the real app shell",async()=>{
   assert.match(reg,/scope:"\/"}/);
 });
 
+test("PWA viewport enables safe-area insets on cutout and gesture devices",async()=>{
+  const layout=await read("app/layout.tsx");
+  const css=await read("app/globals.css");
+  assert.match(layout,/import type \{Metadata,Viewport\} from "next"/);
+  assert.match(layout,/export const viewport:Viewport=/);
+  assert.match(layout,/width:"device-width"/);
+  assert.match(layout,/initialScale:1/);
+  assert.match(layout,/viewportFit:"cover"/);
+  assert.match(css,/env\(safe-area-inset-top\)/);
+  assert.match(css,/env\(safe-area-inset-bottom\)/);
+});
+
 test("service worker never owns API or mutation requests",async()=>{
   const sw=await read("public/sw.js");
   assert.match(sw,/if\(request\.method!==\"GET\"\)return/);
