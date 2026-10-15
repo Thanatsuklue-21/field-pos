@@ -116,14 +116,13 @@ export default function PosDailyWorkspace({
   const [startDayFeedback,setStartDayFeedback]=useState("");
   const expenseSavingRef=useRef(false);
   const startDaySavingRef=useRef(false);
-  const autoRouteRef=useRef(false);
-  const manualTabRef=useRef(false);
   const dialogRef=useRef<HTMLElement|null>(null);
   const closeButtonRef=useRef<HTMLButtonElement|null>(null);
   const startDayCardRef=useRef<HTMLDivElement|null>(null);
   const openingCashRef=useRef<HTMLInputElement|null>(null);
   const [busy,setBusy]=useState(false);
   const [workspaceReady,setWorkspaceReady]=useState(false);
+  const [guidedMode,setGuidedMode]=useState(true);
   const [message,setMessage]=useState("");
   const [queueFeedback,setQueueFeedback]=useState("");
 
@@ -480,16 +479,14 @@ export default function PosDailyWorkspace({
 
   useEffect(()=>{
     if(!open){
-      autoRouteRef.current=false;
-      manualTabRef.current=false;
+      setGuidedMode(true);
       return;
     }
-    if(!workspaceReady||autoRouteRef.current||manualTabRef.current)return;
+    if(!workspaceReady||!guidedMode)return;
     if(nextAction.tab&&tabs.includes(nextAction.tab as WorkspaceTab)){
       setTab(nextAction.tab as WorkspaceTab);
     }
-    autoRouteRef.current=true;
-  },[open,workspaceReady,nextAction.tab,tabs.join("|")]);
+  },[open,workspaceReady,guidedMode,nextAction.tab,tabs.join("|")]);
 
   if(!open)return null;
 
@@ -542,10 +539,15 @@ export default function PosDailyWorkspace({
         </div>:<div className={"rounded-2xl border p-3 "+(expenseData.shift.status==="open"?"border-emerald-200 bg-emerald-50":"border-slate-200 bg-slate-100")}><div className="flex items-start justify-between gap-3"><div><b className="text-sm">{expenseData.shift.status==="open"?"ร้านเปิดแล้ว":"วันนี้ปิดยอดแล้ว"}</b><p className="mt-1 text-xs text-slate-600">{expenseData.shift.status==="open"?"เงินตั้งต้น ฿"+money(expenseData.shift.openingCash)+" ถูกล็อกแล้ว · รับออเดอร์ต่อได้":"วันทำการนี้ปิดแล้ว ระบบไม่เปิดซ้ำ"}</p></div><span className={"rounded-full px-2 py-1 text-[10px] font-bold "+(expenseData.shift.status==="open"?"bg-emerald-200 text-emerald-900":"bg-slate-200 text-slate-700")}>{expenseData.shift.status==="open"?"พร้อมขาย":"ปิดแล้ว"}</span></div></div>}
       </div>}
 
+      <div className="flex items-center justify-between gap-2 border-b border-slate-200 bg-white px-3 py-2">
+        <div className="min-w-0"><b className="text-xs text-slate-800">{guidedMode?"โหมดนำทางอัตโนมัติ":"กำลังดูงานเอง"}</b><p className="mt-0.5 truncate text-[10px] text-slate-500">{guidedMode?"ระบบจะพาไปงานสำคัญถัดไปหลังแต่ละขั้นตอน":"เลือกดูแท็บได้อิสระ · ระบบจะไม่เปลี่ยนแท็บให้เอง"}</p></div>
+        {!guidedMode&&<button type="button" onClick={()=>{setGuidedMode(true);if(nextAction.tab&&tabs.includes(nextAction.tab as WorkspaceTab))setTab(nextAction.tab as WorkspaceTab)}} className="min-h-11 shrink-0 rounded-xl border border-[#1F4D3A]/30 bg-emerald-50 px-3 text-xs font-black text-[#1F4D3A]">กลับตามระบบ</button>}
+      </div>
+
       <div className={"grid gap-1 border-b border-slate-200 bg-white p-2 "+(meta.filter(x=>x.allowed).length>=5?"grid-cols-5":"grid-cols-4")}>
         {meta.filter(x=>x.allowed).map(({key,label,icon:Icon,count})=><button
           key={key}
-          onClick={()=>{manualTabRef.current=true;setTab(key)}}
+          onClick={()=>{setGuidedMode(false);setTab(key)}}
           className={"relative flex min-h-12 flex-col items-center justify-center rounded-xl px-1 text-[10px] font-bold "+(tab===key?"bg-[#d4af37]/20 text-[#6f5510]":"text-slate-600 hover:bg-slate-100")}
         >
           <Icon size={17}/><span className="mt-0.5">{label}</span>
@@ -570,7 +572,7 @@ export default function PosDailyWorkspace({
           {nextAction.action==="start_day"?<button type="button" onClick={()=>{
             startDayCardRef.current?.scrollIntoView({behavior:"smooth",block:"nearest"});
             requestAnimationFrame(()=>openingCashRef.current?.focus());
-          }} className="min-h-11 shrink-0 rounded-xl bg-[#1F4D3A] px-3 text-xs font-bold text-white">{pendingOpenShift?"ตรวจรายการเดิม":"เริ่มงาน"}</button>:nextAction.tab?<button type="button" onClick={()=>{manualTabRef.current=true;setTab(nextAction.tab as WorkspaceTab)}} className="min-h-11 shrink-0 rounded-xl border border-slate-300 bg-white px-3 text-xs font-bold text-slate-800">ไปตรงนี้</button>:null}
+          }} className="min-h-11 shrink-0 rounded-xl bg-[#1F4D3A] px-3 text-xs font-bold text-white">{pendingOpenShift?"ตรวจรายการเดิม":"เริ่มงาน"}</button>:nextAction.tab&&!guidedMode?<button type="button" onClick={()=>{setGuidedMode(true);setTab(nextAction.tab as WorkspaceTab)}} className="min-h-11 shrink-0 rounded-xl bg-[#1F4D3A] px-3 text-xs font-bold text-white">กลับตามระบบ</button>:nextAction.tab&&guidedMode?<span className="shrink-0 rounded-full bg-white px-2.5 py-1.5 text-[10px] font-black text-[#1F4D3A]">ระบบพาไปงานนี้</span>:null}
         </div>
       </div>
 
