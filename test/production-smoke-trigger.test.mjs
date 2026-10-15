@@ -49,3 +49,9 @@ test("production smoke covers root redirect, go-live routes and auth guard",()=>
   assert.match(source,/content-security-policy/);
   assert.match(source,/x-content-type-options/);
 });
+
+
+test("scheduled release resolution follows main first-parent history so merge commits remain visible",()=>{
+  assert.match(source,/git log --first-parent -1 --format=%H -- \\.vercel-release/);
+  assert.doesNotMatch(source,/git log -1 --format=%H -- \\.vercel-release/);
+});
