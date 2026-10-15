@@ -251,3 +251,34 @@ test("read preflight includes persisted start-day intents",async()=>{
   assert.equal(result.ok,false);
   assert.equal(result.blockers[0].kind,"cash_shift_open_unknown");
 });
+
+
+test("same-day unresolved Close Day review or commit blocks a new close flow",async()=>{
+  const api=await loadPreflight("close-day-write"),date="2026-10-15";
+  const result=api.buildCloseDayDevicePreflight({
+    actorId:"owner",businessDate:date,offlineRows:[],cashPending:null,promptPending:null,expenseIntents:[],cashMovementIntents:[],expenseDeleteIntents:[],
+    stockWriteIntents:[],orderMutationIntents:[],cashShiftOpenIntents:[],
+    closeDayWriteIntents:[
+      {version:1,actorId:"owner",createdAt:1,body:{requestKey:"close-review-pending-01",operation:"review",date,firstCount:500,secondCount:500}},
+      {version:1,actorId:"owner-2",createdAt:2,body:{requestKey:"close-commit-pending-01",operation:"close",date,openingCash:500,countedCash:500,reviewId:"r1",varianceReason:"",confirmVariance:false}}
+    ]
+  });
+  assert.equal(result.ok,false);
+  assert.deepEqual(result.blockers.map(x=>x.kind),["close_day_write_unknown","close_day_write_unknown"]);
+  assert.equal(result.blockers[0].route,"/close");
+  assert.equal(result.blockers[1].route,undefined);
+  assert.match(result.blockers[0].title,/ตรวจเงินสดก่อนปิดวัน/);
+  assert.match(result.blockers[1].title,/ผู้ใช้อื่น/);
+});
+
+test("read preflight includes persisted Close Day write intents",async()=>{
+  const api=await loadPreflight("close-day-write-read"),date="2026-10-15";
+  const result=await api.readCloseDayDevicePreflight("owner",date,{
+    storage:storage(),listOffline:async()=>[],listExpenses:()=>[],listCashShiftOpens:()=>[],listCashMovements:()=>[],listExpenseDeletes:()=>[],
+    listStockWrites:()=>[],listOrderMutations:()=>[],
+    listCloseDayWrites:()=>[{version:1,actorId:"owner",createdAt:1,body:{requestKey:"close-read-pending-01",operation:"review",date,firstCount:500,secondCount:500}}]
+  });
+  assert.equal(result.ok,false);
+  assert.equal(result.blockers[0].kind,"close_day_write_unknown");
+  assert.equal(result.blockers[0].route,"/close");
+});
