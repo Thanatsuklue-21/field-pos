@@ -202,7 +202,7 @@ function View({session}:{session:Session}){
     const map:Record<string,string>={
       invalid_request_key:"รหัสกันรายการซ้ำไม่ถูกต้อง",
       invalid_date:"วันทำการไม่ถูกต้อง · รีเฟรชก่อนตรวจหรือปิดวัน",
-      business_date_changed:"วันทำการเปลี่ยนแล้ว · Request เดิมจะไม่ถูกสร้างใหม่ กรุณารีเฟรช",
+      business_date_changed:"วันทำการเปลี่ยนแล้ว · ระบบจะไม่สร้างรายการซ้ำ กรุณารีเฟรช",
       first_cash_count_required:"กรุณากรอกยอดนับรอบที่ 1",
       second_cash_count_required:"กรุณากรอกยอดนับรอบที่ 2",
       day_already_closed:"วันนี้ถูกปิดวันแล้ว",
@@ -217,11 +217,11 @@ function View({session}:{session:Session}){
       close_day_review_count_changed:"ยอดนับเปลี่ยนจากผลตรวจ กรุณาตรวจใหม่",
       cash_variance_reason_required:"เงินขาด/เกินต้องระบุเหตุผล",
       cash_variance_owner_confirmation_required:"ส่วนต่างสูง ต้องยืนยันโดยเจ้าของ",
-      pending_close_day_write_exists:"มี Review/Close Day เดิมที่ยังไม่ทราบผล · ต้องตรวจ Request เดิมก่อน",
-      close_day_ack_unknown:"Server ยังยืนยัน Review/Close Day เดิมไม่ครบ · ระบบเก็บ Request เดิมไว้ ห้ามสร้างรายการใหม่แทน",
-      close_day_recovery_unavailable:"อ่าน/บันทึก recovery ของ Close Day ไม่ได้ · ระบบหยุด Review/Close ใหม่ชั่วคราว",
-      request_key_conflict:"Request เดิมไม่ตรงกับข้อมูลเดิม · หยุดปิดวันและตรวจ Audit/Close Day",
-      network_unavailable:"เน็ตขาดระหว่าง Review/Close Day · ยังไม่ทราบผล ระบบเก็บ Request เดิมไว้",
+      pending_close_day_write_exists:"มีการตรวจหรือปิดวันครั้งก่อนที่ยังไม่ทราบผล · ต้องตรวจรายการเดิมก่อน",
+      close_day_ack_unknown:"ระบบกลางยังยืนยันผลการตรวจหรือปิดวันครั้งก่อนไม่ครบ · ระบบเก็บรายการเดิมไว้ ห้ามเริ่มรายการใหม่แทน",
+      close_day_recovery_unavailable:"อ่านข้อมูลป้องกันการปิดวันซ้ำไม่ได้ · ระบบหยุดการตรวจและปิดวันใหม่ชั่วคราว",
+      request_key_conflict:"ข้อมูลรายการเดิมไม่ตรงกัน · หยุดปิดวันและตรวจประวัติก่อน",
+      network_unavailable:"เน็ตขาดระหว่างตรวจหรือปิดวัน · ยังไม่ทราบผล ระบบเก็บรายการเดิมไว้",
       offline_write_blocked:"ออฟไลน์อยู่ · ต้องเชื่อมต่อก่อนตรวจหรือปิดวัน"
     };
     return map[code]||operatorErrorFallback(code,"การปิดวัน");
@@ -238,10 +238,10 @@ function View({session}:{session:Session}){
       if(intent.body.operation==="review"){
         setReview(r.review);setVarianceReason("");setConfirmVariance(false);
         const v=Number(r.review?.variance||0);
-        setMsg((recovery?"ตรวจ Request เดิมสำเร็จ · ":"")+(v===0?"เงินสดตรงพอดี":r.review?.summary||"พบส่วนต่าง · กรุณาตรวจสอบก่อนปิดวัน"));
+        setMsg((recovery?"ยืนยันผลรายการเดิมแล้ว · ":"")+(v===0?"เงินสดตรงพอดี":r.review?.summary||"พบส่วนต่าง · กรุณาตรวจสอบก่อนปิดวัน"));
       }else{
         const v=Number(r.close?.cashVariance||0);
-        setMsg((recovery?"ตรวจ Request ปิดวันเดิมสำเร็จ · ":"")+"ปิดวันสำเร็จ · เงินสด "+(v===0?"ตรงพอดี":v>0?"เกิน ฿"+v.toLocaleString():"ขาด ฿"+Math.abs(v).toLocaleString()));
+        setMsg((recovery?"ยืนยันผลการปิดวันเดิมแล้ว · ":"")+"ปิดวันสำเร็จ · เงินสด "+(v===0?"ตรงพอดี":v>0?"เกิน ฿"+v.toLocaleString():"ขาด ฿"+Math.abs(v).toLocaleString()));
         setFirstCount("");setSecondCount("");setReview(null);setVarianceReason("");setConfirmVariance(false);
       }
       await load().catch(()=>{});await refreshDevicePreflight().catch(()=>{});
@@ -271,7 +271,7 @@ function View({session}:{session:Session}){
     }else{
       setVarianceReason(intent.body.varianceReason);setConfirmVariance(intent.body.confirmVariance);
     }
-    if(typeof navigator!=="undefined"&&!navigator.onLine){setMsg("มี Review/Close Day เดิมรอตรวจ · ห้ามสร้าง Request ใหม่ เมื่อออนไลน์ระบบจะตรวจ Request เดิม");return}
+    if(typeof navigator!=="undefined"&&!navigator.onLine){setMsg("มีการตรวจหรือปิดวันครั้งก่อนรอยืนยัน · ห้ามเริ่มรายการใหม่ เมื่อออนไลน์ระบบจะตรวจรายการเดิม");return}
     await submitCloseDayIntent(intent,true);
   }
 
@@ -323,7 +323,7 @@ function View({session}:{session:Session}){
     try{
       const intent=prepareCloseDayWriteIntent(session.user.id,{
         requestKey:crypto.randomUUID(),operation:"close",date:businessDate,openingCash:Number(shift?.openingCash||0),
-        countedCash:counted,reviewId:String(review.id||""),varianceReason:varianceReason.trim(),confirmVariance
+        countedCash:counted,reviewId:review.id,varianceReason:varianceReason.trim(),confirmVariance
       });
       setPendingCloseDayWrite(intent);
       await submitCloseDayIntent(intent,false);
@@ -341,7 +341,7 @@ function View({session}:{session:Session}){
   return <section className="soft-scroll h-full overflow-auto p-3 sm:p-5 md:p-7">
     <header className="flex flex-wrap items-end justify-between gap-3"><div><p className="gold m-0 text-[10px] font-bold tracking-[.3em]">งานประจำวัน</p><h1 className="mt-1 text-xl font-semibold sm:text-2xl">เปิดร้าน / ปิดร้าน</h1><p className="mt-1 text-xs text-slate-500">{businessDate||"วันนี้"} · เปิดร้านด้วยเงินทอนตั้งต้น แล้วนับเงินจริงก่อนปิดร้าน</p></div>{session.user.role==="admin"&&<button disabled={busy||!!pendingCloseDayWrite||closeDayRecoveryBlocked||deviceChecking||devicePreflight?.ok===false||!shift||shift.status!=="open"} onClick={close} className="min-h-11 rounded-full bg-[#d4af37] px-5 text-sm font-bold text-black disabled:opacity-40">{busy?"กำลังบันทึก...":"ปิดร้านวันนี้"}</button>}</header>
 
-    {(pendingCloseDayWrite||closeDayRecoveryBlocked)&&<div role="status" aria-live="polite" aria-atomic="true" className="mt-4 rounded-2xl border-2 border-amber-300 bg-amber-50 p-4 text-amber-950"><div className="flex flex-wrap items-start justify-between gap-3"><div><b>{closeDayRecoveryBlocked?"ระบบ recovery ของ Close Day ใช้งานไม่ได้":"มี Review/Close Day เดิมรอยืนยัน"}</b><p className="mt-1 text-xs">{closeDayRecoveryBlocked?"ห้าม Review หรือปิดวันใหม่จนกว่าจะอ่าน recovery storage ได้":"ห้ามสร้าง Request ใหม่ · ระบบต้องยืนยัน Request เดิมก่อนเพื่อป้องกัน Review/Close ซ้ำ"}</p></div>{pendingCloseDayWrite&&<button type="button" disabled={busy} onClick={()=>recoverCloseDayWrite()} className="min-h-11 rounded-xl bg-amber-900 px-4 text-xs font-bold text-white disabled:opacity-40">ตรวจ Request เดิม</button>}</div></div>}
+    {(pendingCloseDayWrite||closeDayRecoveryBlocked)&&<div role="status" aria-live="polite" aria-atomic="true" className="mt-4 rounded-2xl border-2 border-amber-300 bg-amber-50 p-4 text-amber-950"><div className="flex flex-wrap items-start justify-between gap-3"><div><b>{closeDayRecoveryBlocked?"ระบบป้องกันการปิดวันซ้ำใช้งานไม่ได้":"มีการตรวจหรือปิดวันครั้งก่อนรอยืนยัน"}</b><p className="mt-1 text-xs">{closeDayRecoveryBlocked?"ห้ามตรวจหรือปิดวันใหม่จนกว่าระบบจะอ่านข้อมูลรายการเดิมได้":"ห้ามเริ่มรายการใหม่ · ระบบต้องยืนยันผลเดิมก่อนเพื่อป้องกันการบันทึกซ้ำ"}</p></div>{pendingCloseDayWrite&&<button type="button" disabled={busy} onClick={()=>recoverCloseDayWrite()} className="min-h-11 rounded-xl bg-amber-900 px-4 text-xs font-bold text-white disabled:opacity-40">ตรวจรายการเดิม</button>}</div></div>}
     {devicePreflight?.ok===false&&<div className="mt-4 rounded-2xl border-2 border-red-300 bg-red-50 p-4 text-red-950">
       <div className="flex flex-wrap items-start justify-between gap-3"><div><b>ยังปิดวันไม่ได้ · ต้องจัดการรายการค้างในเครื่องนี้ก่อน</b><p className="mt-1 text-xs text-red-800">ระบบกลางเห็นเฉพาะรายการที่ส่งสำเร็จแล้ว · รายการที่ยังค้างในเครื่องนี้ต้องตรวจจากเครื่องนี้ก่อนปิดวัน</p></div><button type="button" disabled={deviceChecking} onClick={()=>refreshDevicePreflight()} className="min-h-11 rounded-xl border border-red-300 bg-white px-4 text-xs font-bold disabled:opacity-40">{deviceChecking?"กำลังตรวจ…":"ตรวจเครื่องนี้อีกครั้ง"}</button></div>
       <div className="mt-3 grid gap-2">{devicePreflight.blockers.map((blocker,index)=><div key={blocker.kind+":"+index} className="rounded-xl border border-red-200 bg-white p-3"><div className="flex flex-wrap items-start justify-between gap-2"><div><b className="text-sm">{blocker.title}</b><p className="mt-1 text-xs text-slate-600">{blocker.detail}</p>{blocker.actorId&&blocker.actorId!==session.user.id&&<p className="mt-1 text-[11px] font-semibold text-amber-800">รายการนี้เป็นของผู้ใช้ {blocker.actorId} บนเครื่องนี้ · ให้สลับกลับผู้ใช้นั้นเพื่อตรวจรายการเดิม · ห้ามสร้างรายการใหม่แทน</p>}</div>{blocker.route&&<button type="button" onClick={()=>window.location.assign(blocker.route!)} className="min-h-11 shrink-0 rounded-xl bg-red-700 px-4 text-xs font-bold text-white">{blocker.kind==="offline_cash"||blocker.kind==="cash_unknown"?"ไปหน้า POS":blocker.kind==="promptpay_unknown"?"ไปตรวจรายการรับเงินค้าง":blocker.kind==="stock_write_unknown"?"ไปหน้าสต็อก":blocker.kind==="order_mutation_unknown"?"ไปหน้า Orders":"ไปหน้า Expenses"}</button>}</div></div>)}</div>
