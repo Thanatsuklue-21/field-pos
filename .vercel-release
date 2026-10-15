@@ -1,3 +1,3 @@
 FIELD POS production release marker
-source_main=64e4a044d18b2e8869fdae269de43e1cb3b1968c
-purpose=zero-switch-ux-inline-queue-receipt-release
+source_main=5992fe79359f99fc1d58446b38ac42d768f396dc
+purpose=continuous-guided-workspace-release
