@@ -18,7 +18,7 @@ test("expected SHA uses deployment SHA and scheduled release-marker history",()=
   assert.match(line,/deployment\.environment == 'Production'/);
   assert.match(line,/deployment\.sha/);
   assert.doesNotMatch(line,/github\.sha/);
-  assert.match(source,/git log -1 --format=%H -- \.vercel-release/);
+  assert.ok(source.includes("git log --first-parent -1 --format=%H -- .vercel-release"));
   assert.match(source,/Resolve intended production release/);
 });
 
@@ -52,6 +52,6 @@ test("production smoke covers root redirect, go-live routes and auth guard",()=>
 
 
 test("scheduled release resolution follows main first-parent history so merge commits remain visible",()=>{
-  assert.match(source,/git log --first-parent -1 --format=%H -- \\.vercel-release/);
-  assert.doesNotMatch(source,/git log -1 --format=%H -- \\.vercel-release/);
+  assert.ok(source.includes("git log --first-parent -1 --format=%H -- .vercel-release"));
+  assert.ok(!source.includes("git log -1 --format=%H -- .vercel-release"));
 });
