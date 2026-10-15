@@ -1,0 +1,15 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import {readFile} from "node:fs/promises";
+const source=await readFile(new URL("../app/pos/page.tsx",import.meta.url),"utf8");
+test("checkout synchronously blocks a second invocation before busy rerender",()=>{
+  assert.match(source,/const checkoutInFlightRef=useRef\(false\)/);
+  const checkout=source.slice(source.indexOf("async function checkout()"),source.indexOf("function openPayment()"));
+  const guard=checkout.indexOf("if(checkoutInFlightRef.current)return"),lock=checkout.indexOf("checkoutInFlightRef.current=true"),busy=checkout.indexOf("setBusy(true)"),request=checkout.indexOf('/api/pos/checkout');
+  assert.ok(guard>=0&&lock>guard&&busy>lock&&request>busy);
+  assert.match(checkout,/finally\{\s*checkoutInFlightRef\.current=false;\s*setBusy\(false\)/);
+});
+test("payment controls stay frozen while checkout commits",()=>{
+  assert.match(source,/<fieldset disabled=\{busy\} aria-busy=\{busy\}/);
+  assert.match(source,/กำลังยืนยันรายการนี้ · ห้ามรับเงินซ้ำหรือเปลี่ยนยอด/);
+});

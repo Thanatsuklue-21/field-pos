@@ -102,6 +102,7 @@ function PosView({session}:{session:Session}){
   const revisionRef=useRef<number|null>(null);
   const offlineSyncRef=useRef(false);
   const promptReconcileRef=useRef(false);
+  const checkoutInFlightRef=useRef(false);
   const cart=useCartStore();
   const heldBills=useHeldCartStore();
 
@@ -642,6 +643,8 @@ function PosView({session}:{session:Session}){
       setResult("มี PromptPay รายการเดิมที่ยังรอผล · ช่องทางรับเงินอื่นถูกพักเพื่อป้องกันรับเงินซ้ำ");
       return;
     }
+    if(checkoutInFlightRef.current)return;
+    checkoutInFlightRef.current=true;
     setBusy(true);
     setResult("");
     try{
@@ -748,6 +751,7 @@ function PosView({session}:{session:Session}){
         setResult(method==="cash"&&e.message==="network_unavailable"?"การเชื่อมต่อขาดหาย · เก็บ request เดิมไว้และจะตรวจซ้ำอัตโนมัติ":message);
       }
     }finally{
+      checkoutInFlightRef.current=false;
       setBusy(false);
     }
   }
