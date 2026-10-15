@@ -61,7 +61,7 @@ test("Close Day UI persists review and final close before network send and auto-
   assert.match(ui,/readCloseDayWriteIntent/);
   assert.match(ui,/operation:"review"/);
   assert.match(ui,/operation:"close"/);
-  assert.match(ui,/ห้ามสร้าง Request ใหม่/);
+  assert.match(ui,/ห้ามเริ่มรายการใหม่/);
   assert.match(ui,/window\.addEventListener\("online",recover\)/);
   for(const marker of ['operation:"review"','operation:"close"']){
     const start=ui.indexOf(marker),persisted=ui.indexOf("setPendingCloseDayWrite(intent)",start),sent=ui.indexOf("await submitCloseDayIntent(intent,false)",persisted);
