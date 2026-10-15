@@ -64,10 +64,16 @@ test("menu rendering and touch ergonomics stay mobile friendly",async()=>{
   assert.ok(css.includes("input,select,textarea{font-size:16px}"));
 });
 
-test("phone navigation shows four daily actions plus More without horizontal scrolling",async()=>{
+test("navigation keeps sale and production primary while secondary work stays one tap away",async()=>{
   const shell=await read("components/app-shell.tsx");
-  assert.ok(shell.includes('const primaryMobile=["/pos","/queue","/orders","/stock"]'));
-  assert.ok(shell.includes('const overflowMobile=["/expenses","/close","/settings"]'));
+  assert.ok(shell.includes('const focusPrimary=["/pos","/queue","/orders","/stock","/close"]'));
+  assert.ok(shell.includes('const primaryMobile=["/pos","/queue"]'));
+  assert.ok(shell.includes('const mobileMorePriority=["/orders","/stock","/expenses","/close","/settings"]'));
+  assert.ok(shell.includes("desktopPrimary"));
+  assert.ok(shell.includes("desktopManage"));
+  assert.ok(shell.includes('aria-controls="field-desktop-manage"'));
+  assert.ok(shell.includes('aria-label="จัดการร้านและตั้งค่า"'));
+  assert.ok(shell.includes("manageOpen&&"));
   assert.ok(shell.includes("mobilePrimary"));
   assert.ok(shell.includes("mobileMore"));
   assert.ok(shell.includes("MoreHorizontal"));
