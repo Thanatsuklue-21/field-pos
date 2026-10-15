@@ -194,19 +194,52 @@ test('real libSQL: revision-aware POS and Queue reads skip unchanged state paylo
 
 test('real libSQL: stale precheck still rejects stock race on the server',async t=>{const doc=seed();doc.ingredients.matcha.qty=10;doc.ingredients.milk.qty=220;const db=await setup(t,doc);const staleBootstrap=structuredClone(doc);assert.equal(staleBootstrap.ingredients.matcha.qty,10);await sell(db,'race-winner');await assert.rejects(sell(db,'race-stale-client'),/stock_shortage/);assert.equal((await state(db)).sales.length,1);assert.equal((await state(db)).ingredients.matcha.qty,0)});
 
-test('real libSQL: full backup restores ledger and durable retry together',async t=>{
+test('real libSQL: full backup restore is atomic and exact replay never restores twice',async t=>{
   const db=await setup(t);const sale=await sell(db,'backed-up-request');
   const token='backup-token';await db.execute({sql:'INSERT INTO field_sessions VALUES(?,?,?,?)',args:[digest(token),user.id,'csrf',Date.now()+60000]});
   const handler=createApi({db,origin:'https://field.test'});
   async function request(method,route,body){const res={writeHead(status){this.status=status},end(raw){this.body=JSON.parse(raw)}};await handler({method,query:{route},headers:{origin:'https://field.test',cookie:'field_session='+token,'x-csrf-token':'csrf'},body},res);return res}
-  const exported=await request('GET','admin/backup/export');assert.equal(exported.status,200);assert.equal(exported.body.tables.posRequests.length,1);
+
+  const exported=await request('GET','admin/backup/export');
+  assert.equal(exported.status,200);assert.equal(exported.body.tables.posRequests.length,1);
+
+  // Move live state beyond the backup so restore has observable work to reverse.
   await act(db,sale.orderId,'select',{itemIndex:0,selected:true});
   const revision=Number((await db.execute('SELECT revision FROM field_state')).rows[0].revision);
-  const restored=await request('POST','admin/backup/restore',{backup:exported.body,expectedRevision:revision,confirm:true});
-  assert.equal(restored.status,200);assert.equal((await sell(db,'backed-up-request')).replayed,true);
-  assert.equal((await state(db)).sales.length,1);assert.equal((await db.execute('SELECT * FROM field_stock_transactions')).rows.length,2);
-});
+  const preview=await request('POST','admin/backup/preview',{backup:exported.body});
+  assert.equal(preview.status,200);assert.match(preview.body.fingerprint,/^[0-9a-f]{64}$/);
 
+  const requestKey='restore-real-0001';
+  const restoreBody={requestKey,backup:exported.body,backupFingerprint:preview.body.fingerprint,expectedRevision:revision,confirm:true};
+  const restored=await request('POST','admin/backup/restore',restoreBody);
+  assert.equal(restored.status,200);
+  assert.equal(restored.body.replayed,false);
+  assert.equal(restored.body.requestKey,requestKey);
+  assert.equal(restored.body.fingerprint,preview.body.fingerprint);
+
+  const auditAfterFirst=Number((await db.execute("SELECT COUNT(*) AS n FROM field_audit WHERE action='full_backup_restore'")).rows[0].n);
+  const versionsAfterFirst=Number((await db.execute("SELECT COUNT(*) AS n FROM field_state_versions WHERE action='before_full_restore'")).rows[0].n);
+  const restoreRowsAfterFirst=Number((await db.execute({sql:'SELECT COUNT(*) AS n FROM field_pos_requests WHERE request_key=?',args:[requestKey]})).rows[0].n);
+  assert.equal(auditAfterFirst,1);assert.equal(versionsAfterFirst,1);assert.equal(restoreRowsAfterFirst,1);
+
+  // Simulate the client losing the first HTTP response: exact replay must return
+  // the original ACK before revision conflict and must not perform restore again.
+  const replayed=await request('POST','admin/backup/restore',restoreBody);
+  assert.equal(replayed.status,200);assert.equal(replayed.body.replayed,true);
+  assert.equal(replayed.body.revision,restored.body.revision);
+  assert.equal(Number((await db.execute("SELECT COUNT(*) AS n FROM field_audit WHERE action='full_backup_restore'")).rows[0].n),auditAfterFirst);
+  assert.equal(Number((await db.execute("SELECT COUNT(*) AS n FROM field_state_versions WHERE action='before_full_restore'")).rows[0].n),versionsAfterFirst);
+  assert.equal(Number((await db.execute({sql:'SELECT COUNT(*) AS n FROM field_pos_requests WHERE request_key=?',args:[requestKey]})).rows[0].n),1);
+
+  // The restore request identity is actor/payload bound.
+  const conflict=await request('POST','admin/backup/restore',{...restoreBody,expectedRevision:revision+1});
+  assert.equal(conflict.status,409);assert.equal(conflict.body.error,'request_key_conflict');
+
+  // A durable request contained in the backup still replays after the restore.
+  assert.equal((await sell(db,'backed-up-request')).replayed,true);
+  assert.equal((await state(db)).sales.length,1);
+  assert.equal((await db.execute('SELECT * FROM field_stock_transactions')).rows.length,2);
+});
 
 test('real libSQL: separate-person bills share one queue and pager while keeping separate sales',async t=>{
   const db=await setup(t);
