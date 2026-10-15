@@ -77,7 +77,9 @@ function View({session}:{session:Session}){
       setPending(null);setMsg("กู้คืน Full Backup สำเร็จ · revision "+r.revision+(r.replayed?" · ยืนยันผลคำขอเดิมแล้ว":""));
       setPreview(null);setFile(null);setBackup(null);setReplace(false);
     }catch(e:any){
-      if(intent&&([400].includes(Number(e?.status))||e?.message==="revision_conflict")){
+      // Only clear automatically when the server proves the request never committed.
+      // Durable replay is checked before revision conflict on the server.
+      if(intent&&e?.message==="revision_conflict"){
         try{clearBackupRestoreIntent(session.user.id,intent.requestKey);setPending(null)}catch{}
       }
       const code=String(e?.message||"");
