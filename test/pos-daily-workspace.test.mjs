@@ -173,18 +173,21 @@ test("workspace expense browser QA proves lost-response recovery reuses the exac
 });
 
 
-test("workspace auto-routes once to the highest-priority task without overriding the operator",async()=>{
+test("workspace guided mode continuously follows the highest-priority task but yields to manual browsing",async()=>{
   const hub=await read("components/pos-daily-workspace.tsx");
-  assert.match(hub,/autoRouteRef=useRef\(false\)/);
-  assert.match(hub,/manualTabRef=useRef\(false\)/);
+  assert.match(hub,/const \[guidedMode,setGuidedMode\]=useState\(true\)/);
   assert.match(hub,/workspaceReady/);
-  assert.match(hub,/if\(!workspaceReady\|\|autoRouteRef\.current\|\|manualTabRef\.current\)return/);
+  assert.match(hub,/if\(!workspaceReady\|\|!guidedMode\)return/);
   assert.match(hub,/nextAction\.tab&&tabs\.includes\(nextAction\.tab as WorkspaceTab\)/);
   assert.match(hub,/setTab\(nextAction\.tab as WorkspaceTab\)/);
-  assert.match(hub,/refresh\(\)\.catch\(\(\)=>\{\}\)\.finally/);
-  assert.match(hub,/autoRouteRef\.current=true/);
-  assert.match(hub,/manualTabRef\.current=true;setTab\(key\)/);
-  assert.match(hub,/if\(!open\)[\s\S]{0,120}autoRouteRef\.current=false[\s\S]{0,120}manualTabRef\.current=false/);
+  assert.match(hub,/\[open,workspaceReady,guidedMode,nextAction\.tab,tabs\.join\("\|"\)\]/);
+  assert.match(hub,/onClick=\{\(\)=>\{setGuidedMode\(false\);setTab\(key\)\}\}/);
+  assert.match(hub,/โหมดนำทางอัตโนมัติ/);
+  assert.match(hub,/กำลังดูงานเอง/);
+  assert.match(hub,/กลับตามระบบ/);
+  assert.match(hub,/ระบบพาไปงานนี้/);
+  assert.doesNotMatch(hub,/autoRouteRef/);
+  assert.doesNotMatch(hub,/manualTabRef/);
 });
 
 
@@ -307,4 +310,18 @@ test("workspace keeps FIFO obvious: only the production head can be called while
   const queueBlock=hub.slice(queueStart,queueEnd);
   assert.equal((queueBlock.match(/runQueueTailAction\(order,"call"\)/g)||[]).length,1);
   assert.equal((queueBlock.match(/runQueueTailAction\(order,"return"\)/g)||[]).length,1);
+});
+
+
+test("guided workspace returns to the recommended tab after the operator resumes system guidance",async()=>{
+  const hub=await read("components/pos-daily-workspace.tsx");
+  assert.match(hub,/setGuidedMode\(true\);if\(nextAction\.tab&&tabs\.includes\(nextAction\.tab as WorkspaceTab\)\)setTab\(nextAction\.tab as WorkspaceTab\)/);
+  assert.match(hub,/setGuidedMode\(true\);setTab\(nextAction\.tab as WorkspaceTab\)/);
+  assert.match(hub,/ระบบจะพาไปงานสำคัญถัดไปหลังแต่ละขั้นตอน/);
+  assert.match(hub,/เลือกดูแท็บได้อิสระ · ระบบจะไม่เปลี่ยนแท็บให้เอง/);
+});
+
+test("guided mode resets when Today Workspace closes so a new operator session starts assisted",async()=>{
+  const hub=await read("components/pos-daily-workspace.tsx");
+  assert.match(hub,/if\(!open\)\{\s*setGuidedMode\(true\);\s*return;\s*\}/);
 });
