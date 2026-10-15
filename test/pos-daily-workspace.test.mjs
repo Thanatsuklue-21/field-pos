@@ -8,7 +8,8 @@ const read=p=>readFile(new URL("../"+p,import.meta.url),"utf8");
 test("POS opens the daily workspace in-place and blocks it during payment mutation",async()=>{
   const pos=await read("app/pos/page.tsx");
   assert.match(pos,/PosDailyWorkspace/);
-  assert.match(pos,/setWorkspaceOpen\(true\)/);
+  assert.match(pos,/const openWorkspace=\(\)=>\{setWorkspaceMounted\(true\);setWorkspaceOpen\(true\)\}/);
+  assert.match(pos,/workspaceMounted&&<PosDailyWorkspace/);
   assert.match(pos,/>งานร้าน<\/button>/);
   assert.match(pos,/disabled=\{busy\|\|payOpen\}/);
   assert.match(pos,/bootstrap=\{data\}/);

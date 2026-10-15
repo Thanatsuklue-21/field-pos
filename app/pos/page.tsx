@@ -2,6 +2,7 @@
 
 import {useEffect,useMemo,useRef,useState} from "react";
 import {useRouter} from "next/navigation";
+import dynamic from "next/dynamic";
 import {ArrowRight,CheckCircle2,ClipboardList,Clock3,Minus,Plus,Search,Trash2,WalletCards,X} from "lucide-react";
 import AuthGate from "@/components/auth-gate";
 import {api,type Bootstrap,type MenuItem,type RevisionUnchanged,type Session} from "@/lib/api-client";
@@ -11,12 +12,17 @@ import {additionalServingsAvailable,additionalServingsForVariant,cartAvailabilit
 import {useCartStore} from "@/stores/cart-store";
 import {useHeldCartStore} from "@/stores/held-cart-store";
 import {writeQueueSnapshotCache} from "@/lib/queue-cache";
-import PosDailyWorkspace from "@/components/pos-daily-workspace";
 import ModalFocus from "@/components/modal-focus";
 import {cashierNextAction} from "@/lib/cashier-guidance.mjs";
 import {chooseWorkspaceNextAction} from "@/lib/workspace-guidance.mjs";
 import {readExpenseIntent} from "@/lib/expense-recovery";
 import {readCashShiftOpenIntent} from "@/lib/cash-shift-open-recovery";
+
+const loadPosDailyWorkspace=()=>import("@/components/pos-daily-workspace");
+const PosDailyWorkspace=dynamic(loadPosDailyWorkspace,{
+  ssr:false,
+  loading:()=> <div role="status" aria-live="polite" className="fixed inset-0 z-[90] grid place-items-center bg-black/20"><div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 shadow-xl">กำลังเปิดงานร้าน…</div></div>
+});
 
 export default function Pos(){return <AuthGate>{s=><PosView session={s}/>}</AuthGate>}
 
@@ -71,6 +77,7 @@ function PosView({session}:{session:Session}){
   const [orderOptionsOpen,setOrderOptionsOpen]=useState(false);
   const [heldOpen,setHeldOpen]=useState(false);
   const [workspaceOpen,setWorkspaceOpen]=useState(false);
+  const [workspaceMounted,setWorkspaceMounted]=useState(false);
   const [method,setMethod]=useState<"cash"|"promptpay"|"bank"|"card"|"delivery">("cash");
   const [deliveryPlatform,setDeliveryPlatform]=useState<"grab"|"lineman"|"other_delivery">("grab");
   const [received,setReceived]=useState("");
@@ -99,6 +106,16 @@ function PosView({session}:{session:Session}){
   const heldBills=useHeldCartStore();
 
   useEffect(()=>{router.prefetch("/queue")},[router]);
+  useEffect(()=>{
+    const warm=()=>{void loadPosDailyWorkspace()};
+    const idleWindow=window as typeof window&{requestIdleCallback?:(callback:()=>void,options?:{timeout:number})=>number;cancelIdleCallback?:(id:number)=>void};
+    if(idleWindow.requestIdleCallback){
+      const id=idleWindow.requestIdleCallback(warm,{timeout:1800});
+      return()=>idleWindow.cancelIdleCallback?.(id);
+    }
+    const timer=window.setTimeout(warm,1200);
+    return()=>window.clearTimeout(timer);
+  },[]);
 
   const acceptBootstrap=(next:Bootstrap|RevisionUnchanged)=>{
     if(next?.unchanged===true)return false;
@@ -786,7 +803,8 @@ function PosView({session}:{session:Session}){
   });
   const workspaceActionVisible=!payOpen&&cartQty===0&&workspaceNextAction.tone!=="ready";
   const workspaceActionLabel=workspaceNextAction.action==="start_day"?"เริ่มตรงนี้":workspaceNextAction.tab==="queue"?"ไปทำคิว":workspaceNextAction.tab==="stock"?"ตรวจสต็อก":workspaceNextAction.tab==="expense"?"ตรวจรายการ":workspaceNextAction.tab==="status"?"ดูสถานะ":"เปิดงานร้าน";
-  const runWorkspaceNextAction=()=>{if(workspaceNextAction.tab==="queue"){router.push("/queue");return}setWorkspaceOpen(true)};
+  const openWorkspace=()=>{setWorkspaceMounted(true);setWorkspaceOpen(true)};
+  const runWorkspaceNextAction=()=>{if(workspaceNextAction.tab==="queue"){router.push("/queue");return}openWorkspace()};
   const hasPendingPrompt=!!pendingRead();
   const quickCashAmounts=Array.from(new Set([Math.ceil(netPayable/100)*100,100,500,1000])).filter(v=>v>=netPayable&&v>0).sort((a,b)=>a-b).slice(0,3);
   const otherPaymentActive=["bank","card","delivery"].includes(method);
@@ -802,7 +820,7 @@ function PosView({session}:{session:Session}){
         <div><p className="gold m-0 text-[10px] font-bold tracking-[.3em]">FIELD POS</p><h1 className="m-0 mt-1 text-xl font-semibold tracking-wide md:text-2xl">รับออเดอร์</h1><p className="mt-0.5 text-[11px] text-slate-500">แตะเมนู → เพิ่ม / ตรวจ → รับเงิน</p></div>
         <div className="flex items-center gap-1.5 sm:gap-2">
           {!offlineStorageError&&(!online||offlineStats.total>0)&&<div className={"hidden rounded-full border px-2.5 py-1.5 text-[10px] font-bold sm:block sm:text-xs "+(!online?"border-amber-300 bg-amber-50 text-amber-800":offlineStats.needsReview>0?"border-red-300 bg-red-50 text-red-700":"border-emerald-300 bg-emerald-50 text-emerald-700")}>{!online?"OFFLINE · เงินสดเท่านั้น":offlineStats.needsReview>0?"บิลในเครื่องต้องตรวจ "+offlineStats.needsReview:"บิลในเครื่องรอส่ง "+offlineStats.pending}</div>}
-          <button disabled={busy||payOpen} onClick={()=>setWorkspaceOpen(true)} className="flex min-h-11 items-center gap-1.5 rounded-full border border-[#d4af37]/50 bg-[#fff8dc] px-2.5 text-[11px] font-bold text-[#6f5510] disabled:opacity-40 sm:px-3 sm:text-xs"><ClipboardList size={14}/>งานร้าน</button><button onClick={()=>setHeldOpen(true)} className="relative flex min-h-11 items-center gap-1.5 rounded-full border border-slate-300 bg-white px-2.5 text-[11px] font-semibold text-slate-700 sm:px-3 sm:text-xs"><Clock3 size={14}/>พักบิล{heldBills.held.length>0&&<span className="grid h-5 min-w-5 place-items-center rounded-full bg-[#d4af37] px-1 text-[10px] font-black text-black">{heldBills.held.length}</span>}</button>
+          <button disabled={busy||payOpen} onClick={openWorkspace} className="flex min-h-11 items-center gap-1.5 rounded-full border border-[#d4af37]/50 bg-[#fff8dc] px-2.5 text-[11px] font-bold text-[#6f5510] disabled:opacity-40 sm:px-3 sm:text-xs"><ClipboardList size={14}/>งานร้าน</button><button onClick={()=>setHeldOpen(true)} className="relative flex min-h-11 items-center gap-1.5 rounded-full border border-slate-300 bg-white px-2.5 text-[11px] font-semibold text-slate-700 sm:px-3 sm:text-xs"><Clock3 size={14}/>พักบิล{heldBills.held.length>0&&<span className="grid h-5 min-w-5 place-items-center rounded-full bg-[#d4af37] px-1 text-[10px] font-black text-black">{heldBills.held.length}</span>}</button>
           <div className="hidden rounded-full border border-slate-300 bg-white px-3 py-1.5 text-[11px] text-slate-600 sm:block sm:px-4 sm:py-2 sm:text-xs">{session.user.username}</div>
         </div>
       </div>
@@ -894,6 +912,6 @@ function PosView({session}:{session:Session}){
     </fieldset></ModalFocus></div>}
 
     {lastSale&&<div role="status" aria-live="assertive" aria-atomic="true" className={"fixed bottom-[92px] right-4 z-[70] w-[min(460px,calc(100vw-2rem))] rounded-[26px] border bg-white p-5 shadow-2xl md:bottom-6 md:right-6 "+(lastSale.offline?"border-amber-300":"border-emerald-300")}><div className="flex items-start gap-3"><div className={"grid h-10 w-10 shrink-0 place-items-center rounded-full "+(lastSale.offline?"bg-amber-100 text-amber-700":"bg-emerald-100 text-emerald-700")}><CheckCircle2 size={22}/></div><div className="min-w-0 flex-1"><div><b className="text-lg">{lastSale.offline?"บันทึกเงินสดไว้ในเครื่องแล้ว":splitPaymentPending?"รับเงินคนนี้สำเร็จ · คิวเดิมยังไม่จบ":"ชำระเงินสำเร็จ"}</b><p className="mt-1 text-sm text-slate-600">{lastSale.offline?"เลขชั่วคราว "+lastSale.queueNo+" · รอส่งเข้าระบบเมื่อเน็ตกลับ":splitPaymentPending?"คิว "+lastSale.queueNo+" · เหลือ "+splitRemainingQty+" แก้ว รอรับเงินคนถัดไป":"คิว "+lastSale.queueNo+(lastSale.recovered?" · กู้คืนรายการเดิม":"")}</p></div>{lastSale.offline?<div className="mt-3 rounded-[20px] border-2 border-amber-300 bg-amber-50 p-4 text-center"><div className="text-xs font-bold tracking-[.12em] text-amber-800">บิลรอส่ง</div><div className="mt-1 text-3xl font-black leading-none text-amber-900">{lastSale.queueNo}</div><p className="mt-2 text-xs text-amber-800">ทำและส่งมอบออเดอร์นี้ตามลำดับที่รับ · เมื่อเน็ตกลับ ระบบจะลงบัญชีและตัดสต็อกให้อัตโนมัติ โดยไม่สร้างคิวผลิตซ้ำ</p></div>:splitPaymentPending?<div className="mt-3 rounded-[20px] border-2 border-amber-300 bg-amber-50 p-4 text-center"><div className="text-xs font-black tracking-[.12em] text-amber-800">ยังไม่ต้องส่งคิวไปทำ</div><div className="mt-1 text-3xl font-black leading-none text-amber-900">เหลือ {splitRemainingQty} แก้ว</div><p className="mt-2 text-xs text-amber-800">รับเงินของคิว {lastSale.queueNo} ให้ครบก่อน · รายการที่เหลือยังอยู่ในตะกร้าเดิม</p></div>:<div className="mt-3 rounded-[20px] border-2 border-[#d4af37] bg-[#fff8dc] p-4 text-center"><div className="text-xs font-bold tracking-[.18em] text-[#765b08]">หยิบบัตรให้ลูกค้า</div><div className="mt-1 text-4xl font-black leading-none text-[#6f5510] md:text-5xl">บัตร {lastSale.pager||"—"}</div></div>}{lastSale.payment==="cash"&&<div className="mt-3 flex items-center justify-between rounded-2xl bg-emerald-50 p-3"><span className="text-sm font-semibold text-emerald-800">เงินทอน</span><div className="text-2xl font-bold text-emerald-800">฿{lastSale.change.toFixed(0)}</div></div>}<div className={"mt-3 grid gap-2 "+(lastSale.offline||splitPaymentPending?"grid-cols-1":"grid-cols-2")}><button onClick={startNextOrder} className="flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-[#d4af37] px-3 text-sm font-bold text-black"><Plus size={16}/>{splitPaymentPending?"รับเงินคนถัดไปในคิวนี้":"รับออเดอร์ถัดไป"}</button>{!lastSale.offline&&!splitPaymentPending&&<button onClick={()=>router.push("/queue")} className="flex min-h-12 items-center justify-center gap-2 rounded-2xl border border-slate-300 bg-white px-3 text-xs font-semibold text-slate-700">ไปทำคิว {lastSale.queueNo} <ArrowRight size={15}/></button>}</div><p className="mt-2 text-center text-[11px] text-slate-500">{lastSale.offline?"ยอดถูกเก็บในเครื่องแล้ว · ห้ามล้างข้อมูลแอปหรือเบราว์เซอร์ จนกว่าระบบจะแจ้งว่าส่งบิลสำเร็จ":splitPaymentPending?"อย่าเปิดออเดอร์ใหม่จนกว่าจะรับเงินคิวนี้ครบ · กดปุ่มด้านบนเพื่อรับเงินคนถัดไป":"รับออเดอร์ถัดไปได้ทันทีโดยไม่ออกจากหน้า POS"}</p></div></div></div>}
-    <PosDailyWorkspace session={session} bootstrap={data} open={workspaceOpen} online={online} onClose={()=>setWorkspaceOpen(false)}/>
+    {workspaceMounted&&<PosDailyWorkspace session={session} bootstrap={data} open={workspaceOpen} online={online} onClose={()=>setWorkspaceOpen(false)}/>} 
   </section>;
 }

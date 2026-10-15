@@ -538,6 +538,19 @@ test('POS menu filtering and totals are memoized away from unrelated modal state
 });
 
 
+test('POS code-splits Today Workspace and warms it only after first paint',async()=>{
+  const pos=await read('app/pos/page.tsx');
+  assert.match(pos,/import dynamic from "next\/dynamic"/);
+  assert.match(pos,/const loadPosDailyWorkspace=\(\)=>import\("@\/components\/pos-daily-workspace"\)/);
+  assert.match(pos,/dynamic\(loadPosDailyWorkspace/);
+  assert.doesNotMatch(pos,/import PosDailyWorkspace from "@\/components\/pos-daily-workspace"/);
+  assert.match(pos,/const \[workspaceMounted,setWorkspaceMounted\]=useState\(false\)/);
+  assert.match(pos,/workspaceMounted&&<PosDailyWorkspace/);
+  assert.match(pos,/requestIdleCallback/);
+  assert.match(pos,/setWorkspaceMounted\(true\);setWorkspaceOpen\(true\)/);
+  assert.match(pos,/กำลังเปิดงานร้าน…/);
+});
+
 test('Today Workspace memoizes queue cards and reuses one money formatter',async()=>{
   const hub=await read('components/pos-daily-workspace.tsx');
   assert.match(hub,/const THAI_MONEY_FORMATTER=new Intl\.NumberFormat/);
