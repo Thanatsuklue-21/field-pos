@@ -256,19 +256,25 @@ test("workspace start-day recommendation focuses the exact opening cash control 
 });
 
 
-test("workspace finishes safe queue tail work in-place without exposing production mutations",async()=>{
+test("workspace completes the normal first-queue production flow in-place",async()=>{
   const hub=await read("components/pos-daily-workspace.tsx");
   assert.match(hub,/useQueueActionRecovery/);
+  assert.match(hub,/runQueueProductionAction\(order:QueueOrder,item:QueueItem,itemIndex:number,action:"complete_item"\|"waste_remake"\)/);
+  assert.match(hub,/action==="complete_item"/);
+  assert.match(hub,/action==="waste_remake"/);
+  assert.match(hub,/expectedReadyQty:n\(item\.readyQty\)/);
+  assert.match(hub,/reason:"ชงเสีย \/ ทำใหม่"/);
+  assert.match(hub,/const result=await sendQueueAction\(body\)/);
+  assert.match(hub,/สูตรต่อแก้ว/);
+  assert.match(hub,/ห้ามข้ามคิว/);
+  assert.match(hub,/ทำ \{currentPrepTask\.item\.name\} ครบ/);
   assert.match(hub,/runQueueTailAction\(order,"call"\)/);
   assert.match(hub,/runQueueTailAction\(order,"return"\)/);
   assert.match(hub,/เรียกบัตร/);
   assert.match(hub,/ลูกค้ารับแล้ว/);
-  assert.match(hub,/ทำคิวนี้ต่อ/);
   assert.match(hub,/productionHead/);
   assert.match(hub,/readyAll/);
   assert.match(hub,/calledAll/);
-  assert.doesNotMatch(hub,/action:"complete_item"/);
-  assert.doesNotMatch(hub,/action:"waste_remake"/);
   assert.doesNotMatch(hub,/action:"call_item"/);
 });
 

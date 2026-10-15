@@ -81,7 +81,7 @@ test("POS replaces the generic cashier hint with the highest-priority store acti
   assert.match(pos,/workspaceActionVisible=!payOpen&&cartQty===0&&workspaceNextAction\.tone!=="ready"/);
   assert.match(pos,/ทำต่อก่อน/);
   assert.match(pos,/onClick=\{runWorkspaceNextAction\}/);
-  assert.match(pos,/workspaceNextAction\.tab==="queue"\?"ไปทำคิว"/);
+  assert.match(pos,/workspaceNextAction\.tab==="queue"\?"ทำคิวตรงนี้"/);
   assert.match(pos,/workspaceNextAction\.action==="start_day"\?"เริ่มตรงนี้"/);
 });
 
@@ -102,20 +102,22 @@ test("operator guidance is part of cached bootstrap rather than a second polling
 });
 
 
-test("queue recommendation skips the read-only workspace and opens production mode in one tap",async()=>{
+test("queue recommendation opens Today Workspace in-place instead of switching pages",async()=>{
   const pos=await read("app/pos/page.tsx");
   assert.match(pos,/const openWorkspace=\(\)=>\{setWorkspaceMounted\(true\);setWorkspaceOpen\(true\)\}/);
-  assert.match(pos,/const runWorkspaceNextAction=\(\)=>\{if\(workspaceNextAction\.tab==="queue"\)\{router\.push\("\/queue"\);return\}openWorkspace\(\)\}/);
+  assert.match(pos,/const runWorkspaceNextAction=\(\)=>openWorkspace\(\)/);
   assert.match(pos,/onClick=\{runWorkspaceNextAction\}/);
-  assert.match(pos,/workspaceNextAction\.tab==="queue"\?"ไปทำคิว"/);
+  assert.match(pos,/workspaceNextAction\.tab==="queue"\?"ทำคิวตรงนี้"/);
+  const start=pos.indexOf("const runWorkspaceNextAction");
+  const block=pos.slice(start,start+180);
+  assert.doesNotMatch(block,/router\.push\("\/queue"\)/);
   assert.doesNotMatch(pos,/method:"POST"[\s\S]{0,180}\/api\/pos\/queue/);
 });
 
-test("non-queue store recommendations still open Today Workspace in place",async()=>{
+test("all store recommendations keep the operator on POS through Today Workspace",async()=>{
   const pos=await read("app/pos/page.tsx");
   const start=pos.indexOf("const runWorkspaceNextAction");
-  const block=pos.slice(start,start+260);
-  assert.match(block,/workspaceNextAction\.tab==="queue"/);
-  assert.match(block,/router\.push\("\/queue"\)/);
+  const block=pos.slice(start,start+180);
   assert.match(block,/openWorkspace\(\)/);
+  assert.doesNotMatch(block,/router\.push/);
 });

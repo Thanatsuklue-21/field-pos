@@ -806,9 +806,9 @@ function PosView({session}:{session:Session}){
     startDayRecoveryBlocked:workspaceSignals.startDayRecoveryBlocked
   });
   const workspaceActionVisible=!payOpen&&cartQty===0&&workspaceNextAction.tone!=="ready";
-  const workspaceActionLabel=workspaceNextAction.action==="start_day"?"เริ่มตรงนี้":workspaceNextAction.tab==="queue"?"ไปทำคิว":workspaceNextAction.tab==="stock"?"ตรวจสต็อก":workspaceNextAction.tab==="expense"?"ตรวจรายการ":workspaceNextAction.tab==="status"?"ดูสถานะ":"เปิดงานร้าน";
+  const workspaceActionLabel=workspaceNextAction.action==="start_day"?"เริ่มตรงนี้":workspaceNextAction.tab==="queue"?"ทำคิวตรงนี้":workspaceNextAction.tab==="stock"?"ตรวจสต็อก":workspaceNextAction.tab==="expense"?"ตรวจรายการ":workspaceNextAction.tab==="status"?"ดูสถานะ":"เปิดงานร้าน";
   const openWorkspace=()=>{setWorkspaceMounted(true);setWorkspaceOpen(true)};
-  const runWorkspaceNextAction=()=>{if(workspaceNextAction.tab==="queue"){router.push("/queue");return}openWorkspace()};
+  const runWorkspaceNextAction=()=>openWorkspace();
   const hasPendingPrompt=!!pendingRead();
   const quickCashAmounts=Array.from(new Set([Math.ceil(netPayable/100)*100,100,500,1000])).filter(v=>v>=netPayable&&v>0).sort((a,b)=>a-b).slice(0,3);
   const otherPaymentActive=["bank","card","delivery"].includes(method);
