@@ -1,3 +1,3 @@
 FIELD POS production release marker
-source_main=fd94c2d2500b8862308424dec4c6ea8fdca9c2aa
-purpose=workspace-progressive-disclosure-zero-learning-release
+source_main=a22fb9143ba18ec8f78ffd3c50d15c69f876ef3f
+purpose=workspace-stale-queue-fail-closed-release
