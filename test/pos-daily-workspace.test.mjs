@@ -287,7 +287,7 @@ test("workspace queue tail actions share the same pending intent and fail closed
 test("workspace keeps FIFO obvious: only the production head can be called while later queues stay read-only",async()=>{
   const hub=await read("components/pos-daily-workspace.tsx");
   assert.match(hub,/productionHead=queueSorted\.find\(order=>!queueOrderCalled\(order\)\)\|\|null/);
-  assert.match(hub,/isProductionHead=productionHead\?\.id===order\.id/);
+  assert.match(hub,/isProductionHead:productionHead\?\.id===order\.id/);
   assert.match(hub,/isProductionHead&&readyAll/);
   assert.match(hub,/รอคิวก่อนหน้า · ระบบเรียงลำดับให้แล้ว/);
   const queueStart=hub.indexOf('tab==="queue"');

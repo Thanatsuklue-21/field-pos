@@ -53,17 +53,19 @@ function buildCategoryFlow(order:QOrder):FlowCategory[]{
   const labels=new Map((order.prepGroups||[]).map(group=>[String(group.id),String(group.label||group.id)]));
   return [...itemGroups.entries()].map(([id,items])=>{
     const menus=new Map<string,FlowMenu>();
+    let qty=0,pendingQty=0,calledQty=0;
     for(const item of items){
+      const itemQty=n(item.qty),itemPending=Math.max(0,itemQty-n(item.readyQty)),itemCalled=Math.min(itemQty,n(item.calledQty));
       const variant=String(item.variant||"Standard"),menuKey=String(item.id)+"|"+variant;
       let menu=menus.get(menuKey);
       if(!menu){menu={key:menuKey,id:String(item.id),name:String(item.name||item.id),variant,qty:0,pendingQty:0,calledQty:0};menus.set(menuKey,menu)}
-      menu.qty+=n(item.qty);
-      menu.pendingQty+=Math.max(0,n(item.qty)-n(item.readyQty));
-      menu.calledQty+=Math.min(n(item.qty),n(item.calledQty));
+      menu.qty+=itemQty;
+      menu.pendingQty+=itemPending;
+      menu.calledQty+=itemCalled;
+      qty+=itemQty;
+      pendingQty+=itemPending;
+      calledQty+=itemCalled;
     }
-    const qty=items.reduce((sum,item)=>sum+n(item.qty),0);
-    const pendingQty=items.reduce((sum,item)=>sum+Math.max(0,n(item.qty)-n(item.readyQty)),0);
-    const calledQty=items.reduce((sum,item)=>sum+Math.min(n(item.qty),n(item.calledQty)),0);
     return {id,label:categoryName(id,labels.get(id)),qty,pendingQty,calledQty,menus:[...menus.values()],items};
   });
 }
@@ -245,25 +247,34 @@ function QueueView({session}:{session:Session}){
     }catch(e:any){if(snapshot)setData(snapshot);setMsg(errorText(e.message));pulse("ส่งมอบไม่สำเร็จ · ระบบคืนคิวกลับแล้ว");await load().catch(()=>{})}finally{busyRef.current=false;setBusy("")}
   }
 
-  const first=orders.find(order=>!orderCalled(order));
-  const firstReady=first?orderReady(first):false;
-  const firstCalled=first?orderCalled(first):false;
-  const firstCupCount=first?(first.items||[]).reduce((sum,item)=>sum+n(item.qty),0):0;
-  const firstRemaining=first?(first.items||[]).reduce((sum,item)=>sum+Math.max(0,n(item.qty)-n(item.readyQty)),0):0;
-  const categoryFlow=first?buildCategoryFlow(first):[];
-  const activeCategoryId=String(task?.item.prepGroup?.id||categoryFlow.find(x=>x.pendingQty>0)?.id||"");
-  const activeCategoryIndex=Math.max(0,categoryFlow.findIndex(x=>x.id===activeCategoryId));
-  const activeCategory=categoryFlow.find(x=>x.id===activeCategoryId)||null;
-  const activeMenu=task&&activeCategory?activeCategory.menus.find(x=>x.id===task.item.id&&x.variant===String(task.item.variant||"Standard"))||null:null;
-  const upcoming=orders.filter(order=>!orderCalled(order)&&order.id!==first?.id).slice(0,3);
-  const extraUpcoming=Math.max(0,orders.filter(order=>!orderCalled(order)).length-1-upcoming.length);
-  const waitingPickup=orders.filter(orderCalled);
+  const queueView=useMemo(()=>{
+    const activeOrders:QOrder[]=[],waitingPickup:QOrder[]=[];
+    for(const order of orders)(orderCalled(order)?waitingPickup:activeOrders).push(order);
+    const first=activeOrders[0]||null;
+    const firstReady=first?orderReady(first):false;
+    const firstCalled=first?orderCalled(first):false;
+    let firstCupCount=0,firstRemaining=0;
+    for(const item of first?.items||[]){
+      const qty=n(item.qty);
+      firstCupCount+=qty;
+      firstRemaining+=Math.max(0,qty-n(item.readyQty));
+    }
+    const categoryFlow=first?buildCategoryFlow(first):[];
+    const activeCategoryId=String(task?.item.prepGroup?.id||categoryFlow.find(x=>x.pendingQty>0)?.id||"");
+    const activeCategoryIndex=Math.max(0,categoryFlow.findIndex(x=>x.id===activeCategoryId));
+    const activeCategory=categoryFlow.find(x=>x.id===activeCategoryId)||null;
+    const activeMenu=task&&activeCategory?activeCategory.menus.find(x=>x.id===task.item.id&&x.variant===String(task.item.variant||"Standard"))||null:null;
+    const upcoming=activeOrders.slice(1,4);
+    const extraUpcoming=Math.max(0,activeOrders.length-1-upcoming.length);
+    return {first,firstReady,firstCalled,firstCupCount,firstRemaining,categoryFlow,activeCategoryId,activeCategoryIndex,activeCategory,activeMenu,upcoming,extraUpcoming,waitingPickup,activeQueueCount:activeOrders.length};
+  },[orders,task]);
+  const {first,firstReady,firstCalled,firstCupCount,firstRemaining,categoryFlow,activeCategoryId,activeCategoryIndex,activeCategory,activeMenu,upcoming,extraUpcoming,waitingPickup,activeQueueCount}=queueView;
 
   return <section className="soft-scroll h-full overflow-y-auto overscroll-contain p-2.5 pb-28 sm:p-4 sm:pb-24 md:p-6 md:pb-8">
     <div className="mx-auto w-full max-w-4xl space-y-3">
       <header className="sticky top-0 z-20 flex items-center justify-between gap-3 rounded-2xl bg-[#f3f5f7] py-2">
         <div className="flex min-w-0 items-center gap-2"><Link href="/pos" className="grid h-11 w-11 shrink-0 place-items-center rounded-full border border-slate-300 bg-white text-slate-700 shadow-sm" aria-label="กลับหน้าเมนู"><ArrowLeft size={17}/></Link><div className="min-w-0"><p className="gold m-0 text-[9px] font-bold tracking-[.26em]">PRODUCTION RUN</p><h1 className="mt-0.5 truncate text-lg font-semibold sm:text-xl">ทำออเดอร์ / รันบัตร</h1></div></div>
-        <div className="flex items-center gap-2">{syncing&&<span className="hidden text-[10px] text-slate-400 sm:inline">กำลังซิงก์…</span>}<span className="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-[10px] font-semibold text-slate-600">กำลังทำ {orders.filter(o=>!orderCalled(o)).length}</span></div>
+        <div className="flex items-center gap-2">{syncing&&<span className="hidden text-[10px] text-slate-400 sm:inline">กำลังซิงก์…</span>}<span className="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-[10px] font-semibold text-slate-600">กำลังทำ {activeQueueCount}</span></div>
       </header>
 
       {(pendingQueueAction||queueRecoveryBlocked)&&<div role="status" aria-live="polite" aria-atomic="true" className="rounded-2xl border-2 border-amber-300 bg-amber-50 p-3 text-xs text-amber-950">
