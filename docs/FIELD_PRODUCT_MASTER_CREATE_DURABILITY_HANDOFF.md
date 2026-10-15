@@ -1,6 +1,6 @@
 # FIELD Product Master create durability handoff
 
-Baseline: `9696dd9b22b0411abd568aadb8ae9d6829e8c4ec`.
+Baseline: `576eed89ee4d7c70ccbd16c7953b5f3cc90efa09` (latest main after Queue/Today Workspace performance memoization).
 
 ## Evidence
 
