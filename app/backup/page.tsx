@@ -71,7 +71,7 @@ function View({session}:{session:Session}){
         requestKey:crypto.randomUUID(),fingerprint:preview.fingerprint,expectedRevision:revision
       })) as Pending;
       setPending(intent);
-      const r=await api<any>("/api/admin/backup/restore",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify(restoreBody(intent,backup))});
+      const r=await api<any>("/api/admin/backup/restore",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({...restoreBody(intent,backup),confirm:true})});
       assertBackupRestoreAck(intent,r);
       clearBackupRestoreIntent(session.user.id,intent.requestKey);
       setPending(null);setMsg("กู้คืน Full Backup สำเร็จ · revision "+r.revision+(r.replayed?" · ยืนยันผลคำขอเดิมแล้ว":""));
