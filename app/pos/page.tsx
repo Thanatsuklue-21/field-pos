@@ -915,7 +915,7 @@ function PosView({session}:{session:Session}){
       </div>
     </fieldset></ModalFocus></div>}
 
-    {lastSale&&<div className="field-modal-overlay fixed inset-0 z-[95] flex items-end justify-center bg-black/30 backdrop-blur-[2px] sm:grid sm:place-items-center">
+    {lastSale&&<div className="field-modal-overlay fixed inset-0 z-[95] flex items-end justify-center bg-slate-950/20 backdrop-blur-[2px] sm:grid sm:place-items-center">
       <ModalFocus labelId="field-payment-handoff-title" className={"field-modal-panel w-full max-w-[460px] overflow-auto rounded-[26px] border bg-white p-5 shadow-2xl "+(lastSale.offline?"border-amber-300":"border-emerald-300")} initialFocusSelector='[data-handoff-primary]'>
         <div className="flex items-start gap-3">
           <div className={"grid h-10 w-10 shrink-0 place-items-center rounded-full "+(lastSale.offline?"bg-amber-100 text-amber-700":"bg-emerald-100 text-emerald-700")}><CheckCircle2 size={22}/></div>
