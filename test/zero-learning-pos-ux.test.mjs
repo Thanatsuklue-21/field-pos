@@ -134,7 +134,8 @@ test("post-payment handoff blocks the sale screen until the cashier chooses the 
   const end=pos.indexOf("{workspaceMounted&&",start);
   const handoff=pos.slice(start,end);
   assert.match(handoff,/fixed inset-0 z-\[95\]/);
-  assert.match(handoff,/bg-black\/30/);
+  assert.match(handoff,/bg-slate-950\/20/);
+  assert.doesNotMatch(handoff,/bg-black\/30/);
   assert.match(handoff,/ModalFocus labelId="field-payment-handoff-title"/);
   assert.match(handoff,/initialFocusSelector='\[data-handoff-primary\]'/);
   assert.match(handoff,/data-handoff-primary/);
