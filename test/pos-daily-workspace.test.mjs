@@ -109,12 +109,13 @@ test("workspace dialog traps keyboard focus and supports Escape without changing
   assert.doesNotMatch(hub,/method:"POST"[\s\S]{0,180}\/api\/stock/);
 });
 
-test("workspace renders one explicit recommended action above the detail tabs",async()=>{
+test("workspace renders one explicit next action before optional detail browsing",async()=>{
   const hub=await read("components/pos-daily-workspace.tsx");
   assert.match(hub,/chooseWorkspaceNextAction/);
-  assert.match(hub,/แนะนำตอนนี้/);
+  assert.match(hub,/ทำตอนนี้/);
   assert.match(hub,/aria-live="polite"/);
   assert.match(hub,/setTab\(nextAction\.tab as WorkspaceTab\)/);
+  assert.match(hub,/ดูงานอื่น/);
 });
 
 
@@ -257,7 +258,7 @@ test("workspace start-day recommendation focuses the exact opening cash control 
   assert.match(hub,/scrollIntoView\(\{behavior:"smooth",block:"nearest"\}\)/);
   assert.match(hub,/openingCashRef\.current\?\.focus\(\)/);
   assert.match(hub,/"เริ่มงาน"/);
-  assert.match(hub,/>ไปตรงนี้<\/button>/);
+  assert.match(hub,/>ทำตามนี้<\/button>/);
 });
 
 
@@ -315,4 +316,40 @@ test("guided workspace no longer uses a one-shot auto-route lock",async()=>{
   assert.doesNotMatch(hub,/autoRouteRef/);
   assert.doesNotMatch(hub,/manualTabRef/);
   assert.match(hub,/\[open,workspaceReady,guidedMode,nextAction\.tab,tabs\.join\("\|"\),tab\]/);
+});
+
+
+test("Today Workspace hides secondary task tabs until the operator explicitly asks to browse",async()=>{
+  const hub=await read("components/pos-daily-workspace.tsx");
+  assert.match(hub,/const \[browseOpen,setBrowseOpen\]=useState\(false\)/);
+  assert.match(hub,/aria-expanded=\{browseOpen\}/);
+  assert.match(hub,/aria-controls="field-workspace-other-tasks"/);
+  assert.match(hub,/\{browseOpen\?"ซ่อนงานอื่น":"ดูงานอื่น"\}/);
+  assert.match(hub,/\{browseOpen&&<div id="field-workspace-other-tasks"/);
+  assert.match(hub,/ถ้าทำตามระบบ ไม่จำเป็นต้องเปิดส่วนนี้/);
+  assert.match(hub,/setGuidedMode\(false\);setTab\(key\);setBrowseOpen\(false\)/);
+});
+
+test("ready workspace has one obvious exit back to selling instead of opening history",async()=>{
+  const hub=await read("components/pos-daily-workspace.tsx");
+  assert.match(hub,/nextAction\.tone==="ready"\?<button type="button" onClick=\{onClose\}/);
+  assert.match(hub,/>รับออเดอร์<\/button>/);
+  assert.match(hub,/nextAction\.tab\?<button type="button"/);
+  assert.match(hub,/>ทำตามนี้<\/button>/);
+});
+
+test("one-next-action navigation is presentation-only and introduces no new financial or stock mutation",async()=>{
+  const hub=await read("components/pos-daily-workspace.tsx");
+  const guideStart=hub.indexOf('role="status" aria-live="polite"');
+  const guideEnd=hub.indexOf('<div className="soft-scroll',guideStart);
+  const guide=hub.slice(guideStart,guideEnd);
+  assert.doesNotMatch(guide,/method:"POST"/);
+  assert.doesNotMatch(guide,/\/api\/pos\/queue/);
+  assert.doesNotMatch(guide,/\/api\/expenses/);
+  assert.doesNotMatch(guide,/\/api\/stock/);
+});
+
+test("workspace resets optional browsing when it closes",async()=>{
+  const hub=await read("components/pos-daily-workspace.tsx");
+  assert.match(hub,/if\(!open\)\{[\s\S]{0,120}setGuidedMode\(true\);[\s\S]{0,120}setBrowseOpen\(false\)/);
 });
