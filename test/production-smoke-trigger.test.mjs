@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {readFile} from "node:fs/promises";
 
 const source=await readFile(new URL("../.github/workflows/production-smoke.yml",import.meta.url),"utf8");
+const apiRoute=await readFile(new URL("../app/api/[...route]/route.js",import.meta.url),"utf8");
 
 test("deployment-triggered production smoke ignores preview environments",()=>{
   assert.match(source,/github\.event\.deployment\.environment == 'Production'/);
@@ -48,4 +49,21 @@ test("production smoke covers root redirect, go-live routes and auth guard",()=>
   assert.match(source,/must reject unauthenticated access with HTTP 401/);
   assert.match(source,/content-security-policy/);
   assert.match(source,/x-content-type-options/);
+});
+
+test("health smoke measures the validated request once per attempt and preserves the 5s budget",()=>{
+  assert.match(source,/--write-out '%\\{http_code\\} %\\{time_total\\}'/);
+  assert.doesNotMatch(source,/--output \\/dev\\/null --write-out '%\\{time_total\\}' "\\$base\\/api\\/health"/);
+  assert.match(source,/health-server-times\\.txt/);
+  assert.match(source,/health_timing_missing/);
+  assert.match(source,/server-timing:.*db;dur=/i);
+  assert.match(source,/if\\(max>5\\) throw new Error\\('health_latency_budget_exceeded'\\)/);
+});
+
+test("health endpoint exposes database timing without weakening storage verification",()=>{
+  assert.match(apiRoute,/await getDb\\(\\)\\.execute\\("SELECT 1 AS ok"\\)/);
+  assert.match(apiRoute,/timing:\\{dbMs:Number\\(dbMs\\.toFixed\\(1\\)\\),totalMs:Number\\(totalMs\\.toFixed\\(1\\)\\)\\}/);
+  assert.match(apiRoute,/Server-Timing/);
+  assert.match(apiRoute,/db;dur=/);
+  assert.match(apiRoute,/error:"turso_unavailable"/);
 });
