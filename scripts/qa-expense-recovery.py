@@ -55,15 +55,13 @@ with sync_playwright() as p:
         expect(dialog.get_by_role('button', name='โอน/ธนาคาร', exact=True)).to_be_disabled()
         dialog.get_by_role('button', name='ปิดหน้าต่าง · เก็บรายการไว้', exact=True).click()
         page.reload()
-        expect(page.get_by_role('button', name='ตรวจผลรายการเดิม', exact=True)).to_be_visible()
-        page.get_by_role('button', name='ตรวจรายการค้าง', exact=True).click()
-        expect(page.get_by_role('dialog').get_by_label('จำนวนเงิน', exact=True)).to_have_value('30')
-        expect(page.get_by_role('dialog').get_by_label('จำนวนเงิน', exact=True)).to_be_disabled()
-        page.screenshot(path=str(output/f'expense-pending-{width}.png'), full_page=True)
-        page.get_by_role('dialog').get_by_role('button', name='ตรวจผลรายการเดิม', exact=True).click()
+        # Current UX auto-recovers the durable request on reload. The operator should
+        # not need to reopen the form or press a recovery button when exact replay succeeds.
+        expect(page.get_by_text('รายการนี้ถูกบันทึกไว้แล้ว · ระบบไม่สร้างซ้ำ', exact=True)).to_be_visible(timeout=10000)
         expect(page.get_by_role('dialog')).to_have_count(0)
-        expect(page.get_by_text('รายการนี้ถูกบันทึกไว้แล้ว · ระบบไม่สร้างซ้ำ', exact=True)).to_be_visible()
         assert len(stored)==1 and len(sent)==2
+        assert sent[1]==sent[0], 'Automatic recovery changed original payload/key'
+        page.screenshot(path=str(output/f'expense-recovered-{width}.png'), full_page=True)
         assert page.evaluate('document.documentElement.scrollWidth <= innerWidth'), 'Page overflow'
         assert not errors, errors
         results.append({'viewport':[width,height],'lost_response_reload_exact_replay':'pass','committed_expenses':len(stored),'send_attempts':len(sent),'page_errors':errors,'document_overflow':False})
