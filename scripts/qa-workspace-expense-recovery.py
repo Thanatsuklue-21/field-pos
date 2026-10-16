@@ -10,14 +10,16 @@ from playwright.sync_api import sync_playwright,expect
 
 parser=argparse.ArgumentParser()
 parser.add_argument("--base-url",default="http://localhost:3000")
-parser.add_argument("--browser",default="/usr/bin/chromium")
+parser.add_argument("--browser",default="")
 parser.add_argument("--output",default="/tmp/field-workspace-expense-qa")
 args=parser.parse_args()
 out=Path(args.output);out.mkdir(parents=True,exist_ok=True)
 posts=[];page_errors=[]
 
 with sync_playwright() as p:
-    browser=p.chromium.launch(executable_path=args.browser,args=["--no-sandbox"])
+    launch_args={"args":["--no-sandbox"]}
+    if args.browser: launch_args["executable_path"]=args.browser
+    browser=p.chromium.launch(**launch_args)
     context=browser.new_context(viewport={"width":390,"height":844})
     page=context.new_page();page.set_default_timeout(30000)
     page.on("pageerror",lambda e:page_errors.append(str(e)))
