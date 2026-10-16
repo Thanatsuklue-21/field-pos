@@ -628,6 +628,7 @@ function PosView({session}:{session:Session}){
       code==="request_key_conflict"?"รายการเดิมถูกเปลี่ยน กรุณาตรวจประวัติออเดอร์ก่อนชำระอีกครั้ง":
       code==="recipe_unavailable"?"สูตรเมนูยังไม่ครบหรือมีปริมาณผิด กรุณาตรวจสูตรก่อนขาย":
       code==="day_closed"?"วันนี้ปิดยอดแล้ว ไม่สามารถรับรายการขายเพิ่มได้":
+      code==="cash_shift_not_open"?"ยังไม่ได้เปิดกะเงินสดวันนี้ · เปิดงานร้านก่อนรับเงินสด หรือเลือก PromptPay/ช่องทางอื่น":
       code==="variant_unavailable"?"ตัวเลือกของเมนูในตะกร้าเปลี่ยนแล้ว กรุณาเลือกเมนูใหม่":
       (code==="stock_shortage"||code.startsWith("stock_shortage:"))?"วัตถุดิบไม่เพียงพอสำหรับออเดอร์นี้":
       code==="promptpay_timeout"?"หมดเวลารอ PromptPay ระบบยังเก็บรายการจองไว้ชั่วคราวและจะตรวจสอบอีกครั้ง":
@@ -661,6 +662,22 @@ function PosView({session}:{session:Session}){
     const unresolvedPrompt=pendingRead();
     if(unresolvedPrompt&&method!=="promptpay"){
       setResult("มี PromptPay รายการเดิมที่ยังรอผล · ช่องทางรับเงินอื่นถูกพักเพื่อป้องกันรับเงินซ้ำ");
+      return;
+    }
+    const shiftStatus=String(data?.operatorGuide?.shiftStatus||"");
+    if(online&&method==="cash"&&shiftStatus==="closed"){
+      setResult("วันนี้ปิดยอดแล้ว · ยังรับเงินสดเพิ่มไม่ได้");
+      return;
+    }
+    if(online&&method==="cash"&&shiftStatus==="not_open"){
+      if(session.user.role==="admin"){
+        setPayOpen(false);
+        setNotice("ก่อนรับเงินสด ต้องเปิดกะเงินสดวันนี้ก่อน · ระบบพาไปเปิดในงานร้านโดยไม่ออกจากหน้า POS");
+        setWorkspaceMounted(true);
+        setWorkspaceOpen(true);
+      }else{
+        setResult("ยังไม่ได้เปิดกะเงินสด · ให้เจ้าของร้านเปิดกะก่อน หรือเลือก PromptPay/ช่องทางอื่น");
+      }
       return;
     }
     if(checkoutInFlightRef.current)return;
