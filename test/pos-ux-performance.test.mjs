@@ -369,8 +369,8 @@ test('solo operator daily flow keeps sales and production primary while secondar
   const shell=await read('components/app-shell.tsx'),pos=await read('app/pos/page.tsx'),queue=await read('app/queue/page.tsx'),close=await read('app/close/page.tsx');
   assert.match(shell,/const primaryMobile=\["\/pos","\/queue"\]/);
   assert.match(shell,/const mobileMorePriority=\["\/orders","\/stock","\/expenses","\/close","\/settings"\]/);
-  assert.match(pos,/ไปทำคิว \{lastSale\.queueNo\}/);
-  assert.match(pos,/onClick=\{\(\)=>\{setLastSale\(null\);openWorkspace\(\)\}\}/);
+  assert.match(pos,/ทำคิว \{lastSale\.queueNo\} ตรงนี้/);
+  assert.match(pos,/onClick=\{\(\)=>\{setLastSale\(null\);openWorkspace\("queue"\)\}\}/);
   assert.match(pos,/รับออเดอร์ถัดไป/);
   assert.match(queue,/PRODUCTION RUN/);
   assert.match(queue,/ทำออเดอร์ \/ รันบัตร/);
