@@ -1,3 +1,3 @@
 FIELD POS production release marker
-source_main=a22fb9143ba18ec8f78ffd3c50d15c69f876ef3f
-purpose=workspace-stale-queue-fail-closed-release
+source_main=155ad0ffd9a066fa271ee15e68d81fa19a2ca1db
+purpose=promptpay-production-live-gate
