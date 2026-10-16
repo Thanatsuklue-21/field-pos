@@ -32,6 +32,6 @@ test("cash checkout recovery is serialized across overlapping lifecycle events",
   assert.match(block,/if\(cashReconcileRef\.current\)return/);
   assert.match(block,/cashReconcileRef\.current=true/);
   assert.match(block,/finally\{\s*cashReconcileRef\.current=false/);
-  assert.match(block,/JSON\\.stringify\\(p\\.body\\)/);
-  assert.match(block,/cashPendingClear\\(\\)/);
+  assert.match(block,/JSON\.stringify\(p\.body\)/);
+  assert.match(block,/cashPendingClear\(\)/);
 });
