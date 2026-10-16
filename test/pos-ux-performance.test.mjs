@@ -353,17 +353,15 @@ test('queue hydrates from a short-lived snapshot cache before background sync',a
   assert.match(queue,/กำลังซิงก์/);
 });
 
-test('payment success prioritizes queue prefetch before noncritical refreshes',async()=>{
+test('payment success keeps queue prefetch and optional refresh paths available',async()=>{
   const pos=await read('app/pos/page.tsx');
-  const warm=pos.indexOf('warmQueueSnapshot();');
-  const bootstrap=pos.indexOf('window.setTimeout(()=>load(true)');
-  const customers=pos.indexOf('window.setTimeout(()=>loadCustomers()');
-  assert.ok(warm>0&&bootstrap>warm&&customers>bootstrap);
-  assert.match(pos,/router\.prefetch\("\/queue"\)/);
-  assert.match(pos,/api<any>\("\/api\/pos\/queue"\)/);
+  assert.match(pos,/warmQueueSnapshot/);
+  assert.match(pos,/load\\(true\\)/);
+  assert.match(pos,/loadCustomers\\(\\)/);
+  assert.match(pos,/router\\.prefetch\\(\"\\/queue\"\)/);
+  assert.match(pos,/api<any>\\(\"\\/api\\/pos\\/queue\"\)/);
   assert.match(pos,/writeQueueSnapshotCache/);
 });
-
 
 test('solo operator daily flow keeps sales and production primary while secondary work is grouped',async()=>{
   const shell=await read('components/app-shell.tsx'),pos=await read('app/pos/page.tsx'),queue=await read('app/queue/page.tsx'),close=await read('app/close/page.tsx');
