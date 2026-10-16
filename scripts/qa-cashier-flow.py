@@ -82,7 +82,7 @@ with sync_playwright() as p:
     handoff=page.get_by_role("status").filter(has_text="ชำระเงินสำเร็จ")
     expect(handoff).to_be_visible()
     expect(handoff.get_by_role("button",name="รับออเดอร์ถัดไป",exact=True)).to_be_visible()
-    expect(handoff.get_by_role("button",name=re.compile(r"ไปทำคิว Q001"))).to_be_visible()
+    expect(handoff.get_by_role("button",name=re.compile(r"ทำคิว Q001 ตรงนี้"))).to_be_visible()
     # Payment handoff is intentionally non-dismissible: cashier must choose the next safe action.
     assert handoff.get_by_role("button",name=re.compile(r"ปิด|Close|Dismiss")).count()==0
     tap(handoff.get_by_role("button",name="รับออเดอร์ถัดไป",exact=True))

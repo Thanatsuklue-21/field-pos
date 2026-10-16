@@ -9,7 +9,7 @@ test('POS shows live cash change and closes payment modal after success',async()
   assert.match(pos,/เงินทอน/);
   assert.match(pos,/setPayOpen\(false\)/);
   assert.match(pos,/ชำระเงินสำเร็จ/);
-  assert.match(pos,/ไปทำคิว \{lastSale\.queueNo\}/);
+  assert.match(pos,/ทำคิว \{lastSale\.queueNo\} ตรงนี้/);
 });
 
 test('POS hides zero-price menus and reconciles stale persisted cart items',async()=>{
@@ -72,7 +72,7 @@ test('payment success makes the physical pager card visually dominant only after
   const pos=await read('app/pos/page.tsx');
   assert.match(pos,/splitPaymentPending\?<div[^>]*border-amber-300/);
   assert.match(pos,/ยังไม่ต้องส่งคิวไปทำ/);
-  assert.match(pos,/!lastSale\.offline&&!splitPaymentPending&&<button onClick=\{\(\)=>\{setLastSale\(null\);openWorkspace\(\)\}\}/);
+  assert.match(pos,/!lastSale\.offline&&!splitPaymentPending&&<button onClick=\{\(\)=>\{setLastSale\(null\);openWorkspace\("queue"\)\}\}/);
   assert.doesNotMatch(pos,/!lastSale\.offline&&!splitPaymentPending&&<button onClick=\{\(\)=>router\.push\("\/queue"\)\}/);
   assert.match(pos,/หยิบบัตรให้ลูกค้า/);
   assert.match(pos,/text-4xl font-black/);
@@ -369,8 +369,8 @@ test('solo operator daily flow keeps sales and production primary while secondar
   const shell=await read('components/app-shell.tsx'),pos=await read('app/pos/page.tsx'),queue=await read('app/queue/page.tsx'),close=await read('app/close/page.tsx');
   assert.match(shell,/const primaryMobile=\["\/pos","\/queue"\]/);
   assert.match(shell,/const mobileMorePriority=\["\/orders","\/stock","\/expenses","\/close","\/settings"\]/);
-  assert.match(pos,/ไปทำคิว \{lastSale\.queueNo\}/);
-  assert.match(pos,/onClick=\{\(\)=>\{setLastSale\(null\);openWorkspace\(\)\}\}/);
+  assert.match(pos,/ทำคิว \{lastSale\.queueNo\} ตรงนี้/);
+  assert.match(pos,/onClick=\{\(\)=>\{setLastSale\(null\);openWorkspace\("queue"\)\}\}/);
   assert.match(pos,/รับออเดอร์ถัดไป/);
   assert.match(queue,/PRODUCTION RUN/);
   assert.match(queue,/ทำออเดอร์ \/ รันบัตร/);

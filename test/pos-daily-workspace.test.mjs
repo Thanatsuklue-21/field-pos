@@ -8,7 +8,10 @@ const read=p=>readFile(new URL("../"+p,import.meta.url),"utf8");
 test("POS opens the daily workspace in-place and blocks it during payment mutation",async()=>{
   const pos=await read("app/pos/page.tsx");
   assert.match(pos,/PosDailyWorkspace/);
-  assert.match(pos,/const openWorkspace=\(\)=>\{setWorkspaceMounted\(true\);setWorkspaceOpen\(true\)\}/);
+  assert.match(pos,/const openWorkspace=\(requestedTab:null\|"queue"\|"orders"\|"stock"\|"expense"\|"status"=null\)=>\{/);
+  assert.match(pos,/setWorkspaceRequestedTab\(requestedTab\)/);
+  assert.match(pos,/setWorkspaceMounted\(true\)/);
+  assert.match(pos,/setWorkspaceOpen\(true\)/);
   assert.match(pos,/workspaceMounted&&<PosDailyWorkspace/);
   assert.match(pos,/>งานร้าน<\/button>/);
   assert.match(pos,/disabled=\{busy\|\|payOpen\}/);
@@ -314,7 +317,7 @@ test("guided workspace no longer uses a one-shot auto-route lock",async()=>{
   const hub=await read("components/pos-daily-workspace.tsx");
   assert.doesNotMatch(hub,/autoRouteRef/);
   assert.doesNotMatch(hub,/manualTabRef/);
-  assert.match(hub,/\[open,workspaceReady,guidedMode,nextAction\.tab,tabs\.join\("\|"\),tab\]/);
+  assert.match(hub,/\[open,workspaceReady,guidedMode,nextAction\.tab,requestedTab,tabs\.join\("\|"\),tab\]/);
 });
 
 
@@ -375,4 +378,26 @@ test("workspace invalidates queue freshness across connectivity and app-resume b
 test("queue recovery response can restore freshness only when it includes a server queue snapshot",async()=>{
   const hub=await read("components/pos-daily-workspace.tsx");
   assert.match(hub,/onRecovered:result=>\{[\s\S]{0,160}if\(Array\.isArray\(result\?\.orders\)\)\{setQueue\(result\.orders\);setQueueFresh\(true\)\}/);
+});
+
+
+test("POS routine task buttons open the exact Today Workspace task without route switching",async()=>{
+  const pos=await read("app/pos/page.tsx");
+  const workspace=await read("components/pos-daily-workspace.tsx");
+  assert.match(pos,/workspaceRequestedTab/);
+  assert.match(pos,/openWorkspace\("stock"\)/);
+  assert.match(pos,/openWorkspace\("queue"\)/);
+  assert.match(pos,/ตรวจสต็อกตรงนี้/);
+  assert.match(pos,/ทำคิว \{lastSale\.queueNo\} ตรงนี้/);
+  assert.doesNotMatch(pos,/router\.push\("\/stock"\)/);
+  assert.match(pos,/requestedTab=\{workspaceRequestedTab\}/);
+  assert.match(workspace,/requestedTab\?:WorkspaceTab\|null/);
+  assert.match(workspace,/if\(requestedTab&&tabs\.includes\(requestedTab\)\)/);
+  assert.match(workspace,/setGuidedMode\(false\)/);
+  assert.match(workspace,/if\(tab!==requestedTab\)setTab\(requestedTab\)/);
+});
+
+test("closing a direct Today Workspace task clears its explicit target",async()=>{
+  const pos=await read("app/pos/page.tsx");
+  assert.match(pos,/onClose=\{\(\)=>\{setWorkspaceOpen\(false\);setWorkspaceRequestedTab\(null\)\}\}/);
 });

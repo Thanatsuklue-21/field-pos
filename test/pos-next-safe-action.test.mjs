@@ -104,8 +104,11 @@ test("operator guidance is part of cached bootstrap rather than a second polling
 
 test("queue recommendation opens Today Workspace in-place instead of switching pages",async()=>{
   const pos=await read("app/pos/page.tsx");
-  assert.match(pos,/const openWorkspace=\(\)=>\{setWorkspaceMounted\(true\);setWorkspaceOpen\(true\)\}/);
-  assert.match(pos,/const runWorkspaceNextAction=\(\)=>openWorkspace\(\)/);
+  assert.match(pos,/const openWorkspace=\(requestedTab:null\|"queue"\|"orders"\|"stock"\|"expense"\|"status"=null\)=>\{/);
+  assert.match(pos,/setWorkspaceRequestedTab\(requestedTab\)/);
+  assert.match(pos,/setWorkspaceMounted\(true\);/);
+  assert.match(pos,/setWorkspaceOpen\(true\);/);
+  assert.match(pos,/const runWorkspaceNextAction=\(\)=>openWorkspace\(null\)/);
   assert.match(pos,/onClick=\{runWorkspaceNextAction\}/);
   assert.match(pos,/workspaceNextAction\.tab==="queue"\?"ทำคิวตรงนี้"/);
   const start=pos.indexOf("const runWorkspaceNextAction");
@@ -118,6 +121,6 @@ test("all store recommendations keep the operator on POS through Today Workspace
   const pos=await read("app/pos/page.tsx");
   const start=pos.indexOf("const runWorkspaceNextAction");
   const block=pos.slice(start,start+180);
-  assert.match(block,/openWorkspace\(\)/);
+  assert.match(block,/openWorkspace\(null\)/);
   assert.doesNotMatch(block,/router\.push/);
 });
