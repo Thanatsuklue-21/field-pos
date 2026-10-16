@@ -8,7 +8,7 @@ from playwright.sync_api import sync_playwright, expect
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--base-url', default='http://localhost:3000')
-parser.add_argument('--browser', default='/usr/bin/chromium')
+parser.add_argument('--browser', default='')
 parser.add_argument('--output', default='/tmp/field-expense-qa')
 args = parser.parse_args()
 output = Path(args.output)
@@ -16,7 +16,9 @@ output.mkdir(parents=True, exist_ok=True)
 results = []
 
 with sync_playwright() as p:
-    browser = p.chromium.launch(executable_path=args.browser, args=['--no-sandbox'])
+    launch_args={'args':['--no-sandbox']}
+    if args.browser: launch_args['executable_path']=args.browser
+    browser = p.chromium.launch(**launch_args)
     for width, height in [(320,640),(360,740),(390,844),(412,915),(430,932),(768,1024),(1024,768)]:
         context = browser.new_context(viewport={'width':width,'height':height})
         page = context.new_page()
