@@ -25,6 +25,8 @@ test('createPromptPayCharge normalizes baht to satang and returns QR metadata',a
     assert.equal(url,'https://api.omise.co/charges');
     assert.equal(init.method,'POST');
     assert.match(String(init.headers.Authorization),/^Basic /);
+    assert.ok(init.signal instanceof AbortSignal);
+    assert.equal(init.signal.aborted,false);
     const form=new URLSearchParams(String(init.body));
     assert.equal(form.get('amount'),'5500');
     assert.equal(form.get('currency'),'THB');
@@ -58,4 +60,17 @@ test('PromptPay rejects unsafe charge ids before network access',async()=>{
   let called=false;globalThis.fetch=async()=>{called=true;throw new Error('should not call')};
   await assert.rejects(()=>getPromptPayCharge('../bad'),/invalid_charge_id/);
   assert.equal(called,false);
+});
+
+
+test('Opn provider timeout fails closed instead of hanging checkout',async()=>{
+  process.env.OMISE_SECRET_KEY='skey_test_123';
+  globalThis.fetch=async(_url,init)=>{
+    assert.ok(init.signal instanceof AbortSignal);
+    throw new DOMException('Timed out','TimeoutError');
+  };
+  await assert.rejects(
+    ()=>createPromptPayCharge({amount:55,reference:'A001'}),
+    error=>error?.message==='payment_provider_timeout'&&error?.status===502
+  );
 });
