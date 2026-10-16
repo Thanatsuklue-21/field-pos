@@ -15,6 +15,9 @@ const user={id:'owner',role:'admin',permissions:{}};
 const cart=[{id:'latte',variant:'100%',qty:2}];
 const seed=()=>({menu:[{id:'latte',enabled:true,price:55,name:'Latte',variants:[{label:'100%',recipe:{items:{matcha:5,milk:110}}}]}],ingredients:{matcha:{qty:1000,unitCost:2},milk:{qty:30000,unitCost:0.06}},settings:{pagerCount:10},sales:[],orders:[],billSeq:{}});
 async function setup(t,doc=seed()){
+  if(!Object.prototype.hasOwnProperty.call(doc,"cashShifts")){
+    doc={...doc,cashShifts:[{id:"test-shift",date:bangkokDate(),status:"open",openingCash:100,openedAt:1,openedBy:user.id}]};
+  }
   const dir=await mkdtemp(join(tmpdir(),'field-core-'));
   const db=createClient({url:'file:'+join(dir,'test.db')});t.after(async()=>{
     db.close();
@@ -511,7 +514,7 @@ test('real libSQL: pre-production bank and card refunds require external referen
 
 
 test('real libSQL: manual cash expense is idempotent and cannot overdraw the drawer',async t=>{
-  const db=await setup(t),token='expense-control-token';
+  const db=await setup(t,{...seed(),cashShifts:[]}),token='expense-control-token';
   await db.execute({sql:'INSERT INTO field_sessions VALUES(?,?,?,?)',args:[digest(token),user.id,'csrf',Date.now()+60000]});
   const handler=createApi({db,origin:'https://field.test'});
   const opened=await apiPost(handler,token,['cash-shift','open'],{openingCash:100});
@@ -551,7 +554,7 @@ test('real libSQL: manual cash expense is idempotent and cannot overdraw the dra
 });
 
 test('real libSQL: lost expense response replays after close without repeating drawer or audit effects',async t=>{
-  const db=await setup(t),token='expense-recovery-token';
+  const db=await setup(t,{...seed(),cashShifts:[]}),token='expense-recovery-token';
   await db.execute({sql:'INSERT INTO field_sessions VALUES(?,?,?,?)',args:[digest(token),user.id,'csrf',Date.now()+60000]});
   const handler=createApi({db,origin:'https://field.test'});
   await apiPost(handler,token,['cash-shift','open'],{openingCash:100});

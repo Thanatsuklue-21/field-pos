@@ -23,6 +23,9 @@ function initialState(){
 }
 
 function fakeDb(seed=initialState()){
+  if(!Object.prototype.hasOwnProperty.call(seed,"cashShifts")){
+    seed={...seed,cashShifts:[{id:"test-shift",date:"2026-10-01",status:"open",openingCash:100,openedAt:1,openedBy:"admin-1"}]};
+  }
   const storage={revision:0,document:JSON.stringify(seed),audits:[],stockTx:[],costSnapshots:[],requests:[]};
 
   function executeOn(target,query){
