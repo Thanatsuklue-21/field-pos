@@ -26,3 +26,19 @@ jobs:
         run: npm test
       - name: Build Next.js application
         run: npm run build
+      - name: Install browser QA runtime
+        run: |
+          python -m pip install --disable-pip-version-check playwright
+          python -m playwright install --with-deps chromium
+      - name: Run touch and rotation browser QA
+        run: |
+          set -euo pipefail
+          npm start >/tmp/field-pos-ci.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true; cat /tmp/field-pos-ci.log' EXIT
+          for i in {1..60}; do
+            if curl --fail --silent http://127.0.0.1:3000/pos >/dev/null; then break; fi
+            sleep 1
+          done
+          curl --fail --silent http://127.0.0.1:3000/pos >/dev/null
+          python scripts/qa-pos-touch.py --base-url http://127.0.0.1:3000 --output /tmp/field-touch-qa

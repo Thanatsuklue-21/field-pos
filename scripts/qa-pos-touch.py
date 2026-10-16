@@ -9,13 +9,15 @@ from playwright.sync_api import sync_playwright, expect
 
 parser=argparse.ArgumentParser()
 parser.add_argument('--base-url',default='http://localhost:3000')
-parser.add_argument('--browser',default='/usr/bin/chromium')
+parser.add_argument('--browser',default='')
 parser.add_argument('--output',default='/tmp/field-touch-qa')
 args=parser.parse_args()
 output=Path(args.output);output.mkdir(parents=True,exist_ok=True)
 results=[]
 with sync_playwright() as p:
-    browser=p.chromium.launch(executable_path=args.browser,args=['--no-sandbox'])
+    launch_args={'args':['--no-sandbox']}
+    if args.browser: launch_args['executable_path']=args.browser
+    browser=p.chromium.launch(**launch_args)
     for width,height in [(320,640),(360,740),(390,844),(412,915),(430,932),(768,1024),(1024,768)]:
         context=browser.new_context(viewport={'width':width,'height':height})
         page=context.new_page();page.set_default_timeout(30000);writes=[];errors=[]
@@ -78,12 +80,19 @@ with sync_playwright() as p:
         expect(dialog.get_by_role('button',name='ยืนยันรับเงิน',exact=True)).to_be_disabled()
         expect(dialog.get_by_text('ขาดอีก',exact=True)).to_be_visible()
         assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
+        if width<height:
+            page.set_viewport_size({'width':height,'height':width})
+            expect(dialog).to_be_visible()
+            assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
+            page.set_viewport_size({'width':width,'height':height})
+            expect(dialog).to_be_visible()
+            assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
         page.screenshot(path=str(output/f'touch-{width}.png'),full_page=True)
         dialog.get_by_role('button',name='กลับไปเลือกเมนู',exact=True).click()
         expect(page.get_by_role('dialog',name='รับเงิน ฿55',exact=True)).to_have_count(0)
         assert not writes, writes
         assert not errors, errors
-        results.append({'viewport':f'{width}x{height}','touch44':True,'navTouch44':True,'quantityUpdates':True,'cashUnderpaymentBlocked':True,'noFinancialWrites':True})
+        results.append({'viewport':f'{width}x{height}','touch44':True,'navTouch44':True,'quantityUpdates':True,'cashUnderpaymentBlocked':True,'rotationSafe':True,'noFinancialWrites':True})
         print(json.dumps(results[-1]),flush=True)
         context.close()
     browser.close()
