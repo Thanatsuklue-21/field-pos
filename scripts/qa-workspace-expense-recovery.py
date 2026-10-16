@@ -55,6 +55,9 @@ with sync_playwright() as p:
     page.get_by_role("button",name="งานร้าน",exact=True).click()
     workspace=page.get_by_role("dialog",name="งานร้าน FIELD")
     expect(workspace).to_be_visible()
+    # Guided workspace intentionally hides secondary tasks until the operator asks
+    # to browse them, reducing choices for a new cashier.
+    workspace.get_by_role("button",name="ดูงานอื่น",exact=True).click()
     workspace.get_by_role("button",name="รายจ่าย",exact=True).click()
     workspace.get_by_role("button",name="โอน",exact=True).click()
     workspace.get_by_role("spinbutton",name="จำนวนเงินค่าใช้จ่ายด่วน").fill("45") if workspace.get_by_role("spinbutton",name="จำนวนเงินค่าใช้จ่ายด่วน").count() else workspace.get_by_label("จำนวนเงินค่าใช้จ่ายด่วน").fill("45")
