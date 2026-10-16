@@ -8,6 +8,6 @@ test('schema startup uses a durable version marker before replaying DDL',async()
   const db=await read('lib/db.mjs');
   assert.match(db,/const SCHEMA_VERSION=1/);
   assert.match(db,/PRAGMA user_version/);
-  assert.ok(db.indexOf('PRAGMA user_version')<db.indexOf('db\.batch'));
-  assert.ok(db.indexOf('ensureSchemaMigrations\(db\)')<db.lastIndexOf('PRAGMA user_version ='));
+  assert.ok(db.indexOf('PRAGMA user_version')<db.indexOf('db.batch'));
+  assert.ok(db.indexOf('ensureSchemaMigrations(db)')<db.lastIndexOf('PRAGMA user_version ='));
 });
