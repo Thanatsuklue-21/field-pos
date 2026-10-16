@@ -28,11 +28,16 @@ function View({session}:{session:Session}){
     try{setPendingDelete(readExpenseDeleteIntent(session.user.id))}catch{setDeleteRecoveryBlocked(true);setError("อ่านสถานะการลบรายการเดิมไม่ได้ · ห้ามลบหรือเพิ่มรายการใหม่จนกว่าจะตรวจ recovery storage ได้")}
   },[session.user.id]);
   useEffect(()=>{
+    let disposed=false,retryTimer:number|undefined;
     const reconnect=()=>{
-      if(!savingRef.current){
-        try{const intent=readExpenseIntent(session.user.id);if(intent)save(intent).catch(()=>{})}catch{setRecoveryBlocked(true)}
+      if(disposed)return;
+      const writeSettling=savingRef.current||(session.user.role==="admin"&&deleteSavingRef.current);
+      if(writeSettling){
+        if(retryTimer===undefined)retryTimer=window.setTimeout(()=>{retryTimer=undefined;reconnect()},100);
+        return;
       }
-      if(session.user.role==="admin"&&!deleteSavingRef.current){
+      try{const intent=readExpenseIntent(session.user.id);if(intent)save(intent).catch(()=>{})}catch{setRecoveryBlocked(true)}
+      if(session.user.role==="admin"){
         try{const intent=readExpenseDeleteIntent(session.user.id);if(intent)recoverDelete(intent).catch(()=>{})}catch{setDeleteRecoveryBlocked(true)}
       }
     };
@@ -41,7 +46,13 @@ function View({session}:{session:Session}){
     window.addEventListener("online",reconnect);
     window.addEventListener("focus",reconnect);
     document.addEventListener("visibilitychange",visible);
-    return()=>{window.removeEventListener("online",reconnect);window.removeEventListener("focus",reconnect);document.removeEventListener("visibilitychange",visible)};
+    return()=>{
+      disposed=true;
+      if(retryTimer!==undefined)window.clearTimeout(retryTimer);
+      window.removeEventListener("online",reconnect);
+      window.removeEventListener("focus",reconnect);
+      document.removeEventListener("visibilitychange",visible);
+    };
   },[session.user.id,session.user.role,session.csrf]);
   const amountNumber=Number(amount)||0;
   const isCash=paymentMethod==="cash";
