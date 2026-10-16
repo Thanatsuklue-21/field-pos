@@ -44,3 +44,4 @@ jobs:
           python scripts/qa-pos-touch.py --base-url http://127.0.0.1:3000 --output /tmp/field-touch-qa
           python scripts/qa-offline-outbox.py --base-url http://127.0.0.1:3000 --output /tmp/field-outbox-qa
           python scripts/qa-cashier-flow.py --base-url http://127.0.0.1:3000 --output /tmp/field-cashier-flow-qa
+          python scripts/qa-promptpay-nonblocking.py --base-url http://127.0.0.1:3000 --output /tmp/field-promptpay-qa
