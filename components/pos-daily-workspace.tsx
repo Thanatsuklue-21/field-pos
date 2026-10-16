@@ -84,9 +84,9 @@ function queueActionError(code:string){
 }
 
 export default function PosDailyWorkspace({
-  session,bootstrap,open,online,onClose
+  session,bootstrap,open,online,requestedTab,onClose
 }:{
-  session:Session;bootstrap:Bootstrap|null;open:boolean;online:boolean;onClose:()=>void
+  session:Session;bootstrap:Bootstrap|null;open:boolean;online:boolean;requestedTab?:WorkspaceTab|null;onClose:()=>void
 }){
   const canQueue=session.user.role==="admin"||session.user.permissions?.queue===true;
   const canOrder=session.user.role==="admin"||session.user.permissions?.order===true;
@@ -499,11 +499,17 @@ export default function PosDailyWorkspace({
       setBrowseOpen(false);
       return;
     }
+    if(requestedTab&&tabs.includes(requestedTab)){
+      setGuidedMode(false);
+      setBrowseOpen(false);
+      if(tab!==requestedTab)setTab(requestedTab);
+      return;
+    }
     if(!workspaceReady||!guidedMode)return;
     if(nextAction.tab&&tabs.includes(nextAction.tab as WorkspaceTab)&&tab!==nextAction.tab){
       setTab(nextAction.tab as WorkspaceTab);
     }
-  },[open,workspaceReady,guidedMode,nextAction.tab,tabs.join("|"),tab]);
+  },[open,workspaceReady,guidedMode,nextAction.tab,requestedTab,tabs.join("|"),tab]);
 
   if(!open)return null;
 
