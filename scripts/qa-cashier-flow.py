@@ -12,13 +12,15 @@ from playwright.sync_api import sync_playwright, expect
 
 parser=argparse.ArgumentParser()
 parser.add_argument("--base-url",default="http://localhost:3000")
-parser.add_argument("--browser",default="/usr/bin/chromium")
+parser.add_argument("--browser",default="")
 parser.add_argument("--output",default="/tmp/field-cashier-flow-qa")
 args=parser.parse_args()
 output=Path(args.output); output.mkdir(parents=True,exist_ok=True)
 
 with sync_playwright() as p:
-    browser=p.chromium.launch(executable_path=args.browser,args=["--no-sandbox"])
+    launch_args={"args":["--no-sandbox"]}
+    if args.browser: launch_args["executable_path"]=args.browser
+    browser=p.chromium.launch(**launch_args)
     context=browser.new_context(viewport={"width":390,"height":844})
     page=context.new_page(); page.set_default_timeout(30000)
     writes=[]; errors=[]; checkout_bodies=[]; taps=0
@@ -79,7 +81,7 @@ with sync_playwright() as p:
     expect(page.get_by_text("คิว Q001",exact=True)).to_be_visible()
     expect(page.get_by_text("บัตร 7",exact=True)).to_be_visible()
     expect(page.get_by_text("฿45",exact=True)).to_be_visible()
-    handoff=page.get_by_role("status").filter(has_text="ชำระเงินสำเร็จ")
+    handoff=page.get_by_role("dialog",name="ชำระเงินสำเร็จ",exact=True)
     expect(handoff).to_be_visible()
     expect(handoff.get_by_role("button",name="รับออเดอร์ถัดไป",exact=True)).to_be_visible()
     expect(handoff.get_by_role("button",name=re.compile(r"ทำคิว Q001 ตรงนี้"))).to_be_visible()
