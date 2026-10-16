@@ -783,6 +783,12 @@ function PosView({session}:{session:Session}){
         setPayOpen(false);
         setNotice(message);
         load().catch(()=>{});
+      }else if(e.message==="cash_shift_not_open"&&method==="cash"&&session.user.role==="admin"){
+        setPayOpen(false);
+        setNotice("ยังไม่ได้เปิดกะเงินสด · ระบบตรวจจาก Server แล้วและพาไปเปิดกะเดิมโดยไม่สร้างบิลซ้ำ");
+        setWorkspaceMounted(true);
+        setWorkspaceOpen(true);
+        load().catch(()=>{});
       }else{
         setResult(method==="cash"&&e.message==="network_unavailable"?"การเชื่อมต่อขาดหาย · เก็บ request เดิมไว้และจะตรวจซ้ำอัตโนมัติ":message);
       }
