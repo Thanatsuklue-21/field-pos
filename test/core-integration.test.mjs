@@ -514,7 +514,7 @@ test('real libSQL: pre-production bank and card refunds require external referen
 
 
 test('real libSQL: manual cash expense is idempotent and cannot overdraw the drawer',async t=>{
-  const db=await setup(t),token='expense-control-token';
+  const db=await setup(t,{...seed(),cashShifts:[]}),token='expense-control-token';
   await db.execute({sql:'INSERT INTO field_sessions VALUES(?,?,?,?)',args:[digest(token),user.id,'csrf',Date.now()+60000]});
   const handler=createApi({db,origin:'https://field.test'});
   const opened=await apiPost(handler,token,['cash-shift','open'],{openingCash:100});
@@ -554,7 +554,7 @@ test('real libSQL: manual cash expense is idempotent and cannot overdraw the dra
 });
 
 test('real libSQL: lost expense response replays after close without repeating drawer or audit effects',async t=>{
-  const db=await setup(t),token='expense-recovery-token';
+  const db=await setup(t,{...seed(),cashShifts:[]}),token='expense-recovery-token';
   await db.execute({sql:'INSERT INTO field_sessions VALUES(?,?,?,?)',args:[digest(token),user.id,'csrf',Date.now()+60000]});
   const handler=createApi({db,origin:'https://field.test'});
   await apiPost(handler,token,['cash-shift','open'],{openingCash:100});
