@@ -54,10 +54,12 @@ jobs:
           echo "Checking $base"
 
           : > /tmp/health-times.txt
+          : > /tmp/health-server-times.txt
           for attempt in 1 2 3; do
-            code="$(curl --silent --show-error --output /tmp/health.json --dump-header /tmp/health.headers --write-out '%{http_code}' --retry 2 --retry-all-errors --retry-delay 2 "$base/api/health")"
-            test "$code" = "200" || { echo "::error::health attempt $attempt returned HTTP $code"; exit 1; }
-            total="$(curl --silent --show-error --output /dev/null --write-out '%{time_total}' "$base/api/health")"
+            metrics="$(curl --silent --show-error --output /tmp/health.json --dump-header /tmp/health.headers --write-out '%{http_code} %{time_total}' --retry 2 --retry-all-errors --retry-delay 2 "$base/api/health")"
+            code="${metrics%% *}"
+            total="${metrics#* }"
+            test "$code" = "200" || { echo "::error::health attempt $attempt returned HTTP $code"; cat /tmp/health.json; exit 1; }
             echo "$total" >> /tmp/health-times.txt
 
             node --input-type=module <<'NODE'
@@ -69,13 +71,17 @@ jobs:
           if(!health.release.branch || !health.release.environment || !health.release.deploymentId) throw new Error('release_context_missing');
           if(health.release.branch!=='main') throw new Error('release_branch_not_main');
           if(health.release.environment!=='production') throw new Error('release_environment_not_production');
-          console.log('health ok',health.release);
+          const dbMs=Number(health?.timing?.dbMs),appMs=Number(health?.timing?.totalMs);
+          if(!Number.isFinite(dbMs)||!Number.isFinite(appMs)) throw new Error('health_timing_missing');
+          fs.appendFileSync('/tmp/health-server-times.txt',JSON.stringify({dbMs,appMs})+'\n');
+          console.log('health ok',health.release,{dbMs,appMs});
           NODE
 
             grep -qi '^strict-transport-security:' /tmp/health.headers || { echo "::error::HSTS header missing"; exit 1; }
             grep -qi '^x-content-type-options:[[:space:]]*nosniff' /tmp/health.headers || { echo "::error::nosniff header missing"; exit 1; }
             grep -qi '^x-frame-options:[[:space:]]*DENY' /tmp/health.headers || { echo "::error::frame protection header missing"; exit 1; }
             grep -qi '^content-security-policy:' /tmp/health.headers || { echo "::error::health CSP header missing"; exit 1; }
+            grep -qi '^server-timing:.*db;dur=' /tmp/health.headers || { echo "::error::health Server-Timing missing database duration"; exit 1; }
           done
 
           node --input-type=module <<'NODE'
@@ -83,7 +89,10 @@ jobs:
           const values=fs.readFileSync('/tmp/health-times.txt','utf8').trim().split(/\s+/).map(Number).filter(Number.isFinite);
           if(values.length!==3) throw new Error('health_latency_sample_missing');
           const max=Math.max(...values),avg=values.reduce((a,b)=>a+b,0)/values.length;
-          console.log({healthLatencySeconds:{avg,max}});
+          const server=fs.readFileSync('/tmp/health-server-times.txt','utf8').trim().split(/\n+/).filter(Boolean).map(x=>JSON.parse(x));
+          if(server.length!==3) throw new Error('health_server_timing_sample_missing');
+          const dbMax=Math.max(...server.map(x=>Number(x.dbMs)||0)),appMax=Math.max(...server.map(x=>Number(x.appMs)||0));
+          console.log({healthLatencySeconds:{avg,max},healthServerMs:{dbMax,appMax}});
           if(max>5) throw new Error('health_latency_budget_exceeded');
           NODE
 
