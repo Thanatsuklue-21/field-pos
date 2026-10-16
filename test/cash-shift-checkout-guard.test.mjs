@@ -124,7 +124,7 @@ test("POS explains and routes cash-shift preflight without leaving the sales rou
   const {readFile}=await import("node:fs/promises");
   const pos=await readFile(new URL("../app/pos/page.tsx",import.meta.url),"utf8");
   assert.match(pos,/cash_shift_not_open/);
-  assert.match(pos,/shiftStatus==="not_open"/);
+  assert.match(pos,/currentShiftStatus==="not_open"/);
   assert.match(pos,/setPayOpen\(false\)/);
   assert.match(pos,/setWorkspaceMounted\(true\)/);
   assert.match(pos,/setWorkspaceOpen\(true\)/);
