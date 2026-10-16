@@ -5,13 +5,15 @@ from playwright.sync_api import sync_playwright, expect
 
 parser=argparse.ArgumentParser()
 parser.add_argument("--base-url",default="http://localhost:3000")
-parser.add_argument("--browser",default="/usr/bin/chromium")
+parser.add_argument("--browser",default="")
 parser.add_argument("--output",default="/tmp/field-promptpay-qa")
 args=parser.parse_args()
 output=Path(args.output); output.mkdir(parents=True,exist_ok=True)
 
 with sync_playwright() as p:
-    browser=p.chromium.launch(executable_path=args.browser,args=["--no-sandbox"])
+    launch_args={"args":["--no-sandbox"]}
+    if args.browser: launch_args["executable_path"]=args.browser
+    browser=p.chromium.launch(**launch_args)
     context=browser.new_context(viewport={"width":390,"height":844})
     page=context.new_page(); page.set_default_timeout(30000)
     errors=[]; writes=[]; counters={"splitStart":0,"create":0,"providerStatus":0,"splitPay":0,"checkout":0}
