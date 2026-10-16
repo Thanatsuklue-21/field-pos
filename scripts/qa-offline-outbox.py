@@ -37,7 +37,7 @@ with sync_playwright() as p:
             route.fulfill(status=200,content_type='application/json',body=json.dumps(data))
         page.route('**/api/**',handler)
         page.goto(args.base_url+'/pos')
-        warning=page.get_by_role('alert').filter(has_text='ยังอ่านบิล Offline ในเครื่องไม่ได้')
+        warning=page.get_by_role('alert').filter(has_text='ยังอ่านบิลที่เก็บในเครื่องไม่ได้')
         expect(warning).to_be_visible(timeout=30000)
         expect(warning).to_contain_text('อย่าล้างข้อมูลเบราว์เซอร์')
         page.get_by_role('button',name=re.compile('เมนูทดสอบ')).first.click()
