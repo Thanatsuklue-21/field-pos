@@ -9,13 +9,15 @@ from playwright.sync_api import sync_playwright, expect
 
 parser=argparse.ArgumentParser()
 parser.add_argument('--base-url',default='http://localhost:3000')
-parser.add_argument('--browser',default='/usr/bin/chromium')
+parser.add_argument('--browser',default='')
 parser.add_argument('--output',default='/tmp/field-outbox-qa')
 args=parser.parse_args()
 output=Path(args.output);output.mkdir(parents=True,exist_ok=True)
 results=[]
 with sync_playwright() as p:
-    browser=p.chromium.launch(executable_path=args.browser,args=['--no-sandbox'])
+    launch_args={'args':['--no-sandbox']}
+    if args.browser: launch_args['executable_path']=args.browser
+    browser=p.chromium.launch(**launch_args)
     for width,height in [(320,640),(360,740),(390,844),(412,915),(430,932),(768,1024),(1024,768)]:
         context=browser.new_context(viewport={'width':width,'height':height})
         context.add_init_script("window.__fieldOpen=indexedDB.open.bind(indexedDB); indexedDB.open=()=>{throw new DOMException('Storage blocked','SecurityError')};")
@@ -35,7 +37,7 @@ with sync_playwright() as p:
             route.fulfill(status=200,content_type='application/json',body=json.dumps(data))
         page.route('**/api/**',handler)
         page.goto(args.base_url+'/pos')
-        warning=page.get_by_role('alert').filter(has_text='ยังอ่านบิล Offline ในเครื่องไม่ได้')
+        warning=page.get_by_role('alert').filter(has_text='ยังอ่านบิลที่เก็บในเครื่องไม่ได้')
         expect(warning).to_be_visible(timeout=30000)
         expect(warning).to_contain_text('อย่าล้างข้อมูลเบราว์เซอร์')
         page.get_by_role('button',name=re.compile('เมนูทดสอบ')).first.click()
