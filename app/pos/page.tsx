@@ -140,12 +140,18 @@ function PosView({session}:{session:Session}){
       .catch(()=>{});
     load(true).catch(()=>{});
 
-    // These calls are non-blocking secondary data; the menu can render from IndexedDB first.
-    loadCustomers().catch(()=>{});
+    // Keep the critical path limited to cached catalog + authoritative bootstrap.
+    // Customers are optional CRM data and are loaded after first paint; opening payment
+    // still triggers an immediate fetch if the idle window has not run yet.
+    const customerTimer=window.setTimeout(()=>loadCustomers().catch(()=>{}),1200);
     api<any>("/api/payments/promptpay/config").then(setPromptConfig).catch(()=>setPromptConfig({ready:false,configured:false}));
     recoverCashCheckout().then(()=>recoverPending()).catch(()=>{});
-    return()=>{active=false};
+    return()=>{active=false;window.clearTimeout(customerTimer)};
   },[]);
+
+  useEffect(()=>{
+    if((paymentReviewOpen||payOpen)&&customers.length===0)loadCustomers().catch(()=>{});
+  },[paymentReviewOpen,payOpen,customers.length]);
 
   useEffect(()=>{
     const networkChanged=()=>{
