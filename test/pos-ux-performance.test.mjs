@@ -356,10 +356,10 @@ test('queue hydrates from a short-lived snapshot cache before background sync',a
 test('payment success keeps queue prefetch and optional refresh paths available',async()=>{
   const pos=await read('app/pos/page.tsx');
   assert.match(pos,/warmQueueSnapshot/);
-  assert.match(pos,/load\\(true\\)/);
-  assert.match(pos,/loadCustomers\\(\\)/);
-  assert.match(pos,/router\\.prefetch\\(\"\\/queue\"\)/);
-  assert.match(pos,/api<any>\\(\"\\/api\\/pos\\/queue\"\)/);
+  assert.match(pos,/load\(true\)/);
+  assert.match(pos,/loadCustomers\(\)/);
+  assert.match(pos,/router\.prefetch\("\/queue"\)/);
+  assert.match(pos,/api<any>\("\/api\/pos\/queue"\)/);
   assert.match(pos,/writeQueueSnapshotCache/);
 });
 
