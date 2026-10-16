@@ -314,7 +314,7 @@ test("guided workspace no longer uses a one-shot auto-route lock",async()=>{
   const hub=await read("components/pos-daily-workspace.tsx");
   assert.doesNotMatch(hub,/autoRouteRef/);
   assert.doesNotMatch(hub,/manualTabRef/);
-  assert.match(hub,/\[open,workspaceReady,guidedMode,nextAction\.tab,tabs\.join\("\|"\),tab\]/);
+  assert.match(hub,/\[open,workspaceReady,guidedMode,nextAction\.tab,requestedTab,tabs\.join\("\|"\),tab\]/);
 });
 
 
