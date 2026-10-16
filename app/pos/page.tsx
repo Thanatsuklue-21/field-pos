@@ -127,7 +127,7 @@ function PosView({session}:{session:Session}){
     return true;
   };
   const load=(force=false)=>api<Bootstrap|RevisionUnchanged>("/api/pos/bootstrap",!force&&revisionRef.current!==null?{headers:{"X-Field-Revision":String(revisionRef.current)}}:{}).then(acceptBootstrap);
-  const loadCustomers=()=>api<any>("/api/customers").then(x=>{setCustomers(x.customers||[]);setLoyalty({pointsSpend:Number(x.loyalty?.pointsSpend)||0,pointsRedeemValue:Number(x.loyalty?.pointsRedeemValue)||0})});
+  const loadCustomers=()=>api<any>("/api/customers").then(x=>{setCustomers(x.customers||[]);setLoyalty({pointsSpend:Number(x.loyalty?.pointsSpend)||0,pointsRedeemValue:Number(x.loyalty?.pointsRedeemValue)||0})}).catch(()=>{});
 
   useEffect(()=>{
     let active=true;
@@ -140,12 +140,18 @@ function PosView({session}:{session:Session}){
       .catch(()=>{});
     load(true).catch(()=>{});
 
-    // These calls are non-blocking secondary data; the menu can render from IndexedDB first.
-    loadCustomers().catch(()=>{});
+    // Keep the critical path limited to cached catalog + authoritative bootstrap.
+    // Customers are optional CRM data and are loaded after first paint; opening payment
+    // still triggers an immediate fetch if the idle window has not run yet.
+    const customerTimer=window.setTimeout(()=>loadCustomers(),1200);
     api<any>("/api/payments/promptpay/config").then(setPromptConfig).catch(()=>setPromptConfig({ready:false,configured:false}));
     recoverCashCheckout().then(()=>recoverPending()).catch(()=>{});
-    return()=>{active=false};
+    return()=>{active=false;window.clearTimeout(customerTimer)};
   },[]);
+
+  useEffect(()=>{
+    if((paymentReviewOpen||payOpen)&&customers.length===0)loadCustomers().catch(()=>{});
+  },[paymentReviewOpen,payOpen,customers.length]);
 
   useEffect(()=>{
     const networkChanged=()=>{
