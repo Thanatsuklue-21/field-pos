@@ -46,7 +46,7 @@ with sync_playwright() as p:
             body=json.loads(route.request.post_data or "{}");posts.append(body)
             if len(posts)==1:
                 return route.abort("failed")
-            ack={"ok":True,"expense":{"id":"exp-test","requestKey":body["requestKey"],"createdBy":"owner","date":body["date"],"amount":body["amount"],"category":body["category"],"description":body["description"],"paymentMethod":body["paymentMethod"]}}
+            ack={"ok":True,"replayed":True,"expense":{"id":"exp-test","requestKey":body["requestKey"],"createdBy":"owner","date":body["date"],"amount":body["amount"],"category":body["category"],"description":body["description"],"paymentMethod":body["paymentMethod"]}}
             return route.fulfill(status=200,content_type="application/json",body=json.dumps(ack))
         return route.fulfill(status=200,content_type="application/json",body="{}")
 
