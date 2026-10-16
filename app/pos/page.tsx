@@ -101,6 +101,7 @@ function PosView({session}:{session:Session}){
   const [workspaceSignals,setWorkspaceSignals]=useState({pendingExpense:false,expenseRecoveryBlocked:false,pendingOpenShift:false,startDayRecoveryBlocked:false});
   const revisionRef=useRef<number|null>(null);
   const offlineSyncRef=useRef(false);
+  const cashReconcileRef=useRef(false);
   const promptReconcileRef=useRef(false);
   const checkoutInFlightRef=useRef(false);
   const cart=useCartStore();
@@ -150,12 +151,25 @@ function PosView({session}:{session:Session}){
       const next=typeof navigator==="undefined"||navigator.onLine;
       setOnline(next);
       refreshOfflineStats().catch(()=>{});
-      if(next)syncOfflineQueue().catch(()=>{});
+      if(next){
+        syncOfflineQueue().catch(()=>{});
+        recoverCashCheckout().then(()=>recoverPending()).catch(()=>{});
+      }
     };
+    const resume=()=>{if(document.visibilityState==="visible")networkChanged()};
     networkChanged();
     window.addEventListener("online",networkChanged);
     window.addEventListener("offline",networkChanged);
-    return()=>{window.removeEventListener("online",networkChanged);window.removeEventListener("offline",networkChanged)};
+    window.addEventListener("focus",networkChanged);
+    window.addEventListener("pageshow",networkChanged);
+    document.addEventListener("visibilitychange",resume);
+    return()=>{
+      window.removeEventListener("online",networkChanged);
+      window.removeEventListener("offline",networkChanged);
+      window.removeEventListener("focus",networkChanged);
+      window.removeEventListener("pageshow",networkChanged);
+      document.removeEventListener("visibilitychange",resume);
+    };
   },[]);
 
   useEffect(()=>{
@@ -476,22 +490,28 @@ function PosView({session}:{session:Session}){
 
 
   async function recoverCashCheckout(){
-    const p=cashPendingRead();
-    if(!p)return;
-    if(Date.now()-Number(p.createdAt||0)>24*60*60*1000){
-      setNotice("พบรายการเงินสดค้างเกิน 24 ชม. กรุณาตรวจ Orders ก่อนดำเนินการต่อ");
-      return;
-    }
+    if(cashReconcileRef.current)return;
+    cashReconcileRef.current=true;
     try{
-      const r=await api<any>("/api/pos/checkout",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify(p.body)});
-      cashPendingClear();
-      finishSale(r,{payment:"cash",total:Number(p.body?.total)||0,received:Number(p.body?.received)||0,recovered:true,splitBill:p.body?.checkoutMode==="split_bill",paidCart:Array.isArray(p.body?.cart)?p.body.cart:undefined});
-    }catch(e:any){
-      if(e.message==="business_date_changed")setNotice("รายการเงินสดค้างข้ามวัน · กรุณาตรวจ Orders ก่อน หากไม่พบบิลให้บันทึกปรับปรุงด้วย Admin");
-      else if(!["network_unavailable","offline_write_blocked"].includes(e.message)){
-        cashPendingClear();
-        setNotice("ตรวจรายการเงินสดค้างไม่สำเร็จ · "+errorText(e.message));
+      const p=cashPendingRead();
+      if(!p)return;
+      if(Date.now()-Number(p.createdAt||0)>24*60*60*1000){
+        setNotice("พบรายการเงินสดค้างเกิน 24 ชม. กรุณาตรวจ Orders ก่อนดำเนินการต่อ");
+        return;
       }
+      try{
+        const r=await api<any>("/api/pos/checkout",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify(p.body)});
+        cashPendingClear();
+        finishSale(r,{payment:"cash",total:Number(p.body?.total)||0,received:Number(p.body?.received)||0,recovered:true,splitBill:p.body?.checkoutMode==="split_bill",paidCart:Array.isArray(p.body?.cart)?p.body.cart:undefined});
+      }catch(e:any){
+        if(e.message==="business_date_changed")setNotice("รายการเงินสดค้างข้ามวัน · กรุณาตรวจ Orders ก่อน หากไม่พบบิลให้บันทึกปรับปรุงด้วย Admin");
+        else if(!["network_unavailable","offline_write_blocked"].includes(e.message)){
+          cashPendingClear();
+          setNotice("ตรวจรายการเงินสดค้างไม่สำเร็จ · "+errorText(e.message));
+        }
+      }
+    }finally{
+      cashReconcileRef.current=false;
     }
   }
 
