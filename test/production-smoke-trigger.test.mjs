@@ -52,14 +52,13 @@ test("production smoke covers root redirect, go-live routes and auth guard",()=>
 });
 
 test("health smoke measures the validated request once per attempt and preserves the 5s budget",()=>{
-  assert.match(source,/--write-out '%\\{http_code\\} %\\{time_total\\}'/);
-  assert.doesNotMatch(source,/--output \\/dev\\/null --write-out '%\\{time_total\\}' "\\$base\\/api\\/health"/);
-  assert.match(source,/health-server-times\\.txt/);
-  assert.match(source,/health_timing_missing/);
+  assert.ok(source.includes("--write-out '%{http_code} %{time_total}'"));
+  assert.equal(source.includes("--output /dev/null --write-out '%{time_total}' \"$base/api/health\""),false);
+  assert.ok(source.includes("health-server-times.txt"));
+  assert.ok(source.includes("health_timing_missing"));
   assert.match(source,/server-timing:.*db;dur=/i);
-  assert.match(source,/if\\(max>5\\) throw new Error\\('health_latency_budget_exceeded'\\)/);
+  assert.ok(source.includes("if(max>5) throw new Error('health_latency_budget_exceeded')"));
 });
-
 test("health endpoint exposes database timing without weakening storage verification",()=>{
   assert.match(apiRoute,/await getDb\\(\\)\\.execute\\("SELECT 1 AS ok"\\)/);
   assert.match(apiRoute,/timing:\\{dbMs:Number\\(dbMs\\.toFixed\\(1\\)\\),totalMs:Number\\(totalMs\\.toFixed\\(1\\)\\)\\}/);
