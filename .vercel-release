@@ -1,3 +1,3 @@
 FIELD POS production release marker
-source_main=fa3ce76d4ab66bda424d2463c5f4e754f4544964
-purpose=turso-schema-meta-health-observability
+source_main=f1f8d8c8553984d2d200841c73a0e6bc0cca6030
+purpose=defer-optional-pos-customer-loading
