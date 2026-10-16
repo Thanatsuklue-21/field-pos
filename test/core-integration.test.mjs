@@ -15,6 +15,9 @@ const user={id:'owner',role:'admin',permissions:{}};
 const cart=[{id:'latte',variant:'100%',qty:2}];
 const seed=()=>({menu:[{id:'latte',enabled:true,price:55,name:'Latte',variants:[{label:'100%',recipe:{items:{matcha:5,milk:110}}}]}],ingredients:{matcha:{qty:1000,unitCost:2},milk:{qty:30000,unitCost:0.06}},settings:{pagerCount:10},sales:[],orders:[],billSeq:{}});
 async function setup(t,doc=seed()){
+  if(!Object.prototype.hasOwnProperty.call(doc,"cashShifts")){
+    doc={...doc,cashShifts:[{id:"test-shift",date:bangkokDate(),status:"open",openingCash:100,openedAt:1,openedBy:user.id}]};
+  }
   const dir=await mkdtemp(join(tmpdir(),'field-core-'));
   const db=createClient({url:'file:'+join(dir,'test.db')});t.after(async()=>{
     db.close();
