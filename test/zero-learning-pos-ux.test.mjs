@@ -148,10 +148,10 @@ test("post-payment handoff blocks the sale screen until the cashier chooses the 
   assert.match(handoff,/initialFocusSelector='\[data-handoff-primary\]'/);
   assert.match(handoff,/data-handoff-primary/);
   assert.match(handoff,/รับออเดอร์ถัดไป/);
-  assert.match(handoff,/ไปทำคิว/);
+  assert.match(handoff,/ทำคิว \{lastSale\.queueNo\} ตรงนี้/);
   assert.match(handoff,/เลือกขั้นตอนถัดไปก่อนกลับหน้าขาย/);
   assert.doesNotMatch(handoff,/onEscape=/);
-  assert.match(handoff,/onClick=\{\(\)=>\{setLastSale\(null\);openWorkspace\(\)\}\}/);
+  assert.match(handoff,/onClick=\{\(\)=>\{setLastSale\(null\);openWorkspace\("queue"\)\}\}/);
   assert.doesNotMatch(handoff,/router\.push\("\/queue"\)/);
   assert.match(pos,/function startNextOrder\(\)/);
   assert.match(pos,/setLastSale\(null\)/);
@@ -197,7 +197,7 @@ test("split-payment handoff keeps the cashier on the same queue until every paye
   assert.match(handoff,/เลือกของคนถัดไป/);
   assert.match(handoff,/อย่าเปิดออเดอร์ใหม่จนกว่าจะรับเงินคิวนี้ครบ/);
   assert.match(handoff,/เลือกแก้วของคนถัดไป แล้วกดรับเงินเมื่อพร้อม/);
-  assert.match(handoff,/!lastSale\.offline&&!splitPaymentPending&&<button onClick=\{\(\)=>\{setLastSale\(null\);openWorkspace\(\)\}\}/);
+  assert.match(handoff,/!lastSale\.offline&&!splitPaymentPending&&<button onClick=\{\(\)=>\{setLastSale\(null\);openWorkspace\("queue"\)\}\}/);
 });
 
 
