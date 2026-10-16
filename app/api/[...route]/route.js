@@ -21,12 +21,17 @@ async function handle(request,{params}){
     if(!process.env.TURSO_DATABASE_URL||!process.env.TURSO_AUTH_TOKEN){
       return Response.json({ok:false,storage:"turso",error:"turso_not_configured"},{status:503,headers:{"Cache-Control":"no-store"}});
     }
+    const healthStarted=performance.now(),dbStarted=performance.now();
     try{
       await getDb().execute("SELECT 1 AS ok");
+      const dbMs=Math.max(0,performance.now()-dbStarted);
+      const totalMs=Math.max(0,performance.now()-healthStarted);
       const release={commit:String(process.env.VERCEL_GIT_COMMIT_SHA||process.env.GIT_COMMIT_SHA||"local").slice(0,40),branch:String(process.env.VERCEL_GIT_COMMIT_REF||process.env.GIT_BRANCH||"local").slice(0,120),environment:String(process.env.VERCEL_ENV||process.env.NODE_ENV||"development").slice(0,40),deploymentId:String(process.env.VERCEL_DEPLOYMENT_ID||"").slice(0,120)};
-      return Response.json({ok:true,storage:"turso",release},{status:200,headers:{"Cache-Control":"no-store"}});
+      return Response.json({ok:true,storage:"turso",release,timing:{dbMs:Number(dbMs.toFixed(1)),totalMs:Number(totalMs.toFixed(1))}},{status:200,headers:{"Cache-Control":"no-store","Server-Timing":`db;dur=${dbMs.toFixed(1)},app;dur=${totalMs.toFixed(1)}`}});
     }catch{
-      return Response.json({ok:false,storage:"turso",error:"turso_unavailable"},{status:503,headers:{"Cache-Control":"no-store"}});
+      const dbMs=Math.max(0,performance.now()-dbStarted);
+      const totalMs=Math.max(0,performance.now()-healthStarted);
+      return Response.json({ok:false,storage:"turso",error:"turso_unavailable",timing:{dbMs:Number(dbMs.toFixed(1)),totalMs:Number(totalMs.toFixed(1))}},{status:503,headers:{"Cache-Control":"no-store","Server-Timing":`db;dur=${dbMs.toFixed(1)},app;dur=${totalMs.toFixed(1)}`}});
     }
   }
   if(routePath==="/api/build"&&request.method==="GET"){
