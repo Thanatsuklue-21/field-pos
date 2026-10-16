@@ -1,4 +1,4 @@
-import test from 'node:test';import assert from 'node:assert/strict';import {readFile} from 'node:fs/promises';const read=p=>readFile(new URL('../'+p,import.meta.url),'utf8');
+import test from 'node:test';import assert from 'node:assert/strict';import {readFile} from 'node:fs/promises';const read=p=>readFile(new URL('../'+p,import.meta.url),'utf8');import {isPromptPayLiveReady} from '../lib/payment-promptpay.mjs';
 test('admin readiness is read-only and exposes operational readiness without provider secrets',async()=>{const api=await read('lib/api.mjs');const start=api.indexOf("if(path==='/api/admin/readiness'"),end=api.indexOf("if(path==='/api/admin/business-settings'",start);assert.ok(start>0&&end>start);const seg=api.slice(start,end);assert.match(seg,/promptPayConfig\(\)/);for(const field of ['readyForCashSales','readyForPromptPay','readyForFullOperations','openOrders','pendingPayments','splitCollecting','splitRequiresResolution','missingCost','pendingCost','lowStock','availableMenus','availableVariants','no_available_menu'])assert.match(seg,new RegExp(field));assert.doesNotMatch(seg,/OMISE_SECRET_KEY|secret\(/);assert.doesNotMatch(seg,/UPDATE |INSERT |DELETE /)});
 test('settings surfaces readiness without exposing secrets',async()=>{const ui=await read('app/settings/page.tsx');assert.match(ui,/SYSTEM READINESS/);assert.match(ui,/READY FOR CASH SALES/);assert.match(ui,/\/api\/admin\/readiness/);assert.match(ui,/PromptPay/);assert.doesNotMatch(ui,/OMISE_SECRET_KEY/)});
 
@@ -192,4 +192,38 @@ test('production readiness requires audit-backed go-live drill evidence before R
   assert.match(seg,/payment_recovery_drill',done:goLiveDrills\.paymentRecovery\.done/);
   assert.doesNotMatch(seg,/cash_close_drill',done:accounting\.ok/);
   assert.doesNotMatch(seg,/payment_recovery_drill',done:splitRequiresResolution\.length===0/);
+});
+
+
+test('PromptPay production readiness rejects configured test providers',()=>{
+  assert.equal(isPromptPayLiveReady({ready:true,mode:'test'}),false);
+  assert.equal(isPromptPayLiveReady({ready:true,mode:'playground'}),false);
+  assert.equal(isPromptPayLiveReady({ready:false,mode:'live'}),false);
+  assert.equal(isPromptPayLiveReady({ready:true,mode:'live'}),true);
+});
+
+test('production PromptPay routes fail closed unless the provider is live',async()=>{
+  const api=await read('lib/api.mjs');
+  const configStart=api.indexOf("if(path==='/api/payments/promptpay/config'");
+  const createStart=api.indexOf("if(path==='/api/payments/promptpay/create'",configStart);
+  const statusStart=api.indexOf("if(path==='/api/payments/promptpay/status'",createStart);
+  const configSeg=api.slice(configStart,createStart);
+  const createSeg=api.slice(createStart,statusStart);
+  assert.match(configSeg,/isPromptPayLiveReady\(config\)/);
+  assert.match(configSeg,/production\?liveReady:config\.ready===true/);
+  assert.match(createSeg,/VERCEL_ENV/);
+  assert.match(createSeg,/!isPromptPayLiveReady\(providerConfig\)/);
+  assert.match(createSeg,/promptpay_provider_not_live/);
+  assert.ok(createSeg.indexOf('promptpay_provider_not_live')<createSeg.indexOf('createPromptPayCharge'));
+});
+
+test('production readiness cannot report PromptPay ready from playground credentials',async()=>{
+  const api=await read('lib/api.mjs');
+  const start=api.indexOf("if(path==='/api/admin/readiness'");
+  const end=api.indexOf("if(path==='/api/admin/business-settings'",start);
+  const seg=api.slice(start,end);
+  assert.match(seg,/promptpayLiveReady=isPromptPayLiveReady\(promptpay\)/);
+  assert.match(seg,/readyForPromptPay=readyForCashSales&&promptpayLiveReady/);
+  assert.match(seg,/status:promptpayLiveReady\?'PASS':'WARN'/);
+  assert.doesNotMatch(seg,/readyForPromptPay=readyForCashSales&&promptpay\.ready===true/);
 });

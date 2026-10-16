@@ -29,9 +29,10 @@ test('Beam webhook can finalize the reserved payment server-side',async()=>{
   assert.match(seg,/provider-fail:/);
 });
 
-test('readiness requires Beam webhook configuration before enabling PromptPay',async()=>{
+test('readiness requires a live provider and Beam webhook configuration before enabling PromptPay',async()=>{
   const api=await read('lib/api.mjs');
-  assert.match(api,/promptpay\.ready===true/);
+  assert.match(api,/promptpayLiveReady=isPromptPayLiveReady\(promptpay\)/);
+  assert.match(api,/readyForPromptPay=readyForCashSales&&promptpayLiveReady/);
   assert.match(api,/beam_webhook_not_configured/);
   const settings=await read('app/settings/page.tsx');
   assert.match(settings,/Webhook/);
