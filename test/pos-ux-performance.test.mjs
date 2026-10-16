@@ -9,7 +9,7 @@ test('POS shows live cash change and closes payment modal after success',async()
   assert.match(pos,/เงินทอน/);
   assert.match(pos,/setPayOpen\(false\)/);
   assert.match(pos,/ชำระเงินสำเร็จ/);
-  assert.match(pos,/ไปทำคิว \{lastSale\.queueNo\}/);
+  assert.match(pos,/ทำคิว \{lastSale\.queueNo\} ตรงนี้/);
 });
 
 test('POS hides zero-price menus and reconciles stale persisted cart items',async()=>{
@@ -72,7 +72,7 @@ test('payment success makes the physical pager card visually dominant only after
   const pos=await read('app/pos/page.tsx');
   assert.match(pos,/splitPaymentPending\?<div[^>]*border-amber-300/);
   assert.match(pos,/ยังไม่ต้องส่งคิวไปทำ/);
-  assert.match(pos,/!lastSale\.offline&&!splitPaymentPending&&<button onClick=\{\(\)=>\{setLastSale\(null\);openWorkspace\(\)\}\}/);
+  assert.match(pos,/!lastSale\.offline&&!splitPaymentPending&&<button onClick=\{\(\)=>\{setLastSale\(null\);openWorkspace\("queue"\)\}\}/);
   assert.doesNotMatch(pos,/!lastSale\.offline&&!splitPaymentPending&&<button onClick=\{\(\)=>router\.push\("\/queue"\)\}/);
   assert.match(pos,/หยิบบัตรให้ลูกค้า/);
   assert.match(pos,/text-4xl font-black/);
