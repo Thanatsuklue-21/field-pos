@@ -78,6 +78,7 @@ function PosView({session}:{session:Session}){
   const [heldOpen,setHeldOpen]=useState(false);
   const [workspaceOpen,setWorkspaceOpen]=useState(false);
   const [workspaceMounted,setWorkspaceMounted]=useState(false);
+  const [workspaceRequestedTab,setWorkspaceRequestedTab]=useState<"queue"|"orders"|"stock"|"expense"|"status"|null>(null);
   const [method,setMethod]=useState<"cash"|"promptpay"|"bank"|"card"|"delivery">("cash");
   const [deliveryPlatform,setDeliveryPlatform]=useState<"grab"|"lineman"|"other_delivery">("grab");
   const [received,setReceived]=useState("");
@@ -851,8 +852,12 @@ function PosView({session}:{session:Session}){
   });
   const workspaceActionVisible=!payOpen&&cartQty===0&&workspaceNextAction.tone!=="ready";
   const workspaceActionLabel=workspaceNextAction.action==="start_day"?"เริ่มตรงนี้":workspaceNextAction.tab==="queue"?"ทำคิวตรงนี้":workspaceNextAction.tab==="stock"?"ตรวจสต็อก":workspaceNextAction.tab==="expense"?"ตรวจรายการ":workspaceNextAction.tab==="status"?"ดูสถานะ":"เปิดงานร้าน";
-  const openWorkspace=()=>{setWorkspaceMounted(true);setWorkspaceOpen(true)};
-  const runWorkspaceNextAction=()=>openWorkspace();
+  const openWorkspace=(requestedTab:null|"queue"|"orders"|"stock"|"expense"|"status"=null)=>{
+    setWorkspaceRequestedTab(requestedTab);
+    setWorkspaceMounted(true);
+    setWorkspaceOpen(true);
+  };
+  const runWorkspaceNextAction=()=>openWorkspace(null);
   const hasPendingPrompt=!!pendingRead();
   const quickCashAmounts=Array.from(new Set([Math.ceil(netPayable/100)*100,100,500,1000])).filter(v=>v>=netPayable&&v>0).sort((a,b)=>a-b).slice(0,3);
   const otherPaymentActive=["bank","card","delivery"].includes(method);
@@ -887,7 +892,7 @@ function PosView({session}:{session:Session}){
 
       {offlineStorageError&&<div role="alert" className="mb-3 shrink-0 rounded-2xl border border-red-200 bg-red-50 p-3 text-sm text-red-900"><b>ยังอ่านบิลที่เก็บในเครื่องไม่ได้</b><p className="mt-1 text-xs">ยังยืนยันไม่ได้ว่ามีบิลรอส่งกี่รายการ · หยุดรับเงินสดตอนเน็ตหลุด และอย่าล้างข้อมูลเบราว์เซอร์ กรุณาตรวจพื้นที่เก็บข้อมูลหรือให้เจ้าของร้านช่วย</p><button disabled={busy} onClick={()=>refreshOfflineStats().catch(()=>{})} className="mt-2 min-h-11 rounded-xl border border-red-300 bg-white px-3 text-xs font-bold disabled:opacity-40">อ่านรายการ Offline อีกครั้ง</button></div>}
       {notice&&<div className="mb-3 flex items-start justify-between gap-3 rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900"><span>{notice}</span><button onClick={()=>setNotice("")} className="shrink-0"><X size={16}/></button></div>}
-      {allUnavailable&&<div className="mb-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-900"><b>เมนูทั้งหมดถูกพักขายชั่วคราว</b><p className="mt-1 text-xs">ต้องบันทึกยอดวัตถุดิบจริงก่อนรับออเดอร์{unavailableNames.length?" · ขาด: "+unavailableNames.join(", "):""}</p><button onClick={()=>router.push("/stock")} className="mt-3 rounded-full bg-red-700 px-4 py-2 text-xs font-bold text-white">ตั้งยอดเริ่มต้น Stock</button></div>}
+      {allUnavailable&&<div className="mb-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-900"><b>เมนูทั้งหมดถูกพักขายชั่วคราว</b><p className="mt-1 text-xs">ต้องบันทึกยอดวัตถุดิบจริงก่อนรับออเดอร์{unavailableNames.length?" · ขาด: "+unavailableNames.join(", "):""}</p><button onClick={()=>openWorkspace("stock")} className="mt-3 rounded-full bg-red-700 px-4 py-2 text-xs font-bold text-white">ตรวจสต็อกตรงนี้</button></div>}
 
       <div className="glass mb-2.5 flex items-center gap-2.5 rounded-2xl px-3 py-2.5 sm:mb-3 sm:gap-3 sm:px-4 sm:py-3"><Search size={17} className="text-slate-500"/><input value={q} onChange={e=>setQ(e.target.value)} placeholder="ค้นหาเมนู เช่น มัทฉะ / กาแฟ" className="w-full bg-transparent outline-none"/></div>
 
@@ -973,13 +978,13 @@ function PosView({session}:{session:Session}){
             {lastSale.payment==="cash"&&<div className="mt-3 flex items-center justify-between rounded-2xl bg-emerald-50 p-3"><span className="text-sm font-semibold text-emerald-800">เงินทอน</span><div className="text-2xl font-bold text-emerald-800">฿{lastSale.change.toFixed(0)}</div></div>}
             <div className={"mt-3 grid gap-2 "+(lastSale.offline||splitPaymentPending?"grid-cols-1":"grid-cols-2")}>
               <button data-handoff-primary onClick={startNextOrder} className="flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-[#d4af37] px-3 text-sm font-bold text-black"><Plus size={16}/>{splitPaymentPending?"เลือกของคนถัดไป":"รับออเดอร์ถัดไป"}</button>
-              {!lastSale.offline&&!splitPaymentPending&&<button onClick={()=>{setLastSale(null);openWorkspace()}} className="flex min-h-12 items-center justify-center gap-2 rounded-2xl border border-slate-300 bg-white px-3 text-xs font-semibold text-slate-700">ไปทำคิว {lastSale.queueNo} <ArrowRight size={15}/></button>}
+              {!lastSale.offline&&!splitPaymentPending&&<button onClick={()=>{setLastSale(null);openWorkspace("queue")}} className="flex min-h-12 items-center justify-center gap-2 rounded-2xl border border-slate-300 bg-white px-3 text-xs font-semibold text-slate-700">ทำคิว {lastSale.queueNo} ตรงนี้ <ArrowRight size={15}/></button>}
             </div>
             <p className="mt-2 text-center text-[11px] text-slate-500">{lastSale.offline?"ยอดถูกเก็บในเครื่องแล้ว · ห้ามล้างข้อมูลแอปหรือเบราว์เซอร์ จนกว่าระบบจะแจ้งว่าส่งบิลสำเร็จ":splitPaymentPending?"อย่าเปิดออเดอร์ใหม่จนกว่าจะรับเงินคิวนี้ครบ · เลือกแก้วของคนถัดไป แล้วกดรับเงินเมื่อพร้อม":"เลือกขั้นตอนถัดไปก่อนกลับหน้าขาย เพื่อไม่ลืมหยิบบัตรหรือเงินทอน"}</p>
           </div>
         </div>
       </ModalFocus>
     </div>}
-    {workspaceMounted&&<PosDailyWorkspace session={session} bootstrap={data} open={workspaceOpen} online={online} onClose={()=>setWorkspaceOpen(false)}/>} 
+    {workspaceMounted&&<PosDailyWorkspace session={session} bootstrap={data} open={workspaceOpen} online={online} requestedTab={workspaceRequestedTab} onClose={()=>{setWorkspaceOpen(false);setWorkspaceRequestedTab(null)}}/>} 
   </section>;
 }
