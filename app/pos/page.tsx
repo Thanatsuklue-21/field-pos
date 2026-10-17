@@ -109,13 +109,16 @@ function PosView({session}:{session:Session}){
   const heldBills=useHeldCartStore();
 
   useEffect(()=>{
+    const connection=(navigator as Navigator&{connection?:{saveData?:boolean;effectiveType?:string}}).connection;
+    const constrained=!!connection?.saveData||["slow-2g","2g"].includes(String(connection?.effectiveType||""));
+    if(constrained)return;
     const warm=()=>{void loadPosDailyWorkspace()};
     const idleWindow=window as typeof window&{requestIdleCallback?:(callback:()=>void,options?:{timeout:number})=>number;cancelIdleCallback?:(id:number)=>void};
     if(idleWindow.requestIdleCallback){
-      const id=idleWindow.requestIdleCallback(warm,{timeout:1800});
+      const id=idleWindow.requestIdleCallback(warm,{timeout:3500});
       return()=>idleWindow.cancelIdleCallback?.(id);
     }
-    const timer=window.setTimeout(warm,1200);
+    const timer=window.setTimeout(warm,2500);
     return()=>window.clearTimeout(timer);
   },[]);
 
@@ -238,11 +241,11 @@ function PosView({session}:{session:Session}){
   },[]);
 
   useEffect(()=>{
-    const refresh=()=>load().catch(()=>{});
+    const refresh=()=>{if(document.visibilityState==="hidden")return;load().catch(()=>{})};
     const visible=()=>{if(document.visibilityState==="visible")refresh()};
     const timer=setInterval(refresh,15000);
     window.addEventListener("focus",refresh);document.addEventListener("visibilitychange",visible);
-    return()=>{clearInterval(timer);window.removeEventListener("focus",refresh);document.removeEventListener("visibilitychange",visible)};
+    return()=>{clearInterval(timer);window.removeEventListener("focus",refresh);document.removeEventListener("visibilitychange",visible)}
   },[]);
 
   // Keep pager and change visible until the operator chooses the next step.
