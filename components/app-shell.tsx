@@ -13,6 +13,7 @@ const items=[["/dashboard","dashboard",LayoutDashboard,"report"],["/control","co
 const focusPrimary=["/pos","/queue","/orders","/stock","/close"];
 const primaryMobile=["/pos","/queue"];
 const mobileMorePriority=["/orders","/stock","/expenses","/close","/settings"];
+const posWorkspaceTabs={"/queue":"queue","/orders":"orders","/stock":"stock","/expenses":"expense"} as const;
 
 export default function AppShell({children}:{children:React.ReactNode}){
   const path=usePathname(),lang=useAppStore(s=>s.language),t=dict[lang],[session,setSession]=useState<Session|null>(null),[moreOpen,setMoreOpen]=useState(false),[manageOpen,setManageOpen]=useState(false);
@@ -29,6 +30,7 @@ export default function AppShell({children}:{children:React.ReactNode}){
     return (ai<0?mobileMorePriority.length:ai)-(bi<0?mobileMorePriority.length:bi);
   });
   const moreActive=mobileMore.some(([href])=>path===href);
+  const openPosWorkspace=(tab:"queue"|"orders"|"stock"|"expense")=>window.dispatchEvent(new CustomEvent("field:open-pos-workspace",{detail:{tab}}));
 
   return <div className="field-app-root h-dvh w-full bg-[#e9edf2] p-1.5 pb-[70px] text-[#1d1d1f] sm:p-2 sm:pb-[76px] md:p-4 md:pb-4">
     <NetworkStatus/>
@@ -54,12 +56,12 @@ export default function AppShell({children}:{children:React.ReactNode}){
     {mobileMore.length>0&&moreOpen&&<div className="fixed inset-0 z-[48] bg-black/20 md:hidden" onClick={()=>setMoreOpen(false)}>
       <div id="field-mobile-more" aria-label="เมนูเพิ่มเติม" className="frosted absolute bottom-[calc(70px+env(safe-area-inset-bottom))] left-2 right-2 max-h-[calc(100dvh-110px)] overflow-y-auto overscroll-contain rounded-[20px] p-2 shadow-2xl" onClick={e=>e.stopPropagation()}>
         <div className="mb-1 flex items-center justify-between px-2"><div><b className="text-sm">เพิ่มเติม</b><p className="mt-0.5 text-[10px] text-slate-500">ประวัติ สต็อก รายจ่าย ปิดวัน และการตั้งค่าร้าน</p></div><button onClick={()=>setMoreOpen(false)} className="grid h-11 w-11 place-items-center rounded-xl" aria-label="ปิดเมนูเพิ่มเติม"><X size={17}/></button></div>
-        <div className="grid gap-1">{mobileMore.map(([href,key,Icon])=><Link key={href} href={href} className={"flex min-h-11 items-center gap-3 rounded-xl px-3 py-2 text-sm "+(path===href?"bg-[#d4af37]/18 font-bold text-[#6f5510]":"text-slate-700")}><Icon size={18}/><span>{t[key]}</span></Link>)}</div>
+        <div className="grid gap-1">{mobileMore.map(([href,key,Icon])=>{const workspaceTab=path==="/pos"?posWorkspaceTabs[href as keyof typeof posWorkspaceTabs]:undefined;return workspaceTab?<button key={href} type="button" onClick={()=>{setMoreOpen(false);openPosWorkspace(workspaceTab)}} className="flex min-h-11 items-center gap-3 rounded-xl px-3 py-2 text-left text-sm text-slate-700"><Icon size={18}/><span>{t[key]}</span><span className="ml-auto text-[9px] font-bold text-[#765b08]">เปิดตรงนี้</span></button>:<Link key={href} href={href} className={"flex min-h-11 items-center gap-3 rounded-xl px-3 py-2 text-sm "+(path===href?"bg-[#d4af37]/18 font-bold text-[#6f5510]":"text-slate-700")}><Icon size={18}/><span>{t[key]}</span></Link>})}</div>
       </div>
     </div>}
 
     {(mobilePrimary.length>0||mobileMore.length>0)&&<nav className="frosted fixed bottom-[max(.35rem,env(safe-area-inset-bottom))] left-1.5 right-1.5 z-50 flex items-stretch gap-0.5 overflow-hidden rounded-[20px] p-1 md:hidden">
-      {mobilePrimary.map(([href,key,Icon])=><Link key={href} href={href} className={"flex min-h-11 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-[16px] px-1 py-1 text-[9px] "+(path===href?"bg-[#d4af37]/18 font-bold text-[#6f5510]":"text-slate-600")}><Icon size={17}/><span className="truncate">{t[key]}</span></Link>)}
+      {mobilePrimary.map(([href,key,Icon])=>path==="/pos"&&href==="/queue"?<button key={href} type="button" onClick={()=>openPosWorkspace("queue")} className="flex min-h-11 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-[16px] bg-[#fff8dc] px-1 py-1 text-[9px] font-bold text-[#6f5510]"><ClipboardList size={17}/><span className="truncate">งานร้าน</span></button>:<Link key={href} href={href} className={"flex min-h-11 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-[16px] px-1 py-1 text-[9px] "+(path===href?"bg-[#d4af37]/18 font-bold text-[#6f5510]":"text-slate-600")}><Icon size={17}/><span className="truncate">{t[key]}</span></Link>)}
       {mobileMore.length>0&&<button type="button" aria-controls="field-mobile-more" aria-expanded={moreOpen} onClick={()=>setMoreOpen(v=>!v)} className={"flex min-h-11 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-[16px] px-1 py-1 text-[9px] "+(moreActive||moreOpen?"bg-[#d4af37]/18 font-bold text-[#6f5510]":"text-slate-600")}><MoreHorizontal size={18}/><span>เพิ่มเติม</span></button>}
     </nav>}
   </div>
