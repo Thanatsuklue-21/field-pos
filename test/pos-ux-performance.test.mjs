@@ -353,12 +353,12 @@ test('queue hydrates from a short-lived snapshot cache before background sync',a
   assert.match(queue,/กำลังซิงก์/);
 });
 
-test('payment success keeps queue prefetch and optional refresh paths available',async()=>{
+test('payment success warms queue data without prefetching the obsolete queue route on POS startup',async()=>{
   const pos=await read('app/pos/page.tsx');
   assert.match(pos,/warmQueueSnapshot/);
   assert.match(pos,/load\(true\)/);
   assert.match(pos,/loadCustomers\(\)/);
-  assert.match(pos,/router\.prefetch\("\/queue"\)/);
+  assert.doesNotMatch(pos,/router\.prefetch\("\/queue"\)/);
   assert.match(pos,/api<any>\("\/api\/pos\/queue"\)/);
   assert.match(pos,/writeQueueSnapshotCache/);
 });
@@ -571,4 +571,22 @@ test('payment mapping v2 exposes bank and card as first-class channels',async()=
   assert.match(core,/\['cash','promptpay','bank','card','other'\]/);assert.match(core,/manual_bank/);assert.match(core,/manual_card/);
   assert.match(api,/paymentSummary=\{cash:0,promptpay:0,bank:0,card:0,other:0\}/);assert.match(api,/bankAmount:/);assert.match(api,/cardAmount:/);
   assert.match(close,/x\.bank/);assert.match(close,/x\.card/);assert.match(reports,/PAYMENT CHANNELS/);
+});
+
+
+test('POS critical path defers optional PromptPay configuration until payment UI opens',async()=>{
+  const pos=await read('app/pos/page.tsx');
+  const startup=pos.slice(pos.indexOf('useEffect(()=>{\n    let active=true;'),pos.indexOf('useEffect(()=>{\n    if((paymentReviewOpen||payOpen)',pos.indexOf('useEffect(()=>{\n    let active=true;')));
+  assert.doesNotMatch(startup,/\/api\/payments\/promptpay\/config/);
+  assert.match(pos,/if\(\(paymentReviewOpen\|\|payOpen\)&&promptConfig===null\)/);
+  assert.match(pos,/api<any>\("\/api\/payments\/promptpay\/config"\)/);
+});
+
+test('global AI supervisor is code-split and does not poll while hidden on POS',async()=>{
+  const shell=await read('components/app-shell.tsx');
+  const ai=await read('components/ai-supervisor.tsx');
+  assert.match(shell,/dynamic\(\(\)=>import\("@\/components\/ai-supervisor"\),\{ssr:false\}\)/);
+  assert.doesNotMatch(shell,/import AiSupervisor from "@\/components\/ai-supervisor"/);
+  assert.match(ai,/if\(!session\|\|path==="\/pos"\)return/);
+  assert.match(ai,/\[session\?\.user\.id,path\]/);
 });
