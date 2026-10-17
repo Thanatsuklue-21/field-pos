@@ -21,6 +21,9 @@ jobs:
       - run: npm test
       - run: npm run build
       - run: |
+          python -m pip install --disable-pip-version-check playwright
+          python -m playwright install --with-deps chromium
+      - run: |
           npm run start -- --hostname 127.0.0.1 --port 3000 > /tmp/field-pos.log 2>&1 &
           echo $! > /tmp/field-pos.pid
           for i in {1..60}; do
