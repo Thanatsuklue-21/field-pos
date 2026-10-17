@@ -77,3 +77,12 @@ test("web-vitals endpoint rejects non-POS or unknown metrics",async()=>{
     assert.equal(res.body.error,"invalid_web_vital");
   }
 });
+
+
+test("browser QA excludes only the log-only telemetry endpoint from business-write assertions",async()=>{
+  for(const path of ["scripts/qa-pos-touch.py","scripts/qa-offline-outbox.py","scripts/qa-cashier-flow.py","scripts/qa-promptpay-nonblocking.py"]){
+    const qa=await read(path);
+    assert.match(qa,/telemetry\/web-vitals/);
+    assert.match(qa,/method|route\.request\.method/);
+  }
+});
