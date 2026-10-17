@@ -136,3 +136,15 @@ test('AI model actions are filtered against the permission-scoped navigation lis
   assert.match(server,/a\.type==='navigate'&&allowedNavigation\.has\(a\.href\)/);
   assert.doesNotMatch(server,/ALLOWED_HREFS/);
 });
+
+
+test('POS can lazy-mount AI supervisor and replay the explicit request that triggered it',async()=>{
+  const {readFile}=await import('node:fs/promises');
+  const shell=await readFile(new URL('../components/app-shell.tsx',import.meta.url),'utf8');
+  const ui=await readFile(new URL('../components/ai-supervisor.tsx',import.meta.url),'utf8');
+  assert.match(shell,/setAiRequest\(\{id:Date\.now\(\),message\}\)/);
+  assert.match(shell,/setAiMounted\(true\)/);
+  assert.match(ui,/setOpen\(true\)/);
+  assert.match(ui,/setMessage\(initialRequest\.message\)/);
+  assert.match(ui,/ask\(initialRequest\.message\)/);
+});

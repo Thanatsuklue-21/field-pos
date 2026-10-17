@@ -590,3 +590,34 @@ test('global AI supervisor is code-split and does not poll while hidden on POS',
   assert.match(ai,/if\(!session\|\|path==="\/pos"\)return/);
   assert.match(ai,/\[session\?\.user\.id,path\]/);
 });
+
+
+test('POS pauses bootstrap polling while the document is hidden',async()=>{
+  const pos=await read('app/pos/page.tsx');
+  assert.match(pos,/const refresh=\(\)=>\{if\(document\.visibilityState==="hidden"\)return;load\(\)\.catch\(\(\)=>\{\}\)\}/);
+  assert.match(pos,/const timer=setInterval\(refresh,15000\)/);
+  assert.match(pos,/visibilitychange/);
+});
+
+test('POS skips Today Workspace prewarm on constrained or save-data networks',async()=>{
+  const pos=await read('app/pos/page.tsx');
+  assert.match(pos,/connection\?:\{saveData\?:boolean;effectiveType\?:string\}/);
+  assert.match(pos,/connection\?\.saveData/);
+  assert.match(pos,/\["slow-2g","2g"\]\.includes/);
+  assert.match(pos,/if\(constrained\)return/);
+  assert.match(pos,/requestIdleCallback\(warm,\{timeout:3500\}\)/);
+  assert.match(pos,/setTimeout\(warm,2500\)/);
+});
+
+test('AI supervisor is truly on-demand on POS instead of merely code-split',async()=>{
+  const shell=await read('components/app-shell.tsx');
+  const ai=await read('components/ai-supervisor.tsx');
+  assert.match(shell,/\[aiMounted,setAiMounted\]=useState\(path!=="\/pos"\)/);
+  assert.match(shell,/if\(path!=="\/pos"\|\|aiMounted\)return/);
+  assert.match(shell,/window\.addEventListener\("field:ai-ask",requestAi\)/);
+  assert.match(shell,/setAiMounted\(true\)/);
+  assert.match(shell,/\(path!=="\/pos"\|\|aiMounted\)&&<AiSupervisor session=\{session\} initialRequest=\{aiRequest\}\/>/);
+  assert.match(ai,/initialRequest\?:\{id:number;message:string\}\|null/);
+  assert.match(ai,/ask\(initialRequest\.message\)/);
+  assert.match(ai,/if\(!session\|\|path==="\/pos"\)return/);
+});

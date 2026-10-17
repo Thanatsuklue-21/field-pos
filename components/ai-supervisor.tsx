@@ -9,7 +9,7 @@ type Alert={id:string;severity:"critical"|"high"|"medium"|"low"|"info";area:stri
 type Snapshot={health:"critical"|"review"|"ok";topSeverity:string;metrics:Record<string,number>;alerts:Alert[];policy:{auto:string[];approval:string[];never:string[]};generatedAt:number;revision:number};
 type AiReply={answer:string;actions:{type:"navigate"|"refresh";label:string;href:string;reason:string}[];mode:"ai"|"rules";snapshot:Snapshot};
 
-export default function AiSupervisor({session}:{session:Session|null}){
+export default function AiSupervisor({session,initialRequest}:{session:Session|null;initialRequest?:{id:number;message:string}|null}){
   const router=useRouter(),path=usePathname(),[open,setOpen]=useState(false),[snap,setSnap]=useState<Snapshot|null>(null),[busy,setBusy]=useState(false),[message,setMessage]=useState("ช่วยตรวจว่าตอนนี้ต้องทำอะไรก่อน"),[reply,setReply]=useState<AiReply|null>(null),[error,setError]=useState("");
   async function load(){
     if(!session)return;
@@ -27,6 +27,13 @@ export default function AiSupervisor({session}:{session:Session|null}){
     }catch(e:any){setError(e?.message==="network_unavailable"?"ออฟไลน์ · ใช้กฎตรวจสอบในระบบเดิมต่อได้ แต่ AI อธิบายยังใช้งานไม่ได้":"AI ยังตอบไม่ได้ กรุณาลองใหม่")}
     finally{setBusy(false)}
   }
+  useEffect(()=>{
+    if(!session||!initialRequest?.message)return;
+    setOpen(true);
+    setMessage(initialRequest.message);
+    ask(initialRequest.message);
+  },[initialRequest?.id,session?.user.id]);
+
   useEffect(()=>{
     const handler=(event:Event)=>{
       const next=String((event as CustomEvent)?.detail?.message||"ช่วยตรวจสิ่งที่ผิดปกติตอนนี้");
