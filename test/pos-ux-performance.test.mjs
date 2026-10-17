@@ -621,3 +621,11 @@ test('AI supervisor is truly on-demand on POS instead of merely code-split',asyn
   assert.match(ai,/ask\(initialRequest\.message\)/);
   assert.match(ai,/if\(!session\|\|path==="\/pos"\)return/);
 });
+
+
+test('AppShell disables automatic route prefetch while POS is the single operator surface',async()=>{
+  const shell=await read('components/app-shell.tsx');
+  const links=shell.match(/<Link key=\{href\} href=\{href\} prefetch=\{path==="\/pos"\?false:undefined\}/g)||[];
+  assert.ok(links.length>=3,'expected POS-aware prefetch policy on navigation links');
+  assert.match(shell,/prefetch=\{path==="\/pos"\?false:undefined\}/);
+});
