@@ -1,3 +1,3 @@
 FIELD POS production release marker
-source_main=fa430cfb6e3533e050c378e5b6606aedd3c17d2f
-purpose=release-current-main-performance-and-stability
+source_main=4b7d482e16375faf3841aa2677bf39f7120220a7
+purpose=release-operator-safe-admin-errors
