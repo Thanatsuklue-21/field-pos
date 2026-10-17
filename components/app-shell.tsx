@@ -30,7 +30,7 @@ export default function AppShell({children}:{children:React.ReactNode}){
     return (ai<0?mobileMorePriority.length:ai)-(bi<0?mobileMorePriority.length:bi);
   });
   const moreActive=mobileMore.some(([href])=>path===href);
-  const openPosWorkspace=(tab:"queue"|"orders"|"stock"|"expense")=>window.dispatchEvent(new CustomEvent("field:open-pos-workspace",{detail:{tab}}));
+  const openPosWorkspace=(tab:"queue"|"orders"|"stock"|"expense"|null)=>window.dispatchEvent(new CustomEvent("field:open-pos-workspace",{detail:{tab}}));
 
   return <div className="field-app-root h-dvh w-full bg-[#e9edf2] p-1.5 pb-[70px] text-[#1d1d1f] sm:p-2 sm:pb-[76px] md:p-4 md:pb-4">
     <NetworkStatus/>
@@ -61,7 +61,7 @@ export default function AppShell({children}:{children:React.ReactNode}){
     </div>}
 
     {(mobilePrimary.length>0||mobileMore.length>0)&&<nav aria-label="เมนูหลักบนมือถือ" className="frosted fixed bottom-[max(.35rem,env(safe-area-inset-bottom))] left-1.5 right-1.5 z-50 flex items-stretch gap-0.5 overflow-hidden rounded-[20px] p-1 md:hidden">
-      {mobilePrimary.map(([href,key,Icon])=>path==="/pos"&&href==="/queue"?<button key={href} type="button" onClick={()=>openPosWorkspace("queue")} className="flex min-h-11 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-[16px] bg-[#fff8dc] px-1 py-1 text-[9px] font-bold text-[#6f5510]"><ClipboardList size={17}/><span className="truncate">งานร้าน</span></button>:<Link key={href} href={href} className={"flex min-h-11 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-[16px] px-1 py-1 text-[9px] "+(path===href?"bg-[#d4af37]/18 font-bold text-[#6f5510]":"text-slate-600")}><Icon size={17}/><span className="truncate">{t[key]}</span></Link>)}
+      {mobilePrimary.map(([href,key,Icon])=>path==="/pos"&&href==="/queue"?<button key={href} type="button" onClick={()=>openPosWorkspace(null)} className="flex min-h-11 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-[16px] bg-[#fff8dc] px-1 py-1 text-[9px] font-bold text-[#6f5510]"><ClipboardList size={17}/><span className="truncate">งานร้าน</span></button>:<Link key={href} href={href} className={"flex min-h-11 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-[16px] px-1 py-1 text-[9px] "+(path===href?"bg-[#d4af37]/18 font-bold text-[#6f5510]":"text-slate-600")}><Icon size={17}/><span className="truncate">{t[key]}</span></Link>)}
       {mobileMore.length>0&&<button type="button" aria-controls="field-mobile-more" aria-expanded={moreOpen} onClick={()=>setMoreOpen(v=>!v)} className={"flex min-h-11 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-[16px] px-1 py-1 text-[9px] "+(moreActive||moreOpen?"bg-[#d4af37]/18 font-bold text-[#6f5510]":"text-slate-600")}><MoreHorizontal size={18}/><span>เพิ่มเติม</span></button>}
     </nav>}
   </div>
