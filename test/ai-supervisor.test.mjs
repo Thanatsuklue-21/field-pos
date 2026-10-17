@@ -97,3 +97,42 @@ test('Control Center can open the global AI Supervisor for focused analysis',asy
   assert.match(ui,/ตรวจเงินกับ AI/);
   assert.match(ui,/ตรวจสต๊อก\/Flow/);
 });
+
+
+test('AI supervisor navigation is permission-aware and never sends staff into admin-only pages',()=>{
+  const snapshot={
+    health:'review',topSeverity:'high',
+    alerts:[
+      {id:'stock-adjust-pattern',severity:'high',area:'stock',title:'stock',detail:'adjustments',href:'/audit'},
+      {id:'refund-void-pattern',severity:'high',area:'money',title:'refund',detail:'pattern',href:'/audit'}
+    ],
+    metrics:{revenue:0,refundAmount:0,orders:1,openOrders:0,expenses:0,pendingPayments:0,outOfStock:0,lowStock:1,cashVariance:0,stockAdjustments:3,wasteEvents:0,highWasteIngredients:0,voidReversals:0},
+    auditSignals:[],stockIntegrityEvidence:[],
+    policy:{auto:['navigate'],approval:[],never:[]}
+  };
+  const staff=filterAiSupervisorSnapshot(snapshot,{role:'staff',permissions:{order:true,stock:true,report:true,queue:false}});
+  assert.equal(staff.alerts.find(x=>x.id==='stock-adjust-pattern')?.href,'/stock');
+  assert.equal(staff.alerts.find(x=>x.id==='refund-void-pattern')?.href,'/orders');
+  assert.ok(staff.policy.navigationHrefs.includes('/stock'));
+  assert.ok(staff.policy.navigationHrefs.includes('/orders'));
+  assert.equal(staff.policy.navigationHrefs.includes('/audit'),false);
+  assert.equal(staff.policy.navigationHrefs.includes('/costs'),false);
+});
+
+test('AI supervisor admin navigation keeps full diagnostic destinations',()=>{
+  const snapshot={health:'ok',topSeverity:'info',alerts:[],metrics:{},auditSignals:[],stockIntegrityEvidence:[],policy:{auto:['navigate'],approval:[],never:[]}};
+  const admin=filterAiSupervisorSnapshot(snapshot,{role:'admin',permissions:{}});
+  for(const href of ['/pos','/queue','/stock','/expenses','/close','/orders','/reports','/audit','/costs','/settings']){
+    assert.ok(admin.policy.navigationHrefs.includes(href),href);
+  }
+});
+
+test('AI model actions are filtered against the permission-scoped navigation list',async()=>{
+  const {readFile}=await import('node:fs/promises');
+  const server=await readFile(new URL('../lib/ai-supervisor-server.mjs',import.meta.url),'utf8');
+  assert.match(server,/navigationHrefs=aiNavigationHrefs\(user\)/);
+  assert.match(server,/safeAlertHref\(a,user,navigationSet\)/);
+  assert.match(server,/allowedNavigation=new Set\(Array\.isArray\(snapshot\?\.policy\?\.navigationHrefs\)/);
+  assert.match(server,/a\.type==='navigate'&&allowedNavigation\.has\(a\.href\)/);
+  assert.doesNotMatch(server,/ALLOWED_HREFS/);
+});
