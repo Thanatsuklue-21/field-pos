@@ -17,9 +17,19 @@ const mobileMorePriority=["/orders","/stock","/expenses","/close","/settings"];
 const posWorkspaceTabs={"/queue":"queue","/orders":"orders","/stock":"stock","/expenses":"expense"} as const;
 
 export default function AppShell({children}:{children:React.ReactNode}){
-  const path=usePathname(),lang=useAppStore(s=>s.language),t=dict[lang],[session,setSession]=useState<Session|null>(null),[moreOpen,setMoreOpen]=useState(false),[manageOpen,setManageOpen]=useState(false);
+  const path=usePathname(),lang=useAppStore(s=>s.language),t=dict[lang],[session,setSession]=useState<Session|null>(null),[moreOpen,setMoreOpen]=useState(false),[manageOpen,setManageOpen]=useState(false),[aiMounted,setAiMounted]=useState(path!=="/pos"),[aiRequest,setAiRequest]=useState<{id:number;message:string}|null>(null);
   useEffect(()=>{const logged=(e:Event)=>setSession((e as CustomEvent).detail||null),expired=()=>{clearSessionCache();setSession(null)};getSessionCached().then(setSession).catch(()=>{});window.addEventListener("field:session",logged);window.addEventListener("field:auth-expired",expired);return()=>{window.removeEventListener("field:session",logged);window.removeEventListener("field:auth-expired",expired)}},[]);
-  useEffect(()=>{setMoreOpen(false);setManageOpen(!focusPrimary.includes(path))},[path]);
+  useEffect(()=>{setMoreOpen(false);setManageOpen(!focusPrimary.includes(path));if(path!=="/pos")setAiMounted(true)},[path]);
+  useEffect(()=>{
+    if(path!=="/pos"||aiMounted)return;
+    const requestAi=(event:Event)=>{
+      const message=String((event as CustomEvent)?.detail?.message||"ช่วยตรวจสิ่งที่ผิดปกติตอนนี้");
+      setAiRequest({id:Date.now(),message});
+      setAiMounted(true);
+    };
+    window.addEventListener("field:ai-ask",requestAi);
+    return()=>window.removeEventListener("field:ai-ask",requestAi);
+  },[path,aiMounted]);
 
   const allowed=useMemo(()=>items.filter(([, , ,access])=>session&&(access==="any"||session.user.role==="admin"||session.user.permissions?.[access]===true)),[session]);
   const desktopPrimary=allowed.filter(([href])=>focusPrimary.includes(href)).sort((a,b)=>focusPrimary.indexOf(a[0])-focusPrimary.indexOf(b[0]));
@@ -52,7 +62,7 @@ export default function AppShell({children}:{children:React.ReactNode}){
       <main className="min-w-0 flex-1 overflow-hidden rounded-[20px] border border-slate-300/80 bg-[#f3f5f7] shadow-[0_10px_30px_rgba(15,23,42,.08)] sm:rounded-[24px] md:rounded-[32px]">{children}</main>
     </div>
 
-    <AiSupervisor session={session}/>
+    {(path!=="/pos"||aiMounted)&&<AiSupervisor session={session} initialRequest={aiRequest}/>} 
 
     {mobileMore.length>0&&moreOpen&&<div className="fixed inset-0 z-[48] bg-black/20 md:hidden" onClick={()=>setMoreOpen(false)}>
       <div id="field-mobile-more" aria-label="เมนูเพิ่มเติม" className="frosted absolute bottom-[calc(70px+env(safe-area-inset-bottom))] left-2 right-2 max-h-[calc(100dvh-110px)] overflow-y-auto overscroll-contain rounded-[20px] p-2 shadow-2xl" onClick={e=>e.stopPropagation()}>
