@@ -21,11 +21,15 @@ with sync_playwright() as p:
     for width,height in [(320,640),(360,740),(390,844),(412,915),(430,932),(768,1024),(1024,768)]:
         context=browser.new_context(viewport={'width':width,'height':height})
         context.add_init_script("window.__fieldOpen=indexedDB.open.bind(indexedDB); indexedDB.open=()=>{throw new DOMException('Storage blocked','SecurityError')};")
-        page=context.new_page();page.set_default_timeout(30000);writes=[];errors=[]
+        page=context.new_page();page.set_default_timeout(30000);writes=[];errors=[];ai_messages=[]
         page.on('pageerror',lambda error:(errors.append(str(error)),print('PAGE ERROR:',error)))
         def handler(route):
             path=route.request.url.split('/api/')[-1]
-            if route.request.method!='GET':writes.append(path)
+            if route.request.method!='GET':
+                writes.append(path)
+                if path=='ai/chat':
+                    try: ai_messages.append((route.request.post_data_json or {}).get('message',''))
+                    except Exception: ai_messages.append('')
             if path=='auth/session':
                 data={'user':{'id':'owner','username':'owner','role':'admin','permissions':{}},'csrf':'test'}
             elif path=='pos/bootstrap':
@@ -62,13 +66,19 @@ with sync_playwright() as p:
         expect(page.get_by_role('button',name='FIELD AI Supervisor',exact=True)).to_have_count(0)
         context.set_offline(False)
         page.get_by_role('button',name='งานร้าน',exact=True).click()
-        page.get_by_role('button',name='ถามผู้ช่วยเรื่องงานร้าน',exact=True).click()
+        ai_button=page.get_by_role('button',name='ให้ AI อธิบายคำแนะนำตอนนี้',exact=True)
+        expect(ai_button).to_be_enabled()
+        ai_button.click()
         expect(page.get_by_role('dialog',name='งานร้าน FIELD',exact=True)).to_have_count(0)
         expect(page.get_by_text('ตรวจงานร้านจากข้อมูลทดสอบแล้ว',exact=True)).to_be_visible()
         assert writes==['ai/chat'], writes
+        assert len(ai_messages)==1, ai_messages
+        assert 'ระบบ FIELD แนะนำให้ทำสิ่งนี้ก่อน:' in ai_messages[0], ai_messages[0]
+        assert 'ห้ามจัดลำดับงานใหม่' in ai_messages[0], ai_messages[0]
+        assert 'ห้ามแนะนำให้ข้ามการยืนยันเงิน สต็อก คิว หรือ Close Day' in ai_messages[0], ai_messages[0]
         assert not errors, errors
         page.screenshot(path=str(output/f'outbox-recovered-{width}.png'),full_page=True)
-        results.append({'viewport':[width,height],'unreadable_outbox_blocks_offline_sale':True,'read_only_recovery_preserves_cart':True,'financial_writes':[],'assistant_requests':writes,'page_errors':errors})
+        results.append({'viewport':[width,height],'unreadable_outbox_blocks_offline_sale':True,'read_only_recovery_preserves_cart':True,'financial_writes':[],'assistant_requests':writes,'assistant_message_guarded':True,'page_errors':errors})
         context.close()
     browser.close()
 (output/'results.json').write_text(json.dumps(results,ensure_ascii=False,indent=2))
