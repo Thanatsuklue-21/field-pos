@@ -3,6 +3,7 @@ import AuthGate from "@/components/auth-gate";
 import ModalFocus from "@/components/modal-focus";
 import {useEffect,useMemo,useRef,useState} from "react";
 import {api,type Session} from "@/lib/api-client";
+import {operatorErrorFallback} from "@/lib/operator-error-language.mjs";
 import {prepareProductCreateIntent,readProductCreateIntent,sendProductCreateIntent,type ProductCreateIntent} from "@/lib/product-create-recovery";
 import {ImagePlus,Layers3,Pencil,Plus,Search,Trash2,X} from "lucide-react";
 
@@ -53,7 +54,7 @@ function ProductsView({session}:{session:Session}){
       offline_write_blocked:"ออฟไลน์อยู่ · ระบบเก็บรายการเดิมไว้และจะตรวจเมื่อเชื่อมต่อ",
       request_key_conflict:"Request เดิมถูกผูกกับข้อมูลหรือผู้ใช้อื่น · หยุดสร้างเมนูใหม่และตรวจรายการเดิม"
     };
-    return map[code]||code;
+    return map[code]||operatorErrorFallback(code,"เมนู");
   }
 
   async function submitProductIntent(intent:ProductCreateIntent,recovery=false){
@@ -94,7 +95,7 @@ function ProductsView({session}:{session:Session}){
     return()=>{disposed=true;window.removeEventListener("online",recover);window.removeEventListener("focus",recover);document.removeEventListener("visibilitychange",visible)};
   },[admin,session.user.id,session.csrf]);
 
-  async function chooseImage(file?:File){if(!file)return;setMsg("");try{setPendingImage(await compressMenuImage(file))}catch(e:any){setMsg(e.message)}}
+  async function chooseImage(file?:File){if(!file)return;setMsg("");try{setPendingImage(await compressMenuImage(file))}catch(e:any){setMsg(operatorErrorFallback(e?.message,"เมนู"))}}
   async function save(){
     if(!edit)return;
     if(!edit.id){
