@@ -493,6 +493,12 @@ export default function PosDailyWorkspace({
     startDayRecoveryBlocked
   });
 
+  function explainNextActionWithAi(){
+    const message="ระบบ FIELD แนะนำให้ทำสิ่งนี้ก่อน: "+nextAction.label+" — "+nextAction.detail+" ช่วยอธิบายให้พนักงานใหม่เข้าใจแบบสั้น ๆ ว่าทำไมต้องทำก่อนและต้องทำอย่างไร โดยยึดลำดับนี้ตามระบบ ห้ามจัดลำดับงานใหม่ และห้ามแนะนำให้ข้ามการยืนยันเงิน สต็อก คิว หรือ Close Day";
+    onClose();
+    window.dispatchEvent(new CustomEvent("field:ai-ask",{detail:{message}}));
+  }
+
   useEffect(()=>{
     if(!open){
       setGuidedMode(true);
@@ -537,10 +543,7 @@ export default function PosDailyWorkspace({
           <p className="mt-1 text-xs text-slate-500">เช็กงานหลักโดยไม่ออกจากหน้า POS · งานแก้ไขเชิงลึกค่อยเปิดหน้าเต็ม</p>
         </div>
         <div className="flex gap-1">
-          <button type="button" onClick={()=>{
-            onClose();
-            window.dispatchEvent(new CustomEvent("field:ai-ask",{detail:{message:"ช่วยตรวจงานร้านตอนนี้และบอกสิ่งที่ควรทำต่อ"}}));
-          }} aria-label="ถามผู้ช่วยเรื่องงานร้าน" className="grid h-11 w-11 place-items-center rounded-xl border border-slate-200 bg-white">
+          <button type="button" disabled={!online} onClick={explainNextActionWithAi} aria-label="ให้ AI อธิบายคำแนะนำตอนนี้" title={online?"ให้ AI อธิบายว่าทำไมระบบแนะนำงานนี้":"ต้องเชื่อมต่ออินเทอร์เน็ตเพื่อถาม AI"} className="grid h-11 w-11 place-items-center rounded-xl border border-slate-200 bg-white disabled:cursor-not-allowed disabled:opacity-35">
             <Bot size={18}/>
           </button>
           <button disabled={busy||!online} onClick={()=>refresh()} aria-label="รีเฟรชงานร้าน" className="grid h-11 w-11 place-items-center rounded-xl border border-slate-200 bg-white disabled:opacity-40">

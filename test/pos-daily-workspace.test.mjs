@@ -401,3 +401,18 @@ test("closing a direct Today Workspace task clears its explicit target",async()=
   const pos=await read("app/pos/page.tsx");
   assert.match(pos,/onClose=\{\(\)=>\{setWorkspaceOpen\(false\);setWorkspaceRequestedTab\(null\)\}\}/);
 });
+
+
+test("workspace AI explains the deterministic recommendation instead of reprioritizing work",async()=>{
+  const hub=await read("components/pos-daily-workspace.tsx");
+  assert.match(hub,/function explainNextActionWithAi\(\)/);
+  assert.match(hub,/nextAction\.label/);
+  assert.match(hub,/nextAction\.detail/);
+  assert.match(hub,/ยึดลำดับนี้ตามระบบ/);
+  assert.match(hub,/ห้ามจัดลำดับงานใหม่/);
+  assert.match(hub,/ห้ามแนะนำให้ข้ามการยืนยันเงิน สต็อก คิว หรือ Close Day/);
+  assert.match(hub,/aria-label="ให้ AI อธิบายคำแนะนำตอนนี้"/);
+  assert.match(hub,/disabled=\{!online\}/);
+  assert.match(hub,/onClick=\{explainNextActionWithAi\}/);
+  assert.doesNotMatch(hub,/ช่วยตรวจงานร้านตอนนี้และบอกสิ่งที่ควรทำต่อ/);
+});
