@@ -5,6 +5,7 @@ import {Plus,ShieldCheck,UserCog,X} from "lucide-react";
 import AuthGate from "@/components/auth-gate";
 import ModalFocus from "@/components/modal-focus";
 import {api,type Session} from "@/lib/api-client";
+import {operatorErrorFallback} from "@/lib/operator-error-language.mjs";
 import {prepareUserCreateIntent,readUserCreateIntent,sendUserCreateIntent,type UserCreateIntent,type UserCreatePermissions} from "@/lib/user-create-recovery";
 
 type Perms={order?:boolean;queue?:boolean;stock?:boolean;report?:boolean};
@@ -115,7 +116,7 @@ function View({session}:{session:Session}){
   async function patch(id:string,body:any){
     setBusy(true);setMsg("");
     try{await api("/api/admin/users/"+id,{method:"PATCH",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify(body)});await load()}
-    catch(e:any){setMsg(e.message)}
+    catch(e:any){setMsg(operatorErrorFallback(e?.message,"ผู้ใช้"))}
     finally{setBusy(false)}
   }
   async function resetPassword(id:string){

@@ -4,6 +4,7 @@ import Link from "next/link";
 import {Download,Landmark} from "lucide-react";
 import AuthGate from "@/components/auth-gate";
 import {api} from "@/lib/api-client";
+import {operatorErrorFallback} from "@/lib/operator-error-language.mjs";
 import {ResponsiveContainer,BarChart,Bar,XAxis,YAxis,Tooltip} from "recharts";
 
 type Summary={today:string;todayRevenue:number;totalRevenue:number;grossProfit:number;grossMargin:number;profitEstimated:boolean;costQuality:{status:string};cups:number;daily:{date:string;revenue:number}[];inventoryValue:number;inventoryItems:number;inventoryValueEstimated:boolean;delivery:{gross:number;gpFees:number;netSettlement:number;orders:number};paymentSummary:{cash:number;promptpay:number;bank:number;card:number;other:number}};
@@ -24,7 +25,7 @@ function downloadCsv(name:string,rows:Record<string,unknown>[]){
 
 function ReportsView(){
   const [d,setD]=useState<Summary|null>(null),[busy,setBusy]=useState(false),[msg,setMsg]=useState("");
-  useEffect(()=>{api<Summary>("/api/reports/summary").then(setD).catch(()=>{})},[]);
+  useEffect(()=>{api<Summary>("/api/reports/summary").then(setD).catch((e:any)=>setMsg(operatorErrorFallback(e?.message,"รายงาน")))},[]);
   const k=[["ยอดขายวันนี้",d?.todayRevenue||0,"฿"],["ยอดขายรวม",d?.totalRevenue||0,"฿"],["กำไรขั้นต้น",d?.grossProfit||0,"฿"],["Gross Margin",d?.grossMargin||0,"%"],["มูลค่า Stock คงเหลือ",d?.inventoryValue||0,"฿"]];
   async function exportKind(kind:"sales"|"expenses"|"stock"|"cashMovements"){
     setBusy(true);setMsg("");
@@ -32,7 +33,7 @@ function ReportsView(){
       const x=await api<ExportData>("/api/reports/accounting-export");
       downloadCsv("FIELD_"+kind+"_"+new Date().toISOString().slice(0,10)+".csv",x[kind]||[]);
       setMsg("Export "+kind+" สำเร็จ");
-    }catch(e:any){setMsg(e.message||"export_failed")}finally{setBusy(false)}
+    }catch(e:any){setMsg(operatorErrorFallback(e?.message||"export_failed","การส่งออกรายงาน"))}finally{setBusy(false)}
   }
   return <section className="soft-scroll h-full overflow-auto p-3 sm:p-5 md:p-7">
     <div className="flex flex-wrap items-end justify-between gap-3"><div><p className="gold m-0 text-[10px] font-bold tracking-[.3em]">PERFORMANCE</p><h1 className="mt-1 text-xl font-semibold sm:text-2xl">REPORTS</h1><p className="mt-1 text-xs text-slate-500">ยอดขาย · กำไร · มูลค่าสต็อก · Export สำหรับบัญชี</p></div><div className="flex flex-wrap gap-2"><Link href="/settlements" className="flex min-h-11 items-center gap-1.5 rounded-full bg-[#d4af37] px-3 text-xs font-bold text-black"><Landmark size={14}/>Settlement</Link>{(["sales","expenses","stock","cashMovements"] as const).map(x=><button key={x} disabled={busy} onClick={()=>exportKind(x)} className="flex min-h-11 items-center gap-1.5 rounded-full border border-slate-300 bg-white px-3 text-xs font-semibold disabled:opacity-40"><Download size={14}/>{x==="sales"?"Sales CSV":x==="expenses"?"Expenses CSV":x==="stock"?"Stock CSV":"Cash Drawer CSV"}</button>)}</div></div>
