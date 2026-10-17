@@ -108,7 +108,6 @@ function PosView({session}:{session:Session}){
   const cart=useCartStore();
   const heldBills=useHeldCartStore();
 
-  useEffect(()=>{router.prefetch("/queue")},[router]);
   useEffect(()=>{
     const warm=()=>{void loadPosDailyWorkspace()};
     const idleWindow=window as typeof window&{requestIdleCallback?:(callback:()=>void,options?:{timeout:number})=>number;cancelIdleCallback?:(id:number)=>void};
@@ -144,14 +143,16 @@ function PosView({session}:{session:Session}){
     // Customers are optional CRM data and are loaded after first paint; opening payment
     // still triggers an immediate fetch if the idle window has not run yet.
     const customerTimer=window.setTimeout(()=>loadCustomers(),1200);
-    api<any>("/api/payments/promptpay/config").then(setPromptConfig).catch(()=>setPromptConfig({ready:false,configured:false}));
     recoverCashCheckout().then(()=>recoverPending()).catch(()=>{});
     return()=>{active=false;window.clearTimeout(customerTimer)};
   },[]);
 
   useEffect(()=>{
     if((paymentReviewOpen||payOpen)&&customers.length===0)loadCustomers().catch(()=>{});
-  },[paymentReviewOpen,payOpen,customers.length]);
+    if((paymentReviewOpen||payOpen)&&promptConfig===null){
+      api<any>("/api/payments/promptpay/config").then(setPromptConfig).catch(()=>setPromptConfig({ready:false,configured:false}));
+    }
+  },[paymentReviewOpen,payOpen,customers.length,promptConfig]);
 
   useEffect(()=>{
     const networkChanged=()=>{
