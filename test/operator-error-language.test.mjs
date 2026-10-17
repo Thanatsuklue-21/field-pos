@@ -32,7 +32,11 @@ test("queue orders and close day use operator-safe fallback instead of raw error
   assert.match(orders,/operatorErrorFallback\(code,"การแก้ไขบิล"\)/);
   assert.match(close,/operatorErrorFallback\(code,"รายการเงินสดในลิ้นชัก"\)/);
   assert.match(close,/operatorErrorFallback\(code,"การปิดวัน"\)/);
-  assert.match(close,/setMsg\(closeDayError\(e\.message\)\)/);\n  assert.match(reports,/operatorErrorFallback/);\n  assert.match(users,/operatorErrorFallback\(e\?\.message,"ผู้ใช้"\)/);\n  assert.match(products,/operatorErrorFallback/);\n  assert.match(settlements,/operatorErrorFallback/);
+  assert.match(close,/setMsg\(closeDayError\(e\.message\)\)/);
+  assert.match(reports,/operatorErrorFallback/);
+  assert.match(users,/operatorErrorFallback\(e\?\.message,"ผู้ใช้"\)/);
+  assert.match(products,/operatorErrorFallback/);
+  assert.match(settlements,/operatorErrorFallback/);
 });
 
 test("operator-facing recovery and close-day copy avoids engineering jargon",async()=>{

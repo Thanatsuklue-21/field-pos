@@ -10,14 +10,16 @@ from playwright.sync_api import sync_playwright,expect
 
 parser=argparse.ArgumentParser()
 parser.add_argument("--base-url",default="http://localhost:3000")
-parser.add_argument("--browser",default="/usr/bin/chromium")
+parser.add_argument("--browser",default="")
 parser.add_argument("--output",default="/tmp/field-workspace-expense-qa")
 args=parser.parse_args()
 out=Path(args.output);out.mkdir(parents=True,exist_ok=True)
 posts=[];page_errors=[]
 
 with sync_playwright() as p:
-    browser=p.chromium.launch(executable_path=args.browser,args=["--no-sandbox"])
+    launch_args={"args":["--no-sandbox"]}
+    if args.browser: launch_args["executable_path"]=args.browser
+    browser=p.chromium.launch(**launch_args)
     context=browser.new_context(viewport={"width":390,"height":844})
     page=context.new_page();page.set_default_timeout(30000)
     page.on("pageerror",lambda e:page_errors.append(str(e)))
@@ -44,7 +46,7 @@ with sync_playwright() as p:
             body=json.loads(route.request.post_data or "{}");posts.append(body)
             if len(posts)==1:
                 return route.abort("failed")
-            ack={"ok":True,"expense":{"id":"exp-test","requestKey":body["requestKey"],"createdBy":"owner","date":body["date"],"amount":body["amount"],"category":body["category"],"description":body["description"],"paymentMethod":body["paymentMethod"]}}
+            ack={"ok":True,"replayed":True,"expense":{"id":"exp-test","requestKey":body["requestKey"],"createdBy":"owner","date":body["date"],"amount":body["amount"],"category":body["category"],"description":body["description"],"paymentMethod":body["paymentMethod"]}}
             return route.fulfill(status=200,content_type="application/json",body=json.dumps(ack))
         return route.fulfill(status=200,content_type="application/json",body="{}")
 
@@ -53,6 +55,8 @@ with sync_playwright() as p:
     page.get_by_role("button",name="งานร้าน",exact=True).click()
     workspace=page.get_by_role("dialog",name="งานร้าน FIELD")
     expect(workspace).to_be_visible()
+    # Guided workspace hides secondary tasks until explicitly requested.
+    workspace.get_by_role("button",name="ดูงานอื่น",exact=True).click()
     workspace.get_by_role("button",name="รายจ่าย",exact=True).click()
     workspace.get_by_role("button",name="โอน",exact=True).click()
     workspace.get_by_role("spinbutton",name="จำนวนเงินค่าใช้จ่ายด่วน").fill("45") if workspace.get_by_role("spinbutton",name="จำนวนเงินค่าใช้จ่ายด่วน").count() else workspace.get_by_label("จำนวนเงินค่าใช้จ่ายด่วน").fill("45")
