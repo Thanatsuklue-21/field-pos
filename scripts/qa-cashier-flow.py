@@ -95,13 +95,16 @@ with sync_playwright() as p:
     expect(page.get_by_text("฿45",exact=True)).to_be_visible()
     handoff=page.get_by_role("dialog",name="ชำระเงินสำเร็จ",exact=True)
     expect(handoff).to_be_visible()
-    expect(handoff.get_by_role("button",name="รับออเดอร์ถัดไป",exact=True)).to_be_visible()
-    expect(handoff.get_by_role("button",name=re.compile(r"ทำคิว Q001 ตรงนี้"))).to_be_visible()
-    # Payment handoff is intentionally non-dismissible: cashier must choose the next safe action.
+    primary=handoff.get_by_role("button",name="ทำคิว Q001 ต่อเลย",exact=True)
+    expect(primary).to_be_visible()
+    # Payment handoff is intentionally non-dismissible and exposes one guided next action.
+    assert handoff.get_by_role("button").count()==1
     assert handoff.get_by_role("button",name=re.compile(r"ปิด|Close|Dismiss")).count()==0
-    tap(handoff.get_by_role("button",name="รับออเดอร์ถัดไป",exact=True))
+    tap(primary)
     expect(page.get_by_text("ชำระเงินสำเร็จ",exact=True)).to_have_count(0)
-    expect(page.get_by_text("แตะเมนูที่ลูกค้าสั่ง",exact=True)).to_be_visible()
+    workspace=page.get_by_role("dialog",name="งานร้าน FIELD",exact=True)
+    expect(workspace).to_be_visible()
+    expect(workspace.get_by_text("งานร้าน",exact=True)).to_be_visible()
     assert len(checkout_bodies)==1, checkout_bodies
 
     elapsed_ms=round((time.perf_counter()-started)*1000)

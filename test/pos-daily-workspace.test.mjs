@@ -388,7 +388,7 @@ test("POS routine task buttons open the exact Today Workspace task without route
   assert.match(pos,/openWorkspace\("stock"\)/);
   assert.match(pos,/openWorkspace\("queue"\)/);
   assert.match(pos,/ตรวจสต็อกตรงนี้/);
-  assert.match(pos,/ทำคิว \{lastSale\.queueNo\} ตรงนี้/);
+  assert.match(pos,/"ทำคิว "\+lastSale\.queueNo\+" ต่อเลย"/);
   assert.doesNotMatch(pos,/router\.push\("\/stock"\)/);
   assert.match(pos,/requestedTab=\{workspaceRequestedTab\}/);
   assert.match(workspace,/requestedTab\?:WorkspaceTab\|null/);
