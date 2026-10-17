@@ -16,7 +16,7 @@ export default function AiSupervisor({session}:{session:Session|null}){
     try{setSnap(await api<Snapshot>("/api/ai/supervisor"));setError("")}
     catch(e:any){if(e?.message!=="network_unavailable")setError("AI Supervisor โหลดสถานะไม่ได้")}
   }
-  useEffect(()=>{if(!session)return;load();const id=setInterval(()=>{if(document.visibilityState==="visible")load()},30000);return()=>clearInterval(id)},[session?.user.id]);
+  useEffect(()=>{if(!session||path==="/pos")return;load();const id=setInterval(()=>{if(document.visibilityState==="visible")load()},30000);return()=>clearInterval(id)},[session?.user.id,path]);
   const badge=useMemo(()=>snap?.alerts?.filter(x=>x.severity==="critical"||x.severity==="high").length||0,[snap]);
   async function ask(text=message){
     if(!session||!text.trim())return;
