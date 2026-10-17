@@ -7,4 +7,6 @@ test('POS defers optional CRM loading without delaying payment access',async()=>
   assert.match(pos,/window\.setTimeout\(\(\)=>loadCustomers\(\),1200\)/);
   assert.ok(pos.includes('if((paymentReviewOpen||payOpen)&&customers.length===0)loadCustomers().catch(()=>{})'));
   assert.match(pos,/window\.clearTimeout\(customerTimer\)/);
+  assert.match(pos,/if\(\(paymentReviewOpen\|\|payOpen\)&&promptConfig===null\)/);
 });
+
