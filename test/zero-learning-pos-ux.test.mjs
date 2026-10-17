@@ -196,8 +196,10 @@ test("split-payment handoff keeps the cashier on the same queue until every paye
   assert.match(handoff,/ยังไม่ต้องส่งคิวไปทำ/);
   assert.match(handoff,/เลือกของคนถัดไป/);
   assert.match(handoff,/อย่าเปิดออเดอร์ใหม่จนกว่าจะรับเงินคิวนี้ครบ/);
-  assert.match(handoff,/เลือกแก้วของคนถัดไป แล้วกดรับเงินเมื่อพร้อม/);
-  assert.match(handoff,/!lastSale\.offline&&!splitPaymentPending&&<button onClick=\{\(\)=>\{setLastSale\(null\);openWorkspace\("queue"\)\}\}/);
+  assert.match(handoff,/ปุ่มเดียวจะพาไปเลือกรายการของคนถัดไป/);
+  assert.match(handoff,/if\(lastSale\.offline\|\|splitPaymentPending\)\{startNextOrder\(\);return\}setLastSale\(null\);openWorkspace\("queue"\)/);
+  assert.match(handoff,/lastSale\.offline\?"รับออเดอร์ถัดไป":splitPaymentPending\?"เลือกของคนถัดไป":"ทำคิว "/);
+  assert.doesNotMatch(handoff,/!lastSale\.offline&&!splitPaymentPending&&<button/);
 });
 
 
