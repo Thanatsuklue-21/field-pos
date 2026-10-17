@@ -102,7 +102,9 @@ with sync_playwright() as p:
     assert handoff.get_by_role("button",name=re.compile(r"ปิด|Close|Dismiss")).count()==0
     tap(primary)
     expect(page.get_by_text("ชำระเงินสำเร็จ",exact=True)).to_have_count(0)
-    expect(page.get_by_text("คิว Q001",exact=True)).to_be_visible()
+    workspace=page.get_by_role("dialog",name="งานร้าน FIELD",exact=True)
+    expect(workspace).to_be_visible()
+    expect(workspace.get_by_text("งานร้าน",exact=True)).to_be_visible()
     assert len(checkout_bodies)==1, checkout_bodies
 
     elapsed_ms=round((time.perf_counter()-started)*1000)
