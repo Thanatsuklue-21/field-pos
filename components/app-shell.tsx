@@ -1,12 +1,13 @@
 "use client";
 import {useEffect,useMemo,useState} from "react";
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import {usePathname} from "next/navigation";
 import {BarChart3,ClipboardList,ListOrdered,Package2,Settings,ShoppingBag,Sparkles,Boxes,LayoutDashboard,ReceiptText,Users,BookOpenCheck,CalendarCheck2,DatabaseBackup,UserCog,ScrollText,Calculator,ShieldCheck,MoreHorizontal,X} from "lucide-react";
 import {useAppStore} from "@/stores/app-store";
 import {dict} from "@/lib/i18n";
 import NetworkStatus from "@/components/network-status";
-import AiSupervisor from "@/components/ai-supervisor";
+const AiSupervisor=dynamic(()=>import("@/components/ai-supervisor"),{ssr:false});
 import {clearSessionCache,getSessionCached,type Session} from "@/lib/api-client";
 
 const items=[["/dashboard","dashboard",LayoutDashboard,"report"],["/control","control",ShieldCheck,"admin"],["/pos","pos",ShoppingBag,"order"],["/queue","queue",ListOrdered,"queue"],["/products","products",Package2,"admin"],["/stock","stock",Boxes,"stock"],["/costs","costs",Calculator,"admin"],["/expenses","expenses",ReceiptText,"report"],["/customers","customers",Users,"admin"],["/recipes","recipes",BookOpenCheck,"admin"],["/close","close",CalendarCheck2,"report"],["/orders","orders",ClipboardList,"order"],["/reports","reports",BarChart3,"report"],["/backup","backup",DatabaseBackup,"admin"],["/users","users",UserCog,"admin"],["/audit","audit",ScrollText,"admin"],["/settings","settings",Settings,"any"]] as const;
