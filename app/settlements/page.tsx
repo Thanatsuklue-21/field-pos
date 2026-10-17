@@ -4,6 +4,7 @@ import {CheckCircle2,RefreshCw,RotateCcw,TriangleAlert,X} from "lucide-react";
 import AuthGate from "@/components/auth-gate";
 import ModalFocus from "@/components/modal-focus";
 import {api,type Session} from "@/lib/api-client";
+import {operatorErrorFallback} from "@/lib/operator-error-language.mjs";
 import {prepareSettlementWriteIntent,readSettlementWriteIntent,sendSettlementWriteIntent,type SettlementWriteBody,type SettlementWriteIntent} from "@/lib/settlement-write-recovery";
 
 type Pending={key:string;saleDate:string;platform:string;gross:number;gpFees:number;expectedAmount:number;orders:number;saleIds:string[]};
@@ -19,7 +20,7 @@ function View({session}:{session:Session}){
   const [pendingSettlementIntent,setPendingSettlementIntent]=useState<SettlementWriteIntent|null>(null),[settlementRecoveryBlocked,setSettlementRecoveryBlocked]=useState(false);
   const settlementRecoveryRef=useRef(false);
   const load=()=>api<Data>("/api/accounting/settlements").then(setData);
-  useEffect(()=>{load().catch((e:any)=>setMsg(e.message||"โหลดข้อมูลไม่สำเร็จ"))},[]);
+  useEffect(()=>{load().catch((e:any)=>setMsg(operatorErrorFallback(e?.message||"load_failed","ข้อมูลกระทบยอด")))},[]);
   const pendingTotal=useMemo(()=>(data?.pending||[]).reduce((s,x)=>s+x.expectedAmount,0),[data]);
   function open(row:Pending){
     if(pendingSettlementIntent||settlementRecoveryBlocked){setMsg(settlementError(settlementRecoveryBlocked?"settlement_recovery_unavailable":"pending_settlement_write_exists"));return}
@@ -43,7 +44,7 @@ function View({session}:{session:Session}){
       network_unavailable:"การเชื่อมต่อขาดระหว่างกระทบยอด · ยังไม่ทราบผล ระบบเก็บ Request เดิมไว้และจะตรวจซ้ำ",
       offline_write_blocked:"ออฟไลน์อยู่ · ระบบเก็บ Request เดิมไว้และจะตรวจเมื่อเชื่อมต่อ"
     };
-    return map[code]||code;
+    return map[code]||operatorErrorFallback(code,"การกระทบยอด"))
   }
 
   function settlementRequest(body:SettlementWriteBody){
