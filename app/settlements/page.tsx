@@ -44,7 +44,7 @@ function View({session}:{session:Session}){
       network_unavailable:"การเชื่อมต่อขาดระหว่างกระทบยอด · ยังไม่ทราบผล ระบบเก็บ Request เดิมไว้และจะตรวจซ้ำ",
       offline_write_blocked:"ออฟไลน์อยู่ · ระบบเก็บ Request เดิมไว้และจะตรวจเมื่อเชื่อมต่อ"
     };
-    return map[code]||operatorErrorFallback(code,"การกระทบยอด"))
+    return map[code]||operatorErrorFallback(code,"การกระทบยอด");
   }
 
   function settlementRequest(body:SettlementWriteBody){
