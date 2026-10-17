@@ -52,6 +52,18 @@ with sync_playwright() as p:
     started=time.perf_counter()
     page.goto(args.base_url+"/pos",wait_until="domcontentloaded",timeout=60000)
 
+    # Routine mobile operations must stay on the POS surface instead of route-switching.
+    mobile_nav=page.get_by_role("navigation",name="เมนูหลักบนมือถือ")
+    workspace_button=mobile_nav.get_by_role("button",name="งานร้าน",exact=True)
+    expect(workspace_button).to_be_visible()
+    before_workspace_url=page.url
+    workspace_button.click()
+    workspace=page.get_by_role("dialog",name="งานร้าน FIELD")
+    expect(workspace).to_be_visible()
+    assert page.url==before_workspace_url and page.url.endswith("/pos"), page.url
+    workspace.get_by_role("button",name="ปิดงานร้าน",exact=True).click()
+    expect(workspace).to_have_count(0)
+
     def tap(locator):
         nonlocal_taps[0]+=1
         locator.click()
@@ -113,6 +125,7 @@ with sync_playwright() as p:
         "pagerVerified":7,
         "handoffRequiresNextAction":True,
         "nextCustomerResetVerified":True,
+        "workspaceStayedOnPos":True,
         "pageErrors":errors,
         "note":"Automation timing is regression telemetry only; it is not a human training-time claim."
     }
