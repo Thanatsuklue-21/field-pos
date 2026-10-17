@@ -1,3 +1,3 @@
 FIELD POS production release marker
-source_main=142aeceb2fc0ded69ee891f69c156d58d4efdeb9
-purpose=release-ai-guided-fast-single-surface-pos
+source_main=973cb432cb09cb6adf200e3507e5c7f71d2ad1fb
+purpose=release-pos-critical-path-prefetch-performance
