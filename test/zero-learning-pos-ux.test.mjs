@@ -148,10 +148,11 @@ test("post-payment handoff blocks the sale screen until the cashier chooses the 
   assert.match(handoff,/initialFocusSelector='\[data-handoff-primary\]'/);
   assert.match(handoff,/data-handoff-primary/);
   assert.match(handoff,/รับออเดอร์ถัดไป/);
-  assert.match(handoff,/ทำคิว \{lastSale\.queueNo\} ตรงนี้/);
-  assert.match(handoff,/เลือกขั้นตอนถัดไปก่อนกลับหน้าขาย/);
+  assert.match(handoff,/"ทำคิว "\+lastSale\.queueNo\+" ต่อเลย"/);
+  assert.match(handoff,/ไม่ต้องเลือกทางเอง/);
   assert.doesNotMatch(handoff,/onEscape=/);
-  assert.match(handoff,/onClick=\{\(\)=>\{setLastSale\(null\);openWorkspace\("queue"\)\}\}/);
+  assert.match(handoff,/onClick=\{\(\)=>\{if\(lastSale\.offline\|\|splitPaymentPending\)\{startNextOrder\(\);return\}setLastSale\(null\);openWorkspace\("queue"\)\}\}/);
+  assert.equal((handoff.match(/<button/g)||[]).length,1,"handoff must expose one primary action");
   assert.doesNotMatch(handoff,/router\.push\("\/queue"\)/);
   assert.match(pos,/function startNextOrder\(\)/);
   assert.match(pos,/setLastSale\(null\)/);
