@@ -24,7 +24,7 @@ with sync_playwright() as p:
         page.on('pageerror',lambda error:(errors.append(str(error)),print('PAGE ERROR:',error)))
         def handler(route):
             path=route.request.url.split('/api/')[-1]
-            if route.request.method!='GET':writes.append(path)
+            if route.request.method!='GET' and path!='telemetry/web-vitals':writes.append(path)
             if path=='auth/session':
                 data={'user':{'id':'owner','username':'owner','role':'admin','permissions':{}},'csrf':'test'}
             elif path=='pos/bootstrap':

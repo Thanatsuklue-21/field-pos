@@ -629,3 +629,15 @@ test('AppShell disables automatic route prefetch while POS is the single operato
   assert.ok(links.length>=3,'expected POS-aware prefetch policy on navigation links');
   assert.match(shell,/prefetch=\{path==="\/pos"\?false:undefined\}/);
 });
+
+
+test('POS field performance telemetry stays log-only instead of adding Turso writes',async()=>{
+  const api=await read('lib/api.mjs');
+  const start=api.indexOf("if(path==='/api/telemetry/web-vitals'");
+  const end=api.indexOf("if(path==='/api/auth/logout'",start);
+  const block=api.slice(start,end);
+  assert.ok(start>0&&end>start);
+  assert.match(block,/FIELD_WEB_VITAL/);
+  assert.doesNotMatch(block,/INSERT|UPDATE|DELETE/);
+  assert.match(block,/return reply\(res,202,\{ok:true\}\)/);
+});
