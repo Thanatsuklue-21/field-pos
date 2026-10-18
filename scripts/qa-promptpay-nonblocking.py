@@ -23,7 +23,7 @@ with sync_playwright() as p:
         url=route.request.url
         path=url.split("/api/")[-1]
         method=route.request.method
-        if method!="GET": writes.append({"method":method,"path":path})
+        if method!="GET" and path!="telemetry/web-vitals": writes.append({"method":method,"path":path})
         if path=="auth/session":
             data={"user":{"id":"owner","username":"owner","role":"admin","permissions":{}},"csrf":"test"}
         elif path=="pos/bootstrap":
