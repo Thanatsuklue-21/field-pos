@@ -186,7 +186,7 @@ test("workspace continuously follows the highest-priority task until the operato
   assert.match(hub,/refresh\(\)\.catch\(\(\)=>\{\}\)\.finally/);
   assert.match(hub,/onClick=\{\(\)=>\{setGuidedMode\(false\);setTab\(key\);setBrowseOpen\(false\)\}\}/);
   assert.match(hub,/กลับให้ระบบพาไปงานถัดไป/);
-  assert.match(hub,/onClick=\{\(\)=>\{setGuidedMode\(true\);setTab\(nextAction\.tab as WorkspaceTab\);setBrowseOpen\(false\)\}\}/);
+  assert.match(hub,/onClick=\{\(\)=>followGuidedAction\(nextAction\.tab as WorkspaceTab\)\}/);
   assert.match(hub,/if\(!open\)[\s\S]{0,80}setGuidedMode\(true\)/);
 });
 
@@ -416,4 +416,14 @@ test("workspace AI explains the deterministic recommendation instead of repriori
   assert.match(hub,/disabled=\{!online\}/);
   assert.match(hub,/onClick=\{explainNextActionWithAi\}/);
   assert.doesNotMatch(hub,/ช่วยตรวจงานร้านตอนนี้และบอกสิ่งที่ควรทำต่อ/);
+});
+
+
+test("guided stock action moves focus to the actionable stock section",async()=>{
+  const hub=await read("components/pos-daily-workspace.tsx");
+  assert.match(hub,/followGuidedAction/);
+  assert.match(hub,/workspace-task-/);
+  assert.match(hub,/scrollIntoView/);
+  assert.match(hub,/id="workspace-task-stock"/);
+  assert.match(hub,/tabIndex=\{-1\}/);
 });

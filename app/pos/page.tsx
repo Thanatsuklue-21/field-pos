@@ -928,7 +928,7 @@ function PosView({session}:{session:Session}){
 
       {!payOpen&&(workspaceActionVisible?<div role="status" aria-live="polite" className={"mb-3 flex items-center justify-between gap-3 rounded-2xl border px-3 py-2.5 "+(workspaceNextAction.tone==="critical"?"border-red-300 bg-red-50 text-red-900":workspaceNextAction.tone==="warn"?"border-amber-300 bg-amber-50 text-amber-900":"border-[#d4af37]/50 bg-[#fff8dc] text-slate-900")}>
         <div className="min-w-0"><span className="text-[9px] font-black uppercase tracking-[.16em] text-slate-500">ทำต่อก่อน</span><b className="mt-0.5 block text-sm">{workspaceNextAction.label}</b><span className="mt-0.5 block text-[11px] leading-4">{workspaceNextAction.detail}</span></div>
-        <button type="button" disabled={busy||payOpen} onClick={runWorkspaceNextAction} className="min-h-11 shrink-0 rounded-xl bg-[#1F4D3A] px-3 text-xs font-black text-white disabled:opacity-40">{workspaceActionLabel}</button>
+        <button type="button" disabled={busy||payOpen} onClick={runWorkspaceNextAction} className="min-h-11 shrink-0 rounded-xl border border-[#163a2c] bg-[#1F4D3A] px-3 text-xs font-black !text-white shadow-sm disabled:opacity-40" style={{color:"#fff"}}>{workspaceActionLabel}</button>
       </div>:<div role="status" aria-live="polite" className={"mb-3 rounded-2xl border px-3 py-2.5 "+(cashierGuide.tone==="warn"?"border-amber-300 bg-amber-50 text-amber-900":cashierGuide.tone==="ready"?"border-emerald-200 bg-emerald-50 text-emerald-900":"border-[#d4af37]/40 bg-[#fffaf0] text-slate-800")}>
         <b className="block text-sm">{cashierGuide.title}</b>
         <span className="mt-0.5 block text-[11px]">{cashierGuide.detail}</span>
