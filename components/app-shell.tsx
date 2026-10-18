@@ -7,6 +7,7 @@ import {BarChart3,ClipboardList,ListOrdered,Package2,Settings,ShoppingBag,Sparkl
 import {useAppStore} from "@/stores/app-store";
 import {dict} from "@/lib/i18n";
 import NetworkStatus from "@/components/network-status";
+import PosWebVitals from "@/components/pos-web-vitals";
 const AiSupervisor=dynamic(()=>import("@/components/ai-supervisor"),{ssr:false});
 import {clearSessionCache,getSessionCached,type Session} from "@/lib/api-client";
 
@@ -45,6 +46,7 @@ export default function AppShell({children}:{children:React.ReactNode}){
 
   return <div className="field-app-root h-dvh w-full bg-[#e9edf2] p-1.5 pb-[70px] text-[#1d1d1f] sm:p-2 sm:pb-[76px] md:p-4 md:pb-4">
     <NetworkStatus/>
+    <PosWebVitals session={session}/>
     <div className="flex h-full gap-2 sm:gap-3 md:gap-4">
       <aside className="glass card hidden w-[92px] shrink-0 flex-col items-center py-5 md:flex xl:w-[220px]">
         <div className="mb-5 flex items-center gap-3"><div className="grid h-11 w-11 place-items-center rounded-full border border-[#d4af37]/45 bg-[#d4af37]/10"><Sparkles size={19} className="gold"/></div><div className="hidden xl:block"><b className="tracking-[.3em]">FIELD</b><small className="block text-[10px] text-slate-500">CAFE POS</small></div></div>
