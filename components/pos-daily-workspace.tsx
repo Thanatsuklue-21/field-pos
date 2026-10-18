@@ -247,6 +247,8 @@ export default function PosDailyWorkspace({
     if(!open){
       setWorkspaceReady(false);
       setQueueFresh(false);
+      setWasteConfirm(null);
+      setStartDayConfirmAmount(null);
       return;
     }
     let active=true;
