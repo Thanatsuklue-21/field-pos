@@ -46,6 +46,7 @@ jobs:
           python scripts/qa-cashier-flow.py --base-url http://127.0.0.1:3000 --output /tmp/field-cashier-flow-qa
           python scripts/qa-promptpay-nonblocking.py --base-url http://127.0.0.1:3000 --output /tmp/field-promptpay-qa
           python scripts/qa-close-day-recovery.py --base-url http://127.0.0.1:3000 --output /tmp/field-close-day-qa
+          python scripts/qa-queue-waste-review.py --base-url http://127.0.0.1:3000 --output /tmp/field-queue-waste-qa
           python scripts/qa-expense-recovery.py --base-url http://127.0.0.1:3000 --output /tmp/field-expense-qa
           python scripts/qa-workspace-expense-recovery.py --base-url http://127.0.0.1:3000 --output /tmp/field-workspace-expense-qa
           python scripts/qa-backup-preview.py --base-url http://127.0.0.1:3000 --output /tmp/field-backup-preview-qa
