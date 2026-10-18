@@ -68,6 +68,7 @@ test('API and close UI enforce the reviewed close-day path',async()=>{
   assert.match(api,/ownerConfirmRequired:assessment\.ownerConfirmRequired/);
   assert.match(close,/นับเงินสด 2 รอบโดยไม่ดูยอดระบบ/);
   assert.match(close,/ตรวจยอดก่อนปิดวัน/);
-  assert.match(close,/reviewId:review\.id/);
+  assert.match(close,/reviewId:String\(review\.id\)/);
+  assert.match(close,/reviewId:candidate\.reviewId/);
   assert.match(shell,/\/control/);
 });
