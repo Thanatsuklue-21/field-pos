@@ -6,6 +6,7 @@ import {useEffect,useMemo,useRef,useState} from "react";
 import Link from "next/link";
 import {ArrowLeft,BellRing,CheckCircle2,RotateCcw,X} from "lucide-react";
 import AuthGate from "@/components/auth-gate";
+import ModalFocus from "@/components/modal-focus";
 import {api,type RevisionUnchanged,type Session} from "@/lib/api-client";
 import {readQueueSnapshotCache,writeQueueSnapshotCache} from "@/lib/queue-cache";
 import {operatorErrorFallback} from "@/lib/operator-error-language.mjs";
@@ -16,6 +17,7 @@ type PrepGroup={id:string;label:string;batchMode:BatchMode;qty:number;pendingQty
 type QItem={id:string;name:string;variant:string;qty:number;readyQty?:number;calledQty?:number;prepSelected?:boolean;wasteCount?:number;prepGroup?:{id:string;compatibilityKey:string;label:string;batchMode:BatchMode}};
 type QOrder={id:string;queueNo:string;pagerNo:number;status:string;time:number;items:QItem[];prepGroups?:PrepGroup[]};
 type QueueSnapshot={revision:number;unchanged?:false;orders:QOrder[]};
+type WasteReview={orderId:string;queueNo:string;pagerNo:number;itemIndex:number;itemId:string;itemName:string;variant:string};
 
 const n=(v:any)=>Number(v)||0;
 const itemDone=(item:QItem)=>n(item.readyQty)>=n(item.qty);
@@ -80,6 +82,7 @@ function QueueView({session}:{session:Session}){
   const [notice,setNotice]=useState("");
   const [toast,setToast]=useState("");
   const [pickupReviewId,setPickupReviewId]=useState("");
+  const [wasteReview,setWasteReview]=useState<WasteReview|null>(null);
   const busyRef=useRef(false);
   const revisionRef=useRef<number|null>(null);
   useEffect(()=>{if(!toast)return;const timer=window.setTimeout(()=>setToast(""),2600);return()=>window.clearTimeout(timer)},[toast]);
@@ -190,9 +193,13 @@ function QueueView({session}:{session:Session}){
     }catch(e:any){if(snapshot)setData(snapshot);setMsg(errorText(e.message));await load().catch(()=>{})}finally{busyRef.current=false;setBusy("")}
   }
 
+  function reviewWasteRemake(order:QOrder,item:QItem,itemIndex:number){
+    if(busyRef.current||itemCalled(item))return;
+    setWasteReview({orderId:order.id,queueNo:order.queueNo,pagerNo:order.pagerNo,itemIndex,itemId:item.id,itemName:item.name,variant:item.variant||"Standard"});
+  }
+
   async function wasteRemake(order:QOrder,item:QItem,itemIndex:number){
     if(busyRef.current)return;
-    if(!window.confirm("บันทึก “ชงเสีย / ทำใหม่” "+item.name+" 1 แก้ว?\nระบบจะหักวัตถุดิบเพิ่มตามสูตรที่ใช้ตอนขาย และลงค่าใช้จ่าย WASTE อัตโนมัติ"))return;
     const snapshot=data,key="waste:"+order.id+":"+itemIndex;busyRef.current=true;setBusy(key);setMsg("");
     optimistic(list=>list.map(o=>o.id!==order.id?o:{...o,status:"making",items:o.items.map((x,index)=>index===itemIndex?{...x,readyQty:n(x.readyQty)>n(x.calledQty)?n(x.readyQty)-1:n(x.readyQty),prepSelected:true,wasteCount:n(x.wasteCount)+1}:x)}));
     pulse("บันทึกชงเสีย · เตรียมทำใหม่ 1 แก้ว");
@@ -201,6 +208,21 @@ function QueueView({session}:{session:Session}){
       if(!applyState(r))load().catch(()=>{});
       setNotice("บันทึก WASTE "+item.name+" 1 แก้วแล้ว · หัก Stock เพิ่มตามสูตร"+(Number(r?.wasteCost)>0?" · ต้นทุนของเสีย ฿"+Number(r.wasteCost).toFixed(2):"")+" · ทำใหม่ต่อในคิวเดิม");
     }catch(e:any){if(snapshot)setData(snapshot);setMsg(errorText(e.message));await load().catch(()=>{})}finally{busyRef.current=false;setBusy("")}
+  }
+
+  async function confirmWasteRemake(){
+    const review=wasteReview;
+    if(!review||busyRef.current)return;
+    const order=orders.find(row=>row.id===review.orderId);
+    const item=order?.items?.[review.itemIndex];
+    if(!order||!item||item.id!==review.itemId){
+      setWasteReview(null);
+      setMsg("คิวเปลี่ยนแล้ว · ระบบยกเลิกหน้าตรวจชงเสียและโหลดสถานะล่าสุดก่อน");
+      await load().catch(()=>{});
+      return;
+    }
+    setWasteReview(null);
+    await wasteRemake(order,item,review.itemIndex);
   }
 
   async function callOrder(order:QOrder){
@@ -323,7 +345,7 @@ function QueueView({session}:{session:Session}){
 
         {task&&activeCategory&&<div className="mt-3 rounded-[20px] border-2 border-[#d4af37] bg-[#fffaf0] p-3">
           <div className="flex flex-wrap items-start justify-between gap-2"><div><p className="text-[9px] font-bold tracking-[.16em] text-[#9a7a16]">ขั้นตอนปัจจุบัน</p><h3 className="mt-1 text-base font-black">{task.item.name}</h3><p className="mt-1 text-[11px] text-slate-500">{task.item.variant&&task.item.variant!=="Standard"?task.item.variant+" · ":""}ทำอีก {Math.max(0,n(task.item.qty)-n(task.item.readyQty))} แก้ว · {activeCategory.label}</p></div><span className="rounded-full bg-white px-2.5 py-1 text-[10px] font-bold text-[#765b08]">{activeMenu?activeMenu.name+" ×"+activeMenu.qty:task.item.name+" ×"+task.item.qty}</span></div>
-          <div className="mt-3 grid grid-cols-[auto_1fr] gap-2"><button disabled={busy!==""||queueActionLocked||itemCalled(task.item)} onClick={()=>wasteRemake(task.order,task.item,task.index)} className="min-h-12 rounded-2xl border border-red-200 bg-white px-3 text-[10px] font-bold text-red-600 disabled:opacity-40"><RotateCcw size={12} className="mr-1 inline"/>ชงเสีย / ทำใหม่</button><button disabled={busy!==""||queueActionLocked} onClick={()=>completeNext(task.order,task.item,task.index)} className="min-h-12 rounded-2xl bg-[#d4af37] px-4 text-sm font-black text-black disabled:opacity-40">ทำ {task.item.name} ครบ</button></div>
+          <div className="mt-3 grid grid-cols-[auto_1fr] gap-2"><button disabled={busy!==""||queueActionLocked||itemCalled(task.item)} onClick={()=>reviewWasteRemake(task.order,task.item,task.index)} className="min-h-12 rounded-2xl border border-red-200 bg-white px-3 text-[10px] font-bold text-red-600 disabled:opacity-40"><RotateCcw size={12} className="mr-1 inline"/>ชงเสีย / ทำใหม่</button><button disabled={busy!==""||queueActionLocked} onClick={()=>completeNext(task.order,task.item,task.index)} className="min-h-12 rounded-2xl bg-[#d4af37] px-4 text-sm font-black text-black disabled:opacity-40">ทำ {task.item.name} ครบ</button></div>
         </div>}
 
         {!task&&firstReady&&!firstCalled&&<div className="mt-3 grid gap-3 rounded-[20px] border border-emerald-300 bg-emerald-50 p-3 sm:grid-cols-[1fr_auto] sm:items-center"><div><span className="rounded-full bg-emerald-100 px-2.5 py-1 text-[10px] font-black text-emerald-700">ทำครบทั้งบัตรแล้ว</span><div className="mt-2 text-sm font-bold">พร้อมเรียกลูกค้ารับบัตร {first.pagerNo}</div></div><button disabled={busy!==""||queueActionLocked} onClick={()=>callOrder(first)} className="flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-[#d4af37] px-5 text-sm font-black text-black"><BellRing size={17}/>เรียกบัตร {first.pagerNo}</button></div>}
@@ -348,6 +370,14 @@ function QueueView({session}:{session:Session}){
       </section>}
     </div>
 
+    {wasteReview&&<div className="field-modal-overlay fixed inset-0 z-[110] flex items-end justify-center bg-black/35 backdrop-blur-[2px] sm:items-center" onMouseDown={e=>{if(e.currentTarget===e.target&&!busy)setWasteReview(null)}}>
+      <ModalFocus labelId="queue-waste-review-title" onEscape={busy?undefined:()=>setWasteReview(null)} initialFocusSelector='[data-queue-waste-confirm]' className="field-modal-panel w-full max-w-md rounded-t-[28px] bg-white p-4 shadow-2xl sm:rounded-[28px] sm:p-5">
+        <div className="flex items-start justify-between gap-3"><div><p className="m-0 text-[10px] font-black tracking-[.18em] text-red-700">ตรวจอีกครั้งก่อนบันทึก</p><h2 id="queue-waste-review-title" className="mt-1 text-xl font-black text-slate-900">ชงเสีย / ทำใหม่ 1 แก้ว</h2><p className="mt-1 text-xs text-slate-500">คิว {wasteReview.queueNo} · บัตร {wasteReview.pagerNo||"—"}</p></div><button disabled={!!busy} aria-label="ปิดการตรวจชงเสีย" onClick={()=>setWasteReview(null)} className="grid h-11 w-11 shrink-0 place-items-center rounded-xl border border-slate-200 bg-white disabled:opacity-40"><X size={18}/></button></div>
+        <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-3"><b className="text-sm text-slate-900">{wasteReview.itemName}</b>{wasteReview.variant&&wasteReview.variant!=="Standard"&&<p className="mt-1 text-xs text-slate-500">{wasteReview.variant}</p>}<div className="mt-3 grid gap-2 text-xs text-slate-700"><div className="rounded-xl bg-white px-3 py-2"><b>1.</b> บันทึก WASTE 1 แก้วและลงค่าใช้จ่าย WASTE อัตโนมัติ</div><div className="rounded-xl bg-white px-3 py-2"><b>2.</b> หักวัตถุดิบเพิ่มตามสูตรที่ใช้ตอนขาย</div><div className="rounded-xl bg-white px-3 py-2"><b>3.</b> คงคิวเดิมไว้ แล้วทำเมนูนี้ใหม่ต่อ</div></div></div>
+        <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900"><b>ไม่ใช่การ Refund หรือ Void</b> · ใช้เมื่อเครื่องดื่มทำเสียและต้องชงใหม่จริงเท่านั้น</div>
+        <div className="mt-4 grid grid-cols-2 gap-2"><button type="button" disabled={!!busy} onClick={()=>setWasteReview(null)} className="min-h-12 rounded-2xl border border-slate-300 bg-white text-sm font-bold text-slate-700 disabled:opacity-40">ยังไม่บันทึก</button><button type="button" data-queue-waste-confirm disabled={!!busy} onClick={confirmWasteRemake} className="min-h-12 rounded-2xl bg-red-700 px-3 text-sm font-bold text-white disabled:opacity-40">{busy?"กำลังบันทึก…":"ยืนยันชงเสีย / ทำใหม่"}</button></div>
+      </ModalFocus>
+    </div>}
     {toast&&<div className="fixed bottom-[76px] left-4 right-4 z-[95] mx-auto max-w-xl rounded-2xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-center text-sm font-semibold text-emerald-800 shadow-xl sm:bottom-[92px]">{toast}</div>}
   </section>;
 }

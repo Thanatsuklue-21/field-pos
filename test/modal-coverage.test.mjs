@@ -13,7 +13,8 @@ test("operational overlays use the shared modal keyboard and safe-area contract"
     ["components/ai-supervisor.tsx",["ai-supervisor-title"],1],
     ["app/expenses/page.tsx",["expense-dialog-title"],1],
     ["app/close/page.tsx",["cash-drawer-dialog-title"],1],
-    ["app/customers/page.tsx",["customer-create-title"],1]
+    ["app/customers/page.tsx",["customer-create-title"],1],
+    ["app/queue/page.tsx",["queue-waste-review-title"],1]
   ];
   for(const [path,labels,count] of cases){
     const source=await read(path);
@@ -30,6 +31,7 @@ test("financial and stock mutation modals cannot escape-dismiss while busy",asyn
   const stock=await read("app/stock/page.tsx");
   const settlements=await read("app/settlements/page.tsx");
   const products=await read("app/products/page.tsx");
+  const queue=await read("app/queue/page.tsx");
 
   assert.ok(orders.includes('onEscape={busy?undefined:()=>setRecoveryDetail(null)}'));
   assert.ok(stock.includes('onEscape={busy?undefined:()=>setTxOpen(null)}'));
@@ -40,6 +42,7 @@ test("financial and stock mutation modals cannot escape-dismiss while busy",asyn
   assert.ok(products.includes('onEscape={busy?undefined:()=>setStructureOpen(false)}'));
   assert.ok(products.includes('onEscape={busy?undefined:()=>{setEdit(null);setPendingImage("")}}'));
   assert.ok(products.includes('onEscape={busy?undefined:()=>setDel(null)}'));
+  assert.ok(queue.includes('onEscape={busy?undefined:()=>setWasteReview(null)}'));
 });
 
 test("Today Workspace retains its complete custom focus trap",async()=>{
