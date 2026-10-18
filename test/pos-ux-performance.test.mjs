@@ -203,7 +203,10 @@ test('mobile operational pages use compact density while preserving touch action
   assert.match(shell,/const primaryMobile=\["\/pos","\/queue"\]/);
   assert.match(shell,/MoreHorizontal/);
   assert.match(pos,/min-h-\[154px\]/);
-  assert.match(pos,/bottom-\[70px\]/);
+  assert.match(pos,/field-pos-mobile-cartbar/);
+  assert.doesNotMatch(pos,/bottom-\[70px\]/);
+  const css=await read('app/globals.css');
+  assert.match(css,/\.field-pos-mobile-cartbar\{[\s\S]*safe-area-inset-bottom/);
   assert.match(queue,/h-full overflow-y-auto overscroll-contain p-2\.5 pb-28/);
   assert.match(stock,/p-3 sm:p-5 md:p-7/);
   assert.match(orders,/p-3 sm:p-5 md:p-7/);
