@@ -285,3 +285,14 @@ test("read preflight includes persisted Close Day write intents",async()=>{
   assert.equal(result.blockers[0].kind,"close_day_write_unknown");
   assert.equal(result.blockers[0].route,"/close");
 });
+
+
+test("Close Day recovery rechecks device state with the durable intent business date instead of stale React state",async()=>{
+  const ui=await readFile(new URL("../app/close/page.tsx",import.meta.url),"utf8");
+  assert.match(ui,/async function refreshDevicePreflight\(dateOverride\?:string\)/);
+  assert.match(ui,/const targetDate=String\(dateOverride\|\|businessDate\|\|""\)/);
+  const closeSubmit=ui.slice(ui.indexOf("async function submitCloseDayIntent"),ui.indexOf("async function recoverCloseDayWrite"));
+  assert.match(closeSubmit,/refreshDevicePreflight\(intent\.body\.date\)/);
+  const openSubmit=ui.slice(ui.indexOf("async function submitOpenShiftIntent"),ui.indexOf("useEffect\(\(\)=>",ui.indexOf("async function submitOpenShiftIntent")));
+  assert.match(openSubmit,/refreshDevicePreflight\(intent\.body\.date\)/);
+});
