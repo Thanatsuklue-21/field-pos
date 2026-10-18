@@ -127,6 +127,8 @@ export default function PosDailyWorkspace({
   const [message,setMessage]=useState("");
   const [queueFeedback,setQueueFeedback]=useState("");
   const [queueFresh,setQueueFresh]=useState(false);
+  const [wasteConfirm,setWasteConfirm]=useState<{orderId:string;itemIndex:number;itemId:string;itemName:string}|null>(null);
+  const [startDayConfirmAmount,setStartDayConfirmAmount]=useState<number|null>(null);
 
   useEffect(()=>{
     if(!tabs.includes(tab)&&tabs[0])setTab(tabs[0]);
@@ -163,10 +165,6 @@ export default function PosDailyWorkspace({
 
   async function runQueueProductionAction(order:QueueOrder,item:QueueItem,itemIndex:number,action:"complete_item"|"waste_remake"){
     if(!online||!queueFresh||queueActionLocked||busy)return;
-    if(action==="waste_remake"){
-      const confirmed=window.confirm("บันทึกชงเสีย / ทำใหม่ "+item.name+" 1 แก้ว?\nระบบจะหักวัตถุดิบเพิ่มตามสูตรและบันทึก WASTE อัตโนมัติ");
-      if(!confirmed)return;
-    }
     setQueueFeedback("");
     try{
       const body=action==="complete_item"
@@ -329,16 +327,29 @@ export default function PosDailyWorkspace({
     let existing:CashShiftOpenIntent|null=null;
     try{existing=readCashShiftOpenIntent(session.user.id)}
     catch{setStartDayRecoveryBlocked(true);setStartDayFeedback(startDayError("cash_shift_open_recovery_unavailable"));return}
-    if(existing){setPendingOpenShift(existing);await submitStartDayIntent(existing,true);return}
+    if(existing){setStartDayConfirmAmount(null);setPendingOpenShift(existing);await submitStartDayIntent(existing,true);return}
     const date=String(expenseData?.businessDate||"");
     const amount=Number(openingCash);
     if(!/^\d{4}-\d{2}-\d{2}$/.test(date)){setStartDayFeedback("ยังไม่ได้วันทำการล่าสุด · รีเฟรชก่อนเปิดร้าน");return}
     if(!Number.isFinite(amount)||amount<0||amount>1e7||Math.abs(amount*100-Math.round(amount*100))>1e-7){setStartDayFeedback(startDayError("invalid_opening_cash"));return}
-    if(!window.confirm("ยืนยันเปิดร้านด้วยเงินตั้งต้น ฿"+money(amount)+" ? หลังยืนยันจำนวนนี้จะถูกล็อกสำหรับการกระทบยอดวันนี้"))return;
+    setStartDayFeedback("");
+    setStartDayConfirmAmount(amount);
+  }
+
+  async function confirmStartDay(){
+    if(startDayConfirmAmount===null||!canStatus||!online||startDayRecoveryBlocked||startDaySavingRef.current)return;
+    let existing:CashShiftOpenIntent|null=null;
+    try{existing=readCashShiftOpenIntent(session.user.id)}
+    catch{setStartDayRecoveryBlocked(true);setStartDayFeedback(startDayError("cash_shift_open_recovery_unavailable"));return}
+    if(existing){setStartDayConfirmAmount(null);setPendingOpenShift(existing);await submitStartDayIntent(existing,true);return}
+    const date=String(expenseData?.businessDate||"");
+    const amount=Number(startDayConfirmAmount);
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(date)){setStartDayConfirmAmount(null);setStartDayFeedback("วันทำการเปลี่ยนแล้ว · รีเฟรชก่อนเปิดร้าน");return}
+    if(!Number.isFinite(amount)||amount<0||amount>1e7||Math.abs(amount*100-Math.round(amount*100))>1e-7){setStartDayConfirmAmount(null);setStartDayFeedback(startDayError("invalid_opening_cash"));return}
     try{
       const intent=prepareCashShiftOpenIntent(session.user.id,{requestKey:crypto.randomUUID(),date,openingCash:amount});
-      setPendingOpenShift(intent);await submitStartDayIntent(intent,false);
-    }catch(error:any){setStartDayFeedback(startDayError(error?.message))}
+      setStartDayConfirmAmount(null);setPendingOpenShift(intent);await submitStartDayIntent(intent,false);
+    }catch(error:any){setStartDayConfirmAmount(null);setStartDayFeedback(startDayError(error?.message))}
   }
 
   function quickExpenseError(code:string){
@@ -559,8 +570,9 @@ export default function PosDailyWorkspace({
         {!expenseData.shift?<div ref={startDayCardRef} className="rounded-2xl border border-[#d4af37]/50 bg-[#fff8dc] p-3">
           <div className="flex items-start justify-between gap-3"><div><b className="text-sm">เริ่มงานวันนี้</b><p className="mt-1 text-xs text-slate-600">ใส่เงินสดตั้งต้นครั้งเดียว แล้วรับออเดอร์ต่อจากหน้า POS ได้เลย</p></div><span className="rounded-full bg-amber-100 px-2 py-1 text-[10px] font-bold text-amber-800">ยังไม่เปิดร้าน</span></div>
           {(pendingOpenShift||startDayRecoveryBlocked)&&<div className={"mt-3 rounded-xl border p-2 text-xs "+(startDayRecoveryBlocked?"border-red-300 bg-red-50 text-red-800":"border-amber-300 bg-amber-50 text-amber-900")}><b>{startDayRecoveryBlocked?"อ่านรายการเปิดร้านค้างไม่ได้":"มีคำสั่งเปิดร้านเดิมรอยืนยัน"}</b><p className="mt-1">{startDayRecoveryBlocked?"ระบบปิดปุ่มเปิดร้านชั่วคราวเพื่อป้องกันยอดเงินตั้งต้นซ้ำ":"ระบบจะตรวจรายการเปิดร้านเดิมเท่านั้น · ห้ามเปลี่ยนเงินตั้งต้นหรือสร้างรายการใหม่"}</p></div>}
-          <div className="mt-3 grid grid-cols-[1fr_auto] gap-2"><input ref={openingCashRef} aria-label="เงินสดตั้งต้น" inputMode="decimal" disabled={!!pendingOpenShift||startDayRecoveryBlocked} value={openingCash} onChange={e=>setOpeningCash(e.target.value)} placeholder="เช่น 500" className="min-h-12 rounded-xl border border-slate-300 bg-white px-3 text-base font-bold disabled:text-slate-400"/><button type="button" disabled={!online||startDaySavingRef.current||startDayRecoveryBlocked} onClick={openStartDay} className="min-h-12 rounded-xl bg-[#1F4D3A] px-4 text-sm font-black text-white disabled:opacity-40">{pendingOpenShift?"ตรวจผลเดิม":"เปิดร้านวันนี้"}</button></div>
-          <button type="button" disabled={!!pendingOpenShift||startDayRecoveryBlocked} onClick={()=>setOpeningCash("0")} className="mt-2 min-h-11 rounded-xl border border-slate-300 bg-white px-3 text-xs font-semibold text-slate-700 disabled:opacity-40">ไม่มีเงินทอน · ใช้ ฿0</button>
+          <div className="mt-3 grid grid-cols-[1fr_auto] gap-2"><input ref={openingCashRef} aria-label="เงินสดตั้งต้น" inputMode="decimal" disabled={!!pendingOpenShift||startDayRecoveryBlocked||startDayConfirmAmount!==null} value={openingCash} onChange={e=>setOpeningCash(e.target.value)} placeholder="เช่น 500" className="min-h-12 rounded-xl border border-slate-300 bg-white px-3 text-base font-bold disabled:text-slate-400"/><button type="button" disabled={!online||startDaySavingRef.current||startDayRecoveryBlocked||startDayConfirmAmount!==null} onClick={openStartDay} className="min-h-12 rounded-xl bg-[#1F4D3A] px-4 text-sm font-black text-white disabled:opacity-40">{pendingOpenShift?"ตรวจผลเดิม":"เปิดร้านวันนี้"}</button></div>
+          <button type="button" disabled={!!pendingOpenShift||startDayRecoveryBlocked||startDayConfirmAmount!==null} onClick={()=>setOpeningCash("0")} className="mt-2 min-h-11 rounded-xl border border-slate-300 bg-white px-3 text-xs font-semibold text-slate-700 disabled:opacity-40">ไม่มีเงินทอน · ใช้ ฿0</button>
+          {startDayConfirmAmount!==null&&<div role="alertdialog" aria-label="ยืนยันเงินตั้งต้นเปิดร้าน" className="mt-3 rounded-xl border border-[#d4af37] bg-white p-3"><b className="text-sm text-slate-900">ทวนเงินตั้งต้นก่อนเปิดร้าน</b><p className="mt-1 text-xs leading-5 text-slate-600">วันนี้จะเริ่มด้วยเงินสด <b className="text-[#765b08]">฿{money(startDayConfirmAmount)}</b> · เมื่อยืนยัน ยอดนี้จะถูกล็อกสำหรับกระทบยอดทั้งวัน</p><div className="mt-3 grid grid-cols-2 gap-2"><button type="button" onClick={()=>setStartDayConfirmAmount(null)} className="min-h-11 rounded-xl border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700">กลับไปแก้ยอด</button><button type="button" disabled={startDaySavingRef.current} onClick={confirmStartDay} className="min-h-11 rounded-xl bg-[#1F4D3A] px-3 text-xs font-black text-white disabled:opacity-40">ยืนยันเปิดร้าน</button></div></div>}
           {startDayFeedback&&<p className="mt-2 rounded-xl bg-white/70 px-3 py-2 text-xs text-slate-700">{startDayFeedback}</p>}
         </div>:<div className={"rounded-2xl border p-3 "+(expenseData.shift.status==="open"?"border-emerald-200 bg-emerald-50":"border-slate-200 bg-slate-100")}><div className="flex items-start justify-between gap-3"><div><b className="text-sm">{expenseData.shift.status==="open"?"ร้านเปิดแล้ว":"วันนี้ปิดยอดแล้ว"}</b><p className="mt-1 text-xs text-slate-600">{expenseData.shift.status==="open"?"เงินตั้งต้น ฿"+money(expenseData.shift.openingCash)+" ถูกล็อกแล้ว · รับออเดอร์ต่อได้":"วันทำการนี้ปิดแล้ว ระบบไม่เปิดซ้ำ"}</p></div><span className={"rounded-full px-2 py-1 text-[10px] font-bold "+(expenseData.shift.status==="open"?"bg-emerald-200 text-emerald-900":"bg-slate-200 text-slate-700")}>{expenseData.shift.status==="open"?"พร้อมขาย":"ปิดแล้ว"}</span></div></div>}
       </div>}
@@ -633,10 +645,10 @@ export default function PosDailyWorkspace({
                     <p className="mb-1.5 text-[10px] font-black text-slate-600">สูตรต่อแก้ว</p>
                     <div className="grid gap-1.5">{currentPrepRecipe.map(row=><div key={row.id} className="flex items-center justify-between gap-3 text-xs"><span className="min-w-0 truncate text-slate-600">{row.name}</span><b className="shrink-0 text-slate-900">{row.perCup} {row.unit}</b></div>)}</div>
                   </div>:<p className="mt-3 rounded-xl bg-white px-3 py-2 text-[11px] text-slate-500">สูตรละเอียดไม่พร้อมใน snapshot นี้ · หากไม่แน่ใจให้เปิดโหมดทำเครื่องดื่ม</p>}
-                  <div className="mt-3 grid grid-cols-[auto_1fr] gap-2">
-                    <button type="button" disabled={!online||!queueFresh||busy||queueActionLocked||queueItemCalled(currentPrepTask.item)} onClick={()=>runQueueProductionAction(order,currentPrepTask.item,currentPrepTask.index,"waste_remake")} className="min-h-12 rounded-xl border border-red-200 bg-white px-3 text-[10px] font-bold text-red-700 disabled:opacity-40">ชงเสีย / ทำใหม่</button>
+                  {wasteConfirm&&wasteConfirm.orderId===order.id&&wasteConfirm.itemIndex===currentPrepTask.index&&wasteConfirm.itemId===String(currentPrepTask.item.id||"")?<div role="alertdialog" aria-label="ยืนยันชงเสียและทำใหม่" className="mt-3 rounded-xl border border-red-200 bg-red-50 p-3"><b className="text-sm text-red-900">ชงเสีย {wasteConfirm.itemName} 1 แก้วใช่ไหม?</b><p className="mt-1 text-xs leading-5 text-red-800">ระบบจะหักวัตถุดิบเพิ่มตามสูตร บันทึก WASTE และให้ทำเมนูเดิมใหม่ 1 แก้ว</p><div className="mt-3 grid grid-cols-2 gap-2"><button type="button" onClick={()=>setWasteConfirm(null)} className="min-h-11 rounded-xl border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700">ยังไม่บันทึก</button><button type="button" disabled={!online||!queueFresh||busy||queueActionLocked} onClick={()=>{void runQueueProductionAction(order,currentPrepTask.item,currentPrepTask.index,"waste_remake").finally(()=>setWasteConfirm(null))}} className="min-h-11 rounded-xl bg-red-700 px-3 text-xs font-black text-white disabled:opacity-40">ยืนยันชงเสีย</button></div></div>:<div className="mt-3 grid grid-cols-[auto_1fr] gap-2">
+                    <button type="button" disabled={!online||!queueFresh||busy||queueActionLocked||queueItemCalled(currentPrepTask.item)} onClick={()=>setWasteConfirm({orderId:order.id,itemIndex:currentPrepTask.index,itemId:String(currentPrepTask.item.id||""),itemName:currentPrepTask.item.name})} className="min-h-12 rounded-xl border border-red-200 bg-white px-3 text-[10px] font-bold text-red-700 disabled:opacity-40">ชงเสีย / ทำใหม่</button>
                     <button type="button" disabled={!online||!queueFresh||busy||queueActionLocked} onClick={()=>runQueueProductionAction(order,currentPrepTask.item,currentPrepTask.index,"complete_item")} className="min-h-12 rounded-xl bg-[#d4af37] px-4 text-sm font-black text-black disabled:opacity-40">ทำ {currentPrepTask.item.name} ครบ</button>
-                  </div>
+                  </div>}
                 </div>:
                 <p className="mt-3 rounded-xl bg-slate-50 px-3 py-2 text-center text-[11px] text-slate-500">รอคิวก่อนหน้า · ระบบเรียงลำดับให้แล้ว</p>}
             </div>;
