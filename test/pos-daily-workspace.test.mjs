@@ -202,7 +202,7 @@ test("Today Workspace starts the business day in-place with durable exact-replay
   assert.match(hub,/เปิดร้านวันนี้/);
   assert.match(hub,/aria-label="เงินสดตั้งต้น"/);
   assert.match(hub,/pendingOpenShift/);
-  assert.match(hub,/disabled=\{!!pendingOpenShift\|\|startDayRecoveryBlocked\}/);
+  assert.match(hub,/disabled=\{!!pendingOpenShift\|\|startDayRecoveryBlocked\|\|startDayConfirmAmount!==null\}/);
   assert.match(hub,/window\.addEventListener\("online",recover\)/);
   assert.match(hub,/window\.addEventListener\("focus",recover\)/);
   assert.match(hub,/document\.addEventListener\("visibilitychange",visible\)/);
@@ -269,7 +269,8 @@ test("workspace completes the normal first-queue production flow in-place",async
   assert.match(hub,/useQueueActionRecovery/);
   assert.match(hub,/runQueueProductionAction\(order:QueueOrder,item:QueueItem,itemIndex:number,action:"complete_item"\|"waste_remake"\)/);
   assert.match(hub,/action==="complete_item"/);
-  assert.match(hub,/action==="waste_remake"/);
+  assert.match(hub,/wasteConfirm/);
+  assert.match(hub,/aria-label="ยืนยันชงเสียและทำใหม่"/);
   assert.match(hub,/expectedReadyQty:n\(item\.readyQty\)/);
   assert.match(hub,/reason:"ชงเสีย \/ ทำใหม่"/);
   assert.match(hub,/const result=await sendQueueAction\(body\)/);
