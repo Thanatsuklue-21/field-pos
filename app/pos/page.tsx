@@ -447,7 +447,8 @@ function PosView({session}:{session:Session}){
       const orderId=String(r?.orderId||splitGroup?.orderId||"");
       const queueNo=String(r?.queueNo||splitGroup?.queueNo||"—");
       const pager=Number(r?.pager??splitGroup?.pager??0);
-      if(orderId){        const group={orderId,queueNo,pager,createdAt:splitGroup?.createdAt||Date.now()};
+      if(orderId){
+        const group={orderId,queueNo,pager,createdAt:splitGroup?.createdAt||Date.now()};
         splitGroupWrite(group);setSplitGroup(group);
       }
       const qty=remaining.reduce((s,i)=>s+i.qty,0);
@@ -896,7 +897,8 @@ function PosView({session}:{session:Session}){
         }
         if(!st){
           const reservationKey=crypto.randomUUID();
-          const payRequestKey=crypto.randomUUID();          activePending={requestKey:reservationKey,payRequestKey,date:localDate(),cart:cartPayload,paymentReference:"",total:checkoutTotal,customerId:customerId||null,pointsRedeemed:redeemPoints,createdAt:Date.now(),checkoutMode,targetOrderId:splitGroup?.orderId||null};
+          const payRequestKey=crypto.randomUUID();
+          activePending={requestKey:reservationKey,payRequestKey,date:localDate(),cart:cartPayload,paymentReference:"",total:checkoutTotal,customerId:customerId||null,pointsRedeemed:redeemPoints,createdAt:Date.now(),checkoutMode,targetOrderId:splitGroup?.orderId||null};
           pendingWrite(activePending);
           const setup=await ensurePendingPrompt(activePending);
           activePending=setup.pending;
