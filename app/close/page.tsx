@@ -27,14 +27,15 @@ function View({session}:{session:Session}){
   const openShiftRecoveryRef=useRef(false),closeDayRecoveryRef=useRef(false);
   const load=()=>api<CloseData>("/api/close-day").then(x=>{setRows(x.closes||[]);setShift(x.shift||null);setBusinessDate(x.businessDate||"");setMovements(x.cashMovements||[]);setDrawerSnapshot(x.drawerSnapshot||null) });
   useEffect(()=>{load().catch(()=>{})},[]);
-  async function refreshDevicePreflight(){
-    if(!businessDate){
+  async function refreshDevicePreflight(dateOverride?:string){
+    const targetDate=String(dateOverride||businessDate||"");
+    if(!targetDate){
       const blocked:CloseDayDevicePreflight={ok:false,checkedAt:Date.now(),businessDate:"",blockers:[{kind:"storage_unreadable",title:"ยังยืนยันวันทำการไม่ได้",detail:"ระบบยังไม่ได้วันทำการล่าสุด · กรุณารีเฟรชก่อนตรวจหรือปิดวัน"}]};
       setDevicePreflight(blocked);return blocked;
     }
     setDeviceChecking(true);
     try{
-      const result=await readCloseDayDevicePreflight(session.user.id,businessDate);
+      const result=await readCloseDayDevicePreflight(session.user.id,targetDate);
       setDevicePreflight(result);
       return result;
     }finally{setDeviceChecking(false)}
@@ -97,13 +98,13 @@ function View({session}:{session:Session}){
       const r=await sendCashShiftOpenIntent(intent,body=>api<any>("/api/cash-shift/open",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify(body)}));
       setPendingOpenShift(null);setOpenShiftRecoveryBlocked(false);setShift(r.shift);
       setMsg((recovery?"ตรวจรายการเปิดร้านเดิมสำเร็จ · ":"")+"ร้านเปิดแล้ว · เงินตั้งต้น ฿"+Number(r.shift.openingCash).toLocaleString()+" ถูกล็อกแล้ว");
-      await load();await refreshDevicePreflight().catch(()=>{});
+      await load();await refreshDevicePreflight(intent.body.date).catch(()=>{});
       return true;
     }catch(e:any){
       try{setPendingOpenShift(readCashShiftOpenIntent(session.user.id));setOpenShiftRecoveryBlocked(false)}
       catch{setOpenShiftRecoveryBlocked(true)}
       setMsg(startDayError(e.message));
-      await load().catch(()=>{});await refreshDevicePreflight().catch(()=>{});
+      await load().catch(()=>{});await refreshDevicePreflight(intent.body.date).catch(()=>{});
       return false;
     }finally{openShiftRecoveryRef.current=false;setBusy(false)}
   }
@@ -178,7 +179,7 @@ function View({session}:{session:Session}){
       setPendingMovement(null);setMovementRecoveryBlocked(false);
       setMovementAmount("");setMovementReason("");setMovementRiskConfirmed(false);setDrawerOpen(false);
       setMsg((recovery?"ตรวจรายการเดิมสำเร็จ · ":"")+(intent.body.type==="CASH_IN"?"บันทึกเติมเงินสดเข้าลิ้นชักแล้ว":"บันทึกนำเงินสดออกจากลิ้นชักแล้ว")+" · คงเหลือตามระบบ ฿"+Number(r.availableCash||0).toLocaleString());
-      await load();await refreshDevicePreflight();
+      await load();await refreshDevicePreflight(intent.body.date);
       return true;
     }catch(e:any){
       try{
@@ -190,7 +191,7 @@ function View({session}:{session:Session}){
       }catch{
         setMovementRecoveryBlocked(true);setMsg(movementError("cash_movement_recovery_unavailable"));
       }
-      await load().catch(()=>{});await refreshDevicePreflight().catch(()=>{});
+      await load().catch(()=>{});await refreshDevicePreflight(intent.body.date).catch(()=>{});
       return false;
     }finally{setBusy(false)}
   }
@@ -260,7 +261,7 @@ function View({session}:{session:Session}){
         setMsg((recovery?"ยืนยันผลการปิดวันเดิมแล้ว · ":"")+"ปิดวันสำเร็จ · เงินสด "+(v===0?"ตรงพอดี":v>0?"เกิน ฿"+v.toLocaleString():"ขาด ฿"+Math.abs(v).toLocaleString()));
         setFirstCount("");setSecondCount("");setReview(null);setVarianceReason("");setConfirmVariance(false);
       }
-      await load().catch(()=>{});await refreshDevicePreflight().catch(()=>{});
+      await load().catch(()=>{});await refreshDevicePreflight(intent.body.date).catch(()=>{});
       return true;
     }catch(e:any){
       try{setPendingCloseDayWrite(readCloseDayWriteIntent(session.user.id));setCloseDayRecoveryBlocked(false)}
@@ -271,7 +272,7 @@ function View({session}:{session:Session}){
         if(["close_day_review_expired","close_day_review_stale","close_day_review_count_changed"].includes(e.message))setReview(null);
         setMsg(closeDayError(e.message));
       }
-      await load().catch(()=>{});await refreshDevicePreflight().catch(()=>{});
+      await load().catch(()=>{});await refreshDevicePreflight(intent.body.date).catch(()=>{});
       return false;
     }finally{closeDayRecoveryRef.current=false;setBusy(false)}
   }
