@@ -4,6 +4,7 @@ import {AlertTriangle,Archive,ArrowDownCircle,ArrowUpCircle,Edit3,Plus,RotateCcw
 import AuthGate from "@/components/auth-gate";
 import ModalFocus from "@/components/modal-focus";
 import {api,type Session} from "@/lib/api-client";
+import {calculateReceivedQuantity} from "@/lib/domain/stock-units.mjs";
 import {prepareStockWriteIntent,readStockWriteIntent,sendStockWriteIntent,type StockWriteIntent,type StockWriteOperation} from "@/lib/stock-write-recovery";
 
 type Purchase={
@@ -28,16 +29,14 @@ const usageUnitLabel=(unit?:string)=>usageUnits.find(([value])=>value===unit)?.[
 export default function Stock(){return <AuthGate>{s=><StockView session={s}/>}</AuthGate>}
 
 function previewReceived(packageQty:string,packSize:string,fromUnit:string,toUnit:string){
-  const packs=Number(packageQty),size=Number(packSize);if(!(packs>0)||!(size>0))return {qty:0,label:"—",approximate:false};
-  const from=fromUnit.toLowerCase(),to=toUnit.toLowerCase(),mass:Record<string,number>={g:1,kg:1000},volume:Record<string,number>={ml:1,l:1000};
-  let each:number|undefined,approximate=false;
-  if(from===to)each=size;
-  else if(mass[from]&&mass[to])each=size*mass[from]/mass[to];
-  else if(volume[from]&&volume[to])each=size*volume[from]/volume[to];
-  else if((mass[from]&&volume[to])||(volume[from]&&mass[to])){const base=mass[from]?size*mass[from]:size*volume[from];each=(to==="kg"||to==="l")?base/1000:base;approximate=true}
-  else if(from==="piece"&&(to==="piece"||to==="ชิ้น"))each=size;
-  if(each===undefined)return {qty:0,label:"หน่วยไม่เข้ากัน",approximate:false};
-  const qty=packs*each;return {qty,label:qty.toLocaleString()+" "+toUnit,approximate};
+  const packs=Number(packageQty),size=Number(packSize);
+  if(!(packs>0)||!(size>0))return {qty:0,label:"—",approximate:false};
+  try{
+    const result=calculateReceivedQuantity({packageQty:packs,packSize:size,packSizeUnit:fromUnit,usageUnit:toUnit});
+    return {qty:result.quantity,label:result.quantity.toLocaleString()+" "+toUnit,approximate:result.approximate};
+  }catch(error:any){
+    return {qty:0,label:error?.message==="incompatible_stock_unit"?"หน่วยไม่เข้ากัน":"ตรวจหน่วยอีกครั้ง",approximate:false};
+  }
 }
 function compactMoney(v:number){return Number(v||0).toLocaleString("th-TH",{minimumFractionDigits:0,maximumFractionDigits:2})}
 function latestPurchase(x:Ingredient){return x.recentPurchases?.find(p=>!p.cancelled)||null}
