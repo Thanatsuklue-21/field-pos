@@ -631,7 +631,7 @@ export default function PosDailyWorkspace({
       </div>
 
       <div className="soft-scroll min-h-0 flex-1 overflow-auto p-3 sm:p-4">
-        {tab==="queue"&&canQueue&&<div className="space-y-2">
+        {tab==="queue"&&canQueue&&<div id="workspace-task-queue" tabIndex={-1} className="scroll-mt-4 space-y-2 outline-none">
           {!queueFresh&&<div role="status" aria-live="polite" className="rounded-2xl border border-amber-300 bg-amber-50 p-3 text-xs font-bold text-amber-900">ข้อมูลคิวยังไม่ยืนยัน · ปิดปุ่มทำ/เรียก/ส่งมอบชั่วคราว ระบบจะเปิดอีกครั้งเมื่อโหลดคิวล่าสุดสำเร็จ</div>}
           {(pendingQueueAction||queueRecoveryBlocked||queueFeedback)&&<div role="status" aria-live="polite" aria-atomic="true" className={"rounded-2xl border p-3 text-xs "+(pendingQueueAction||queueRecoveryBlocked?"border-amber-300 bg-amber-50 text-amber-950":"border-emerald-200 bg-emerald-50 text-emerald-800")}>
             <div className="flex items-center justify-between gap-2"><div><b>{queueRecoveryBlocked?"ปุ่มคิวถูกพักชั่วคราว":pendingQueueAction?"กำลังตรวจปุ่มคิวก่อนหน้า":"คิวอัปเดตแล้ว"}</b><p className="mt-1">{queueRecoveryBlocked?"ระบบป้องกันการกดซ้ำอ่านข้อมูลไม่ได้ · เปิดโหมดทำเครื่องดื่มเพื่อตรวจ":pendingQueueAction?"ไม่ต้องกดซ้ำ · ระบบจะใช้คำสั่งเดิมจนกว่าจะรู้ผล":queueFeedback}</p></div>{pendingQueueAction&&<button type="button" disabled={queueRecoveryBusy||busy||!online} onClick={()=>recoverQueueAction()} className="min-h-11 shrink-0 rounded-xl bg-amber-900 px-3 font-bold text-white disabled:opacity-40">ตรวจรายการเดิม</button>}</div>
@@ -668,7 +668,7 @@ export default function PosDailyWorkspace({
           <FullLink href="/queue" label="เปิดโหมดทำเครื่องดื่ม / ดูคิวเต็ม"/>
         </div>}
 
-        {tab==="orders"&&canOrder&&<div className="space-y-2">
+        {tab==="orders"&&canOrder&&<div id="workspace-task-orders" tabIndex={-1} className="scroll-mt-4 space-y-2 outline-none">
           {latestOrder&&<details className="overflow-hidden rounded-2xl border border-[#d4af37]/40 bg-[#fffaf0]">
             <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 px-3 text-sm font-bold text-[#6f5510]">
               <span>ใบเสร็จล่าสุด · {latestOrder.queueNo||latestOrder.billNo||"บิล"}</span><span>฿{money(latestOrder.total)}</span>
@@ -730,7 +730,7 @@ export default function PosDailyWorkspace({
           <FullLink href="/stock" label="เปิด Stock / รับเข้า / นับจริง"/>
         </div>}
 
-        {tab==="expense"&&canExpense&&<div className="space-y-3">
+        {tab==="expense"&&canExpense&&<div id="workspace-task-expense" tabIndex={-1} className="scroll-mt-4 space-y-3 outline-none">
           {expenseFeedback&&<div role="status" className={"rounded-xl border p-3 text-xs font-semibold "+(pendingExpense||expenseRecoveryBlocked?"border-amber-200 bg-amber-50 text-amber-900":"border-emerald-200 bg-emerald-50 text-emerald-800")}>{expenseFeedback}</div>}
           {pendingExpense&&<div className="rounded-2xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
             <b>มีค่าใช้จ่ายเดิมรอยืนยัน</b><p className="mt-1">ระบบจะตรวจรายการเดิมเท่านั้น · ห้ามสร้างยอดใหม่จนกว่าระบบกลางจะยืนยันผล</p>
@@ -756,7 +756,7 @@ export default function PosDailyWorkspace({
           <div className="rounded-2xl border border-slate-200 bg-white p-3"><b className="text-sm">ล่าสุดวันนี้</b><div className="mt-2 space-y-2">{expenseRows.length===0?<p className="text-xs text-slate-500">ยังไม่มีค่าใช้จ่าย</p>:expenseRows.map(row=><div key={row.id} className="flex items-center justify-between gap-3 border-t border-slate-100 pt-2 text-xs"><span className="min-w-0 truncate">{row.description||row.category}</span><b className="shrink-0 text-[#765b08]">฿{money(row.amount)}</b></div>)}</div></div>
         </div>}
 
-        {tab==="status"&&canStatus&&<div className="space-y-3">
+        {tab==="status"&&canStatus&&<div id="workspace-task-status" tabIndex={-1} className="scroll-mt-4 space-y-3 outline-none">
           {!readiness?<Empty text={!online?"เน็ตหลุด · ต้องเชื่อมต่อเพื่อดูความพร้อมระบบ":"ยังไม่มีข้อมูลความพร้อมระบบ"}/>:<>
             <div className={"rounded-2xl border p-4 "+(readiness.status==="READY"?"border-emerald-200 bg-emerald-50":readiness.status==="WARN"?"border-amber-200 bg-amber-50":"border-red-200 bg-red-50")}>
               <div className="flex items-center justify-between gap-3">

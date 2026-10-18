@@ -427,3 +427,16 @@ test("guided stock action moves focus to the actionable stock section",async()=>
   assert.match(hub,/id="workspace-task-stock"/);
   assert.match(hub,/tabIndex=\{-1\}/);
 });
+
+
+test("every guided workspace tab exposes a focusable actionable target",async()=>{
+  const hub=await read("components/pos-daily-workspace.tsx");
+  for(const tab of ["queue","orders","stock","expense","status"]){
+    assert.match(hub,new RegExp('id="workspace-task-'+tab+'"'));
+  }
+  const targetBlocks=[...hub.matchAll(/id="workspace-task-(queue|orders|stock|expense|status)" tabIndex=\{-1\} className="scroll-mt-4 [^"]*outline-none"/g)];
+  assert.equal(targetBlocks.length,5);
+  assert.match(hub,/document\.getElementById\("workspace-task-"\+target\)/);
+  assert.match(hub,/scrollIntoView\(\{behavior:"smooth",block:"start"\}\)/);
+  assert.match(hub,/section\.focus\(\{preventScroll:true\}\)/);
+});
