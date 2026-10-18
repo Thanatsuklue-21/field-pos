@@ -13,6 +13,8 @@ type Close={id:string;date:string;revenue:number;cogs:number;expenses:number;pur
 type Shift={id:string;requestKey?:string|null;date:string;status:"open"|"closed";openingCash:number;openedAt:number;openedBy:string;closedAt?:number;cashVariance?:number};
 type Movement={id:string;shiftId:string;date:string;type:"CASH_IN"|"CASH_OUT";amount:number;reason:string;time:number;createdBy:string};
 type DrawerSnapshot={openingCash:number;cashSales:number;cashIn:number;cashPaidOut:number;cashOut:number;availableCash:number};
+type OpenShiftReview={date:string;openingCash:number};
+type CloseDayReview={date:string;reviewId:string;openingCash:number;countedCash:number;expectedCash:number;variance:number;summary:string;varianceReason:string;confirmVariance:boolean};
 type CloseData={closes:Close[];shift:Shift|null;businessDate:string;cashMovements:Movement[];drawerSnapshot:DrawerSnapshot|null};
 
 export default function CloseDay(){return <AuthGate>{s=><View session={s}/>}</AuthGate>}
@@ -21,6 +23,7 @@ function View({session}:{session:Session}){
   const [rows,setRows]=useState<Close[]>([]),[shift,setShift]=useState<Shift|null>(null),[businessDate,setBusinessDate]=useState(""),[movements,setMovements]=useState<Movement[]>([]),[drawerSnapshot,setDrawerSnapshot]=useState<DrawerSnapshot|null>(null),[msg,setMsg]=useState(""),[busy,setBusy]=useState(false),[openingCash,setOpeningCash]=useState("0"),[firstCount,setFirstCount]=useState(""),[secondCount,setSecondCount]=useState(""),[review,setReview]=useState<any|null>(null),[varianceReason,setVarianceReason]=useState(""),[confirmVariance,setConfirmVariance]=useState(false),[drawerOpen,setDrawerOpen]=useState(false),[movementType,setMovementType]=useState<"CASH_IN"|"CASH_OUT">("CASH_OUT"),[movementAmount,setMovementAmount]=useState(""),[movementReason,setMovementReason]=useState(""),[movementRiskConfirmed,setMovementRiskConfirmed]=useState(false),[devicePreflight,setDevicePreflight]=useState<CloseDayDevicePreflight|null>(null),[deviceChecking,setDeviceChecking]=useState(false),[pendingMovement,setPendingMovement]=useState<CashMovementIntent|null>(null),[movementRecoveryBlocked,setMovementRecoveryBlocked]=useState(false);
   const [pendingOpenShift,setPendingOpenShift]=useState<CashShiftOpenIntent|null>(null),[openShiftRecoveryBlocked,setOpenShiftRecoveryBlocked]=useState(false);
   const [pendingCloseDayWrite,setPendingCloseDayWrite]=useState<CloseDayWriteIntent|null>(null),[closeDayRecoveryBlocked,setCloseDayRecoveryBlocked]=useState(false);
+  const [openShiftReview,setOpenShiftReview]=useState<OpenShiftReview|null>(null),[closeDayReview,setCloseDayReview]=useState<CloseDayReview|null>(null);
   const openShiftRecoveryRef=useRef(false),closeDayRecoveryRef=useRef(false);
   const load=()=>api<CloseData>("/api/close-day").then(x=>{setRows(x.closes||[]);setShift(x.shift||null);setBusinessDate(x.businessDate||"");setMovements(x.cashMovements||[]);setDrawerSnapshot(x.drawerSnapshot||null) });
   useEffect(()=>{load().catch(()=>{})},[]);
@@ -131,10 +134,23 @@ function View({session}:{session:Session}){
     if(!businessDate){setMsg("ยังไม่ได้วันทำการล่าสุด · รีเฟรชก่อนเปิดร้าน");return}
     const opening=Number(openingCash||0);
     if(!Number.isFinite(opening)||opening<0||opening>1e7||Math.abs(opening*100-Math.round(opening*100))>1e-7){setMsg(startDayError("invalid_opening_cash"));return}
-    if(!window.confirm("ยืนยันเปิดร้านด้วยเงินตั้งต้น ฿"+opening.toLocaleString()+" ? หลังเปิดแล้วจำนวนนี้จะถูกล็อกสำหรับการกระทบยอดวันนี้"))return;
+    setOpenShiftReview({date:businessDate,openingCash:opening});
+  }
+
+  async function confirmOpenShift(){
+    const candidate=openShiftReview;
+    if(!candidate||busy||openShiftRecoveryBlocked)return;
+    let existing:CashShiftOpenIntent|null=null;
+    try{existing=readCashShiftOpenIntent(session.user.id)}
+    catch{setOpenShiftRecoveryBlocked(true);setOpenShiftReview(null);setMsg(startDayError("cash_shift_open_recovery_unavailable"));return}
+    if(existing){setOpenShiftReview(null);setPendingOpenShift(existing);await submitOpenShiftIntent(existing,true);return}
+    const currentOpening=Number(openingCash||0);
+    if(businessDate!==candidate.date||currentOpening!==candidate.openingCash||shift){
+      setOpenShiftReview(null);setMsg("ข้อมูลเปิดร้านเปลี่ยนแล้ว · กรุณาตรวจเงินตั้งต้นและวันทำการใหม่");await load().catch(()=>{});return;
+    }
     try{
-      const intent=prepareCashShiftOpenIntent(session.user.id,{requestKey:crypto.randomUUID(),date:businessDate,openingCash:opening});
-      setPendingOpenShift(intent);await submitOpenShiftIntent(intent,false);
+      const intent=prepareCashShiftOpenIntent(session.user.id,{requestKey:crypto.randomUUID(),date:candidate.date,openingCash:candidate.openingCash});
+      setPendingOpenShift(intent);setOpenShiftReview(null);await submitOpenShiftIntent(intent,false);
     }catch(e:any){setMsg(startDayError(e.message))}
   }
 
@@ -317,15 +333,31 @@ function View({session}:{session:Session}){
     if(review.ownerConfirmRequired&&!confirmVariance){setMsg("ส่วนต่างสูง ต้องติ๊กยืนยันโดยเจ้าของก่อนปิดวัน");return}
     const local=await refreshDevicePreflight();
     if(!local.ok){setMsg("ยังปิดวันไม่ได้ · พบรายการค้างในเครื่องหรืออ่านข้อมูลรายการเดิมไม่ได้ กรุณาจัดการก่อน แล้วตรวจใหม่");return}
-    if(!window.confirm("ยืนยันปิดวันตามผลตรวจ? "+(review.variance===0?"เงินสดตรงพอดี":review.summary)))return;
+    setCloseDayReview({
+      date:businessDate,reviewId:String(review.id),openingCash:Number(shift?.openingCash||0),countedCash:counted,
+      expectedCash:Number(review.expectedCash)||0,variance:Number(review.variance)||0,summary:String(review.summary||""),
+      varianceReason:varianceReason.trim(),confirmVariance
+    });
+  }
+
+  async function confirmCloseDay(){
+    const candidate=closeDayReview;
+    if(!candidate||busy||closeDayRecoveryBlocked)return;
+    let existing:CloseDayWriteIntent|null=null;
+    try{existing=readCloseDayWriteIntent(session.user.id)}
+    catch{setCloseDayRecoveryBlocked(true);setCloseDayReview(null);setMsg(closeDayError("close_day_recovery_unavailable"));return}
+    if(existing){setCloseDayReview(null);setPendingCloseDayWrite(existing);await submitCloseDayIntent(existing,true);return}
+    if(!review||String(review.id)!==candidate.reviewId||businessDate!==candidate.date||Number(shift?.openingCash||0)!==candidate.openingCash){
+      setCloseDayReview(null);setReview(null);setMsg("ผลตรวจปิดวันเปลี่ยนแล้ว · กรุณานับและตรวจใหม่ก่อนปิดวัน");await load().catch(()=>{});return;
+    }
     const finalLocal=await refreshDevicePreflight();
-    if(!finalLocal.ok){setReview(null);setMsg("ยกเลิกการปิดวัน · พบรายการค้างใหม่ในเครื่องหลังการยืนยัน กรุณาจัดการรายการเดิมก่อน แล้วนับ/ตรวจใหม่");return}
+    if(!finalLocal.ok){setCloseDayReview(null);setReview(null);setMsg("ยกเลิกการปิดวัน · พบรายการค้างใหม่ในเครื่องหลังการยืนยัน กรุณาจัดการรายการเดิมก่อน แล้วนับ/ตรวจใหม่");return}
     try{
       const intent=prepareCloseDayWriteIntent(session.user.id,{
-        requestKey:crypto.randomUUID(),operation:"close",date:businessDate,openingCash:Number(shift?.openingCash||0),
-        countedCash:counted,reviewId:review.id,varianceReason:varianceReason.trim(),confirmVariance
+        requestKey:crypto.randomUUID(),operation:"close",date:candidate.date,openingCash:candidate.openingCash,
+        countedCash:candidate.countedCash,reviewId:candidate.reviewId,varianceReason:candidate.varianceReason,confirmVariance:candidate.confirmVariance
       });
-      setPendingCloseDayWrite(intent);
+      setPendingCloseDayWrite(intent);setCloseDayReview(null);
       await submitCloseDayIntent(intent,false);
     }catch(e:any){setMsg(closeDayError(e.message));if(e.message==="close_day_recovery_unavailable")setCloseDayRecoveryBlocked(true)}
   }
