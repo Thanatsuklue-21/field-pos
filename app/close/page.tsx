@@ -350,8 +350,9 @@ function View({session}:{session:Session}){
     if(!review||String(review.id)!==candidate.reviewId||businessDate!==candidate.date||Number(shift?.openingCash||0)!==candidate.openingCash){
       setCloseDayReview(null);setReview(null);setMsg("ผลตรวจปิดวันเปลี่ยนแล้ว · กรุณานับและตรวจใหม่ก่อนปิดวัน");await load().catch(()=>{});return;
     }
+    setBusy(true);
     const finalLocal=await refreshDevicePreflight();
-    if(!finalLocal.ok){setCloseDayReview(null);setReview(null);setMsg("ยกเลิกการปิดวัน · พบรายการค้างใหม่ในเครื่องหลังการยืนยัน กรุณาจัดการรายการเดิมก่อน แล้วนับ/ตรวจใหม่");return}
+    if(!finalLocal.ok){setBusy(false);setCloseDayReview(null);setReview(null);setMsg("ยกเลิกการปิดวัน · พบรายการค้างใหม่ในเครื่องหลังการยืนยัน กรุณาจัดการรายการเดิมก่อน แล้วนับ/ตรวจใหม่");return}
     try{
       const intent=prepareCloseDayWriteIntent(session.user.id,{
         requestKey:crypto.randomUUID(),operation:"close",date:candidate.date,openingCash:candidate.openingCash,
@@ -359,7 +360,7 @@ function View({session}:{session:Session}){
       });
       setPendingCloseDayWrite(intent);setCloseDayReview(null);
       await submitCloseDayIntent(intent,false);
-    }catch(e:any){setMsg(closeDayError(e.message));if(e.message==="close_day_recovery_unavailable")setCloseDayRecoveryBlocked(true)}
+    }catch(e:any){setBusy(false);setMsg(closeDayError(e.message));if(e.message==="close_day_recovery_unavailable")setCloseDayRecoveryBlocked(true)}
   }
 
   const movementAmountNumber=Number(movementAmount)||0;
