@@ -25,7 +25,9 @@ test("open shift review persists identity only after final in-app confirmation",
   assert.doesNotMatch(openBlock,/prepareCashShiftOpenIntent/);
   assert.match(confirmBlock,/readCashShiftOpenIntent/);
   assert.match(confirmBlock,/businessDate!==candidate\.date\|\|currentOpening!==candidate\.openingCash\|\|shift/);
-  assert.ok(confirmBlock.indexOf("prepareCashShiftOpenIntent")<confirmBlock.indexOf("submitOpenShiftIntent"));
+  const prepare=confirmBlock.indexOf("prepareCashShiftOpenIntent");
+  const freshSubmit=confirmBlock.indexOf("submitOpenShiftIntent(intent,false)",prepare);
+  assert.ok(prepare>=0&&freshSubmit>prepare);
 });
 
 test("close day guided review keeps first and final device preflight separated by human confirmation",async()=>{
