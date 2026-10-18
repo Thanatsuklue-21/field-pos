@@ -14,7 +14,7 @@ parser.add_argument("--browser",default="")
 parser.add_argument("--output",default="/tmp/field-close-day-qa")
 args=parser.parse_args()
 out=Path(args.output);out.mkdir(parents=True,exist_ok=True)
-posts=[];committed={};page_errors=[]
+posts=[];committed={};close_posts=[];page_errors=[]
 
 with sync_playwright() as p:
     launch={"args":["--no-sandbox"]}
@@ -39,6 +39,13 @@ with sync_playwright() as p:
                 return route.abort("failed")
             assert body==posts[0],(posts[0],body)
             return route.fulfill(status=200,content_type="application/json",body=json.dumps(committed[key]))
+        if path=="close-day" and method=="POST":
+            body=json.loads(route.request.post_data or "{}");close_posts.append(body)
+            data={"ok":True,"requestKey":body["requestKey"],"performedBy":"owner","operation":"close","close":{
+                "id":"close-1","date":body["date"],"closedBy":"owner","openingCash":body["openingCash"],
+                "countedCash":body["countedCash"],"reviewId":body["reviewId"],"cashVariance":0,"varianceReason":""
+            },"revision":2}
+            return route.fulfill(status=201,content_type="application/json",body=json.dumps(data))
         return route.fulfill(status=200,content_type="application/json",body="{}")
 
     page.route("**/api/**",handler)
@@ -56,11 +63,37 @@ with sync_playwright() as p:
     page.reload(wait_until="domcontentloaded")
     expect(page.get_by_text("เงินสดตรงพอดี",exact=True)).to_be_visible()
     assert len(posts)==2 and posts[1]==first and len(committed)==1
+
+    close_button=page.get_by_role("button",name="ปิดร้านวันนี้",exact=True)
+    expect(close_button).to_be_enabled()
+    close_button.click()
+    close_dialog=page.get_by_role("dialog",name="ยืนยันปิดร้านวันนี้",exact=True)
+    expect(close_dialog).to_be_visible()
+    expect(close_dialog.get_by_text("ระบบจะตรวจรายการค้างในเครื่องอีกครั้งเมื่อกดยืนยัน",exact=False)).to_be_visible()
+    assert close_posts==[],close_posts
+    cancel=close_dialog.get_by_role("button",name="ยังไม่ปิดวัน",exact=True)
+    confirm=close_dialog.get_by_role("button",name="ยืนยันปิดวัน",exact=True)
+    for control in [cancel,confirm]:
+        box=control.bounding_box()
+        assert box and box["width"]>=44 and box["height"]>=44,box
+    cancel.click()
+    expect(close_dialog).to_have_count(0)
+    assert close_posts==[],close_posts
+
+    close_button.click()
+    close_dialog=page.get_by_role("dialog",name="ยืนยันปิดร้านวันนี้",exact=True)
+    close_dialog.get_by_role("button",name="ยืนยันปิดวัน",exact=True).click()
+    expect(close_dialog).to_have_count(0)
+    assert len(close_posts)==1,close_posts
+    close_body=close_posts[0]
+    assert close_body["operation"]=="close" and close_body["date"]=="2026-10-16"
+    assert close_body["openingCash"]==500 and close_body["countedCash"]==500 and close_body["reviewId"]=="review-1"
+    assert isinstance(close_body.get("requestKey"),str) and len(close_body["requestKey"])>=8
     assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
     assert not page_errors,page_errors
 
-    result={"viewport":"390x844","reviewPosts":len(posts),"committedReviews":len(committed),"exactReplay":True,"reloadRecovery":True,"liveWrites":False,"pageErrors":page_errors}
+    result={"viewport":"390x844","reviewPosts":len(posts),"committedReviews":len(committed),"exactReplay":True,"reloadRecovery":True,"guidedCloseReview":True,"closePosts":len(close_posts),"cancelNoWrite":True,"touch44":True,"liveWrites":False,"pageErrors":page_errors}
     (out/"results.json").write_text(json.dumps(result,ensure_ascii=False,indent=2))
-    page.screenshot(path=str(out/"close-day-review-recovered.png"),full_page=True)
+    page.screenshot(path=str(out/"close-day-guided-close.png"),full_page=True)
     print(json.dumps(result,ensure_ascii=False),flush=True)
     context.close();browser.close()
