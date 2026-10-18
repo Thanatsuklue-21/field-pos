@@ -2,7 +2,7 @@
 import {formatMoney} from "@/lib/money-format.mjs";
 
 import {useEffect,useMemo,useRef,useState} from "react";
-import {useRouter} from "next/navigation";
+import dynamic from "next/dynamic";
 import {ArrowRight,CheckCircle2,Clock3,ClipboardList,Minus,Plus,Printer,Search,Trash2,WalletCards,X} from "lucide-react";
 import AuthGate from "@/components/auth-gate";
 import SaleReceipt,{type ReceiptSale} from "@/components/sale-receipt";
@@ -16,7 +16,9 @@ import {writeQueueSnapshotCache} from "@/lib/queue-cache"; import {clearRecovery
 import {shouldRetainCashPending} from "@/lib/cash-recovery-policy.mjs";
 import {inspectPaymentRecoveryRaw} from "@/lib/payment-recovery-integrity.mjs";
 import {buildPosGuidance} from "@/lib/pos-guidance.mjs";
-import PosOperationsHub,{type HubTab} from "@/components/pos-operations-hub";
+import type {HubTab} from "@/components/pos-operations-hub";
+
+const PosOperationsHub=dynamic(()=>import("@/components/pos-operations-hub"),{ssr:false,loading:()=>null});
 
 export default function Pos(){return <AuthGate>{s=><PosView session={s}/>}</AuthGate>}
 
@@ -72,7 +74,6 @@ function isDefaultOrderOption(label:string){
 }
 
 function PosView({session}:{session:Session}){
-  const router=useRouter();
   const [data,setData]=useState<Bootstrap|null>(null);
   const [q,setQ]=useState("");
   const [cat,setCat]=useState("ทั้งหมด");
@@ -118,7 +119,6 @@ function PosView({session}:{session:Session}){
   const cart=useCartStore();
   const heldBills=useHeldCartStore();
 
-  useEffect(()=>{router.prefetch("/queue");router.prefetch("/orders")},[router]);
   useEffect(()=>{if(!cartToast)return;const timer=window.setTimeout(()=>setCartToast(""),1400);return()=>window.clearTimeout(timer)},[cartToast]);
   useEffect(()=>{window.dispatchEvent(new CustomEvent("field:transaction-busy",{detail:{busy:busy||payOpen,source:"pos"}}));return()=>{window.dispatchEvent(new CustomEvent("field:transaction-busy",{detail:{busy:false,source:"pos"}}));}},[busy,payOpen]);
 
@@ -447,8 +447,7 @@ function PosView({session}:{session:Session}){
       const orderId=String(r?.orderId||splitGroup?.orderId||"");
       const queueNo=String(r?.queueNo||splitGroup?.queueNo||"—");
       const pager=Number(r?.pager??splitGroup?.pager??0);
-      if(orderId){
-        const group={orderId,queueNo,pager,createdAt:splitGroup?.createdAt||Date.now()};
+      if(orderId){        const group={orderId,queueNo,pager,createdAt:splitGroup?.createdAt||Date.now()};
         splitGroupWrite(group);setSplitGroup(group);
       }
       const qty=remaining.reduce((s,i)=>s+i.qty,0);
@@ -897,8 +896,7 @@ function PosView({session}:{session:Session}){
         }
         if(!st){
           const reservationKey=crypto.randomUUID();
-          const payRequestKey=crypto.randomUUID();
-          activePending={requestKey:reservationKey,payRequestKey,date:localDate(),cart:cartPayload,paymentReference:"",total:checkoutTotal,customerId:customerId||null,pointsRedeemed:redeemPoints,createdAt:Date.now(),checkoutMode,targetOrderId:splitGroup?.orderId||null};
+          const payRequestKey=crypto.randomUUID();          activePending={requestKey:reservationKey,payRequestKey,date:localDate(),cart:cartPayload,paymentReference:"",total:checkoutTotal,customerId:customerId||null,pointsRedeemed:redeemPoints,createdAt:Date.now(),checkoutMode,targetOrderId:splitGroup?.orderId||null};
           pendingWrite(activePending);
           const setup=await ensurePendingPrompt(activePending);
           activePending=setup.pending;
@@ -1158,6 +1156,6 @@ function PosView({session}:{session:Session}){
 
     {lastSale?.receipt&&<SaleReceipt sale={lastSale.receipt} paperWidth={receiptPaperWidth}/>}
     {lastSale&&<div className={"fixed bottom-[92px] right-4 z-[70] w-[min(460px,calc(100vw-2rem))] rounded-[26px] border bg-white p-5 shadow-2xl md:bottom-6 md:right-6 "+(lastSale.offline?"border-amber-300":"border-emerald-300")}><div className="flex items-start gap-3"><div className={"grid h-10 w-10 shrink-0 place-items-center rounded-full "+(lastSale.offline?"bg-amber-100 text-amber-700":"bg-emerald-100 text-emerald-700")}><CheckCircle2 size={22}/></div><div className="min-w-0 flex-1"><div className="flex items-start justify-between gap-2"><div><b className="text-lg">{lastSale.offline?"บันทึกเงินสดออฟไลน์แล้ว":"ชำระเงินสำเร็จ"}</b><p className="mt-1 text-sm text-slate-600">{lastSale.offline?"เลขชั่วคราว "+lastSale.queueNo+" · รอซิงก์ขึ้นระบบ":"คิว "+lastSale.queueNo+(lastSale.recovered?" · กู้คืนรายการเดิม":"")}</p></div><button onClick={()=>setLastSale(null)}><X size={18}/></button></div>{lastSale.offline?<div className="mt-3 rounded-[20px] border-2 border-amber-300 bg-amber-50 p-4 text-center"><div className="text-xs font-bold tracking-[.12em] text-amber-800">ออเดอร์ออฟไลน์</div><div className="mt-1 text-3xl font-black leading-none text-amber-900">{lastSale.queueNo}</div><p className="mt-2 text-xs text-amber-800">ทำและส่งมอบออเดอร์นี้ตามลำดับที่รับ · เมื่ออินเทอร์เน็ตกลับ ระบบจะลงบัญชีและสต็อกโดยไม่สร้างคิวผลิตซ้ำ</p></div>:<div className="mt-3 rounded-[20px] border-2 border-[#d4af37] bg-[#fff8dc] p-4 text-center"><div className="text-xs font-bold tracking-[.18em] text-[#765b08]">หยิบบัตรให้ลูกค้า</div><div className="mt-1 text-4xl font-black leading-none text-[#6f5510] md:text-5xl">บัตร {lastSale.pager||"—"}</div></div>}{lastSale.payment==="cash"&&<div className="mt-3 flex items-center justify-between rounded-2xl bg-emerald-50 p-3"><span className="text-sm font-semibold text-emerald-800">เงินทอน</span><div className="text-2xl font-bold text-emerald-800">฿{formatMoney(lastSale.change)}</div></div>}<div className="mt-3 space-y-2">{!lastSale.offline&&canQueueOps?<><button onClick={()=>{setOpsInitialTab("queue");setLastSale(null);setOpsOpen(true)}} className="flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl bg-[#d4af37] px-3 text-sm font-black text-black">ไปทำคิว {lastSale.queueNo} <ArrowRight size={16}/></button><button onClick={startNextOrder} className="flex min-h-11 w-full items-center justify-center gap-2 rounded-2xl border border-slate-300 bg-white px-3 text-xs font-semibold text-slate-700"><Plus size={15}/>รับออเดอร์ถัดไปก่อน</button></>:<button onClick={startNextOrder} className="flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl bg-[#d4af37] px-3 text-sm font-bold text-black"><Plus size={16}/>รับออเดอร์ถัดไป</button>}{!lastSale.offline&&lastSale.receipt&&<button onClick={()=>window.print()} className="flex min-h-11 w-full items-center justify-center gap-2 rounded-2xl border border-slate-300 bg-white px-3 text-xs font-semibold text-slate-700"><Printer size={15}/>พิมพ์ใบเสร็จ</button>}</div><p className="mt-2 text-center text-[11px] text-slate-500">{lastSale.offline?"ยอดถูกเก็บในเครื่องแล้ว · ใบเสร็จจริงจะพิมพ์ได้หลังซิงก์สำเร็จ":canQueueOps?"ทำคิวนี้ก่อนตาม FIFO · ถ้าจำเป็นจึงรับออเดอร์ถัดไป":"รับออเดอร์ถัดไปได้ทันทีโดยไม่ออกจากหน้า POS"}</p></div></div></div>}
-    <PosOperationsHub session={session} bootstrap={data} open={opsOpen} onClose={()=>setOpsOpen(false)} onRefreshStock={()=>load(true)} networkOnline={online} initialTab={opsInitialTab}/>
+    {opsOpen&&<PosOperationsHub session={session} bootstrap={data} open={opsOpen} onClose={()=>setOpsOpen(false)} onRefreshStock={()=>load(true)} networkOnline={online} initialTab={opsInitialTab}/>}
   </section>;
 }
