@@ -28,7 +28,8 @@ test("waste review re-resolves the live FIFO order before mutating stock",async(
 
 test("queue waste review explains irreversible effects before the red action",async()=>{
   const queue=await read("app/queue/page.tsx");
-  assert.match(queue,/บันทึก WASTE 1 แก้วในประวัติ/);
+  assert.match(queue,/บันทึก WASTE 1 แก้ว/);
+  assert.match(queue,/ลงค่าใช้จ่าย WASTE อัตโนมัติ/);
   assert.match(queue,/หักวัตถุดิบเพิ่มตามสูตรที่ใช้ตอนขาย/);
   assert.match(queue,/คงคิวเดิมไว้ แล้วทำเมนูนี้ใหม่ต่อ/);
   assert.match(queue,/bg-red-700/);
