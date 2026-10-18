@@ -24,7 +24,8 @@ test('close day UI freezes opening float and requires blind reviewed count',asyn
   assert.match(ui,/กรุณาเปิดร้านและล็อกเงินตั้งต้นก่อนปิดวัน/);
   assert.match(ui,/\/api\/close-day\/review/);
   assert.match(ui,/firstCount:first,secondCount:second/);
-  assert.match(ui,/reviewId:review\.id/);
+  assert.match(ui,/reviewId:String\(review\.id\)/);
+  assert.match(ui,/reviewId:candidate\.reviewId/);
   assert.doesNotMatch(ui,/body:JSON\.stringify\(\{openingCash:opening,countedCash:counted\}\)/);
   assert.match(ui,/เงินสดที่ควรมี = เงินตั้งต้น \+ ยอดขายเงินสด \+ เงินเติมเข้า − ค่าใช้จ่ายเงินสด − เงินนำออก/);
 });

@@ -118,26 +118,29 @@ test("malformed pending cash never becomes an empty recovery state",async()=>{
   assert.equal(result.blockers[0].kind,"storage_unreadable");
 });
 
-test("Close Day checks device state before review and rechecks after final confirmation",async()=>{
+test("Close Day checks device state before guided review and rechecks after final in-app confirmation",async()=>{
   const ui=await readFile(new URL("../app/close/page.tsx",import.meta.url),"utf8");
   const reviewStart=ui.indexOf("async function reviewCash");
   const closeStart=ui.indexOf("async function close()",reviewStart);
+  const confirmStart=ui.indexOf("async function confirmCloseDay()",closeStart);
+  const movementStart=ui.indexOf("const movementAmountNumber",confirmStart);
   const review=ui.slice(reviewStart,closeStart);
-  const closing=ui.slice(closeStart,ui.indexOf("const movementAmountNumber",closeStart));
+  const closing=ui.slice(closeStart,confirmStart);
+  const confirming=ui.slice(confirmStart,movementStart);
   const firstPreflight=closing.indexOf("await refreshDevicePreflight()");
-  const confirm=closing.indexOf("window.confirm");
-  const finalPreflight=closing.indexOf("await refreshDevicePreflight()",firstPreflight+1);
+  const showReview=closing.indexOf("setCloseDayReview");
+  const finalPreflight=confirming.indexOf("await refreshDevicePreflight()");
   const reviewPersist=review.indexOf("prepareCloseDayWriteIntent");
   const reviewSend=review.indexOf("submitCloseDayIntent",reviewPersist);
-  const finalPersist=closing.indexOf("prepareCloseDayWriteIntent",finalPreflight);
-  const finalSend=closing.indexOf("submitCloseDayIntent",finalPersist);
+  const finalPersist=confirming.indexOf("prepareCloseDayWriteIntent",finalPreflight);
+  const finalSend=confirming.indexOf("submitCloseDayIntent",finalPersist);
   assert.ok(review.indexOf("await refreshDevicePreflight()")>=0);
   assert.ok(review.indexOf("await refreshDevicePreflight()")<reviewPersist);
   assert.ok(reviewPersist>=0&&reviewSend>reviewPersist);
-  assert.ok(firstPreflight>=0&&firstPreflight<confirm);
-  assert.ok(finalPreflight>confirm);
+  assert.ok(firstPreflight>=0&&showReview>firstPreflight);
+  assert.ok(finalPreflight>=0);
   assert.ok(finalPersist>finalPreflight&&finalSend>finalPersist);
-  assert.match(closing,/setReview\(null\).*พบรายการค้างใหม่ในเครื่องหลังการยืนยัน/);
+  assert.match(confirming,/setCloseDayReview\(null\);setReview\(null\);setMsg\("ยกเลิกการปิดวัน · พบรายการค้างใหม่ในเครื่องหลังการยืนยัน/);
 });
 
 test("Close Day refreshes blockers after reconnect focus and visible resume and provides recovery routes",async()=>{
@@ -281,4 +284,15 @@ test("read preflight includes persisted Close Day write intents",async()=>{
   assert.equal(result.ok,false);
   assert.equal(result.blockers[0].kind,"close_day_write_unknown");
   assert.equal(result.blockers[0].route,"/close");
+});
+
+
+test("Close Day recovery rechecks device state with the durable intent business date instead of stale React state",async()=>{
+  const ui=await readFile(new URL("../app/close/page.tsx",import.meta.url),"utf8");
+  assert.match(ui,/async function refreshDevicePreflight\(dateOverride\?:string\)/);
+  assert.match(ui,/const targetDate=String\(dateOverride\|\|businessDate\|\|""\)/);
+  const closeSubmit=ui.slice(ui.indexOf("async function submitCloseDayIntent"),ui.indexOf("async function recoverCloseDayWrite"));
+  assert.match(closeSubmit,/refreshDevicePreflight\(intent\.body\.date\)/);
+  const openSubmit=ui.slice(ui.indexOf("async function submitOpenShiftIntent"),ui.indexOf("useEffect\(\(\)=>",ui.indexOf("async function submitOpenShiftIntent")));
+  assert.match(openSubmit,/refreshDevicePreflight\(intent\.body\.date\)/);
 });
