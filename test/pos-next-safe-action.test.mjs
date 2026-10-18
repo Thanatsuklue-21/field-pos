@@ -124,3 +124,10 @@ test("all store recommendations keep the operator on POS through Today Workspace
   assert.match(block,/openWorkspace\(null\)/);
   assert.doesNotMatch(block,/router\.push/);
 });
+
+
+test("primary workspace action keeps high contrast text",async()=>{
+  const pos=await read("app/pos/page.tsx");
+  assert.match(pos,/!text-white/);
+  assert.match(pos,/style=\{\{color:"#fff"\}\}/);
+});
