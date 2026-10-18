@@ -129,6 +129,16 @@ export default function PosDailyWorkspace({
   const [queueFresh,setQueueFresh]=useState(false);
   const [wasteConfirm,setWasteConfirm]=useState<{orderId:string;itemIndex:number;itemId:string;itemName:string}|null>(null);
   const [startDayConfirmAmount,setStartDayConfirmAmount]=useState<number|null>(null);
+  const followGuidedAction=(target:WorkspaceTab)=>{
+    setGuidedMode(true);
+    setTab(target);
+    setBrowseOpen(false);
+    window.setTimeout(()=>{
+      const section=document.getElementById("workspace-task-"+target);
+      section?.scrollIntoView({behavior:"smooth",block:"start"});
+      if(section instanceof HTMLElement)section.focus({preventScroll:true});
+    },0);
+  };
 
   useEffect(()=>{
     if(!tabs.includes(tab)&&tabs[0])setTab(tabs[0]);
@@ -599,9 +609,9 @@ export default function PosDailyWorkspace({
             requestAnimationFrame(()=>openingCashRef.current?.focus());
           }} className="min-h-11 shrink-0 rounded-xl bg-[#1F4D3A] px-3 text-xs font-bold text-white">{pendingOpenShift?"ตรวจรายการเดิม":"เริ่มงาน"}</button>:
           nextAction.tone==="ready"?<button type="button" onClick={onClose} className="min-h-11 shrink-0 rounded-xl bg-[#1F4D3A] px-3 text-xs font-bold text-white">รับออเดอร์</button>:
-          nextAction.tab?<button type="button" onClick={()=>{setGuidedMode(true);setTab(nextAction.tab as WorkspaceTab);setBrowseOpen(false)}} className="min-h-11 shrink-0 rounded-xl border border-slate-300 bg-white px-3 text-xs font-bold text-slate-800">ทำตามนี้</button>:null}
+          nextAction.tab?<button type="button" onClick={()=>followGuidedAction(nextAction.tab as WorkspaceTab)} className="min-h-11 shrink-0 rounded-xl border border-slate-300 bg-white px-3 text-xs font-bold text-slate-800">ทำตามนี้</button>:null}
         </div>
-        {!guidedMode&&nextAction.tab&&tabs.includes(nextAction.tab as WorkspaceTab)&&<button type="button" onClick={()=>{setGuidedMode(true);setTab(nextAction.tab as WorkspaceTab);setBrowseOpen(false)}} className="mt-3 min-h-11 w-full rounded-xl border border-[#d4af37]/50 bg-white px-3 text-xs font-bold text-[#6f5510]">กลับให้ระบบพาไปงานถัดไป</button>}
+        {!guidedMode&&nextAction.tab&&tabs.includes(nextAction.tab as WorkspaceTab)&&<button type="button" onClick={()=>followGuidedAction(nextAction.tab as WorkspaceTab)} className="mt-3 min-h-11 w-full rounded-xl border border-[#d4af37]/50 bg-white px-3 text-xs font-bold text-[#6f5510]">กลับให้ระบบพาไปงานถัดไป</button>}
       </div>
 
       <div className="border-b border-slate-200 bg-white px-3 py-2 sm:px-4">
@@ -705,7 +715,7 @@ export default function PosDailyWorkspace({
           <FullLink href="/orders" label="เปิดประวัติ / คืนเงิน / ยกเลิกบิล"/>
         </div>}
 
-        {tab==="stock"&&canStock&&<div className="space-y-2">
+        {tab==="stock"&&canStock&&<div id="workspace-task-stock" tabIndex={-1} className="scroll-mt-4 space-y-2 outline-none">
           <div className="grid grid-cols-2 gap-2">
             <StatusCard label="ทำไม่ได้" value={outCount} level="danger"/>
             <StatusCard label="ใกล้หมด" value={lowCount} level="warn"/>
