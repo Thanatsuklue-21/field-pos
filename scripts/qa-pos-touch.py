@@ -43,6 +43,20 @@ with sync_playwright() as p:
                 continue
             box=control.bounding_box()
             assert box and box['width']>=44 and box['height']>=44, {'nav_index':index,'box':box}
+        if width<1024:
+            cartbar=page.locator('.field-pos-mobile-cartbar')
+            expect(cartbar).to_be_visible()
+            cart_box=cartbar.bounding_box()
+            assert cart_box, {'viewport':f'{width}x{height}','cartbar':'missing_box'}
+            if width<768:
+                bottom_nav=page.get_by_role('navigation',name='เมนูหลักบนมือถือ')
+                expect(bottom_nav).to_be_visible()
+                nav_box=bottom_nav.bounding_box()
+                assert nav_box, {'viewport':f'{width}x{height}','bottom_nav':'missing_box'}
+                assert cart_box['y']+cart_box['height']<=nav_box['y'], {'viewport':f'{width}x{height}','cartbar':cart_box,'bottomNav':nav_box}
+            else:
+                lower_gap=height-(cart_box['y']+cart_box['height'])
+                assert 0<=lower_gap<=40, {'viewport':f'{width}x{height}','tabletCartbar':cart_box,'lowerGap':lower_gap}
         page.get_by_role('button',name=re.compile('เมนูทดสอบ')).first.click()
         page.get_by_role('button',name='ชำระเงิน',exact=True).click()
         dialog=page.get_by_role('dialog',name=re.compile('รับเงิน ฿'))
@@ -108,7 +122,7 @@ with sync_playwright() as p:
         expect(page.get_by_role('dialog',name='รับเงิน ฿55',exact=True)).to_have_count(0)
         assert not writes, writes
         assert not errors, errors
-        results.append({'viewport':f'{width}x{height}','touch44':True,'navTouch44':True,'quantityUpdates':True,'cashUnderpaymentBlocked':True,'rotationSafe':True,'keyboardViewportSafe':True,'noFinancialWrites':True})
+        results.append({'viewport':f'{width}x{height}','touch44':True,'navTouch44':True,'fixedActionOverlapSafe':True,'quantityUpdates':True,'cashUnderpaymentBlocked':True,'rotationSafe':True,'keyboardViewportSafe':True,'noFinancialWrites':True})
         print(json.dumps(results[-1]),flush=True)
         context.close()
     browser.close()
