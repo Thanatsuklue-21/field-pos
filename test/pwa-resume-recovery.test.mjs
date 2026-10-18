@@ -6,7 +6,7 @@ const read=p=>readFile(new URL("../"+p,import.meta.url),"utf8");
 
 test("PWA resume revalidates network state and restarts durable recovery",async()=>{
   const pos=await read("app/pos/page.tsx");
-  const start=pos.indexOf("useEffect(()=>{\n    const networkChanged=");
+  const start=pos.indexOf("useEffect(()=>{\n    let initial=true;");
   const end=pos.indexOf("\n\n  useEffect(()=>{",start+1);
   assert.ok(start>0&&end>start);
   const block=pos.slice(start,end);

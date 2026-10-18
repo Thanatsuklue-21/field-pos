@@ -143,11 +143,19 @@ function PosView({session}:{session:Session}){
     load(true).catch(()=>{});
 
     // Keep the critical path limited to cached catalog + authoritative bootstrap.
-    // Customers are optional CRM data and are loaded after first paint; opening payment
-    // still triggers an immediate fetch if the idle window has not run yet.
-    const customerTimer=window.setTimeout(()=>loadCustomers(),1200);
+    // CRM is optional for the first sale: run it only when the browser is idle.
+    // Opening payment still triggers an immediate fetch if this idle work has not run.
+    const idleWindow=window as typeof window&{requestIdleCallback?:(callback:()=>void,options?:{timeout:number})=>number;cancelIdleCallback?:(id:number)=>void};
+    let customerTimer:number|undefined;
+    let customerIdle:number|undefined;
+    if(idleWindow.requestIdleCallback)customerIdle=idleWindow.requestIdleCallback(()=>{void loadCustomers()},{timeout:5000});
+    else customerTimer=window.setTimeout(()=>{void loadCustomers()},3000);
     recoverCashCheckout().then(()=>recoverPending()).catch(()=>{});
-    return()=>{active=false;window.clearTimeout(customerTimer)};
+    return()=>{
+      active=false;
+      if(customerIdle!==undefined)idleWindow.cancelIdleCallback?.(customerIdle);
+      if(customerTimer!==undefined)window.clearTimeout(customerTimer);
+    };
   },[]);
 
   useEffect(()=>{
@@ -158,14 +166,29 @@ function PosView({session}:{session:Session}){
   },[paymentReviewOpen,payOpen,customers.length,promptConfig]);
 
   useEffect(()=>{
+    let initial=true;
+    const idleWindow=window as typeof window&{requestIdleCallback?:(callback:()=>void,options?:{timeout:number})=>number;cancelIdleCallback?:(id:number)=>void};
+    let maintenanceTimer:number|undefined;
+    let maintenanceIdle:number|undefined;
+    const runMaintenance=()=>{
+      refreshOfflineStats().catch(()=>{});
+      if(typeof navigator==="undefined"||navigator.onLine)syncOfflineQueue().catch(()=>{});
+    };
+    const scheduleInitialMaintenance=()=>{
+      if(idleWindow.requestIdleCallback)maintenanceIdle=idleWindow.requestIdleCallback(runMaintenance,{timeout:5000});
+      else maintenanceTimer=window.setTimeout(runMaintenance,3000);
+    };
     const networkChanged=()=>{
       const next=typeof navigator==="undefined"||navigator.onLine;
       setOnline(next);
-      refreshOfflineStats().catch(()=>{});
-      if(next){
-        syncOfflineQueue().catch(()=>{});
-        recoverCashCheckout().then(()=>recoverPending()).catch(()=>{});
+      if(initial){
+        initial=false;
+        scheduleInitialMaintenance();
+      }else{
+        refreshOfflineStats().catch(()=>{});
+        if(next)syncOfflineQueue().catch(()=>{});
       }
+      if(next)recoverCashCheckout().then(()=>recoverPending()).catch(()=>{});
     };
     const resume=()=>{if(document.visibilityState==="visible")networkChanged()};
     networkChanged();
@@ -180,6 +203,8 @@ function PosView({session}:{session:Session}){
       window.removeEventListener("focus",networkChanged);
       window.removeEventListener("pageshow",networkChanged);
       document.removeEventListener("visibilitychange",resume);
+      if(maintenanceIdle!==undefined)idleWindow.cancelIdleCallback?.(maintenanceIdle);
+      if(maintenanceTimer!==undefined)window.clearTimeout(maintenanceTimer);
     };
   },[]);
 
