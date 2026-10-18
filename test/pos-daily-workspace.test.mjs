@@ -417,3 +417,13 @@ test("workspace AI explains the deterministic recommendation instead of repriori
   assert.match(hub,/onClick=\{explainNextActionWithAi\}/);
   assert.doesNotMatch(hub,/ช่วยตรวจงานร้านตอนนี้และบอกสิ่งที่ควรทำต่อ/);
 });
+
+
+test("guided stock action moves focus to the actionable stock section",async()=>{
+  const hub=await read("components/pos-daily-workspace.tsx");
+  assert.match(hub,/followGuidedAction/);
+  assert.match(hub,/workspace-task-/);
+  assert.match(hub,/scrollIntoView/);
+  assert.match(hub,/id="workspace-task-stock"/);
+  assert.match(hub,/tabIndex=\{-1\}/);
+});
