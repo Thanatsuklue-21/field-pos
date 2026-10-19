@@ -7,11 +7,12 @@ const read=p=>readFile(new URL("../"+p,import.meta.url),"utf8");
 test("mobile POS keeps routine operations on the same surface",async()=>{
   const shell=await read("components/app-shell.tsx");
   const pos=await read("app/pos/page.tsx");
-  assert.match(shell,/posWorkspaceTabs=\{"\/queue":"queue","\/orders":"orders","\/stock":"stock","\/expenses":"expense"\}/);
+  assert.doesNotMatch(shell,/posWorkspaceTabs=/);
   assert.match(shell,/field:open-pos-workspace/);
   assert.match(shell,/path==="\/pos"&&href==="\/queue"/);
   assert.match(shell,/>งานร้าน<\/span>/);
-  assert.match(shell,/เปิดตรงนี้/);
+  assert.match(shell,/aria-label="เมนูหลังบ้าน"/);
+  assert.match(shell,/โซนนี้เป็นงานจัดการร้าน ไม่ใช่ขั้นตอนรับออเดอร์ประจำวัน/);
   assert.match(shell,/aria-label="เมนูหลักบนมือถือ"/);
   assert.match(pos,/window\.addEventListener\("field:open-pos-workspace",openFromShell\)/);
   assert.match(pos,/openWorkspace\(tab\)/);
