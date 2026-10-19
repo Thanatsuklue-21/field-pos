@@ -42,6 +42,7 @@ function OrdersView({session}:{session:Session}){
   const [recoveryReference,setRecoveryReference]=useState("");
   const [recoveryConfirmed,setRecoveryConfirmed]=useState(false);
   const [refundReview,setRefundReview]=useState<null|{sale:Sale;count:number;total:number;external:string[];reason:string;manualReference:string;manualConfirmed:boolean}>(null);
+  const [cashActionReview,setCashActionReview]=useState<null|{sale:Sale;mode:"void"|"edit";reason:string}>(null);
   const [pendingOrderMutation,setPendingOrderMutation]=useState<OrderMutationIntent|null>(null),[orderMutationRecoveryBlocked,setOrderMutationRecoveryBlocked]=useState(false);
   const orderMutationRecoveryRef=useRef(false);
 
@@ -198,15 +199,12 @@ function OrdersView({session}:{session:Session}){
     }
   }
 
-  async function voidCash(s:Sale,reasonInput?:string){
-    const reason=reasonInput??window.prompt("เหตุผลในการยกเลิกบิลเงินสด (ทำได้ก่อนเริ่มผลิตเท่านั้น)");
-    if(reason===null)return false;
+  async function voidCash(s:Sale,reason:string){
     if(reason.trim().length<2){setMsg("การยกเลิกบิลต้องระบุเหตุผล เพื่อให้ตรวจสอบย้อนหลังได้");return false}
-    if(reasonInput===undefined&&!window.confirm("ยืนยัน VOID บิลนี้? ระบบจะบันทึกผู้ทำ เหตุผล และคืน สต็อก ตามเงื่อนไข"))return false;
     if(orderMutationRecoveryBlocked){setMsg(orderMutationError("order_mutation_recovery_unavailable"));return false}
     if(pendingOrderMutation){setMsg(orderMutationError("pending_order_mutation_exists"));return false}
     try{
-      const body={requestKey:crypto.randomUUID(),saleId:s.id,reason,riskConfirmed:true as const};
+      const body={requestKey:crypto.randomUUID(),saleId:s.id,reason:reason.trim(),riskConfirmed:true as const};
       const intent=prepareOrderMutationIntent(session.user.id,"void",s.date,body);
       setPendingOrderMutation(intent);
       return !!(await submitOrderMutation(intent,false));
@@ -217,22 +215,30 @@ function OrdersView({session}:{session:Session}){
     }
   }
 
-  async function editCashOrder(s:Sale){
+  function openCashAction(s:Sale,mode:"void"|"edit"){
+    if(orderMutationRecoveryBlocked){setMsg(orderMutationError("order_mutation_recovery_unavailable"));return}
+    if(pendingOrderMutation){setMsg(orderMutationError("pending_order_mutation_exists"));return}
     if(s.payment!=="cash"||s.status!=="paid")return;
-    if(s.productionStarted){
-      setMsg("ออเดอร์นี้เริ่มผลิตแล้ว จึงไม่สามารถแก้รายการแบบคืน สต็อก อัตโนมัติได้ · หากลูกค้าเปลี่ยนใจให้ใช้ Refund ตามสถานะจริง");
-      return;
+    if(mode==="edit"){
+      if(s.productionStarted){setMsg("ออเดอร์นี้เริ่มผลิตแล้ว จึงแก้รายการแบบคืนสต็อกอัตโนมัติไม่ได้ · ใช้ Refund ตามสถานะจริง");return}
+      if(!s.items.length||s.items.some(i=>!i.id)){setMsg("ข้อมูลเมนูของบิลนี้ไม่ครบ จึงโหลดกลับไปแก้ไขอัตโนมัติไม่ได้");return}
     }
-    if(!s.items.length||s.items.some(i=>!i.id)){
-      setMsg("ข้อมูลเมนูของบิลนี้ไม่ครบ จึงไม่สามารถโหลดกลับไปแก้ไขอัตโนมัติได้");
-      return;
-    }
-    if(!window.confirm("แก้ไข "+s.queueNo+" ?\nระบบจะยกเลิกบิลเดิม คืน สต็อก และนำรายการทั้งหมดกลับไปหน้า POS เพื่อให้เพิ่ม/ลด/เปลี่ยนเมนูแล้วคิดเงินใหม่"))return;
-    const ok=await voidCash(s,"ลูกค้าขอแก้ไขรายการก่อนเริ่มผลิต");
+    setCashActionReview({sale:s,mode,reason:mode==="edit"?"ลูกค้าขอแก้ไขรายการก่อนเริ่มผลิต":""});
+    setMsg("");
+  }
+
+  async function confirmCashAction(){
+    const review=cashActionReview;if(!review)return;
+    const s=review.sale,reason=review.reason.trim();
+    if(reason.length<2){setMsg("กรุณาระบุเหตุผลอย่างน้อย 2 ตัวอักษร");return}
+    const ok=await voidCash(s,reason);
     if(!ok)return;
-    cart.replaceItems(s.items.map(i=>({key:i.id+"::"+i.variant,id:i.id,name:i.name,variant:i.variant,price:i.price,qty:i.qty})));
-    try{sessionStorage.setItem("field-pos-edit-cash-v1",JSON.stringify({heldCash:s.total,fromBill:s.billNo,fromQueue:s.queueNo}))}catch{}
-    router.push("/pos");
+    setCashActionReview(null);
+    if(review.mode==="edit"){
+      cart.replaceItems(s.items.map(i=>({key:i.id+"::"+i.variant,id:i.id,name:i.name,variant:i.variant,price:i.price,qty:i.qty})));
+      try{sessionStorage.setItem("field-pos-edit-cash-v1",JSON.stringify({heldCash:s.total,fromBill:s.billNo,fromQueue:s.queueNo}))}catch{}
+      router.push("/pos");
+    }
   }
 
   function openRecovery(s:RecoverySession){
@@ -314,6 +320,19 @@ function OrdersView({session}:{session:Session}){
 
     {recoveryDetail&&<div className="field-modal-overlay fixed inset-0 z-[70] grid place-items-end bg-black/55 sm:place-items-center" onMouseDown={()=>{if(!busy)setRecoveryDetail(null)}}><ModalFocus labelId="payment-recovery-title" onEscape={busy?undefined:()=>setRecoveryDetail(null)} className="field-modal-panel soft-scroll w-full max-w-lg overflow-auto rounded-t-[28px] bg-white p-4 shadow-2xl sm:rounded-[28px] sm:p-6"><div onMouseDown={e=>e.stopPropagation()}><div className="flex items-start justify-between gap-3"><div><p className="m-0 text-[10px] font-black tracking-[.2em] text-amber-700">เจ้าของร้าน · รายการรับเงินค้าง</p><h2 id="payment-recovery-title" className="mt-1 text-xl font-bold">ตรวจรายการรับเงินค้าง</h2><p className="mt-1 text-xs text-slate-500">{recoveryDetail.id.slice(0,18)}… · {recoveryDetail.date}</p></div><button disabled={busy} onClick={()=>setRecoveryDetail(null)} className="grid h-11 w-11 shrink-0 place-items-center rounded-xl border border-slate-200 disabled:opacity-40" aria-label="ปิด รายการรับเงินค้าง"><X size={18}/></button></div>{(()=>{const paid=recoveryDetail.payments.reduce((n,p)=>n+Number(p.amount||0),0),remaining=Number(recoveryDetail.remainingAmount||0),isPrompt=recoveryDetail.mode==="promptpay_full",canResolve=!isPrompt&&recoveryDetail.status==="requires_resolution"&&recoveryDetail.payments.length>0,canFinish=!isPrompt&&recoveryDetail.status==="collecting"&&!!recoveryDetail.resolvedAt&&recoveryDetail.payments.length>0;return <><div className="mt-4 grid grid-cols-3 gap-2 text-center"><div className="rounded-2xl bg-slate-50 p-3"><small className="text-slate-500">ยอดทั้งหมด</small><b className="mt-1 block">฿{Number(recoveryDetail.total||0).toFixed(0)}</b></div><div className="rounded-2xl bg-emerald-50 p-3"><small className="text-emerald-700">รับแล้ว</small><b className="mt-1 block text-emerald-800">฿{paid.toFixed(0)}</b></div><div className="rounded-2xl bg-amber-50 p-3"><small className="text-amber-700">คงเหลือ</small><b className="mt-1 block text-amber-900">฿{remaining.toFixed(0)}</b></div></div><div className="mt-4 rounded-2xl border border-slate-200 p-3"><b className="text-sm">รายการที่ยังจองสต็อก</b><div className="mt-2 space-y-2">{recoveryDetail.items.map((item,index)=>{const qty=Number(recoveryDetail.remainingQty?.[index]||0);return <div key={index} className="flex items-center justify-between gap-3 text-sm"><span className={qty<=0?"text-slate-400 line-through":"text-slate-700"}>{item.name} · {item.variant}</span><b>{qty>0?"เหลือ ×"+qty:"รับเงินแล้ว"}</b></div>})}</div></div>{recoveryDetail.payments.length>0&&<div className="mt-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-3"><b className="text-sm text-emerald-900">เงินที่ระบบบันทึกแล้ว — ห้ามรับซ้ำ</b>{recoveryDetail.payments.map((p,i)=><div key={p.id||i} className="mt-2 flex justify-between text-xs text-emerald-800"><span>{p.label||"รายการรับเงิน "+(i+1)} · {p.method}</span><b>฿{Number(p.amount||0).toFixed(0)}</b></div>)}</div>}{isPrompt&&<div className="mt-3 rounded-2xl border border-red-200 bg-red-50 p-3 text-sm text-red-700"><b>PromptPay · ห้ามเปลี่ยนช่องทาง</b><p className="mt-1 text-xs">เจ้าของร้านไม่สามารถเปลี่ยนรายการนี้เป็นเงินสด/โอน/บัตรจากหน้านี้ได้ เพื่อป้องกันรับเงินซ้ำกับผู้ให้บริการ PromptPay</p></div>}{canResolve&&<><label className="mt-4 flex items-start gap-3 rounded-2xl border border-amber-300 bg-amber-50 p-3 text-sm"><input type="checkbox" checked={recoveryConfirmed} onChange={e=>setRecoveryConfirmed(e.target.checked)} className="mt-1 h-4 w-4"/><span><b>ฉันตรวจยอดที่รับไปแล้ว ฿{paid.toFixed(0)}</b><br/><span className="text-xs text-slate-600">ตรวจรายการเดิมโดยไม่คืนสต็อกและไม่ลบยอดที่รับแล้ว จากนั้นรับเฉพาะยอดคงเหลือ ฿{remaining.toFixed(0)}</span></span></label><button disabled={busy||!recoveryConfirmed} onClick={()=>resolveRecovery(recoveryDetail)} className="mt-3 min-h-12 w-full rounded-2xl bg-amber-600 font-bold text-white disabled:opacity-40">{busy?"กำลังกู้คืน...":"ยืนยันตรวจรายการเดิม"}</button></>}{canFinish&&<><div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-800"><ShieldCheck size={16} className="mb-1"/><b>เจ้าของร้านตรวจรายการเดิมแล้ว</b><p className="mt-1">ระบบจะส่งเฉพาะรายการและจำนวนที่ยังเหลือให้ระบบกลางตรวจอีกครั้งก่อนบันทึกเงินจริง</p></div><div className="mt-3 grid grid-cols-3 gap-1 rounded-2xl bg-slate-100 p-1">{(["cash","bank","card"] as const).map(m=><button key={m} onClick={()=>{setRecoveryMethod(m);setRecoveryReceived("");setRecoveryReference("")}} className={"min-h-11 rounded-xl text-xs font-bold "+(recoveryMethod===m?"bg-white shadow-sm":"text-slate-600")}>{m==="cash"?"เงินสด":m==="bank"?"โอน":"บัตร"}</button>)}</div>{recoveryMethod==="cash"?<label className="mt-3 block text-sm"><span className="font-semibold text-slate-700">รับเงินสด</span><input inputMode="decimal" value={recoveryReceived} onChange={e=>setRecoveryReceived(e.target.value)} placeholder={"อย่างน้อย "+remaining.toFixed(0)} className="mt-2 min-h-12 w-full rounded-2xl border border-slate-300 px-4 text-lg"/></label>:<label className="mt-3 block text-sm"><span className="font-semibold text-slate-700">เลขอ้างอิง / หมายเหตุ (ถ้ามี)</span><input value={recoveryReference} onChange={e=>setRecoveryReference(e.target.value)} className="mt-2 min-h-12 w-full rounded-2xl border border-slate-300 px-4"/></label>}<label className="mt-3 flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 p-3 text-sm text-red-700"><input type="checkbox" checked={recoveryConfirmed} onChange={e=>setRecoveryConfirmed(e.target.checked)} className="mt-1 h-4 w-4"/><span>ยืนยันว่า <b>จะรับเฉพาะยอดคงเหลือ ฿{remaining.toFixed(0)}</b> และเงิน ฿{paid.toFixed(0)} ที่ระบบบันทึกไว้ก่อนหน้าไม่ได้รับซ้ำ</span></label><button disabled={busy||!recoveryConfirmed||(recoveryMethod==="cash"&&Number(recoveryReceived)<remaining)} onClick={()=>finishRecovery(recoveryDetail)} className="mt-3 min-h-12 w-full rounded-2xl bg-emerald-700 font-bold text-white disabled:opacity-40">{busy?"กำลังบันทึก...":"รับยอดคงเหลือและจบรายการ"}</button></>}{recoveryDetail.status==="collecting"&&!recoveryDetail.resolvedAt&&<div className="mt-3 rounded-2xl border border-blue-200 bg-blue-50 p-3 text-xs text-blue-800">รายการนี้ยังอยู่ระหว่างรับชำระและยังไม่ได้ผ่านการตรวจจากเจ้าของร้าน · ระบบไม่เปิดปุ่มรับเงินจากหน้านี้เพื่อป้องกันชนกับหน้าขายเครื่องอื่น</div>}</>})()}</div></ModalFocus></div>}
 
+    {cashActionReview&&<div className="field-modal-overlay fixed inset-0 z-[72] grid place-items-center bg-black/65 p-3">
+      <ModalFocus labelId="cash-action-review-title" onEscape={()=>!busy&&setCashActionReview(null)} className="field-modal-panel glass card soft-scroll w-full max-w-lg overflow-auto p-4 sm:p-6">
+        <div className="flex items-start justify-between gap-3">
+          <div><p className="gold text-[10px] font-black tracking-[.22em]">GUIDED {cashActionReview.mode==="edit"?"EDIT":"VOID"}</p><h3 id="cash-action-review-title" className="mt-1 text-xl font-black">{cashActionReview.mode==="edit"?"แก้ไขบิลก่อนเริ่มผลิต":"ยกเลิกบิลเงินสด"}</h3><p className="mt-1 text-xs text-slate-500">{cashActionReview.mode==="edit"?"ระบบจะยกเลิกบิลเดิม คืนสต็อก แล้วนำรายการกลับหน้า POS":"ทำได้ก่อนเริ่มผลิตเท่านั้น · ระบบจะบันทึกผู้ทำและเหตุผล"}</p></div>
+          <button disabled={busy} onClick={()=>setCashActionReview(null)} aria-label="ปิดการตรวจรายการ" className="grid h-11 w-11 shrink-0 place-items-center rounded-xl border border-slate-200 disabled:opacity-40"><X size={18}/></button>
+        </div>
+        <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4"><div className="flex items-center justify-between gap-3"><span className="text-sm text-slate-600">คิว {cashActionReview.sale.queueNo||"—"}</span><b className="text-2xl text-red-700">฿{cashActionReview.sale.total.toFixed(0)}</b></div><p className="mt-2 text-xs text-slate-500">{cashActionReview.sale.itemCount} รายการ · เงินสด · {cashActionReview.sale.productionStarted?"เริ่มผลิตแล้ว":"ยังไม่เริ่มผลิต"}</p></div>
+        {cashActionReview.mode==="void"&&cashActionReview.sale.productionStarted&&<div className="mt-3 rounded-2xl border border-red-300 bg-red-50 p-3 text-xs font-semibold text-red-800">เริ่มผลิตแล้ว · ห้าม VOID แบบคืนสต็อกอัตโนมัติ ให้ใช้ Refund ตามสถานะจริงแทน</div>}
+        <div className="mt-3 rounded-2xl border border-slate-200 bg-white p-3"><b className="text-sm">เหตุผล</b><textarea value={cashActionReview.reason} onChange={e=>setCashActionReview(v=>v?{...v,reason:e.target.value}:v)} rows={3} placeholder="เช่น ลูกค้ายกเลิกก่อนเริ่มผลิต / คีย์รายการผิด" className="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm outline-none"/></div>
+        <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600"><b>สิ่งที่จะเกิดขึ้น:</b> ยกเลิกบิลเดิม → คืนสต็อกตามกติกา server → เก็บ Audit Log{cashActionReview.mode==="edit"?" → โหลดรายการกลับหน้า POS พร้อมยอดเงินเดิม":""}</div>
+        <button disabled={busy||cashActionReview.reason.trim().length<2||cashActionReview.sale.productionStarted} onClick={confirmCashAction} className="mt-4 min-h-12 w-full rounded-2xl bg-red-700 px-4 text-sm font-black text-white disabled:opacity-40">{busy?"กำลังตรวจและบันทึก…":cashActionReview.mode==="edit"?"ยืนยันและกลับไปแก้รายการ":"ยืนยันยกเลิกบิล"}</button>
+      </ModalFocus>
+    </div>}
     {refundReview&&<div className="field-modal-overlay fixed inset-0 z-[70] grid place-items-center bg-black/65 p-3">
       <ModalFocus labelId="refund-review-title" onEscape={()=>!busy&&setRefundReview(null)} className="field-modal-panel glass card soft-scroll w-full max-w-lg overflow-auto p-4 sm:p-6">
         <div className="flex items-start justify-between gap-3">
@@ -346,8 +365,8 @@ function OrdersView({session}:{session:Session}){
         <div className="mt-4 space-y-2">{detail.items.map((i,n)=><div key={n} className="flex justify-between gap-3 rounded-2xl bg-slate-50 p-3"><span><b>{i.name}</b><small className="block text-slate-500">{i.variant} ×{i.qty} · ฿{i.price.toFixed(0)}/แก้ว</small></span><b className="shrink-0">฿{(i.price*i.qty).toFixed(0)}</b></div>)}</div>
         {Number(detail.discountTotal||0)>0&&<div className="mt-4 rounded-2xl bg-amber-50 p-3 text-sm"><div className="flex justify-between"><span>ยอดก่อนส่วนลด</span><b>฿{Number(detail.subtotal??detail.total).toFixed(0)}</b></div><div className="mt-1 flex justify-between text-amber-800"><span>ส่วนลดสมาชิก{detail.pointsRedeemed?" · "+detail.pointsRedeemed+" แต้ม":""}</span><b>−฿{Number(detail.discountTotal||0).toFixed(0)}</b></div></div>}<div className="mt-5 flex justify-between border-t border-slate-200 pt-4 text-lg"><b>ยอดสุทธิ</b><b className="gold">฿{detail.total.toFixed(0)}</b></div>{Number(detail.pointsAwarded||0)>0&&<p className="mt-2 text-right text-xs text-emerald-700">ได้รับ +{detail.pointsAwarded} แต้ม</p>}
 
-        {session.user.role==="admin"&&detail.payment==="cash"&&detail.status==="paid"&&!detail.productionStarted&&<button disabled={busy} onClick={()=>editCashOrder(detail)} className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl bg-[#d4af37] py-3 text-sm font-black text-black disabled:opacity-50"><Pencil size={16}/>{busy?"กำลังบันทึก...":"แก้ไข / ลด / เปลี่ยนเมนู"}</button>}
-        {session.user.role==="admin"&&detail.payment==="cash"&&detail.status==="paid"&&<button disabled={busy} onClick={()=>voidCash(detail)} className="mt-2 flex w-full items-center justify-center gap-2 rounded-2xl border border-red-400/30 py-3 text-sm font-semibold text-red-600 disabled:opacity-40"><Ban size={16}/>ยกเลิกบิลเงินสด + คืนสต็อก</button>}
+        {session.user.role==="admin"&&detail.payment==="cash"&&detail.status==="paid"&&!detail.productionStarted&&<button disabled={busy} onClick={()=>openCashAction(detail,"edit")} className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl bg-[#d4af37] py-3 text-sm font-black text-black disabled:opacity-50"><Pencil size={16}/>{busy?"กำลังบันทึก...":"แก้ไข / ลด / เปลี่ยนเมนู"}</button>}
+        {session.user.role==="admin"&&detail.payment==="cash"&&detail.status==="paid"&&<button disabled={busy} onClick={()=>openCashAction(detail,"void")} className="mt-2 flex w-full items-center justify-center gap-2 rounded-2xl border border-red-400/30 py-3 text-sm font-semibold text-red-600 disabled:opacity-40"><Ban size={16}/>ยกเลิกบิลเงินสด + คืนสต็อก</button>}
         {session.user.role==="admin"&&["cash","promptpay","bank","card","split"].includes(detail.payment)&&detail.status==="paid"&&<button disabled={busy} onClick={()=>refundSaleUi(detail)} className="mt-2 flex w-full items-center justify-center gap-2 rounded-2xl border border-amber-400/30 py-3 text-sm font-semibold text-amber-800 disabled:opacity-40"><RotateCcw size={16}/>{detail.orderId&&sales.filter(x=>x.orderId===detail.orderId&&x.status==="paid").length>1?"คืนเงินทั้งออเดอร์":"คืนเงินเต็มจำนวน"}</button>}
         <button onClick={()=>window.print()} className="mt-2 flex w-full items-center justify-center gap-2 rounded-2xl border border-slate-300 py-3 text-sm font-semibold"><Printer size={16}/>พิมพ์ใบเสร็จ</button>
       </div></ModalFocus>
