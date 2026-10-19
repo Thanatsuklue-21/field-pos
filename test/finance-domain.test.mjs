@@ -1,4 +1,10 @@
 import test from 'node:test';import assert from 'node:assert/strict';import {expenseBreakdown,profitSummary,cashExpenseTotal,inventoryValuation} from '../lib/domain/finance.mjs';
+test('satang expense and profit totals use exact decimal arithmetic',()=>{
+  const expenses=[{category:'OTHER',amount:0.1,paymentMethod:'cash'},{category:'OTHER',amount:0.2,paymentMethod:'cash'}];
+  assert.equal(expenseBreakdown(expenses).operatingExpenses,0.3);
+  assert.equal(cashExpenseTotal(expenses),0.3);
+  assert.equal(profitSummary({revenue:0.6,cogs:0.1,expenses}).operatingProfit,0.2);
+});
 test('inventory purchases are cash out but not operating expense on top of COGS',()=>{const expenses=[{category:'PURCHASE',amount:1000},{category:'UTILITY',amount:200},{category:'MAINTENANCE',amount:50}];assert.deepEqual(expenseBreakdown(expenses),{purchaseSpend:1000,operatingExpenses:250,totalCashOut:1250});assert.deepEqual(profitSummary({revenue:3000,cogs:1200,expenses}),{purchaseSpend:1000,operatingExpenses:250,totalCashOut:1250,grossProfit:1800,operatingProfit:1550})});
 test('purchase category is case insensitive and invalid amounts never inflate expense',()=>{assert.deepEqual(expenseBreakdown([{category:'purchase',amount:100},{category:'OTHER',amount:'bad'}]),{purchaseSpend:100,operatingExpenses:0,totalCashOut:100})});
 test('cash paid out only includes expenses explicitly paid from drawer',()=>{assert.equal(cashExpenseTotal([{amount:100,paymentMethod:'cash'},{amount:200,paymentMethod:'bank'},{amount:50,paymentMethod:'noncash'},{amount:25}]),100)});

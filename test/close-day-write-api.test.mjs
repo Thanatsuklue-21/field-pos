@@ -10,6 +10,47 @@ import {digest} from "../lib/security.mjs";
 import {bangkokDate} from "../lib/time.mjs";
 
 const origin="https://field.test";
+test("drawer cash-out accepts exact remaining satang and rejects a true shortage",async t=>{
+  const {db,handler,date}=await setup(t);
+  const doc=JSON.parse((await db.execute('SELECT document FROM field_state WHERE singleton=1')).rows[0].document);
+  doc.cashShifts[0].openingCash=0.3;
+  doc.expenses=[{id:'satang-expense',date,amount:0.1,category:'OTHER',paymentMethod:'cash'}];
+  await db.execute({sql:'UPDATE field_state SET document=? WHERE singleton=1',args:[JSON.stringify(doc)]});
+  const body={requestKey:'satang-out-01',date,type:'CASH_OUT',amount:0.2,reason:'drawer transfer',riskConfirmed:true};
+  const first=await send(handler,req('cash-shift/movements','token-1','csrf-1',body));
+  assert.equal(first.status,201,JSON.stringify(first.body));assert.equal(first.body.availableCash,0);
+  const replay=await send(handler,req('cash-shift/movements','token-1','csrf-1',body));
+  assert.equal(replay.status,200);assert.equal(replay.body.movement.id,first.body.movement.id);
+  const short=await send(handler,req('cash-shift/movements','token-1','csrf-1',{...body,requestKey:'satang-out-02',amount:0.01}));
+  assert.equal(short.status,409);assert.equal(short.body.error,'drawer_cash_shortage');
+  assert.equal(Number((await db.execute("SELECT COUNT(*) AS n FROM field_audit WHERE action='cash_drawer_movement'")).rows[0].n),1);
+});
+test("drawer mutation ACK returns an exact satang balance",async t=>{
+  const {db,handler,date}=await setup(t);
+  const doc=JSON.parse((await db.execute('SELECT document FROM field_state WHERE singleton=1')).rows[0].document);
+  doc.cashShifts[0].openingCash=0.1;
+  await db.execute({sql:'UPDATE field_state SET document=? WHERE singleton=1',args:[JSON.stringify(doc)]});
+  const response=await send(handler,req('cash-shift/movements','token-1','csrf-1',{requestKey:'satang-in-01',date,type:'CASH_IN',amount:0.2,reason:'drawer float'}));
+  assert.equal(response.status,201);assert.equal(response.body.availableCash,0.3);
+});
+test("satang close commits without a phantom variance reason and replays once",async t=>{
+  const {db,handler,date}=await setup(t);
+  const doc=JSON.parse((await db.execute("SELECT document FROM field_state WHERE singleton=1")).rows[0].document);
+  doc.cashShifts[0].openingCash=0.1;
+  doc.cashMovements=[{id:'satang-in',date,type:'CASH_IN',amount:0.2,reason:'opening correction'}];
+  await db.execute({sql:'UPDATE field_state SET document=? WHERE singleton=1',args:[JSON.stringify(doc)]});
+  const reviewed=await send(handler,req('close-day/review','token-1','csrf-1',{requestKey:'satang-review-01',date,firstCount:0.3,secondCount:0.3}));
+  assert.equal(reviewed.status,200);
+  assert.equal(reviewed.body.review.variance,0);
+  const body={requestKey:'satang-close-01',date,openingCash:0.1,countedCash:0.3,reviewId:reviewed.body.review.id,varianceReason:'',confirmVariance:false};
+  const closed=await send(handler,req('close-day','token-1','csrf-1',body));
+  assert.equal(closed.status,201,JSON.stringify(closed.body));
+  assert.equal(closed.body.close.expectedCash,0.3);
+  assert.equal(closed.body.close.cashVariance,0);
+  const replay=await send(handler,req('close-day','token-1','csrf-1',body));
+  assert.equal(replay.status,200);assert.equal(replay.body.close.id,closed.body.close.id);
+  assert.equal(Number((await db.execute("SELECT COUNT(*) AS n FROM field_audit WHERE action='close_day'")).rows[0].n),1);
+});
 async function setup(t){
   const dir=await mkdtemp(join(tmpdir(),"field-close-day-durable-")),db=createClient({url:"file:"+join(dir,"test.db")});
   t.after(async()=>{db.close();try{await rm(dir,{recursive:true,force:true})}catch(error){if(process.platform!=="win32"||error.code!=="EBUSY")throw error}});
