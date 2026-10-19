@@ -45,3 +45,17 @@ test("app modal motion is lightweight and respects reduced-motion",async()=>{
   assert.match(css,/animation:field-sheet-in var\(--motion-sheet\)/);
   assert.match(css,/@media \(prefers-reduced-motion:reduce\)/);
 });
+
+
+test("cash VOID and pre-production edit no longer use browser prompts",async()=>{
+  const ui=await read("app/orders/page.tsx");
+  const start=ui.indexOf("async function voidCash");
+  const end=ui.indexOf("function openRecovery",start);
+  const block=ui.slice(start,end);
+  assert.match(block,/openCashAction/);
+  assert.match(block,/confirmCashAction/);
+  assert.doesNotMatch(block,/window\.confirm/);
+  assert.doesNotMatch(block,/window\.prompt/);
+  assert.match(ui,/GUIDED \{cashActionReview\.mode===\"edit\"\?\"EDIT\":\"VOID\"\}/);
+  assert.match(ui,/ยืนยันและกลับไปแก้รายการ/);
+});
