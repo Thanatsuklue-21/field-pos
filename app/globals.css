@@ -118,8 +118,8 @@ html,body{overscroll-behavior:none}
   to{opacity:1}
 }
 @keyframes field-sheet-in{
-  from{opacity:0;transform:translateY(10px) scale(.985)}
-  to{opacity:1;transform:translateY(0) scale(1)}
+  from{opacity:0;transform:translateY(10px)}
+  to{opacity:1;transform:translateY(0)}
 }
 .field-modal-overlay{
   animation:field-overlay-in var(--motion-fast) var(--ease-smooth);
@@ -130,7 +130,6 @@ html,body{overscroll-behavior:none}
 }
 .field-modal-panel{
   animation:field-sheet-in var(--motion-sheet) var(--ease-smooth);
-  transform-origin:center bottom;
   will-change:transform,opacity;
   max-height:calc(100dvh - max(1rem,env(safe-area-inset-top)) - max(1rem,env(safe-area-inset-bottom)));
   scroll-padding-bottom:max(5rem,env(safe-area-inset-bottom));
