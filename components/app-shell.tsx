@@ -14,7 +14,7 @@ import {clearSessionCache,getSessionCached,type Session} from "@/lib/api-client"
 const items=[["/dashboard","dashboard",LayoutDashboard,"report"],["/control","control",ShieldCheck,"admin"],["/pos","pos",ShoppingBag,"order"],["/queue","queue",ListOrdered,"queue"],["/products","products",Package2,"admin"],["/stock","stock",Boxes,"stock"],["/costs","costs",Calculator,"admin"],["/expenses","expenses",ReceiptText,"report"],["/customers","customers",Users,"admin"],["/recipes","recipes",BookOpenCheck,"admin"],["/close","close",CalendarCheck2,"report"],["/orders","orders",ClipboardList,"order"],["/reports","reports",BarChart3,"report"],["/backup","backup",DatabaseBackup,"admin"],["/users","users",UserCog,"admin"],["/audit","audit",ScrollText,"admin"],["/settings","settings",Settings,"any"]] as const;
 const workRoutes=["/pos","/queue","/orders","/close"];
 const backOfficePriority=["/dashboard","/control","/products","/stock","/recipes","/costs","/expenses","/customers","/reports","/backup","/users","/audit","/settings"];
-const primaryMobile=["/pos","/queue","/orders","/close"];
+const primaryMobile=["/pos","/queue","/close"];
 
 export default function AppShell({children}:{children:React.ReactNode}){
   const path=usePathname(),lang=useAppStore(s=>s.language),t=dict[lang],[session,setSession]=useState<Session|null>(null),[moreOpen,setMoreOpen]=useState(false),[manageOpen,setManageOpen]=useState(false),[aiMounted,setAiMounted]=useState(path!=="/pos"),[aiRequest,setAiRequest]=useState<{id:number;message:string}|null>(null);
