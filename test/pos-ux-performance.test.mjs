@@ -366,10 +366,13 @@ test('payment success warms queue data without prefetching the obsolete queue ro
   assert.match(pos,/writeQueueSnapshotCache/);
 });
 
-test('solo operator daily flow keeps sales and production primary while secondary work is grouped',async()=>{
+test('solo operator daily flow keeps work routes separate from back office',async()=>{
   const shell=await read('components/app-shell.tsx'),pos=await read('app/pos/page.tsx'),queue=await read('app/queue/page.tsx'),close=await read('app/close/page.tsx');
-  assert.match(shell,/const primaryMobile=\["\/pos","\/queue"\]/);
-  assert.match(shell,/const mobileMorePriority=\["\/orders","\/stock","\/expenses","\/close","\/settings"\]/);
+  assert.match(shell,/const workRoutes=\["\/pos","\/queue","\/orders","\/close"\]/);
+  assert.match(shell,/const primaryMobile=\["\/pos","\/queue","\/orders","\/close"\]/);
+  assert.match(shell,/const backOfficePriority=\["\/dashboard","\/control","\/products","\/stock","\/recipes","\/costs","\/expenses","\/customers","\/reports","\/backup","\/users","\/audit","\/settings"\]/);
+  assert.match(shell,/หน้าทำงาน · งานประจำวัน/);
+  assert.match(shell,/หลังบ้าน/);
   assert.match(pos,/"ทำคิว "\+lastSale\.queueNo\+" ต่อเลย"/);
   assert.match(pos,/if\(lastSale\.offline\|\|splitPaymentPending\)\{startNextOrder\(\);return\}setLastSale\(null\);openWorkspace\("queue"\)/);
   assert.match(pos,/รับออเดอร์ถัดไป/);
