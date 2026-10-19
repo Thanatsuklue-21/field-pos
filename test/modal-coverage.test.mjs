@@ -6,7 +6,7 @@ const read=p=>readFile(new URL("../"+p,import.meta.url),"utf8");
 
 test("operational overlays use the shared modal keyboard and safe-area contract",async()=>{
   const cases=[
-    ["app/orders/page.tsx",["payment-recovery-title","order-detail-title"],2],
+    ["app/orders/page.tsx",["payment-recovery-title","refund-review-title","cash-action-review-title","order-detail-title"],4],
     ["app/stock/page.tsx",["stock-transaction-title","stock-master-title","stock-daily-count-title","stock-purchase-edit-title"],4],
     ["app/products/page.tsx",["product-structure-title","product-edit-title","product-archive-title"],3],
     ["app/settlements/page.tsx",["settlement-reconcile-title"],1],
@@ -34,6 +34,8 @@ test("financial and stock mutation modals cannot escape-dismiss while busy",asyn
   const queue=await read("app/queue/page.tsx");
 
   assert.ok(orders.includes('onEscape={busy?undefined:()=>setRecoveryDetail(null)}'));
+  assert.ok(orders.includes('onEscape={busy?undefined:()=>setRefundReview(null)}'));
+  assert.ok(orders.includes('onEscape={busy?undefined:()=>setCashActionReview(null)}'));
   assert.ok(stock.includes('onEscape={busy?undefined:()=>setTxOpen(null)}'));
   assert.ok(stock.includes('onEscape={busy?undefined:()=>{setMaster(null);setMasterMsg("")}}'));
   assert.ok(stock.includes('onEscape={busy?undefined:()=>setCountOpen(false)}'));

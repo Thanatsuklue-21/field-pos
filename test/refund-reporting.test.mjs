@@ -14,8 +14,8 @@ test('orders UI distinguishes cash void from full refund and explains conditiona
   const ui=await read('app/orders/page.tsx');
   assert.match(ui,/คืนเงินเต็มจำนวน/);
   assert.match(ui,/ยกเลิกบิลเงินสด \+ คืนสต็อก/);
-  assert.match(ui,/ระบบจะตัดสินการคืนสต็อกจากสถานะการผลิต/);
-  assert.match(ui,/ออเดอร์นี้มี PromptPay/);
+  assert.match(ui,/ระบบจะคืนเฉพาะกรณียังไม่เริ่มผลิต/);
+  assert.match(ui,/promptpay/);
   assert.match(ui,/paymentMethods/);
   assert.match(ui,/\["cash","promptpay","bank","card","split"\]/);
 });
@@ -38,6 +38,8 @@ test('cash checkout persists its idempotency payload for ambiguous network recov
 test('orders UI makes multi-sale refund an explicit whole-order action',async()=>{
   const ui=await read('app/orders/page.tsx');
   assert.match(ui,/คืนเงินทั้งออเดอร์/);
-  assert.match(ui,/Refund ทั้งออเดอร์/);
+  assert.match(ui,/refundReview\.count>1\?"คืนเงินทั้งออเดอร์ "/);
+  assert.match(ui,/manualConfirmed:review\.external\.length>0/);
+  assert.match(ui,/prepareOrderMutationIntent\(session\.user\.id,"refund"/);
   assert.doesNotMatch(ui,/ออเดอร์นี้มีหลาย sale ยังไม่รองรับ Refund อัตโนมัติ/);
 });

@@ -113,13 +113,24 @@ html,body{overscroll-behavior:none}
 
 
 /* POS/PWA modal safety: keep sheets clear of Android gesture areas and on-screen keyboards. */
+@keyframes field-overlay-in{
+  from{opacity:0}
+  to{opacity:1}
+}
+@keyframes field-sheet-in{
+  from{opacity:0;transform:translateY(10px)}
+  to{opacity:1;transform:translateY(0)}
+}
 .field-modal-overlay{
+  animation:field-overlay-in var(--motion-fast) var(--ease-smooth);
   padding-top:max(.5rem,env(safe-area-inset-top));
   padding-right:max(.5rem,env(safe-area-inset-right));
   padding-bottom:max(.5rem,env(safe-area-inset-bottom));
   padding-left:max(.5rem,env(safe-area-inset-left));
 }
 .field-modal-panel{
+  animation:field-sheet-in var(--motion-sheet) var(--ease-smooth);
+  will-change:transform,opacity;
   max-height:calc(100dvh - max(1rem,env(safe-area-inset-top)) - max(1rem,env(safe-area-inset-bottom)));
   scroll-padding-bottom:max(5rem,env(safe-area-inset-bottom));
   outline:none;
