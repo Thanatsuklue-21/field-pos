@@ -23,7 +23,7 @@ test("cashier guidance keeps adding items natural before payment",()=>{
 test("cash guidance handles empty short exact and change states",()=>{
   const empty=cashierNextAction({cartQty:1,payOpen:true,method:"cash",payable:55,received:""});
   assert.match(empty.title,/รับเงินจากลูกค้า/);
-  assert.match(empty.detail,/รับพอดี/);
+  assert.match(empty.detail,/รับเงินพอดี/);
 
   const short=cashierNextAction({cartQty:1,payOpen:true,method:"cash",payable:55,received:"50"});
   assert.equal(short.tone,"warn");
@@ -51,10 +51,10 @@ test("POS renders the guidance in both ordering and payment contexts",async()=>{
   assert.match(pos,/cashierNextAction/);
   const guidance=await read("lib/cashier-guidance.mjs");
   assert.match(guidance,/ลูกค้าสั่งครบหรือยัง/);
-  assert.match(pos,/\["2","เพิ่ม \/ ตรวจ"\]/);
-  assert.match(pos,/แตะเมนู → เพิ่ม \/ ตรวจ → รับเงิน/);
-  assert.match(pos,/aria-label="ชำระเงิน"[^>]*>รับเงิน ฿\{total\.toFixed\(0\)\}/);
-  assert.match(pos,/ขั้นตอน 2 · เพิ่ม \/ ตรวจ/);
+  assert.match(pos,/\["2","ตรวจออเดอร์"\]/);
+  assert.match(pos,/แตะเมนู → ตรวจออเดอร์ → ชำระเงิน/);
+  assert.match(pos,/aria-label="ชำระเงิน"[^>]*>ชำระเงิน ฿\{total\.toFixed\(0\)\}/);
+  assert.match(pos,/ขั้นตอน 2 · ตรวจออเดอร์/);
   const matches=pos.match(/cashierGuide\.title/g)||[];
   assert.ok(matches.length>=2);
   assert.match(pos,/aria-live="polite"/);
