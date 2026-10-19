@@ -17,6 +17,7 @@ export default function Users(){return <AuthGate>{s=><View session={s}/>}</AuthG
 
 function View({session}:{session:Session}){
   const [rows,setRows]=useState<User[]>([]),[open,setOpen]=useState(false),[busy,setBusy]=useState(false),[msg,setMsg]=useState("");
+  const [resetUser,setResetUser]=useState<User|null>(null),[resetPasswordValue,setResetPasswordValue]=useState("");
   const [username,setUsername]=useState(""),[password,setPassword]=useState(""),[role,setRole]=useState<"staff"|"admin">("staff"),[permissions,setPermissions]=useState<Perms>({order:true,queue:true});
   const [pendingCreate,setPendingCreate]=useState<UserCreateIntent|null>(null),[createRecoveryBlocked,setCreateRecoveryBlocked]=useState(false);
   const recoveryRef=useRef(false),passwordRef=useRef("");
@@ -119,8 +120,13 @@ function View({session}:{session:Session}){
     catch(e:any){setMsg(operatorErrorFallback(e?.message,"ผู้ใช้"))}
     finally{setBusy(false)}
   }
-  async function resetPassword(id:string){
-    const next=window.prompt("รหัสผ่านใหม่อย่างน้อย 10 ตัวอักษร");if(!next)return;await patch(id,{password:next});
+  function openPasswordReset(user:User){setResetUser(user);setResetPasswordValue("");setMsg("")}
+  function closePasswordReset(){if(busy)return;setResetUser(null);setResetPasswordValue("")}
+  async function submitPasswordReset(){
+    if(!resetUser||resetPasswordValue.length<10)return;
+    const id=resetUser.id;
+    await patch(id,{password:resetPasswordValue});
+    setResetUser(null);setResetPasswordValue("");setMsg("รีเซ็ตรหัสผ่านแล้ว · "+resetUser.username);
   }
 
   return <section className="soft-scroll h-full overflow-auto p-5 md:p-7">
@@ -139,8 +145,18 @@ function View({session}:{session:Session}){
       <div className="flex items-start justify-between gap-3"><div><div className="flex items-center gap-2"><UserCog size={17} className="gold"/><b>{u.username}</b></div><small className="mt-1 block text-slate-500">{u.role.toUpperCase()} · {u.active?"ACTIVE":"DISABLED"}</small></div>
       {u.id!==session.user.id&&<button disabled={busy} onClick={()=>patch(u.id,{active:!u.active})} className={"min-h-11 rounded-full border px-3 text-xs "+(u.active?"border-red-400/30 text-red-600":"border-emerald-400/30 text-emerald-700")}>{u.active?"DISABLE":"ENABLE"}</button>}</div>
       {u.role==="staff"&&<div className="mt-4 grid grid-cols-2 gap-2">{keys.map(k=><label key={k} className="flex min-h-11 items-center justify-between rounded-2xl border border-slate-100 bg-slate-50 px-3 py-2 text-xs uppercase"><span>{k}</span><input type="checkbox" checked={!!u.permissions?.[k]} onChange={e=>patch(u.id,{permissions:{...u.permissions,[k]:e.target.checked}})}/></label>)}</div>}
-      <button disabled={busy} onClick={()=>resetPassword(u.id)} className="mt-4 min-h-11 w-full rounded-full border border-slate-200 text-xs">RESET PASSWORD</button>
+      <button disabled={busy} onClick={()=>openPasswordReset(u)} className="mt-4 min-h-11 w-full rounded-full border border-slate-200 text-xs">RESET PASSWORD</button>
     </div>)}</div>
+
+    {resetUser&&<div className="field-modal-overlay fixed inset-0 z-[82] grid place-items-center bg-black/70 p-4">
+      <ModalFocus labelId="user-reset-password-title" onEscape={busy?undefined:closePasswordReset} className="field-modal-panel glass card w-full max-w-md p-6">
+        <div className="flex items-start justify-between gap-3"><div><p className="gold text-[10px] tracking-[.25em]">SECURITY</p><h3 id="user-reset-password-title" className="mt-1 text-xl">รีเซ็ตรหัสผ่าน</h3><p className="mt-1 text-xs text-slate-500">{resetUser.username} · ใช้รหัสผ่านใหม่อย่างน้อย 10 ตัวอักษร</p></div><button type="button" disabled={busy} onClick={closePasswordReset} aria-label="ปิดการรีเซ็ตรหัสผ่าน" className="grid h-11 w-11 shrink-0 place-items-center rounded-xl disabled:opacity-40"><X size={18}/></button></div>
+        <label className="mt-5 block text-xs font-semibold text-slate-600" htmlFor="field-user-reset-password">รหัสผ่านใหม่</label>
+        <input id="field-user-reset-password" type="password" autoComplete="new-password" value={resetPasswordValue} onChange={e=>setResetPasswordValue(e.target.value)} placeholder="อย่างน้อย 10 ตัวอักษร" className="mt-2 min-h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4"/>
+        <p className="mt-2 text-xs text-slate-500">การรีเซ็ตรหัสผ่านจะทำให้ Session เดิมของผู้ใช้นี้ออกจากระบบตามกลไกฝั่ง Server</p>
+        <div className="mt-5 grid grid-cols-2 gap-2"><button type="button" disabled={busy} onClick={closePasswordReset} className="min-h-12 rounded-full border border-slate-300 bg-white px-4 text-sm font-bold disabled:opacity-40">ยกเลิก</button><button type="button" disabled={busy||resetPasswordValue.length<10} onClick={submitPasswordReset} className="min-h-12 rounded-full bg-[#d4af37] px-4 text-sm font-bold text-black disabled:opacity-40">{busy?"กำลังบันทึก...":"ยืนยันรีเซ็ต"}</button></div>
+      </ModalFocus>
+    </div>}
 
     {open&&<div className="field-modal-overlay fixed inset-0 z-[80] grid place-items-center bg-black/70 p-4">
       <ModalFocus labelId="user-create-title" onEscape={busy||!!pendingCreate?undefined:()=>setOpen(false)} className="field-modal-panel glass card w-full max-w-md p-6">
