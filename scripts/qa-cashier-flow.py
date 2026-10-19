@@ -76,10 +76,10 @@ with sync_playwright() as p:
     tap(variant.get_by_role("button",name=re.compile(r"หวานน้อย.*50%")).first)
     expect(page.get_by_text("ลูกค้าสั่งครบหรือยัง?",exact=True)).to_be_visible()
     tap(page.get_by_role("button",name="ชำระเงิน",exact=True))
-    payment=page.get_by_role("dialog",name="รับเงิน ฿55")
+    payment=page.get_by_role("dialog",name="ชำระเงิน ฿55")
     expect(payment).to_be_visible()
     expect(payment.get_by_text("รับเงินจากลูกค้า",exact=True)).to_be_visible()
-    tap(payment.get_by_role("button",name="รับพอดี ฿55",exact=True))
+    tap(payment.get_by_role("button",name="รับเงินพอดี ฿55",exact=True))
     # Use 100 to exercise the change path while keeping payment deterministic.
     payment.get_by_role("textbox",name="จำนวนเงินที่รับจากลูกค้า").fill("100")
     nonlocal_taps[0]+=1
