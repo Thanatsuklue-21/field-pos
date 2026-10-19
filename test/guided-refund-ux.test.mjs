@@ -43,6 +43,8 @@ test("app modal motion is lightweight and respects reduced-motion",async()=>{
   assert.match(css,/@keyframes field-sheet-in/);
   assert.match(css,/animation:field-overlay-in var\(--motion-fast\)/);
   assert.match(css,/animation:field-sheet-in var\(--motion-sheet\)/);
+  const sheet=css.slice(css.indexOf("@keyframes field-sheet-in"),css.indexOf(".field-modal-overlay"));
+  assert.doesNotMatch(sheet,/scale\(/);
   assert.match(css,/@media \(prefers-reduced-motion:reduce\)/);
 });
 
