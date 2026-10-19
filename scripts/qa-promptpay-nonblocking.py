@@ -65,7 +65,7 @@ with sync_playwright() as p:
     variant=page.get_by_role("dialog")
     variant.get_by_role("button",name=re.compile(r"หวานน้อย.*50%")).first.click()
     page.get_by_role("button",name="ชำระเงิน",exact=True).click()
-    payment=page.get_by_role("dialog",name="รับเงิน ฿55")
+    payment=page.get_by_role("dialog",name="ชำระเงิน ฿55")
     expect(payment).to_be_visible()
     payment.get_by_role("button",name=re.compile(r"PromptPay")).click()
     expect(payment.get_by_text("กดสร้าง QR ให้ลูกค้า",exact=True)).to_be_visible()
