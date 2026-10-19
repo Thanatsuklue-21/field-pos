@@ -49,6 +49,8 @@ function StockView({session}:{session:Session}){
   const [packageQty,setPackageQty]=useState("1"),[packageUnit,setPackageUnit]=useState("ขวด"),[packSize,setPackSize]=useState(""),[packSizeUnit,setPackSizeUnit]=useState("g"),[presetId,setPresetId]=useState("");
   const [master,setMaster]=useState<MasterDraft|null>(null),[masterMsg,setMasterMsg]=useState(""),[purchaseEdit,setPurchaseEdit]=useState<{ingredient:Ingredient;purchase:Purchase}|null>(null);
   const [countOpen,setCountOpen]=useState(false),[counts,setCounts]=useState<Record<string,CountInput>>({}),[countProposals,setCountProposals]=useState<CountProposal[]>([]);
+  const [ingredientReview,setIngredientReview]=useState<null|{ingredient:Ingredient;action:"archive"|"reset"}>(null);
+  const [countReview,setCountReview]=useState<null|{proposal:CountProposal;approve:boolean;reason:string}>(null);
   const [pendingStockIntent,setPendingStockIntent]=useState<StockWriteIntent|null>(null),[stockRecoveryBlocked,setStockRecoveryBlocked]=useState(false);
   const stockRecoveryRef=useRef(false);
 
@@ -300,14 +302,21 @@ function StockView({session}:{session:Session}){
       if(e.message==="stock_recovery_unavailable")setStockRecoveryBlocked(true);
     }finally{setBusy(false)}
   }
-  async function ingredientAction(x:Ingredient,action:"archive"|"restore"|"reset"){
-    if(action==="archive"&&!window.confirm("เก็บ "+x.name+" ออกจากรายการใช้งาน? ประวัติจะยังอยู่"))return;
-    if(action==="reset"&&!window.confirm("ล้างข้อมูลทดลองของ "+x.name+" ?\nยอดคงเหลือและต้นทุนล่าสุดจะกลับเป็น 0 แต่ประวัติ Audit เดิมยังเก็บไว้"))return;
+  async function performIngredientAction(x:Ingredient,action:"archive"|"restore"|"reset"){
     setBusy(true);setMsg("");
     try{
       await api("/api/stock/ingredients/"+encodeURIComponent(x.id)+"/"+action,{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify(action==="reset"?{confirm:"RESET"}:{})});
-      setMaster(null);setMsg(action==="reset"?"ล้างข้อมูลทดลองแล้ว":action==="archive"?"เก็บรายการแล้ว":"กู้คืนรายการแล้ว");await load();
+      setMaster(null);setIngredientReview(null);setMsg(action==="reset"?"ล้างข้อมูลทดลองแล้ว":action==="archive"?"เก็บรายการแล้ว":"กู้คืนรายการแล้ว");await load();
     }catch(e:any){setMsg(e.message==="ingredient_in_use"?"รายการนี้ยังถูกใช้ในสูตรเมนู ต้องเอาออกจากสูตรก่อนเก็บ":e.message)}finally{setBusy(false)}
+  }
+  async function ingredientAction(x:Ingredient,action:"archive"|"restore"|"reset"){
+    if(action==="restore")return performIngredientAction(x,action);
+    setIngredientReview({ingredient:x,action});
+    setMsg("");
+  }
+  async function confirmIngredientReview(){
+    if(!ingredientReview)return;
+    await performIngredientAction(ingredientReview.ingredient,ingredientReview.action);
   }
 
   function openCount(){
@@ -336,24 +345,26 @@ function StockView({session}:{session:Session}){
       if(e.message==="stock_recovery_unavailable")setStockRecoveryBlocked(true);
     }
   }
-  async function reviewCountProposal(p:CountProposal,approve:boolean){
+  function reviewCountProposal(p:CountProposal,approve:boolean){
     if(!admin)return;
     if(pendingStockIntent||stockRecoveryBlocked){setMsg(stockError(stockRecoveryBlocked?"stock_recovery_unavailable":"pending_stock_write_exists"));return}
+    setCountReview({proposal:p,approve,reason:""});
+    setMsg("");
+  }
+  async function confirmCountReview(){
+    const review=countReview;if(!review)return;
+    if(pendingStockIntent||stockRecoveryBlocked){setMsg(stockError(stockRecoveryBlocked?"stock_recovery_unavailable":"pending_stock_write_exists"));return}
+    if(!review.approve&&review.reason.trim().length<2){setMsg("กรุณาระบุเหตุผลที่ตีกลับอย่างน้อย 2 ตัวอักษร");return}
     try{
-      let operation:StockWriteOperation,body:any;
-      if(approve){
-        const changes=p.adjustments.filter(x=>Math.abs(Number(x.variance||0))>0.000001);
-        if(!window.confirm("อนุมัติผลนับ "+p.id+" ?\nพบส่วนต่าง "+changes.length+" รายการ · ระบบจะปรับ Stock และเขียน Audit Log"))return;
-        operation="cycleCountProposalApprove";
-        body={requestKey:crypto.randomUUID(),proposalId:p.id,confirm:true,note:"Owner reviewed physical count"};
-      }else{
-        const reason=window.prompt("เหตุผลที่ไม่อนุมัติผลนับ")||"";if(reason.trim().length<2)return;
-        operation="cycleCountProposalReject";
-        body={requestKey:crypto.randomUUID(),proposalId:p.id,reason:reason.trim()};
-      }
+      const p=review.proposal;
+      const operation:StockWriteOperation=review.approve?"cycleCountProposalApprove":"cycleCountProposalReject";
+      const body:any=review.approve
+        ?{requestKey:crypto.randomUUID(),proposalId:p.id,confirm:true,note:"Owner reviewed physical count"}
+        :{requestKey:crypto.randomUUID(),proposalId:p.id,reason:review.reason.trim()};
       const intent=prepareStockWriteIntent(session.user.id,operation,p.date||today(),body);
       setPendingStockIntent(intent);
-      await submitStockIntent(intent,false);
+      const result=await submitStockIntent(intent,false);
+      if(result)setCountReview(null);
     }catch(e:any){
       setMsg(stockError(e.message));
       if(e.message==="stock_recovery_unavailable")setStockRecoveryBlocked(true);
@@ -450,6 +461,36 @@ function StockView({session}:{session:Session}){
     {admin&&purchaseHistory.length>0&&<div className="glass card mt-4 overflow-hidden p-2"><div className="p-3"><p className="text-[10px] tracking-[.25em] text-slate-500">PURCHASE HISTORY</p><h2 className="mt-1 text-base">ข้อมูลซื้อที่นำกลับมาใช้ซ้ำได้ / รับเข้า</h2><p className="mt-1 text-xs text-slate-500">ถ้ากรอกวัตถุดิบผิด ให้ใช้ “ยกเลิกรับเข้า” แทนการลบ Stock Master</p></div><div className="soft-scroll max-h-[340px] overflow-auto"><table className="w-full min-w-[780px] text-sm"><thead className="sticky top-0 bg-slate-100 text-left text-[10px] text-slate-500"><tr><th className="p-3">รายการ</th><th>วันที่</th><th>ร้าน/แหล่ง</th><th>จำนวนรับ</th><th>ราคา</th><th>แพ็ก</th><th>สถานะ / จัดการ</th></tr></thead><tbody>{purchaseHistory.map(({ingredient,p})=><tr key={p.id} className={"border-t border-slate-100 "+(p.cancelled?"bg-slate-50 text-slate-400":"")}><td className="p-3"><b className={p.cancelled?"line-through":""}>{ingredient.name}</b>{p.cancelled&&p.cancelReason&&<small className="mt-1 block max-w-[220px]">เหตุผล: {p.cancelReason}</small>}</td><td>{p.purchaseDate}</td><td>{p.supplier||"—"}</td><td>{p.quantityReceived.toLocaleString()} {p.usageUnit}</td><td>฿{compactMoney(p.totalCost)}</td><td>{p.packageQty||"—"} {p.packageUnit}</td><td>{p.cancelled?<span className="rounded-full bg-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600">ยกเลิกแล้ว</span>:<div className="flex gap-2"><button disabled={busy} onClick={()=>setPurchaseEdit({ingredient,purchase:{...p}})} className="rounded-full border px-3 py-1.5 text-xs disabled:opacity-40">แก้</button><button disabled={busy} onClick={()=>cancelPurchase(ingredient,p)} className="rounded-full border border-red-200 px-3 py-1.5 text-xs font-semibold text-red-600 disabled:opacity-40">ยกเลิกรับเข้า</button></div>}</td></tr>)}</tbody></table></div></div>}
 
     <div className="glass card mt-4 overflow-hidden p-2"><div className="p-3"><p className="text-[10px] tracking-[.25em] text-slate-500">RECENT LEDGER</p><h2 className="mt-1 text-base">การเคลื่อนไหว Stock</h2></div><div className="soft-scroll max-h-[260px] overflow-auto"><table className="w-full min-w-[560px] text-sm"><thead className="sticky top-0 bg-slate-100 text-left text-[10px] text-slate-500"><tr><th className="p-3">รายการ</th><th>ประเภท</th><th>จำนวน</th><th>เวลา</th></tr></thead><tbody>{(data?.transactions||[]).map(t=><tr key={t.id} className="border-t border-slate-100"><td className="p-3">{data?.ingredients.find(i=>i.id===t.ingredientId)?.name||t.ingredientId}</td><td>{t.type}</td><td className={t.qtyDelta>=0?"text-emerald-700":"text-red-600"}>{t.qtyDelta>0?"+":""}{t.qtyDelta.toLocaleString()} {t.unit}</td><td className="text-slate-500">{new Date(t.createdAt).toLocaleString("th-TH")}</td></tr>)}</tbody></table></div></div>
+
+    {ingredientReview&&<div className="field-modal-overlay fixed inset-0 z-[82] grid place-items-center bg-black/65">
+      <ModalFocus labelId="stock-ingredient-review-title" onEscape={busy?undefined:()=>setIngredientReview(null)} className="field-modal-panel glass card soft-scroll w-full max-w-lg overflow-auto p-4 sm:p-6">
+        <div className="flex items-start justify-between gap-3">
+          <div><p className="gold text-[10px] font-black tracking-[.22em]">GUIDED STOCK</p><h3 id="stock-ingredient-review-title" className="mt-1 text-xl font-black">{ingredientReview.action==="archive"?"เก็บรายการออกจากงานประจำ":"ล้างข้อมูลทดลอง"}</h3><p className="mt-1 text-xs text-slate-500">{ingredientReview.ingredient.name}</p></div>
+          <button disabled={busy} onClick={()=>setIngredientReview(null)} aria-label="ปิดการตรวจ Stock" className="grid h-11 w-11 shrink-0 place-items-center rounded-xl disabled:opacity-40"><X size={18}/></button>
+        </div>
+        <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+          <div className="flex items-center justify-between gap-3"><span className="text-sm text-slate-600">คงเหลือปัจจุบัน</span><b className="text-xl text-[#765b08]">{ingredientReview.ingredient.qty.toLocaleString()} {ingredientReview.ingredient.unit}</b></div>
+          <p className="mt-2 text-xs text-slate-500">ต้นทุนล่าสุด ฿{ingredientReview.ingredient.unitCost.toFixed(4)}/{ingredientReview.ingredient.unit}</p>
+        </div>
+        {ingredientReview.action==="archive"?<div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900"><b>ผลลัพธ์:</b> ซ่อนจากรายการใช้งาน แต่ประวัติ Stock/Audit ยังคงอยู่ · ถ้ายังถูกใช้ในสูตร ระบบจะไม่อนุญาตให้เก็บ</div>:<div className="mt-3 rounded-2xl border border-red-200 bg-red-50 p-3 text-xs text-red-800"><b>ผลลัพธ์:</b> ยอดคงเหลือและต้นทุนล่าสุดจะกลับเป็น 0 · ใช้สำหรับข้อมูลทดลองเท่านั้น · Audit เดิมยังเก็บไว้</div>}
+        <button disabled={busy} onClick={confirmIngredientReview} className={"mt-4 min-h-12 w-full rounded-2xl px-4 text-sm font-black text-white disabled:opacity-40 "+(ingredientReview.action==="reset"?"bg-red-700":"bg-amber-700")}>{busy?"กำลังบันทึก…":ingredientReview.action==="reset"?"ยืนยันล้างข้อมูลทดลอง":"ยืนยันเก็บรายการ"}</button>
+      </ModalFocus>
+    </div>}
+
+    {countReview&&<div className="field-modal-overlay fixed inset-0 z-[83] grid place-items-center bg-black/65">
+      <ModalFocus labelId="stock-count-review-title" onEscape={busy||!!pendingStockIntent?undefined:()=>setCountReview(null)} className="field-modal-panel glass card soft-scroll w-full max-w-lg overflow-auto p-4 sm:p-6">
+        <div className="flex items-start justify-between gap-3">
+          <div><p className="gold text-[10px] font-black tracking-[.22em]">COUNT REVIEW</p><h3 id="stock-count-review-title" className="mt-1 text-xl font-black">{countReview.approve?"อนุมัติผลนับ Stock":"ตีกลับผลนับ Stock"}</h3><p className="mt-1 text-xs text-slate-500">ผู้ส่ง {countReview.proposal.submittedBy}</p></div>
+          <button disabled={busy||!!pendingStockIntent} onClick={()=>setCountReview(null)} aria-label="ปิดการตรวจผลนับ" className="grid h-11 w-11 shrink-0 place-items-center rounded-xl disabled:opacity-40"><X size={18}/></button>
+        </div>
+        <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-3">
+          <div className="flex items-center justify-between gap-3"><span className="text-sm">รายการมีส่วนต่าง</span><b className="text-xl">{countReview.proposal.adjustments.filter(x=>Math.abs(Number(x.variance||0))>0.000001).length}</b></div>
+          <div className="mt-2 space-y-1 text-xs text-slate-600">{countReview.proposal.adjustments.filter(x=>Math.abs(Number(x.variance||0))>0.000001).slice(0,6).map(x=><div key={x.ingredientId} className="flex justify-between gap-3"><span className="truncate">{x.name}</span><b className={x.variance<0?"text-red-700":"text-emerald-700"}>{x.variance>0?"+":""}{Number(x.variance).toLocaleString()} {x.unit}</b></div>)}</div>
+        </div>
+        {countReview.approve?<div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900"><b>อนุมัติ:</b> Server จะตรวจว่าข้อมูลยังไม่เปลี่ยน แล้วจึงปรับ Stock และเขียน Audit Log · ถ้า Stock เปลี่ยนหลังนับ ระบบจะไม่ปรับยอดเก่า</div>:<div className="mt-3"><label className="text-xs font-semibold text-slate-700">เหตุผลที่ตีกลับ</label><textarea value={countReview.reason} onChange={e=>setCountReview(v=>v?{...v,reason:e.target.value}:v)} rows={3} placeholder="เช่น จำนวนแพ็กไม่ตรง กรุณานับใหม่" className="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm outline-none"/></div>}
+        <button disabled={busy||!!pendingStockIntent||(!countReview.approve&&countReview.reason.trim().length<2)} onClick={confirmCountReview} className={"mt-4 min-h-12 w-full rounded-2xl px-4 text-sm font-black text-white disabled:opacity-40 "+(countReview.approve?"bg-[#1F4D3A]":"bg-red-700")}>{busy?"กำลังตรวจและบันทึก…":countReview.approve?"ยืนยันอนุมัติผลนับ":"ยืนยันตีกลับให้นับใหม่"}</button>
+      </ModalFocus>
+    </div>}
 
     {txOpen&&<div className="field-modal-overlay fixed inset-0 z-[80] grid place-items-center overflow-auto bg-black/70"><ModalFocus labelId="stock-transaction-title" onEscape={busy?undefined:()=>setTxOpen(null)} className="field-modal-panel glass card soft-scroll my-4 w-full max-w-lg overflow-auto p-4 sm:p-6"><div className="flex justify-between"><div><p className="gold text-[10px] tracking-[.25em]">{type}</p><h3 id="stock-transaction-title" className="mt-1 text-lg">{txOpen.name}</h3></div><button disabled={busy} aria-label="ปิดรายการสต๊อก" onClick={()=>setTxOpen(null)} className="grid h-11 w-11 place-items-center rounded-xl disabled:opacity-40"><X/></button></div>
       <div className="mt-4 grid gap-3">{type==="WASTE"?<><label className="text-xs text-slate-500">จำนวนของเสีย ({txOpen.unit})</label><input inputMode="decimal" value={wasteQty} onChange={e=>setWasteQty(e.target.value)} className="rounded-2xl border bg-slate-50 px-4 py-3"/><input value={note} onChange={e=>setNote(e.target.value)} placeholder="เหตุผล / หมายเหตุ" className="rounded-2xl border bg-slate-50 px-4 py-3"/></>:<>
