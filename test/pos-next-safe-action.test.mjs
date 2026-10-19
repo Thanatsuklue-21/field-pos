@@ -59,6 +59,25 @@ test("POS bootstrap gives the operator one safe summary from the same state revi
   assert.equal(res.body.operatorGuide.lowStockMenuCount,1);
 });
 
+test("POS bootstrap keeps FIFO queue summary without allocating and sorting active history",async()=>{
+  const state=doc();
+  state.orders=[
+    {id:"later",queueNo:"Q099",status:"making",time:900,items:[]},
+    {id:"closed",queueNo:"Q000",status:"cancelled",time:1,items:[]},
+    {id:"first",queueNo:"Q010",status:"assigned",time:100,items:[]},
+    {id:"middle",queueNo:"Q020",status:"making",time:300,items:[]}
+  ];
+  const res=await bootstrap(state,{order:true,queue:true});
+  assert.equal(res.body.operatorGuide.queueCount,3);
+  assert.equal(res.body.operatorGuide.firstQueue,"Q010");
+  const api=await read("lib/api.mjs");
+  const start=api.indexOf("const canQueue=mayView");
+  const block=api.slice(start,start+1200);
+  assert.match(block,/for\(const order of Array\.isArray\(doc\.orders\)\?doc\.orders:\[\]\)/);
+  assert.doesNotMatch(block,/activeQueue/);
+  assert.doesNotMatch(block,/\.sort\(/);
+});
+
 test("bootstrap never leaks queue workload to an order-only operator",async()=>{
   const res=await bootstrap(doc(),{order:true});
   assert.equal(res.status,200);
