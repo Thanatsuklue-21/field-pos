@@ -35,7 +35,7 @@ test("normal payment stays compact while split bill keeps line-item controls exp
 
 test("primary POS actions use operator language instead of developer checkout jargon",async()=>{
   const pos=await read("app/pos/page.tsx");
-  assert.match(pos,/aria-label="ชำระเงิน"[^>]*>รับเงิน/);
+  assert.match(pos,/aria-label="ชำระเงิน"[^>]*>ชำระเงิน/);
   assert.ok(pos.includes('"ยืนยันรับเงิน"'));
   assert.ok(pos.includes('"สร้าง QR ให้ลูกค้า"'));
   assert.ok(pos.includes("เลือกระดับหวาน / สูตร"));
