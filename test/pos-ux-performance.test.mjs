@@ -200,8 +200,9 @@ test('order items preserve sale-time price while production queue hides commerci
 
 test('mobile operational pages use compact density while preserving touch actions',async()=>{
   const shell=await read('components/app-shell.tsx'),pos=await read('app/pos/page.tsx'),queue=await read('app/queue/page.tsx'),stock=await read('app/stock/page.tsx'),orders=await read('app/orders/page.tsx');
-  assert.match(shell,/const primaryMobile=\["\/pos","\/queue"\]/);
-  assert.match(shell,/MoreHorizontal/);
+  assert.match(shell,/const primaryMobile=\["\/pos","\/queue","\/orders","\/close"\]/);
+  assert.match(shell,/Settings/);
+  assert.match(shell,/aria-label="เมนูหลังบ้าน"/);
   assert.match(pos,/min-h-\[154px\]/);
   assert.match(pos,/field-pos-mobile-cartbar/);
   assert.doesNotMatch(pos,/bottom-\[70px\]/);
