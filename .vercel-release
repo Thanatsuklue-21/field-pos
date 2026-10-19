@@ -1,3 +1,3 @@
 FIELD POS production release marker
-source_main=191a34c3a10acd804fae7a738e9ee764855e4005
-purpose=release-work-surface-backoffice-separation
+source_main=74558761b392cb3ac11ba19cb8700c809589ac47
+purpose=release-pos-parallel-auth-bootstrap
