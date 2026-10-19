@@ -1,3 +1,3 @@
 FIELD POS production release marker
-source_main=20678c789bb9974808a93626479eafb02ad71d53
-purpose=release-exact-money-offline-safety-clear-checkout
+source_main=191a34c3a10acd804fae7a738e9ee764855e4005
+purpose=release-work-surface-backoffice-separation
