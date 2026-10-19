@@ -3,7 +3,7 @@ import {useEffect,useMemo,useState} from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import {usePathname} from "next/navigation";
-import {BarChart3,ClipboardList,ListOrdered,Package2,Settings,ShoppingBag,Sparkles,Boxes,LayoutDashboard,ReceiptText,Users,BookOpenCheck,CalendarCheck2,DatabaseBackup,UserCog,ScrollText,Calculator,ShieldCheck,MoreHorizontal,X} from "lucide-react";
+import {BarChart3,ClipboardList,ListOrdered,Package2,Settings,ShoppingBag,Sparkles,Boxes,LayoutDashboard,ReceiptText,Users,BookOpenCheck,CalendarCheck2,DatabaseBackup,UserCog,ScrollText,Calculator,ShieldCheck,X} from "lucide-react";
 import {useAppStore} from "@/stores/app-store";
 import {dict} from "@/lib/i18n";
 import NetworkStatus from "@/components/network-status";
