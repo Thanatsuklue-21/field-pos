@@ -35,3 +35,13 @@ test("guided refund still enters the durable order-mutation recovery path",async
   assert.match(block,/riskConfirmed:true/);
   assert.match(block,/manualConfirmed:review\.external\.length>0/);
 });
+
+
+test("app modal motion is lightweight and respects reduced-motion",async()=>{
+  const css=await read("app/globals.css");
+  assert.match(css,/@keyframes field-overlay-in/);
+  assert.match(css,/@keyframes field-sheet-in/);
+  assert.match(css,/animation:field-overlay-in var\(--motion-fast\)/);
+  assert.match(css,/animation:field-sheet-in var\(--motion-sheet\)/);
+  assert.match(css,/@media \(prefers-reduced-motion:reduce\)/);
+});
