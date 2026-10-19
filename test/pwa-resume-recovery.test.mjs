@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {readFile} from "node:fs/promises";
 
-const read=p=>readFile(new URL("../"+p,import.meta.url),"utf8");
+const read=async p=>(await readFile(new URL("../"+p,import.meta.url),"utf8")).replace(/\r\n/g,"\n");
 
 test("PWA resume revalidates network state and restarts durable recovery",async()=>{
   const pos=await read("app/pos/page.tsx");

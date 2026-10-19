@@ -80,6 +80,7 @@ test('unreadable outbox produces neither a zero summary nor sync mutations',asyn
     replace:source=>source
       .replace(/^import .*api-client.*;$/m,'export const mutations=[]; const api=async()=>{mutations.push("checkout");return {}};')
       .replace(/^import .*offline-db.*;$/m,'const offlineCashList=async()=>{throw new Error("offline_storage_unavailable")}; const offlineCashPatch=async()=>mutations.push("patch"); const offlineCashDelete=async()=>mutations.push("delete"); const offlineCashPut=async()=>mutations.push("put");')
+      .replace(/^import .*money.mjs.*;$/m,'const sumMoney=()=>{throw new Error("unexpected_money_read")};')
   });
   await assert.rejects(api.getOfflineCashSummary(),{message:'offline_storage_unavailable'});
   await assert.rejects(api.syncOfflineCashSales({user:{id:'owner'},csrf:'test'}),{message:'offline_storage_unavailable'});

@@ -8,9 +8,9 @@ test("POS teaches the core sale flow with visible 1-2-3 guidance",async()=>{
   const pos=await read("app/pos/page.tsx");
   assert.ok(pos.includes('const orderStep=payOpen?3:cart.items.length?2:1'));
   assert.ok(pos.includes('["1","เลือกเมนู"]'));
-  assert.ok(pos.includes('["2","เพิ่ม / ตรวจ"]'));
-  assert.ok(pos.includes('["3","รับเงิน"]'));
-  assert.ok(pos.includes("แตะเมนู → เพิ่ม / ตรวจ → รับเงิน"));
+  assert.ok(pos.includes('["2","ตรวจออเดอร์"]'));
+  assert.ok(pos.includes('["3","ชำระเงิน"]'));
+  assert.ok(pos.includes("แตะเมนู → ตรวจออเดอร์ → ชำระเงิน"));
 });
 
 test("single-variant products add directly while multi-variant drinks still ask for a choice",async()=>{
@@ -35,7 +35,7 @@ test("normal payment stays compact while split bill keeps line-item controls exp
 
 test("primary POS actions use operator language instead of developer checkout jargon",async()=>{
   const pos=await read("app/pos/page.tsx");
-  assert.match(pos,/aria-label="ชำระเงิน"[^>]*>รับเงิน/);
+  assert.match(pos,/aria-label="ชำระเงิน"[^>]*>ชำระเงิน/);
   assert.ok(pos.includes('"ยืนยันรับเงิน"'));
   assert.ok(pos.includes('"สร้าง QR ให้ลูกค้า"'));
   assert.ok(pos.includes("เลือกระดับหวาน / สูตร"));
@@ -49,7 +49,7 @@ test("cash payment provides common one-tap tender amounts",async()=>{
   assert.ok(pos.includes("const quickCashAmounts="));
   assert.ok(pos.includes("quickCashAmounts.map"));
   assert.ok(pos.includes("setReceived(String(amount))"));
-  assert.ok(pos.includes("รับพอดี ฿{netPayable.toFixed(0)}"));
+  assert.ok(pos.includes("รับเงินพอดี ฿{netPayable.toFixed(0)}"));
 });
 
 test("menu rendering and touch ergonomics stay mobile friendly",async()=>{

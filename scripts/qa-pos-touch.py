@@ -59,7 +59,7 @@ with sync_playwright() as p:
                 assert 0<=lower_gap<=40, {'viewport':f'{width}x{height}','tabletCartbar':cart_box,'lowerGap':lower_gap}
         page.get_by_role('button',name=re.compile('เมนูทดสอบ')).first.click()
         page.get_by_role('button',name='ชำระเงิน',exact=True).click()
-        dialog=page.get_by_role('dialog',name=re.compile('รับเงิน ฿'))
+        dialog=page.get_by_role('dialog',name=re.compile('ชำระเงิน ฿'))
         expect(dialog).to_be_visible()
         dialog.get_by_role('button',name='ดูรายการ',exact=True).click()
         increase=dialog.get_by_role('button',name='เพิ่มจำนวน เมนูทดสอบ',exact=True)
@@ -68,7 +68,7 @@ with sync_playwright() as p:
             box=control.bounding_box()
             assert box['width']>=44 and box['height']>=44, box
         increase.click()
-        expect(page.get_by_role('heading',name='รับเงิน ฿110',exact=True)).to_be_visible()
+        expect(page.get_by_role('heading',name='ชำระเงิน ฿110',exact=True)).to_be_visible()
         order_options=dialog.get_by_role('button',name='ตัวเลือกบิล / สมาชิก',exact=True)
         box=order_options.bounding_box()
         assert box['width']>=44 and box['height']>=44, box
@@ -80,13 +80,13 @@ with sync_playwright() as p:
             box=control.bounding_box()
             assert box['width']>=44 and box['height']>=44, box
         splitPlus.click()
-        expect(page.get_by_role('heading',name='รับเงิน ฿55',exact=True)).to_be_visible()
+        expect(page.get_by_role('heading',name='ชำระเงิน ฿55',exact=True)).to_be_visible()
         splitMinus.click()
-        expect(page.get_by_role('heading',name='รับเงิน ฿0',exact=True)).to_be_visible()
+        expect(page.get_by_role('heading',name='ชำระเงิน ฿0',exact=True)).to_be_visible()
         dialog.get_by_role('button',name='ยกเลิกแยกบิล',exact=True).click()
         dialog.get_by_role('button',name='ดูรายการ',exact=True).click()
         decrease.click()
-        expect(page.get_by_role('heading',name='รับเงิน ฿55',exact=True)).to_be_visible()
+        expect(page.get_by_role('heading',name='ชำระเงิน ฿55',exact=True)).to_be_visible()
         dialog.get_by_role('button',name=re.compile('พอดี')).click()
         expect(dialog.get_by_role('textbox',name='จำนวนเงินที่รับจากลูกค้า')).to_have_value('55')
         expect(dialog.get_by_role('button',name='ยืนยันรับเงิน',exact=True)).to_be_enabled()
@@ -119,7 +119,7 @@ with sync_playwright() as p:
             assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
         page.screenshot(path=str(output/f'touch-{width}.png'),full_page=True)
         dialog.get_by_role('button',name='กลับไปเลือกเมนู',exact=True).click()
-        expect(page.get_by_role('dialog',name='รับเงิน ฿55',exact=True)).to_have_count(0)
+        expect(page.get_by_role('dialog',name='ชำระเงิน ฿55',exact=True)).to_have_count(0)
         assert not writes, writes
         assert not errors, errors
         results.append({'viewport':f'{width}x{height}','touch44':True,'navTouch44':True,'fixedActionOverlapSafe':True,'quantityUpdates':True,'cashUnderpaymentBlocked':True,'rotationSafe':True,'keyboardViewportSafe':True,'noFinancialWrites':True})

@@ -1,5 +1,6 @@
 import {api,type Bootstrap,type Session} from "@/lib/api-client";
 import {offlineCashDelete,offlineCashList,offlineCashPatch,offlineCashPut,type OfflineCashRecord} from "@/lib/offline-db";
+import {sumMoney} from "@/lib/domain/money.mjs";
 
 type CartLine={id:string;variant:string;qty:number};
 export type OfflineCashSummary={pending:number;needsReview:number;total:number};
@@ -70,15 +71,31 @@ export async function syncOfflineCashSales(session:Session):Promise<OfflineCashS
     if(typeof navigator!=="undefined"&&!navigator.onLine)break;
     await offlineCashPatch(row.requestKey,{attempts:Number(row.attempts||0)+1,lastAttemptAt:Date.now(),lastError:undefined});
     try{
-      await api<any>("/api/pos/checkout",{
+      const response=await api<any>("/api/pos/checkout",{
         method:"POST",
         headers:{"X-CSRF-Token":session.csrf},
         body:JSON.stringify(row.body)
       });
+      const amount=(value:unknown)=>typeof value==="number"&&Number.isFinite(value)&&value>=0;
+      const total=Number(row.body.total),received=Number(row.body.received);
+      // HTTP success alone does not prove this fulfilled cash bill was committed.
+      // Retain the original outbox identity on an incomplete or mismatched ACK.
+      const confirmed=response?.ok===true&&response.offlineFulfilled===true&&response.pager===0&&
+        typeof response.orderId==="string"&&response.orderId.trim().length>0&&
+        typeof response.queueNo==="string"&&response.queueNo.trim().length>0&&
+        Array.isArray(response.saleIds)&&response.saleIds.length>0&&response.saleIds.every((id:unknown)=>typeof id==="string"&&id.trim().length>0)&&
+        amount(total)&&amount(received)&&received>=total&&
+        [response.total,response.received,response.change].every(amount)&&
+        response.total===sumMoney([total])&&response.received===sumMoney([received])&&response.change===sumMoney([received,-total]);
+      if(!confirmed)throw Object.assign(new Error("offline_sync_unconfirmed"),{status:0});
       await offlineCashDelete(row.requestKey);
       synced++;
     }catch(error:any){
       const code=String(error?.message||"sync_failed");
+      if(code==="offline_sync_unconfirmed"){
+        await offlineCashPatch(row.requestKey,{lastError:code,lastAttemptAt:Date.now()});
+        break;
+      }
       if(["network_unavailable","offline_write_blocked"].includes(code)||!error?.status)break;
       if(Number(error.status)>=400&&Number(error.status)<500){
         await offlineCashPatch(row.requestKey,{status:"needs_review",lastError:code,lastAttemptAt:Date.now()});

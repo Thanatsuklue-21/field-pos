@@ -52,7 +52,7 @@ with sync_playwright() as p:
         expect(page.get_by_text('เครื่องนี้ไม่สามารถเปิดพื้นที่เก็บ Offline ได้ กรุณาเชื่อมต่ออินเทอร์เน็ตก่อนขาย',exact=True)).to_be_visible()
         assert not writes, writes
         expect(page.get_by_role('button',name='รับออเดอร์ถัดไป',exact=True)).to_have_count(0)
-        payment=page.locator('div.fixed.inset-0').filter(has=page.get_by_role('heading',name='รับเงิน ฿55',exact=True))
+        payment=page.locator('div.fixed.inset-0').filter(has=page.get_by_role('heading',name='ชำระเงิน ฿55',exact=True))
         payment.locator('button').first.click()
         # Restore real IndexedDB, then perform a read-only retry while still offline.
         page.evaluate('indexedDB.open=window.__fieldOpen')
