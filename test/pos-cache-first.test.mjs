@@ -21,3 +21,16 @@ test('cache-first bootstrap adds no client dependency',async()=>{
   assert.equal(pkg.dependencies.dexie,undefined);
   assert.ok(pkg.dependencies.zustand);
 });
+
+
+test('POS starts safe bootstrap preloading through AuthGate before waiting for the session',async()=>{
+  const gate=await read('components/auth-gate.tsx');
+  const pos=await read('app/pos/page.tsx');
+  assert.match(pos,/<AuthGate preloadPath="\/api\/pos\/bootstrap">/);
+  assert.match(gate,/preloadPath\?:string/);
+  assert.match(gate,/preloadSafeGet/);
+  const preload=gate.indexOf('preloadSafeGet(preloadPath)');
+  const session=gate.indexOf('getSessionCached()');
+  assert.ok(preload>=0&&session>preload,'bootstrap preload must start before session request');
+  assert.match(gate,/if\(loading\)return/);
+});

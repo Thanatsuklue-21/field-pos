@@ -102,6 +102,11 @@ async function executeApi<T>(path:string,init:RequestInit,method:string){
   }
 }
 
+export function preloadSafeGet(path:string){
+  if(!SAFE_GET_CACHE.has(path))return Promise.resolve(undefined);
+  return api(path).then(()=>undefined).catch(()=>undefined);
+}
+
 export async function api<T>(path:string,init:RequestInit={}){
   const method=String(init.method||"GET").toUpperCase();
   if(method!=="GET"&&typeof navigator!=="undefined"&&!navigator.onLine)throw Object.assign(new Error("offline_write_blocked"),{status:0});

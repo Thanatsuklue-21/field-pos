@@ -80,3 +80,16 @@ test('unavailable IndexedDB preserves the network error instead of leaking a sto
   t.mock.method(globalThis,'fetch',async()=>{throw new TypeError('fetch failed')});
   await assert.rejects(api('/api/pos/bootstrap'),error=>error.message==='network_unavailable'&&error.status===0&&error.cause.message==='fetch failed');
 });
+
+
+test('preloading safe bootstrap coalesces with the first POS bootstrap read',async t=>{
+  const {api,preloadSafeGet}=await client(t);
+  const pending=[];
+  t.mock.method(globalThis,'fetch',(_path)=>new Promise(resolve=>pending.push(()=>resolve(Response.json({revision:1,menu:[],availabilityStock:{},settings:{}})))));
+  const preload=preloadSafeGet('/api/pos/bootstrap');
+  const read=api('/api/pos/bootstrap');
+  assert.equal(pending.length,1);
+  pending[0]();
+  await preload;
+  assert.equal((await read).revision,1);
+});
