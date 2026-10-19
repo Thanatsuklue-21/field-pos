@@ -64,19 +64,20 @@ test("menu rendering and touch ergonomics stay mobile friendly",async()=>{
   assert.ok(css.includes("input,select,textarea{font-size:16px}"));
 });
 
-test("navigation keeps sale and production primary while secondary work stays one tap away",async()=>{
+test("navigation clearly separates daily work from back office",async()=>{
   const shell=await read("components/app-shell.tsx");
-  assert.ok(shell.includes('const focusPrimary=["/pos","/queue","/orders","/stock","/close"]'));
-  assert.ok(shell.includes('const primaryMobile=["/pos","/queue"]'));
-  assert.ok(shell.includes('const mobileMorePriority=["/orders","/stock","/expenses","/close","/settings"]'));
+  assert.ok(shell.includes('const workRoutes=["/pos","/queue","/orders","/close"]'));
+  assert.ok(shell.includes('const primaryMobile=["/pos","/queue","/close"]'));
+  assert.ok(shell.includes('const backOfficePriority=["/dashboard","/control","/products","/stock","/recipes","/costs","/expenses","/customers","/reports","/backup","/users","/audit","/settings"]'));
+  assert.ok(shell.includes("หน้าทำงาน · งานประจำวัน"));
+  assert.ok(shell.includes("หลังบ้าน · เจ้าของร้าน / จัดการระบบ"));
+  assert.ok(shell.includes('aria-label="เปิดหรือปิดเมนูหลังบ้าน"'));
+  assert.ok(shell.includes('aria-label="เมนูหลังบ้าน"'));
+  assert.ok(shell.includes("โซนนี้เป็นงานจัดการร้าน ไม่ใช่ขั้นตอนรับออเดอร์ประจำวัน"));
   assert.ok(shell.includes("desktopPrimary"));
   assert.ok(shell.includes("desktopManage"));
-  assert.ok(shell.includes('aria-controls="field-desktop-manage"'));
-  assert.ok(shell.includes('aria-label="จัดการร้านและตั้งค่า"'));
-  assert.ok(shell.includes("manageOpen&&"));
   assert.ok(shell.includes("mobilePrimary"));
   assert.ok(shell.includes("mobileMore"));
-  assert.ok(shell.includes("MoreHorizontal"));
   assert.ok(shell.includes('aria-controls="field-mobile-more"'));
   assert.ok(shell.includes("max-h-[calc(100dvh-110px)] overflow-y-auto overscroll-contain"));
   assert.ok(shell.includes("overflow-hidden rounded-[20px]"));
