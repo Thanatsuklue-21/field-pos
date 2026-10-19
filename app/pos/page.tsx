@@ -24,7 +24,7 @@ const PosDailyWorkspace=dynamic(loadPosDailyWorkspace,{
   loading:()=> <div role="status" aria-live="polite" className="fixed inset-0 z-[90] grid place-items-center bg-black/20"><div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 shadow-xl">กำลังเปิดงานร้าน…</div></div>
 });
 
-export default function Pos(){return <AuthGate>{s=><PosView session={s}/>}</AuthGate>}
+export default function Pos(){return <AuthGate preloadPath="/api/pos/bootstrap">{s=><PosView session={s}/>}</AuthGate>}
 
 function localDate(){
   return new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Bangkok",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date());
