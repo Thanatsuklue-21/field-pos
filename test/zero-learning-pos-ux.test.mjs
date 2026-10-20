@@ -66,9 +66,9 @@ test("menu rendering and touch ergonomics stay mobile friendly",async()=>{
 
 test("navigation clearly separates daily work from back office",async()=>{
   const shell=await read("components/app-shell.tsx");
-  assert.ok(shell.includes('const workRoutes=["/pos","/queue","/orders","/close"]'));
-  assert.ok(shell.includes('const primaryMobile=["/pos","/queue","/close"]'));
-  assert.ok(shell.includes('const backOfficePriority=["/dashboard","/control","/products","/stock","/recipes","/costs","/expenses","/customers","/reports","/backup","/users","/audit","/settings"]'));
+  assert.ok(shell.includes('const workRoutes=["/pos","/queue","/orders"]'));
+  assert.ok(shell.includes('const primaryMobile=["/pos","/queue","/orders"]'));
+  assert.ok(shell.includes('const backOfficePriority=["/dashboard","/control","/products","/stock","/recipes","/costs","/expenses","/close","/customers","/reports","/settlements","/backup","/users","/audit","/settings"]'));
   assert.ok(shell.includes("หน้าทำงาน · งานประจำวัน"));
   assert.ok(shell.includes("หลังบ้าน · เจ้าของร้าน / จัดการระบบ"));
   assert.ok(shell.includes('aria-label="เปิดหรือปิดเมนูหลังบ้าน"'));

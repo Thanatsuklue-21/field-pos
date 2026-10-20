@@ -200,7 +200,7 @@ test('order items preserve sale-time price while production queue hides commerci
 
 test('mobile operational pages use compact density while preserving touch actions',async()=>{
   const shell=await read('components/app-shell.tsx'),pos=await read('app/pos/page.tsx'),queue=await read('app/queue/page.tsx'),stock=await read('app/stock/page.tsx'),orders=await read('app/orders/page.tsx');
-  assert.match(shell,/const primaryMobile=\["\/pos","\/queue","\/close"\]/);
+  assert.match(shell,/const primaryMobile=\["\/pos","\/queue","\/orders"\]/);
   assert.match(shell,/Settings/);
   assert.match(shell,/aria-label="เมนูหลังบ้าน"/);
   assert.match(pos,/min-h-\[154px\]/);
@@ -369,9 +369,9 @@ test('payment success warms queue data without prefetching the obsolete queue ro
 
 test('solo operator daily flow keeps work routes separate from back office',async()=>{
   const shell=await read('components/app-shell.tsx'),pos=await read('app/pos/page.tsx'),queue=await read('app/queue/page.tsx'),close=await read('app/close/page.tsx');
-  assert.match(shell,/const workRoutes=\["\/pos","\/queue","\/orders","\/close"\]/);
-  assert.match(shell,/const primaryMobile=\["\/pos","\/queue","\/close"\]/);
-  assert.match(shell,/const backOfficePriority=\["\/dashboard","\/control","\/products","\/stock","\/recipes","\/costs","\/expenses","\/customers","\/reports","\/backup","\/users","\/audit","\/settings"\]/);
+  assert.match(shell,/const workRoutes=\["\/pos","\/queue","\/orders"\]/);
+  assert.match(shell,/const primaryMobile=\["\/pos","\/queue","\/orders"\]/);
+  assert.match(shell,/const backOfficePriority=\["\/dashboard","\/control","\/products","\/stock","\/recipes","\/costs","\/expenses","\/close","\/customers","\/reports","\/settlements","\/backup","\/users","\/audit","\/settings"\]/);
   assert.match(shell,/หน้าทำงาน · งานประจำวัน/);
   assert.match(shell,/หลังบ้าน/);
   assert.match(pos,/"ทำคิว "\+lastSale\.queueNo\+" ต่อเลย"/);
