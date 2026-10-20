@@ -70,8 +70,8 @@ test("navigation clearly separates daily work from back office",async()=>{
   assert.ok(shell.includes('const primaryMobile=["/pos","/queue","/orders"]'));
   assert.ok(shell.includes('const backOfficePriority=["/dashboard","/control","/products","/stock","/recipes","/costs","/expenses","/close","/customers","/reports","/settlements","/backup","/users","/audit","/settings"]'));
   assert.ok(shell.includes("หน้าทำงาน · งานประจำวัน"));
-  assert.ok(shell.includes("หลังบ้าน · เจ้าของร้าน / จัดการระบบ"));
-  assert.ok(shell.includes('aria-label="เปิดหรือปิดเมนูหลังบ้าน"'));
+  assert.ok(shell.includes("BACK_OFFICE_GROUPS"));
+  assert.ok(shell.includes('currentMode==="back"&&desktopManage.length>0'));
   assert.ok(shell.includes('aria-label="เมนูหลังบ้าน"'));
   assert.ok(shell.includes("โซนนี้เป็นงานจัดการร้าน ไม่ใช่ขั้นตอนรับออเดอร์ประจำวัน"));
   assert.ok(shell.includes("desktopPrimary"));

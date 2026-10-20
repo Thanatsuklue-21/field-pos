@@ -16,7 +16,7 @@ export default function AiSupervisor({session,initialRequest}:{session:Session|n
     try{setSnap(await api<Snapshot>("/api/ai/supervisor"));setError("")}
     catch(e:any){if(e?.message!=="network_unavailable")setError("AI Supervisor โหลดสถานะไม่ได้")}
   }
-  useEffect(()=>{if(!session||path==="/pos")return;load();const id=setInterval(()=>{if(document.visibilityState==="visible")load()},30000);return()=>clearInterval(id)},[session?.user.id,path]);
+  useEffect(()=>{if(!session||!open)return;load();const id=setInterval(()=>{if(document.visibilityState==="visible")load()},30000);return()=>clearInterval(id)},[session?.user.id,open]);
   const badge=useMemo(()=>snap?.alerts?.filter(x=>x.severity==="critical"||x.severity==="high").length||0,[snap]);
   async function ask(text=message){
     if(!session||!text.trim())return;
@@ -28,10 +28,9 @@ export default function AiSupervisor({session,initialRequest}:{session:Session|n
     finally{setBusy(false)}
   }
   useEffect(()=>{
-    if(!session||!initialRequest?.message)return;
+    if(!session||!initialRequest)return;
     setOpen(true);
-    setMessage(initialRequest.message);
-    ask(initialRequest.message);
+    if(initialRequest.message){setMessage(initialRequest.message);ask(initialRequest.message)}
   },[initialRequest?.id,session?.user.id]);
 
   useEffect(()=>{
@@ -49,9 +48,6 @@ export default function AiSupervisor({session,initialRequest}:{session:Session|n
   if(!session)return null;
   const critical=snap?.health==="critical",review=snap?.health==="review";
   return <>
-    <button type="button" onClick={()=>setOpen(v=>!v)} aria-label="FIELD AI Supervisor" className={"fixed bottom-[78px] right-3 z-[70] h-12 w-12 place-items-center rounded-full border shadow-lg md:bottom-6 md:right-6 "+(path==="/pos"?"hidden ":"grid ")+(critical?"border-red-300 bg-red-50 text-red-700":review?"border-amber-300 bg-amber-50 text-amber-700":"border-emerald-200 bg-white text-emerald-700")}>
-      <Bot size={21}/>{badge>0&&<span className="absolute -right-1 -top-1 min-w-5 rounded-full bg-red-600 px-1.5 py-0.5 text-center text-[10px] font-bold text-white">{badge}</span>}
-    </button>
     {open&&<div className="field-modal-overlay fixed inset-0 z-[120] bg-slate-950/20 backdrop-blur-[2px] md:flex md:items-end md:justify-end" onClick={e=>{if(e.currentTarget===e.target)setOpen(false)}}>
       <ModalFocus labelId="ai-supervisor-title" onEscape={()=>setOpen(false)} className="field-modal-panel ml-auto flex h-[min(760px,calc(100dvh-1rem))] w-full max-w-[430px] flex-col overflow-hidden rounded-[28px] border border-slate-200 bg-[#f8fafc] shadow-2xl">
         <header className="flex items-center justify-between border-b border-slate-200 bg-white px-4 py-3">
