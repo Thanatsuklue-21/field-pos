@@ -2,6 +2,7 @@
 
 import {useEffect,useRef,useState} from "react";
 import {Plus,ShieldCheck,UserCog,X} from "lucide-react";
+import {PERMISSION_INFO,STAFF_PRESETS} from "@/lib/work-modes.mjs";
 import AuthGate from "@/components/auth-gate";
 import ModalFocus from "@/components/modal-focus";
 import {api,type Session} from "@/lib/api-client";
@@ -30,7 +31,7 @@ function View({session}:{session:Session}){
     const map:Record<string,string>={
       username_exists:"Username นี้มีอยู่แล้ว",
       invalid_user:"ข้อมูลผู้ใช้หรือรหัสผ่านไม่ถูกต้อง",
-      staff_needs_order_or_queue:"Staff ต้องมีสิทธิ์ Order หรือ Queue อย่างน้อย 1 อย่าง",
+      staff_needs_order_or_queue:"พนักงานต้องรับออเดอร์หรือทำคิวได้อย่างน้อยหนึ่งงาน",
       invalid_request_key:"ระบบสร้างรหัสป้องกัน User ซ้ำไม่สำเร็จ",
       pending_user_create_exists:"มีคำขอสร้าง User ก่อนหน้าที่ยังไม่ทราบผล · ต้องตรวจคำขอเดิมก่อน",
       user_create_password_required:"กรอกรหัสผ่านเดิมเพื่อยืนยันคำขอสร้าง User ที่ค้างอยู่",
@@ -92,7 +93,7 @@ function View({session}:{session:Session}){
     return()=>{disposed=true;window.removeEventListener("online",recover);window.removeEventListener("focus",recover);document.removeEventListener("visibilitychange",visible)};
   },[session.user.id,session.csrf,session.user.role]);
 
-  if(session.user.role!=="admin")return <div className="grid h-full place-items-center text-slate-500">Admin permission required</div>;
+  if(session.user.role!=="admin")return <div className="grid h-full place-items-center text-slate-500">เฉพาะเจ้าของร้านหรือผู้ดูแลระบบ</div>;
 
   async function create(){
     if(role==="staff"&&!permissions.order&&!permissions.queue){setMsg(userError("staff_needs_order_or_queue"));return}
@@ -116,8 +117,8 @@ function View({session}:{session:Session}){
 
   async function patch(id:string,body:any){
     setBusy(true);setMsg("");
-    try{await api("/api/admin/users/"+id,{method:"PATCH",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify(body)});await load()}
-    catch(e:any){setMsg(operatorErrorFallback(e?.message,"ผู้ใช้"))}
+    try{await api("/api/admin/users/"+id,{method:"PATCH",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify(body)});await load().catch(()=>{});return true}
+    catch(e:any){setMsg(operatorErrorFallback(e?.message,"ผู้ใช้"));return false}
     finally{setBusy(false)}
   }
   function openPasswordReset(user:User){setResetUser(user);setResetPasswordValue("");setMsg("")}
@@ -125,14 +126,15 @@ function View({session}:{session:Session}){
   async function submitPasswordReset(){
     if(!resetUser||resetPasswordValue.length<10)return;
     const id=resetUser.id;
-    await patch(id,{password:resetPasswordValue});
+    const updated=await patch(id,{password:resetPasswordValue});
+    if(!updated)return;
     setResetUser(null);setResetPasswordValue("");setMsg("รีเซ็ตรหัสผ่านแล้ว · "+resetUser.username);
   }
 
   return <section className="soft-scroll h-full overflow-auto p-5 md:p-7">
     <header className="flex items-end justify-between gap-4">
-      <div><p className="gold m-0 text-[10px] font-bold tracking-[.3em]">ACCESS CONTROL</p><h1 className="mt-1 text-2xl font-semibold">USERS &amp; PERMISSIONS</h1></div>
-      <button disabled={busy||!!pendingCreate||createRecoveryBlocked} onClick={()=>setOpen(true)} className="flex min-h-11 items-center gap-2 rounded-full bg-[#d4af37] px-4 text-sm font-bold text-black disabled:opacity-40"><Plus size={16}/>ADD USER</button>
+      <div><p className="gold m-0 text-[10px] font-bold tracking-[.3em]">จัดทีมและสิทธิ์การทำงาน</p><h1 className="mt-1 text-2xl font-semibold">ผู้ใช้และหน้าที่</h1></div>
+      <button disabled={busy||!!pendingCreate||createRecoveryBlocked} onClick={()=>setOpen(true)} className="flex min-h-11 items-center gap-2 rounded-full bg-[#d4af37] px-4 text-sm font-bold text-black disabled:opacity-40"><Plus size={16}/>เพิ่มผู้ใช้</button>
     </header>
 
     {(pendingCreate||createRecoveryBlocked)&&<div role="status" aria-live="polite" aria-atomic="true" className="mt-4 rounded-2xl border-2 border-amber-300 bg-amber-50 p-3 text-xs text-amber-950">
@@ -142,33 +144,35 @@ function View({session}:{session:Session}){
     {msg&&<div className="mt-4 rounded-2xl border border-slate-200 p-3 text-sm">{msg}</div>}
 
     <div className="mt-5 grid gap-3 lg:grid-cols-2">{rows.map(u=><div key={u.id} className="glass card p-5">
-      <div className="flex items-start justify-between gap-3"><div><div className="flex items-center gap-2"><UserCog size={17} className="gold"/><b>{u.username}</b></div><small className="mt-1 block text-slate-500">{u.role.toUpperCase()} · {u.active?"ACTIVE":"DISABLED"}</small></div>
-      {u.id!==session.user.id&&<button disabled={busy} onClick={()=>patch(u.id,{active:!u.active})} className={"min-h-11 rounded-full border px-3 text-xs "+(u.active?"border-red-400/30 text-red-600":"border-emerald-400/30 text-emerald-700")}>{u.active?"DISABLE":"ENABLE"}</button>}</div>
-      {u.role==="staff"&&<div className="mt-4 grid grid-cols-2 gap-2">{keys.map(k=><label key={k} className="flex min-h-11 items-center justify-between rounded-2xl border border-slate-100 bg-slate-50 px-3 py-2 text-xs uppercase"><span>{k}</span><input type="checkbox" checked={!!u.permissions?.[k]} onChange={e=>patch(u.id,{permissions:{...u.permissions,[k]:e.target.checked}})}/></label>)}</div>}
-      <button disabled={busy} onClick={()=>openPasswordReset(u)} className="mt-4 min-h-11 w-full rounded-full border border-slate-200 text-xs">RESET PASSWORD</button>
+      <div className="flex items-start justify-between gap-3"><div><div className="flex items-center gap-2"><UserCog size={17} className="gold"/><b>{u.username}</b></div><small className="mt-1 block text-slate-500">{u.role==="admin"?"เจ้าของร้าน / ผู้ดูแลระบบ":"พนักงาน"} · {u.active?"ใช้งานอยู่":"พักการใช้งาน"}</small></div>
+      {u.id!==session.user.id&&<button disabled={busy} onClick={()=>patch(u.id,{active:!u.active})} className={"min-h-11 rounded-full border px-3 text-xs "+(u.active?"border-red-400/30 text-red-600":"border-emerald-400/30 text-emerald-700")}>{u.active?"พักการใช้งาน":"เปิดใช้งาน"}</button>}</div>
+      {u.role==="staff"&&<div className="mt-4 grid grid-cols-2 gap-2">{keys.map(k=><label key={k} className="flex min-h-11 items-center justify-between rounded-2xl border border-slate-100 bg-slate-50 px-3 py-2 text-xs uppercase"><span><b className="block">{PERMISSION_INFO[k].label}</b><small className="mt-1 block font-normal normal-case text-slate-600">{PERMISSION_INFO[k].description}</small></span><input disabled={busy} aria-label={PERMISSION_INFO[k].label+" ของ "+u.username} type="checkbox" checked={!!u.permissions?.[k]} onChange={e=>patch(u.id,{permissions:{...u.permissions,[k]:e.target.checked}})}/></label>)}</div>}
+      <button disabled={busy} onClick={()=>openPasswordReset(u)} className="mt-4 min-h-11 w-full rounded-full border border-slate-200 text-xs">รีเซ็ตรหัสผ่าน</button>
     </div>)}</div>
 
     {resetUser&&<div className="field-modal-overlay fixed inset-0 z-[82] grid place-items-center bg-black/70 p-4">
-      <ModalFocus labelId="user-reset-password-title" onEscape={busy?undefined:closePasswordReset} className="field-modal-panel glass card w-full max-w-md p-6">
+      <ModalFocus labelId="user-reset-password-title" onEscape={busy?undefined:closePasswordReset} className="field-modal-panel glass card soft-scroll min-w-0 w-full max-w-md overflow-auto p-4 sm:p-6">
         <div className="flex items-start justify-between gap-3"><div><p className="gold text-[10px] tracking-[.25em]">SECURITY</p><h3 id="user-reset-password-title" className="mt-1 text-xl">รีเซ็ตรหัสผ่าน</h3><p className="mt-1 text-xs text-slate-500">{resetUser.username} · ใช้รหัสผ่านใหม่อย่างน้อย 10 ตัวอักษร</p></div><button type="button" disabled={busy} onClick={closePasswordReset} aria-label="ปิดการรีเซ็ตรหัสผ่าน" className="grid h-11 w-11 shrink-0 place-items-center rounded-xl disabled:opacity-40"><X size={18}/></button></div>
         <label className="mt-5 block text-xs font-semibold text-slate-600" htmlFor="field-user-reset-password">รหัสผ่านใหม่</label>
         <input id="field-user-reset-password" type="password" autoComplete="new-password" value={resetPasswordValue} onChange={e=>setResetPasswordValue(e.target.value)} placeholder="อย่างน้อย 10 ตัวอักษร" className="mt-2 min-h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4"/>
+        {msg&&<p role="alert" className="mt-3 rounded-xl bg-red-50 p-3 text-sm text-red-800">{msg}</p>}
         <p className="mt-2 text-xs text-slate-500">การรีเซ็ตรหัสผ่านจะทำให้ Session เดิมของผู้ใช้นี้ออกจากระบบตามกลไกฝั่ง Server</p>
         <div className="mt-5 grid grid-cols-2 gap-2"><button type="button" disabled={busy} onClick={closePasswordReset} className="min-h-12 rounded-full border border-slate-300 bg-white px-4 text-sm font-bold disabled:opacity-40">ยกเลิก</button><button type="button" disabled={busy||resetPasswordValue.length<10} onClick={submitPasswordReset} className="min-h-12 rounded-full bg-[#d4af37] px-4 text-sm font-bold text-black disabled:opacity-40">{busy?"กำลังบันทึก...":"ยืนยันรีเซ็ต"}</button></div>
       </ModalFocus>
     </div>}
 
     {open&&<div className="field-modal-overlay fixed inset-0 z-[80] grid place-items-center bg-black/70 p-4">
-      <ModalFocus labelId="user-create-title" onEscape={busy||!!pendingCreate?undefined:()=>setOpen(false)} className="field-modal-panel glass card w-full max-w-md p-6">
-        <div className="flex justify-between"><div><p className="gold text-[10px] tracking-[.25em]">NEW ACCOUNT</p><h3 id="user-create-title" className="mt-1 text-xl">Create User</h3></div><button disabled={busy||!!pendingCreate} aria-label="ปิดการสร้างผู้ใช้" onClick={()=>setOpen(false)} className="grid h-11 w-11 place-items-center rounded-xl disabled:opacity-40"><X/></button></div>
+      <ModalFocus labelId="user-create-title" onEscape={busy||!!pendingCreate?undefined:()=>setOpen(false)} className="field-modal-panel glass card soft-scroll min-w-0 w-full max-w-md overflow-auto p-4 sm:p-6">
+        <div className="flex justify-between"><div><p className="gold text-[10px] tracking-[.25em]">กำหนดหน้าที่ก่อนเริ่มงาน</p><h3 id="user-create-title" className="mt-1 text-xl">เพิ่มผู้ใช้</h3></div><button disabled={busy||!!pendingCreate} aria-label="ปิดการสร้างผู้ใช้" onClick={()=>setOpen(false)} className="grid h-11 w-11 place-items-center rounded-xl disabled:opacity-40"><X/></button></div>
         {pendingCreate&&<div className="mt-4 rounded-2xl border border-amber-300 bg-amber-50 p-3 text-xs text-amber-950"><b>Resume Request เดิม</b><p className="mt-1">username / role / permissions ถูกล็อกไว้ แต่รหัสผ่านไม่ได้ถูกเก็บในเครื่อง กรุณากรอกรหัสผ่านเดิมแล้วกดตรวจคำขอเดิม</p></div>}
         <div className="mt-5 grid gap-3">
-          <input disabled={!!pendingCreate} value={username} onChange={e=>setUsername(e.target.value.toLowerCase())} placeholder="username" className="min-h-12 rounded-2xl border border-slate-200 bg-slate-50 px-4 disabled:opacity-70"/>
+          <input disabled={!!pendingCreate} value={username} onChange={e=>setUsername(e.target.value.toLowerCase())} aria-label="ชื่อผู้ใช้ใหม่" placeholder="ชื่อผู้ใช้ เช่น cashier01" className="min-h-12 rounded-2xl border border-slate-200 bg-slate-50 px-4 disabled:opacity-70"/>
           <input type="password" autoComplete="new-password" value={password} onChange={e=>setPassword(e.target.value)} placeholder={pendingCreate?"กรอกรหัสผ่านเดิมเพื่อยืนยัน":"รหัสผ่าน ≥ 10 ตัวอักษร"} className="min-h-12 rounded-2xl border border-slate-200 bg-slate-50 px-4"/>
-          <select disabled={!!pendingCreate} value={role} onChange={e=>setRole(e.target.value as "staff"|"admin")} className="min-h-12 rounded-2xl border border-slate-200 bg-white px-4 disabled:opacity-70"><option value="staff">Staff</option><option value="admin">Admin</option></select>
-          {role==="staff"&&<div className="grid grid-cols-2 gap-2">{keys.map(k=><label key={k} className="flex min-h-11 items-center justify-between rounded-2xl border border-slate-100 p-3 text-xs uppercase"><span>{k}</span><input disabled={!!pendingCreate} type="checkbox" checked={!!permissions[k]} onChange={e=>setPermissions({...permissions,[k]:e.target.checked})}/></label>)}</div>}
-          <div className="rounded-2xl bg-slate-50 p-3 text-xs text-slate-600"><ShieldCheck size={15} className="mb-2 text-emerald-700"/>Staff ต้องมีอย่างน้อย Order หรือ Queue เพื่อใช้งานหน้าร้าน</div>
-          <button disabled={busy||username.length<3||password.length<10||(role==="staff"&&!permissions.order&&!permissions.queue)} onClick={create} className="min-h-12 rounded-full bg-[#d4af37] py-3 font-bold text-black disabled:opacity-40">{busy?"กำลังตรวจ…":pendingCreate?"ตรวจคำขอเดิม":"CREATE USER"}</button>
+          <select aria-label="ประเภทบัญชี" disabled={!!pendingCreate} value={role} onChange={e=>setRole(e.target.value as "staff"|"admin")} className="min-h-12 min-w-0 w-full rounded-2xl border border-slate-200 bg-white px-3 disabled:opacity-70"><option value="staff">พนักงาน · เลือกหน้าที่ด้านล่าง</option><option value="admin">เจ้าของร้าน / ผู้ดูแลระบบ · จัดการได้ทุกส่วน</option></select>
+          {role==="staff"&&<fieldset disabled={!!pendingCreate||busy} className="min-w-0 space-y-2"><legend className="text-xs font-bold text-slate-700">เลือกชุดหน้าที่</legend><div className="grid grid-cols-2 gap-2">{STAFF_PRESETS.map(preset=><button key={preset.id} type="button" onClick={()=>setPermissions({...preset.permissions})} aria-pressed={keys.every(key=>!!permissions[key]===preset.permissions[key])} className="min-h-12 min-w-0 break-words rounded-xl border border-slate-300 bg-white p-2 text-left text-xs aria-pressed:border-[#1f4d3a] aria-pressed:bg-emerald-50"><b className="block">{preset.label}</b><span className="mt-1 block text-[11px] text-slate-600">{preset.description}</span></button>)}</div></fieldset>}
+          {role==="staff"&&<div className="grid grid-cols-1 gap-2">{keys.map(k=><label key={k} className="flex min-h-11 items-center justify-between rounded-2xl border border-slate-100 p-3 text-xs uppercase"><span><b className="block">{PERMISSION_INFO[k].label}</b><small className="mt-1 block font-normal normal-case text-slate-600">{PERMISSION_INFO[k].description}</small></span><input aria-label={PERMISSION_INFO[k].label} disabled={!!pendingCreate||busy} type="checkbox" checked={!!permissions[k]} onChange={e=>setPermissions({...permissions,[k]:e.target.checked})}/></label>)}</div>}
+          <div className="rounded-2xl bg-slate-50 p-3 text-xs text-slate-600"><ShieldCheck size={15} className="mb-2 text-emerald-700"/>พนักงานต้องมีสิทธิ์รับออเดอร์หรือทำคิวอย่างน้อยหนึ่งงาน · ผู้ดูแลกะดูยอดขายและปิดยอดได้ แต่แก้ผู้ใช้หรือสูตรไม่ได้</div>
+          <button disabled={busy||username.length<3||password.length<10||(role==="staff"&&!permissions.order&&!permissions.queue)} onClick={create} className="min-h-12 rounded-full bg-[#d4af37] py-3 font-bold text-black disabled:opacity-40">{busy?"กำลังตรวจ…":pendingCreate?"ตรวจคำขอเดิม":"สร้างผู้ใช้"}</button>
         </div>
       </ModalFocus>
     </div>}
