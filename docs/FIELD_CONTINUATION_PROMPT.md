@@ -1,5 +1,7 @@
 # Prompt ส่งต่อให้ FIELD
 
+> Satang labels 2026-10-20: รอบล่าสุดเริ่มจาก main `bc457ad` หลัง #473; อ่าน `FIELD_POS_SATANG_HANDOFF.md` และตรวจ PR/CI ล่าสุดก่อนทำซ้ำ การแก้รอบนี้รักษาสตางค์บนหน้าขาย โดยไม่เปลี่ยน financial calculations หรือ master data
+
 > Stability/UX review 2026-10-20: รอบนี้เริ่มจาก exact main `2dbbd92490bbc60f8c68cf721250810aef40c95f` หลัง #472. อ่าน `FIELD_STABILITY_UX_2026-10-20.md` และตรวจสถานะ PR ล่าสุดก่อนทำงานซ้ำ. Shared modal keyboard และคำแนะนำระหว่างรอบันทึกบิลเป็น scope รอบนี้; suite ใหม่ `qa-modal-focus.py` ต้องผ่านพร้อม browser suites เดิม. ใช้ latest origin/main เสมอ ไม่ใช้ SHA snapshot นี้คงที่
 
 > Checkpoint 2026-10-13: baseline รอบ UX คือ `815d3c0def5ca490ac45ca885a72c44abfd20541` หลัง PR #271 ซึ่งรวม strict offline reads/writes และ shared GET hardening แล้ว ห้ามทำ patch เหล่านี้ซ้ำจาก PR #255 เก่า ตรวจ latest main/PR/CI อีกครั้งก่อนเริ่ม รอบ UX ปรับ touch targets และชื่อปุ่มในหน้ารับเงิน; ดู `FIELD_TOUCH_UX_HANDOFF.md` สำหรับขอบเขตและผลตรวจ
