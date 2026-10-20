@@ -1,0 +1,91 @@
+{
+  "date": "2026-10-20",
+  "codeSha": "7c424d28ef570ec5886259a0ae913b737d591c44",
+  "mainBaseline": "f1d0525badcd36f6a2917d52d30abac749610596",
+  "scope": "local Next production build + isolated file-backed libSQL; NOT production latency",
+  "requests": 351,
+  "unexpectedResponses": 0,
+  "elapsedMs": 24013,
+  "metrics": [
+    {
+      "operation": "Checkout ใหม่",
+      "samples": 60,
+      "medianMs": 73.95,
+      "p95Ms": 208.37,
+      "maxMs": 258.89
+    },
+    {
+      "operation": "Checkout ส่งซ้ำคีย์เดิม",
+      "samples": 60,
+      "medianMs": 39.65,
+      "p95Ms": 82.58,
+      "maxMs": 111.84
+    },
+    {
+      "operation": "อัปเดตคิว",
+      "samples": 180,
+      "medianMs": 67.1,
+      "p95Ms": 136.97,
+      "maxMs": 271.2
+    },
+    {
+      "operation": "อ่าน POS bootstrap ที่ล็อกอินแล้ว",
+      "samples": 21,
+      "medianMs": 28.22,
+      "p95Ms": 47.31,
+      "maxMs": 53.06
+    },
+    {
+      "operation": "อ่านคิว",
+      "samples": 20,
+      "medianMs": 26.92,
+      "p95Ms": 44.22,
+      "maxMs": 45.27
+    }
+  ],
+  "independentExpected": {
+    "revenue": 3315,
+    "cogs": 1176,
+    "deliveryGpFees": 165.8,
+    "operatingExpenses": 80.1,
+    "operatingProfit": 1893.1,
+    "expectedCash": 2127.4,
+    "cashVariance": 0
+  },
+  "stored": {
+    "sales": 60,
+    "saleStockTransactions": 180,
+    "closes": 1,
+    "close": {
+      "deliveryGpFees": 165.8,
+      "id": "close_1915c91a-b6e7-4605-b921-f3936c6a37d1",
+      "date": "2026-10-20",
+      "time": 1792463127217,
+      "revenue": 3315,
+      "cogs": 1176,
+      "expenses": 80.1,
+      "purchaseSpend": 0,
+      "totalCashOut": 80.1,
+      "grossProfit": 2139,
+      "operatingProfit": 1893.1,
+      "cash": 1657.5,
+      "promptpay": 0,
+      "bank": 552.5,
+      "card": 552.5,
+      "other": 552.5,
+      "openingCash": 500,
+      "cashIn": 0,
+      "cashPaidOut": 30.1,
+      "cashOut": 0,
+      "expectedCash": 2127.4,
+      "countedCash": 2127.4,
+      "cashVariance": 0,
+      "riskLevel": "OK",
+      "varianceReason": "",
+      "reviewId": "close_review_6ce76cf5-be29-4c1c-9552-0903751ab78a",
+      "orders": 60,
+      "cups": 60,
+      "closedBy": "qa-owner"
+    }
+  }
+}
