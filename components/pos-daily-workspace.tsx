@@ -117,6 +117,7 @@ export default function PosDailyWorkspace({
   const expenseSavingRef=useRef(false);
   const startDaySavingRef=useRef(false);
   const [guidedMode,setGuidedMode]=useState(true);
+  const [stockGuidanceOpen,setStockGuidanceOpen]=useState(false);
   const dialogRef=useRef<HTMLElement|null>(null);
   const closeButtonRef=useRef<HTMLButtonElement|null>(null);
   const startDayCardRef=useRef<HTMLDivElement|null>(null);
@@ -130,11 +131,13 @@ export default function PosDailyWorkspace({
   const [wasteConfirm,setWasteConfirm]=useState<{orderId:string;itemIndex:number;itemId:string;itemName:string}|null>(null);
   const [startDayConfirmAmount,setStartDayConfirmAmount]=useState<number|null>(null);
   const followGuidedAction=(target:WorkspaceTab)=>{
+    if(!tabs.includes(target))return;
+    if(target==="stock")setStockGuidanceOpen(true);
     setGuidedMode(true);
     setTab(target);
     setBrowseOpen(false);
     window.setTimeout(()=>{
-      const section=document.getElementById("workspace-task-"+target);
+      const section=target==="stock"?document.getElementById("workspace-stock-guidance"):document.getElementById("workspace-task-"+target);
       section?.scrollIntoView({behavior:"smooth",block:"start"});
       if(section instanceof HTMLElement)section.focus({preventScroll:true});
     },0);
@@ -256,6 +259,7 @@ export default function PosDailyWorkspace({
   useEffect(()=>{
     if(!open){
       setWorkspaceReady(false);
+      setStockGuidanceOpen(false);
       setQueueFresh(false);
       setWasteConfirm(null);
       setStartDayConfirmAmount(null);
@@ -557,7 +561,7 @@ export default function PosDailyWorkspace({
       aria-modal="true"
       aria-label="งานร้าน FIELD"
       onClick={e=>e.stopPropagation()}
-      className="absolute inset-y-0 right-0 flex w-full flex-col border-l border-slate-200 bg-[#f6f7f8] shadow-2xl sm:w-[520px]"
+      className="field-workspace absolute inset-y-0 right-0 flex w-full flex-col border-l border-slate-200 bg-[#f6f7f8] shadow-2xl sm:w-[520px]"
     >
       <header className="flex items-start justify-between gap-3 border-b border-slate-200 bg-white px-4 py-4 sm:px-5">
         <div>
@@ -609,7 +613,7 @@ export default function PosDailyWorkspace({
             requestAnimationFrame(()=>openingCashRef.current?.focus());
           }} className="min-h-11 shrink-0 rounded-xl bg-[#1F4D3A] px-3 text-xs font-bold text-white">{pendingOpenShift?"ตรวจรายการเดิม":"เริ่มงาน"}</button>:
           nextAction.tone==="ready"?<button type="button" onClick={onClose} className="min-h-11 shrink-0 rounded-xl bg-[#1F4D3A] px-3 text-xs font-bold text-white">รับออเดอร์</button>:
-          nextAction.tab?<button type="button" onClick={()=>followGuidedAction(nextAction.tab as WorkspaceTab)} className="min-h-11 shrink-0 rounded-xl border border-slate-300 bg-white px-3 text-xs font-bold text-slate-800">ทำตามนี้</button>:null}
+          nextAction.tab&&tabs.includes(nextAction.tab as WorkspaceTab)?<button type="button" aria-controls={nextAction.tab==="stock"?"workspace-stock-guidance":"workspace-task-"+nextAction.tab} aria-expanded={nextAction.tab==="stock"?stockGuidanceOpen:undefined} onClick={()=>followGuidedAction(nextAction.tab as WorkspaceTab)} className="min-h-11 shrink-0 rounded-xl border border-slate-300 bg-white px-3 text-xs font-bold text-slate-800">ทำตามนี้</button>:null}
         </div>
         {!guidedMode&&nextAction.tab&&tabs.includes(nextAction.tab as WorkspaceTab)&&<button type="button" onClick={()=>followGuidedAction(nextAction.tab as WorkspaceTab)} className="mt-3 min-h-11 w-full rounded-xl border border-[#d4af37]/50 bg-white px-3 text-xs font-bold text-[#6f5510]">กลับให้ระบบพาไปงานถัดไป</button>}
       </div>
@@ -716,6 +720,14 @@ export default function PosDailyWorkspace({
         </div>}
 
         {tab==="stock"&&canStock&&<div id="workspace-task-stock" tabIndex={-1} className="scroll-mt-4 space-y-2 outline-none">
+          {stockGuidanceOpen&&<section id="workspace-stock-guidance" tabIndex={-1} aria-label="แก้สต็อกที่ทำให้เมนูหยุดขาย" className="rounded-2xl border border-[#d4af37] bg-[#fff8dc] p-3 focus-ring">
+            <h3 className="text-sm font-black">ตรวจวัตถุดิบแล้วเติมสต็อก</h3>
+            <p className="mt-2 text-xs text-slate-700">1. ตรวจของจริงตามรายการด้านล่าง · 2. เปิดหน้าสต็อกเพื่อรับเข้าหรือนับจริง · 3. กลับมาตรวจเมนูอีกครั้ง</p>
+            {!online&&<p role="status" className="mt-2 text-xs text-slate-700">ออฟไลน์ · รายการนี้เป็นข้อมูลล่าสุดที่เก็บไว้ ต้องเชื่อมต่อก่อนบันทึกสต็อก</p>}
+            {stockRows.length===0?<p className="mt-2 text-xs">ไม่พบรายการที่ขาดจากข้อมูลล่าสุด · เปิดหน้าสต็อกเพื่อตรวจรายละเอียด</p>:<ul className="mt-2 space-y-2 text-xs">{stockRows.map(row=><li key={row.key}><b>{row.name} · {row.variant}</b><p>{row.detail}</p></li>)}</ul>}
+            <FullLink href="/stock" label="ไปตรวจวัตถุดิบ / รับเข้า / นับจริง"/>
+          </section>}
+
           <div className="grid grid-cols-2 gap-2">
             <StatusCard label="ทำไม่ได้" value={outCount} level="danger"/>
             <StatusCard label="ใกล้หมด" value={lowCount} level="warn"/>

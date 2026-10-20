@@ -33,7 +33,9 @@ html,body{
 }
 body{overflow:hidden}
 
-button,input,select,textarea{font:inherit;color:inherit}
+@layer base{
+  button,input,select,textarea{font:inherit;color:inherit}
+}
 button,a,[role="button"]{
   -webkit-tap-highlight-color:transparent;
   transition:
@@ -159,4 +161,20 @@ html,body{overscroll-behavior:none}
   .field-pos-mobile-cartbar{
     bottom:calc(72px + max(.35rem,env(safe-area-inset-bottom)));
   }
+}
+
+/* Explicit workspace foregrounds survive resets; disabled labels remain readable. */
+:root{
+  --field-button-green-bg:#1f4d3a;
+  --field-button-green-fg:#ffffff;
+  --field-button-gold-bg:#d4af37;
+  --field-button-gold-fg:#1d1d1f;
+  --field-button-disabled-bg:#e2e8f0;
+  --field-button-disabled-fg:#475569;
+}
+.field-workspace :is(button,a[href]){min-height:44px;min-width:44px}
+.field-workspace button[class*="bg-[#1F4D3A]"]{background:var(--field-button-green-bg);color:var(--field-button-green-fg)}
+.field-workspace button[class*="bg-[#d4af37]"]{background:var(--field-button-gold-bg);color:var(--field-button-gold-fg)}
+.field-app-root .field-workspace button:disabled{
+  background:var(--field-button-disabled-bg);color:var(--field-button-disabled-fg);opacity:1;
 }
