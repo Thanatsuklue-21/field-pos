@@ -84,6 +84,10 @@ with sync_playwright() as p:
     close_dialog=page.get_by_role("dialog",name="ยืนยันปิดร้านวันนี้",exact=True)
     close_dialog.get_by_role("button",name="ยืนยันปิดวัน",exact=True).click()
     expect(close_dialog).to_have_count(0)
+    # The dialog closes after the durable intent is prepared, before the async
+    # write completes. Assert on the exact-ACK UI state, not dialog teardown.
+    expect(page.get_by_text("ปิดวันสำเร็จ · เงินสด ตรงพอดี",exact=True)).to_be_visible()
+    assert page.evaluate("localStorage.getItem('field-close-day-write-pending-v1:owner')") is None
     assert len(close_posts)==1,close_posts
     close_body=close_posts[0]
     assert close_body["operation"]=="close" and close_body["date"]=="2026-10-16"

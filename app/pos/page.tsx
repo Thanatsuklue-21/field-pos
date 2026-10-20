@@ -967,10 +967,10 @@ function PosView({session}:{session:Session}){
 
       {busy&&<div role="status" aria-live="assertive" className="mt-3 rounded-2xl border border-amber-300 bg-amber-50 px-3 py-2.5 text-sm font-semibold text-amber-900">กำลังยืนยันรายการนี้ · ห้ามรับเงินซ้ำหรือเปลี่ยนยอดจนกว่าระบบจะแจ้งผล</div>}
 
-      <div role="status" aria-live="polite" className={"mt-3 rounded-2xl border px-3 py-2.5 "+(cashierGuide.tone==="warn"?"border-amber-300 bg-amber-50 text-amber-900":cashierGuide.tone==="ready"?"border-emerald-200 bg-emerald-50 text-emerald-900":"border-[#d4af37]/40 bg-[#fffaf0] text-slate-800")}>
+      {!busy&&<div role="status" aria-live="polite" className={"mt-3 rounded-2xl border px-3 py-2.5 "+(cashierGuide.tone==="warn"?"border-amber-300 bg-amber-50 text-amber-900":cashierGuide.tone==="ready"?"border-emerald-200 bg-emerald-50 text-emerald-900":"border-[#d4af37]/40 bg-[#fffaf0] text-slate-800")}>
         <b className="block text-sm">{cashierGuide.title}</b>
         <span className="mt-0.5 block text-[11px]">{cashierGuide.detail}</span>
-      </div>
+      </div>}
 
       <button type="button" aria-expanded={orderOptionsVisible} aria-controls="field-order-payment-options" disabled={busy||hasPendingPrompt} onClick={()=>{if(!splitGroup)setOrderOptionsOpen(v=>!v)}} className={"mt-4 min-h-11 w-full rounded-2xl border px-4 text-sm font-semibold "+(orderOptionsVisible?"border-[#d4af37] bg-[#fff8dc] text-[#765b08]":"border-slate-300 bg-white text-slate-700")+" disabled:opacity-40"}>{splitGroup?"คิวนี้กำลังแยกจ่าย":splitBill?"กำลังแยกจ่าย · สมาชิก/แต้ม":"ตัวเลือกบิล / สมาชิก"}</button>
       {orderOptionsVisible&&<div id="field-order-payment-options" className="mt-2 rounded-2xl border border-slate-200 bg-white p-3"><p className="mb-2 text-[11px] text-slate-500">ใช้เมื่อต้องแยกจ่าย หรือเลือกลูกค้าสมาชิก · บิลทั่วไปข้ามส่วนนี้ได้</p>
@@ -1004,7 +1004,7 @@ function PosView({session}:{session:Session}){
       {method==="promptpay"&&prompt?.qrUrl&&<div className="mt-4 rounded-[20px] border border-slate-300 bg-white p-4 text-center"><img src={prompt.qrUrl} alt="PromptPay QR" className="mx-auto max-h-56 w-auto"/><p className="mt-2 text-xs font-semibold text-black">{prompt.paid?"ชำระเงินแล้ว":"สแกน QR แล้วระบบจะตรวจสอบอัตโนมัติ"}</p></div>}
       <div className="sticky bottom-0 z-10 -mx-4 mt-4 border-t border-slate-200 bg-white/95 px-4 pb-[max(.5rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur sm:-mx-6 sm:px-6">
         <button disabled={busy||!payableItems.length||(method==="promptpay"&&hasPendingPrompt)||(method==="cash"&&(!Number.isFinite(cashReceived)||cashReceived<netPayable))} onClick={checkout} className="w-full rounded-2xl bg-[#d4af37] py-3.5 font-bold text-black shadow-sm disabled:opacity-40">{busy?(method==="promptpay"&&prompt?"กำลังตรวจสอบการชำระเงิน...":"กำลังบันทึกบิล..."):(method==="promptpay"?(hasPendingPrompt?"กำลังรอผล QR เดิม...":"สร้าง QR ให้ลูกค้า"):method==="delivery"?"ยืนยันออเดอร์เดลิเวอรี":method==="bank"?"ยืนยันรับเงินโอน":method==="card"?"ยืนยันรับบัตร":!online?"บันทึกเงินสด Offline":"ยืนยันรับเงิน")}</button>
-        {method==="cash"&&Number.isFinite(cashReceived)&&cashReceived===netPayable&&<p className="mt-2 text-center text-xs font-semibold text-emerald-700">รับเงินพอดียอด · กดยืนยันชำระได้เลย</p>}
+        {!busy&&method==="cash"&&Number.isFinite(cashReceived)&&cashReceived===netPayable&&<p className="mt-2 text-center text-xs font-semibold text-emerald-700">รับเงินพอดียอด · กดยืนยันชำระได้เลย</p>}
         {result&&<p className="mt-2 rounded-xl bg-slate-100 px-3 py-2 text-center text-sm text-slate-700">{result}</p>}
       </div>
     </fieldset></ModalFocus></div>}
