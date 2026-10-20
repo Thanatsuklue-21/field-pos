@@ -5,7 +5,7 @@ const good=()=>({menu:[{id:'latte',enabled:true,name:'Latte',price:55,variants:[
 test('catalog diagnostics use current availability and do not change input',async()=>{
  const {buildCatalogReadiness}=await load();const input=good();input.ingredients.milk.qty=0;const before=JSON.stringify(input);const r=buildCatalogReadiness(input);
  assert.equal(JSON.stringify(input),before);assert.equal(r.availableMenus,0);assert.equal(r.activeMenus,1);
- const issue=r.issues.find(x=>x.code==='stock_shortage');assert.equal(issue.href,'/stock');assert.ok(issue.items.some(x=>x.detail.includes('Milk')));assert.equal(r.status,'REVIEW');
+ const issue=r.issues.find(x=>x.code==='stock_shortage');assert.equal(issue.href,'/stock?attention=shortage');assert.ok(issue.items.some(x=>x.detail.includes('Milk')));assert.equal(r.status,'REVIEW');
 });
 test('prices recipes costs packaging produce separate actionable checks',async()=>{
  const {buildCatalogReadiness}=await load();const input=good();input.menu[0].price=0;input.ingredients.milk.unitCost=0;input.ingredients.milk.purchaseProfile={quantityPerPackage:-1};

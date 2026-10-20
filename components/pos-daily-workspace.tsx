@@ -725,7 +725,7 @@ export default function PosDailyWorkspace({
             <p className="mt-2 text-xs text-slate-700">1. ตรวจของจริงตามรายการด้านล่าง · 2. เปิดหน้าสต็อกเพื่อรับเข้าหรือนับจริง · 3. กลับมาตรวจเมนูอีกครั้ง</p>
             {!online&&<p role="status" className="mt-2 text-xs text-slate-700">ออฟไลน์ · รายการนี้เป็นข้อมูลล่าสุดที่เก็บไว้ ต้องเชื่อมต่อก่อนบันทึกสต็อก</p>}
             {stockRows.length===0?<p className="mt-2 text-xs">ไม่พบรายการที่ขาดจากข้อมูลล่าสุด · เปิดหน้าสต็อกเพื่อตรวจรายละเอียด</p>:<ul className="mt-2 space-y-2 text-xs">{stockRows.map(row=><li key={row.key}><b>{row.name} · {row.variant}</b><p>{row.detail}</p></li>)}</ul>}
-            <FullLink href="/stock" label="ไปตรวจวัตถุดิบ / รับเข้า / นับจริง"/>
+            <FullLink href="/stock?attention=shortage" label="ไปตรวจวัตถุดิบ / รับเข้า / นับจริง"/>
           </section>}
 
           <div className="grid grid-cols-2 gap-2">

@@ -41,5 +41,5 @@ test('server and UI enforce high-risk guard contract',async()=>{
   assert.match(orders,/riskConfirmed:true/);
   assert.match(close,/amount>=500/);
   assert.match(close,/riskConfirmed/);
-  assert.match(stock,/นับสต๊อกจริง · Owner/);
+  assert.match(stock,/admin\?"นับของจริง":"ส่งผลนับของจริง"/);
 });
