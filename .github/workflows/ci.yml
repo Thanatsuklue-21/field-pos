@@ -45,6 +45,7 @@ jobs:
           python scripts/qa-catalog-readiness.py --base-url http://127.0.0.1:3000 --output /tmp/field-catalog-readiness-qa
           python scripts/qa-work-modes.py --base-url http://127.0.0.1:3000 --output /tmp/field-work-modes-qa
           python scripts/qa-workspace-cta.py --base-url http://127.0.0.1:3000 --output /tmp/field-workspace-cta-qa
+          python scripts/qa-modal-focus.py --base-url http://127.0.0.1:3000 --output /tmp/field-modal-focus-qa
           python scripts/qa-pos-touch.py --base-url http://127.0.0.1:3000 --output /tmp/field-touch-qa
           python scripts/qa-offline-outbox.py --base-url http://127.0.0.1:3000 --output /tmp/field-outbox-qa
           python scripts/qa-cashier-flow.py --base-url http://127.0.0.1:3000 --output /tmp/field-cashier-flow-qa

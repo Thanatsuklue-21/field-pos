@@ -25,7 +25,10 @@ export default function ModalFocus({
     const node=ref.current;
     if(!node)return;
     const previous=document.activeElement instanceof HTMLElement?document.activeElement:null;
-    const focusables=()=>Array.from(node.querySelectorAll<HTMLElement>(FOCUSABLE)).filter(el=>!el.hasAttribute("disabled")&&el.tabIndex!==-1);
+    // :disabled includes controls disabled by an ancestor fieldset. Hidden
+    // controls cannot serve as the boundaries of a keyboard focus loop.
+    const canFocus=(el:HTMLElement)=>!el.matches(":disabled")&&el.tabIndex!==-1&&el.getClientRects().length>0&&getComputedStyle(el).visibility==="visible";
+    const focusables=()=>Array.from(node.querySelectorAll<HTMLElement>(FOCUSABLE)).filter(canFocus);
     const preferred=initialFocusSelector?node.querySelector<HTMLElement>(initialFocusSelector):null;
     queueMicrotask(()=>{
       const active=document.activeElement instanceof HTMLElement?document.activeElement:null;
