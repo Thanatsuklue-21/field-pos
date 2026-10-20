@@ -53,7 +53,7 @@ test("POS renders the guidance in both ordering and payment contexts",async()=>{
   assert.match(guidance,/ลูกค้าสั่งครบหรือยัง/);
   assert.match(pos,/\["2","ตรวจออเดอร์"\]/);
   assert.match(pos,/แตะเมนู → ตรวจออเดอร์ → ชำระเงิน/);
-  assert.match(pos,/aria-label="ชำระเงิน"[^>]*>ชำระเงิน ฿\{total\.toFixed\(0\)\}/);
+  assert.match(pos,/aria-label="ชำระเงิน"[^>]*>ชำระเงิน ฿\{formatBaht\(total\)\}/);
   assert.match(pos,/ขั้นตอน 2 · ตรวจออเดอร์/);
   const matches=pos.match(/cashierGuide\.title/g)||[];
   assert.ok(matches.length>=2);
