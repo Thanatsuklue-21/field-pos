@@ -24,6 +24,7 @@ type D = {
   totalCashOut: number;
   grossProfit: number;
   operatingProfit: number;
+  deliveryGpFees?: number;
   grossMargin: number;
   profitEstimated: boolean;
   costQuality: { status: string };
@@ -75,6 +76,7 @@ function View() {
     ["ยอดขายวันนี้", d?.todayRevenue || 0, "฿"],
     ["ยอดขายเดือนนี้", d?.revenue || 0, "฿"],
     ["กำไรดำเนินงาน", d?.operatingProfit || 0, "฿"],
+    ["ค่าธรรมเนียมเดลิเวอรี", d?.deliveryGpFees || 0, "฿"],
     ["Gross Margin", d?.grossMargin || 0, "%"],
   ];
   return (
