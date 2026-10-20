@@ -1,12 +1,13 @@
 import {api,type Bootstrap,type Session} from "@/lib/api-client";
 import {offlineCashDelete,offlineCashList,offlineCashPatch,offlineCashPut,type OfflineCashRecord} from "@/lib/offline-db";
-import {sumMoney} from "@/lib/domain/money.mjs";
+import {sumMoney,multiplyMoney} from "@/lib/domain/money.mjs";
+import {cartAvailability} from "@/lib/domain/availability.mjs";
 
 type CartLine={id:string;variant:string;qty:number};
 export type OfflineCashSummary={pending:number;needsReview:number;total:number};
 export type OfflineCashSyncResult=OfflineCashSummary&{synced:number};
 
-export async function queueOfflineCashSale(body:Record<string,any>){
+export async function queueOfflineCashSale(body:Record<string,any>,options:{projectStock?:boolean}={}){
   const createdAt=Number(body.offlineCreatedAt)||Date.now();
   const requestKey=String(body.requestKey||"");
   if(requestKey.length<8)throw new Error("invalid_request_key");
@@ -18,8 +19,16 @@ export async function queueOfflineCashSale(body:Record<string,any>){
     status:"pending",
     attempts:0
   };
-  await offlineCashPut(record);
-  return record;
+  const bootstrap=await offlineCashPut(record,options.projectStock?(current:Bootstrap)=>{
+    if(!Array.isArray(current?.menu)||!current.availabilityStock||!Array.isArray(body.cart)||!body.cart.length)throw new Error("offline_catalog_unavailable");
+    const lines=body.cart as CartLine[];
+    if(lines.some(line=>!Number.isInteger(line.qty)||line.qty<1||!current.menu.some(item=>item.id===line.id&&item.enabled)))throw new Error("stock_shortage");
+    if(!cartAvailability({cart:lines,menu:current.menu,stock:current.availabilityStock}).available)throw new Error("stock_shortage");
+    const total=sumMoney(lines.map(line=>multiplyMoney(current.menu.find(item=>item.id===line.id)!.price,line.qty)));
+    if(!Number.isFinite(body.total)||sumMoney([body.total])!==total||!Number.isFinite(body.received)||body.received<total)throw new Error("offline_price_changed");
+    return applyOfflineCashToBootstrap(current,lines);
+  }:undefined) as Bootstrap|undefined;
+  return {...record,bootstrap};
 }
 
 export async function getOfflineCashSummary():Promise<OfflineCashSummary>{
@@ -97,6 +106,10 @@ export async function syncOfflineCashSales(session:Session):Promise<OfflineCashS
         break;
       }
       if(["network_unavailable","offline_write_blocked"].includes(code)||!error?.status)break;
+      if([401,403,408,425,429].includes(Number(error.status))){
+        await offlineCashPatch(row.requestKey,{lastError:code,lastAttemptAt:Date.now()});
+        break;
+      }
       if(Number(error.status)>=400&&Number(error.status)<500){
         await offlineCashPatch(row.requestKey,{status:"needs_review",lastError:code,lastAttemptAt:Date.now()});
         continue;

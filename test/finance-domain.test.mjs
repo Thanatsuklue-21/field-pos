@@ -1,4 +1,8 @@
 import test from 'node:test';import assert from 'node:assert/strict';import {expenseBreakdown,profitSummary,cashExpenseTotal,inventoryValuation} from '../lib/domain/finance.mjs';
+test('delivery GP is deducted once from operating profit while gross profit stays before fees',()=>{
+  const result=profitSummary({revenue:100,cogs:20,expenses:[{category:'OTHER',amount:10}],deliveryGpFees:30});
+  assert.equal(result.grossProfit,80);assert.equal(result.operatingProfit,40);
+});
 test('satang expense and profit totals use exact decimal arithmetic',()=>{
   const expenses=[{category:'OTHER',amount:0.1,paymentMethod:'cash'},{category:'OTHER',amount:0.2,paymentMethod:'cash'}];
   assert.equal(expenseBreakdown(expenses).operatingExpenses,0.3);

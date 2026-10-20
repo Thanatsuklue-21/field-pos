@@ -11,7 +11,8 @@ async function setup(t,response){
   const driver={rows:[{requestKey:body.requestKey,body:{...body},status:'pending',attempts:0}],sent:[],deleted:[],response};
   const id='__offlineAck_'+t.name.replace(/\W/g,'_');globalThis[id]=driver;t.after(()=>delete globalThis[id]);
   const module=await loadBrowserModule('lib/offline-sales.ts',{id:t.name,replace:source=>source
-    .replace(/^import .*api-client.*;$/m,`const d=globalThis[${JSON.stringify(id)}]; const api=async(path,init)=>{d.sent.push(JSON.parse(init.body));return d.response};`)
+      .replace(/^import .*availability.mjs.*;$/m,'const cartAvailability=()=>{throw new Error("unexpected_capture")};')
+    .replace(/^import .*api-client.*;$/m,`const d=globalThis[${JSON.stringify(id)}]; const api=async(path,init)=>{d.sent.push(JSON.parse(init.body));if(d.response instanceof Error)throw d.response;return d.response};`)
     .replace(/^import .*offline-db.*;$/m,'const offlineCashList=async()=>d.rows; const offlineCashPatch=async(key,patch)=>Object.assign(d.rows.find(x=>x.requestKey===key),patch); const offlineCashDelete=async key=>{d.deleted.push(key);d.rows=d.rows.filter(x=>x.requestKey!==key)}; const offlineCashPut=async()=>{};')
     .replace(/from "@\/lib\/domain\/money.mjs"/,`from ${JSON.stringify(new URL('../lib/domain/money.mjs',import.meta.url).href)}`)
   });
@@ -28,3 +29,11 @@ for(const [name,response] of Object.entries({empty:{},notOk:{...valid,ok:false},
     assert.deepEqual(api.driver.sent,[body,body]);
   });
 }
+
+for(const status of [401,403,408,425,429])test('transient/auth '+status+' keeps offline bill pending for exact replay',async t=>{
+  const api=await setup(t,Object.assign(new Error('session_or_retry_required'),{status}));
+  const result=await api.syncOfflineCashSales({csrf:'test'});
+  assert.equal(result.pending,1);assert.equal(result.needsReview,0);assert.equal(api.driver.deleted.length,0);
+  api.driver.response=valid;assert.equal((await api.syncOfflineCashSales({csrf:'fresh-session'})).synced,1);
+  assert.deepEqual(api.driver.sent,[body,body]);
+});

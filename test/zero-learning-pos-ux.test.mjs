@@ -49,7 +49,7 @@ test("cash payment provides common one-tap tender amounts",async()=>{
   assert.ok(pos.includes("const quickCashAmounts="));
   assert.ok(pos.includes("quickCashAmounts.map"));
   assert.ok(pos.includes("setReceived(String(amount))"));
-  assert.ok(pos.includes("รับเงินพอดี ฿{netPayable.toFixed(0)}"));
+  assert.ok(pos.includes("รับเงินพอดี ฿{formatMoney(netPayable)}"));
 });
 
 test("menu rendering and touch ergonomics stay mobile friendly",async()=>{

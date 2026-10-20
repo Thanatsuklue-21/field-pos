@@ -222,7 +222,7 @@ test('payment modal reviews cart items prices quantities and sweetness before co
   assert.match(pos,/หวานปกติ \(100%\)/);
   assert.match(pos,/หวานน้อย \(50%\)/);
   assert.match(pos,/ไม่หวาน \(0%\)/);
-  assert.match(pos,/\{selectedQty\} × ฿\{i\.price\.toFixed\(0\)\}/);
+  assert.match(pos,/\{selectedQty\} × ฿\{formatMoney\(i\.price\)\}/);
   assert.match(pos,/cart\.removeItem\(i\.key\)/);
   assert.match(pos,/updateCartQuantity\(i\.key,i\.qty-1\)/);
   assert.match(pos,/updateCartQuantity\(i\.key,i\.qty\+1\)/);
@@ -236,7 +236,7 @@ test('payment modal stays above mobile navigation with sticky confirm and exact-
   assert.match(pos,/z-\[90\]/);
   assert.match(pos,/max-h-\[calc\(100dvh-1rem\)\]/);
   assert.match(pos,/sticky bottom-0 z-10/);
-  assert.match(pos,/รับเงินพอดี ฿\{netPayable\.toFixed\(0\)\}/);
+  assert.match(pos,/รับเงินพอดี ฿\{formatMoney\(netPayable\)\}/);
   assert.match(pos,/setReceived\(String\(netPayable\)\)/);
   assert.match(pos,/รับเงินพอดียอด · กดยืนยันชำระได้เลย/);
 });
@@ -313,7 +313,7 @@ test('CRM redemption makes the payment UI use net payable for cash and PromptPay
   assert.match(pos,/crmDiscount/);
   assert.match(pos,/netPayable/);
   assert.match(pos,/pointsRedeemed:redeemPoints/);
-  assert.match(pos,/รับเงินพอดี ฿\{netPayable\.toFixed\(0\)\}/);
+  assert.match(pos,/รับเงินพอดี ฿\{formatMoney\(netPayable\)\}/);
   assert.match(pos,/cashReceived<netPayable/);
   assert.match(pos,/ส่วนลดสมาชิก/);
   assert.match(pos,/ใช้ได้สูงสุด/);
@@ -543,7 +543,7 @@ test('POS menu filtering and totals are memoized away from unrelated modal state
   const pos=await read('app/pos/page.tsx');
   assert.match(pos,/const menu=useMemo\(\(\)=>/);
   assert.match(pos,/\[data\?\.menu,cat,q\]/);
-  assert.match(pos,/const total=useMemo\(\(\)=>cart\.items\.reduce/);
+  assert.match(pos,/const total=useMemo\(\(\)=>sumMoney\(cart\.items\.map/);
 });
 
 

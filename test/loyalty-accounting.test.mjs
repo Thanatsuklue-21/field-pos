@@ -20,3 +20,7 @@ test('customer effects apply and reverse redeemed and awarded points exactly onc
   reverseLoyaltyFromCustomer(customer,{total:90,pointsAwarded:1,pointsRedeemed:5});
   assert.equal(customer.points,20);assert.equal(customer.visits,2);assert.equal(customer.totalSpend,300);
 });
+test('satang loyalty thresholds award all earned points without binary division loss',()=>{
+  const result=resolveLoyalty({customer:{points:0},grossTotal:0.3,settings:{pointsSpend:0.1}});
+  assert.equal(result.pointsAwarded,3);
+});

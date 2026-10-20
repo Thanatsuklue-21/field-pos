@@ -50,3 +50,4 @@ jobs:
           python scripts/qa-expense-recovery.py --base-url http://127.0.0.1:3000 --output /tmp/field-expense-qa
           python scripts/qa-workspace-expense-recovery.py --base-url http://127.0.0.1:3000 --output /tmp/field-workspace-expense-qa
           python scripts/qa-backup-preview.py --base-url http://127.0.0.1:3000 --output /tmp/field-backup-preview-qa
+          python scripts/qa-v81-money-offline.py --base-url http://127.0.0.1:3000 --output /tmp/field-v81-qa

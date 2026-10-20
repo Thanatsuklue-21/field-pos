@@ -46,6 +46,21 @@ async function writeStore(db:IDBDatabase,storeName:string,write:(store:IDBObject
 
 export async function cachePut<T>(key:string,value:T){
   const db=await openDb();if(!db)return;
+  if(key==="/api/pos/bootstrap"){
+    try{
+      const tx=db.transaction([CACHE_STORE,OUTBOX_STORE],"readwrite"),done=txDone(tx);
+      const pending=tx.objectStore(OUTBOX_STORE).getAll();
+      pending.onsuccess=()=>{
+        try{
+          if(!Array.isArray(pending.result))throw new Error("offline_storage_unavailable");
+          // A reconnect GET must not replace stock already consumed by local bills.
+          if(pending.result.length===0)tx.objectStore(CACHE_STORE).put({value,savedAt:Date.now()},key);
+        }catch{tx.abort()}
+      };
+      await done;
+    }finally{db.close()}
+    return;
+  }
   await writeStore(db,CACHE_STORE,store=>{store.put({value,savedAt:Date.now()},key)});
 }
 export async function cacheGet<T>(key:string,maxAgeMs=24*60*60*1000):Promise<T|null>{
@@ -59,9 +74,29 @@ export async function cacheGet<T>(key:string,maxAgeMs=24*60*60*1000):Promise<T|n
   return row.value;
 }
 
-export async function offlineCashPut(record:OfflineCashRecord){
-  const db=await openDb();if(!db)throw new Error("offline_storage_unavailable");
-  await writeStore(db,OUTBOX_STORE,store=>{store.put(record)});
+export async function offlineCashPut(record:OfflineCashRecord,projectBootstrap?:(value:any)=>any){
+  const db=await openDbStrict();
+  if(!projectBootstrap){await writeStore(db,OUTBOX_STORE,store=>{store.put(record)});return}
+  try{
+    const tx=db.transaction([OUTBOX_STORE,CACHE_STORE],"readwrite"),done=txDone(tx);
+    let projected:any;
+    try{
+      tx.objectStore(OUTBOX_STORE).add(record);
+      const store=tx.objectStore(CACHE_STORE),request=store.get("/api/pos/bootstrap");
+      request.onsuccess=()=>{
+        try{
+          const cached=request.result as Cached<any>|undefined,age=Date.now()-Number(cached?.savedAt);
+          if(!cached?.value||!Number.isFinite(age)||age<0||age>24*60*60*1000)throw new Error("offline_catalog_unavailable");
+          projected=projectBootstrap(cached.value);
+          if(!projected)throw new Error("offline_catalog_unavailable");
+          // Preserve catalog freshness: an offline sale is not a server refresh.
+          store.put({...cached,value:projected},"/api/pos/bootstrap");
+        }catch{tx.abort()}
+      };
+    }catch(cause){tx.abort();await done.catch(()=>{});throw Object.assign(new Error("offline_storage_write_failed"),{cause})}
+    await done;
+    return projected;
+  }finally{db.close()}
 }
 export async function offlineCashList():Promise<OfflineCashRecord[]>{
   return offlineCashListStrict();
