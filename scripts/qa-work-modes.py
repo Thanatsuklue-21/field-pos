@@ -38,6 +38,11 @@ with sync_playwright() as p:
             if role=='barista':expect(page).to_have_url(re.compile('/queue$'))
             else:expect(page.get_by_role('heading',name='รับออเดอร์',exact=True)).to_be_visible()
             modes=page.get_by_role('navigation',name='สลับโหมดการทำงาน')
+            assert 'ai/supervisor' not in requests and 'ai/chat' not in requests,requests
+            if width>=768:
+                expect(page.get_by_role('navigation',name='งานประจำวัน').get_by_role('link',name='สต็อก',exact=True)).to_have_count(0)
+            else:
+                expect(page.get_by_role('navigation',name='เมนูหลักบนมือถือ').get_by_role('link',name='ปิดยอดประจำวัน',exact=True)).to_have_count(0)
             expect(modes.get_by_role('link',name='หน้าร้าน',exact=True)).to_be_visible()
             if role in ['admin','shift']:
                 expect(modes.get_by_role('link',name='หลังร้าน',exact=True)).to_be_visible()
@@ -47,6 +52,7 @@ with sync_playwright() as p:
                 expect(page.get_by_text('โหมดหลังร้าน',exact=True)).to_be_visible()
                 if width>=768:
                     nav=page.get_by_role('navigation',name='งานประจำวัน')
+                    expect(nav.get_by_role('link',name='รับออเดอร์',exact=True)).to_have_count(0)
                     for link in nav.get_by_role('link').all():
                         assert link.inner_text().strip(),link.get_attribute('href')
                         assert link.get_attribute('aria-label') or link.inner_text().strip()
@@ -54,6 +60,14 @@ with sync_playwright() as p:
                 expect(page).to_have_url(re.compile('/pos$'))
                 assert page.evaluate('localStorage.getItem("field-pos-cart-v1")')==before
             else:expect(modes.get_by_role('link',name='หลังร้าน',exact=True)).to_have_count(0)
+            assert 'ai/supervisor' not in requests and 'ai/chat' not in requests,requests
+            page.get_by_role('button',name='เปิดผู้ช่วย FIELD',exact=True).click()
+            helper=page.get_by_role('dialog',name='FIELD AI Supervisor',exact=True)
+            expect(helper).to_be_visible()
+            assert 'ai/chat' not in requests,requests
+            helper.get_by_role('button',name='ปิด FIELD AI Supervisor',exact=True).click()
+            expect(helper).to_have_count(0)
+            expect(page.get_by_role('button',name='FIELD AI Supervisor',exact=True)).to_have_count(0)
             page.wait_for_timeout(300)  # Allow mode color transition to settle for visual QA.
             page.screenshot(path=str(out/f'{width}-{role}-front.png'))
             # Direct URL denial must happen before protected view mounts/API is requested.

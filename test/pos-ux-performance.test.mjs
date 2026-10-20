@@ -594,8 +594,8 @@ test('global AI supervisor is code-split and does not poll while hidden on POS',
   const ai=await read('components/ai-supervisor.tsx');
   assert.match(shell,/dynamic\(\(\)=>import\("@\/components\/ai-supervisor"\),\{ssr:false\}\)/);
   assert.doesNotMatch(shell,/import AiSupervisor from "@\/components\/ai-supervisor"/);
-  assert.match(ai,/if\(!session\|\|path==="\/pos"\)return/);
-  assert.match(ai,/\[session\?\.user\.id,path\]/);
+  assert.match(ai,/if\(!session\|\|!open\)return/);
+  assert.match(ai,/\[session\?\.user\.id,open\]/);
 });
 
 
@@ -619,14 +619,14 @@ test('POS skips Today Workspace prewarm on constrained or save-data networks',as
 test('AI supervisor is truly on-demand on POS instead of merely code-split',async()=>{
   const shell=await read('components/app-shell.tsx');
   const ai=await read('components/ai-supervisor.tsx');
-  assert.match(shell,/\[aiMounted,setAiMounted\]=useState\(path!=="\/pos"\)/);
-  assert.match(shell,/if\(path!=="\/pos"\|\|aiMounted\)return/);
+  assert.match(shell,/\[aiMounted,setAiMounted\]=useState\(false\)/);
+  assert.match(shell,/if\(aiMounted\)return/);
   assert.match(shell,/window\.addEventListener\("field:ai-ask",requestAi\)/);
   assert.match(shell,/setAiMounted\(true\)/);
-  assert.match(shell,/\(path!=="\/pos"\|\|aiMounted\)&&<AiSupervisor session=\{session\} initialRequest=\{aiRequest\}\/>/);
+  assert.match(shell,/aiMounted&&<AiSupervisor session=\{session\} initialRequest=\{aiRequest\}\/>/);
   assert.match(ai,/initialRequest\?:\{id:number;message:string\}\|null/);
   assert.match(ai,/ask\(initialRequest\.message\)/);
-  assert.match(ai,/if\(!session\|\|path==="\/pos"\)return/);
+  assert.match(ai,/if\(!session\|\|!open\)return/);
 });
 
 
