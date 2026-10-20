@@ -41,6 +41,7 @@ jobs:
             sleep 1
           done
           curl --fail --silent http://127.0.0.1:3000/pos >/dev/null
+          python scripts/qa-stock-attention.py --base-url http://127.0.0.1:3000 --output /tmp/field-stock-attention-qa
           python scripts/qa-catalog-readiness.py --base-url http://127.0.0.1:3000 --output /tmp/field-catalog-readiness-qa
           python scripts/qa-work-modes.py --base-url http://127.0.0.1:3000 --output /tmp/field-work-modes-qa
           python scripts/qa-workspace-cta.py --base-url http://127.0.0.1:3000 --output /tmp/field-workspace-cta-qa

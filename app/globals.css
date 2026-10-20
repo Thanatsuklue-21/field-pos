@@ -178,3 +178,19 @@ html,body{overscroll-behavior:none}
 .field-app-root .field-workspace button:disabled{
   background:var(--field-button-disabled-bg);color:var(--field-button-disabled-fg);opacity:1;
 }
+
+/* Keep unavailable menu names and reasons readable; the disabled state still prevents ordering. */
+:root{
+  --field-menu-unavailable-bg:#f1f5f9;
+  --field-menu-unavailable-fg:#334155;
+  --field-menu-unavailable-reason:#991b1b;
+}
+.field-app-root .pos-menu-card:disabled{
+  background:var(--field-menu-unavailable-bg);color:var(--field-menu-unavailable-fg);opacity:1;
+}
+.field-app-root .pos-menu-card:disabled b{color:var(--field-menu-unavailable-fg)}
+.field-app-root .pos-menu-card:disabled small{color:var(--field-menu-unavailable-reason)}
+.field-app-root .field-unavailable-variant:disabled{
+  background:var(--field-menu-unavailable-bg);color:var(--field-menu-unavailable-fg);opacity:1;
+}
+.field-app-root .field-unavailable-variant:disabled small{color:var(--field-menu-unavailable-reason)}

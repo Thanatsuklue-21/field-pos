@@ -1,5 +1,6 @@
 "use client";
-import {useEffect,useMemo,useRef,useState} from "react";
+import {Suspense,useEffect,useMemo,useRef,useState} from "react";
+import {useRouter,useSearchParams} from "next/navigation";
 import {AlertTriangle,Archive,ArrowDownCircle,ArrowUpCircle,Edit3,Plus,RotateCcw,Search,Trash2,X} from "lucide-react";
 import AuthGate from "@/components/auth-gate";
 import ModalFocus from "@/components/modal-focus";
@@ -15,7 +16,7 @@ type Purchase={
 type PurchaseProfile={packageUnit:string;packSize:number;packSizeUnit:string;quantityPerPackage:number;usageUnit:string;conversionApproximate?:boolean;supplier?:string;sourceUrl?:string;imageUrl?:string;purchaseCost?:number|null;purchaseDate?:string;note?:string;paymentMethod?:string;updatedAt?:number};
 type Ingredient={id:string;name:string;qty:number;unit:string;safetyStock:number;unitCost:number;costStatus:string;costKind:string;wasteMargin:number;lowStock:boolean;archived:boolean;archivedAt?:number|null;historyResetAt?:number;purchaseProfile?:PurchaseProfile|null;recentPurchases:Purchase[]};
 type Tx={id:string;ingredientId:string;type:string;qtyDelta:number;unit:string;reason:string;createdAt:number};
-type Overview={revision:number;ingredients:Ingredient[];transactions:Tx[]};
+type Overview={revision:number;ingredients:Ingredient[];transactions:Tx[];attention?:{blockedMenus:number;ingredients:Array<{id:string;menuNames:string[]}>;missingReferences:number}};
 type CountInput={packs:string;loose:string;base:string};
 type CountAdjustment={ingredientId:string;name:string;expectedQty:number;countedQty:number;variance:number;unit:string};
 type CountProposal={id:string;date:string;status:string;submittedAt:number;submittedBy:string;adjustments:CountAdjustment[];rejectReason?:string};
@@ -26,7 +27,7 @@ const packageUnits=["ขวด","ถุง","ถัง","แกลลอน","�
 const usageUnits=[["g","กรัม (g)"],["ml","มิลลิลิตร (ml)"],["piece","ชิ้น"],["serve","เสิร์ฟ"]];
 const usageUnitLabel=(unit?:string)=>usageUnits.find(([value])=>value===unit)?.[1]||String(unit||"—");
 
-export default function Stock(){return <AuthGate>{s=><StockView session={s}/>}</AuthGate>}
+export default function Stock(){return <AuthGate>{s=><Suspense fallback={<p className="p-5">กำลังเปิดสต็อก…</p>}><StockView session={s}/></Suspense>}</AuthGate>}
 
 function previewReceived(packageQty:string,packSize:string,fromUnit:string,toUnit:string){
   const packs=Number(packageQty),size=Number(packSize);
@@ -54,7 +55,15 @@ function StockView({session}:{session:Session}){
   const [pendingStockIntent,setPendingStockIntent]=useState<StockWriteIntent|null>(null),[stockRecoveryBlocked,setStockRecoveryBlocked]=useState(false);
   const stockRecoveryRef=useRef(false);
 
-  const load=async()=>{const [overview,proposalData]=await Promise.all([api<Overview>("/api/stock/overview"),api<{proposals:CountProposal[]}>("/api/stock/cycle-count/proposals")]);setData(overview);setCountProposals(proposalData.proposals||[])};
+  const router=useRouter(),params=useSearchParams(),attentionOnly=params.get("attention")==="shortage";
+  const [loadError,setLoadError]=useState(false),[refreshing,setRefreshing]=useState(false);
+  useEffect(()=>{if(attentionOnly){setTab("active");setQ("")}},[attentionOnly]);
+  const load=async()=>{
+    setRefreshing(true);
+    try{const [overview,proposalData]=await Promise.all([api<Overview>("/api/stock/overview"),api<{proposals:CountProposal[]}>("/api/stock/cycle-count/proposals")]);setData(overview);setCountProposals(proposalData.proposals||[]);setLoadError(false)}
+    catch(error){setLoadError(true);throw error}
+    finally{setRefreshing(false)}
+  };
 
   function stockError(code:string){
     const map:Record<string,string>={
@@ -211,7 +220,8 @@ function StockView({session}:{session:Session}){
     window.addEventListener("online",onOnline);window.addEventListener("focus",onFocus);document.addEventListener("visibilitychange",onVisible);
     return()=>{disposed=true;window.removeEventListener("online",onOnline);window.removeEventListener("focus",onFocus);document.removeEventListener("visibilitychange",onVisible)};
   },[session.user.id,session.csrf]);
-  const rows=useMemo(()=>(data?.ingredients||[]).filter(x=>x.archived===(tab==="archived")&&(x.name+" "+x.id).toLowerCase().includes(q.toLowerCase())),[data,q,tab]);
+  const attentionIds=useMemo(()=>new Set(data?.attention?.ingredients.map(x=>x.id)||[]),[data?.attention]);
+  const rows=useMemo(()=>(data?.ingredients||[]).filter(x=>x.archived===(tab==="archived")&&(x.name+" "+x.id).toLowerCase().includes(q.toLowerCase())&&(!attentionOnly||(!loadError&&attentionIds.has(x.id)))),[data,q,tab,attentionOnly,attentionIds,loadError]);
   const active=(data?.ingredients||[]).filter(x=>!x.archived),low=active.filter(x=>x.lowStock);
   const purchaseHistory=useMemo(()=>(data?.ingredients||[]).flatMap(i=>(i.recentPurchases||[]).map(p=>({ingredient:i,p}))).sort((a,b)=>b.p.createdAt-a.p.createdAt).slice(0,60),[data]);
 
@@ -436,8 +446,8 @@ function StockView({session}:{session:Session}){
 
   return <section className="soft-scroll h-full overflow-auto p-3 sm:p-5 md:p-7">
     <header className="flex flex-wrap items-end justify-between gap-3">
-      <div><p className="gold m-0 text-[9px] font-bold tracking-[.26em] sm:text-[10px]">INVENTORY</p><h1 className="mt-1 text-xl font-semibold sm:text-2xl">STOCK MANAGEMENT</h1><p className="mt-1 text-xs text-slate-500">นับเป็นกล่อง/แพ็กได้ · สูตรหักใช้ตามหน่วยจริงแยกกัน</p></div>
-      <div className="flex flex-wrap gap-2">{admin&&<button onClick={()=>openMaster()} className="flex min-h-11 items-center gap-2 rounded-full bg-[#d4af37] px-4 text-xs font-bold text-black"><Plus size={15}/>เพิ่ม Stock</button>}<button onClick={openCount} className="min-h-11 rounded-full border border-slate-300 bg-white px-4 text-xs font-bold">{admin?"นับสต๊อกจริง · Owner":"นับสต๊อกจริง · ส่งให้ Owner"}</button></div>
+      <div><p className="gold m-0 text-[9px] font-bold tracking-[.26em] sm:text-[10px]">INVENTORY</p><h1 className="mt-1 text-xl font-semibold sm:text-2xl">วัตถุดิบและบรรจุภัณฑ์</h1><p className="mt-1 text-xs text-slate-500">นับเป็นกล่อง/แพ็กได้ · สูตรหักใช้ตามหน่วยจริงแยกกัน</p></div>
+      <div className="flex flex-wrap gap-2">{admin&&<button onClick={()=>openMaster()} className="flex min-h-11 items-center gap-2 rounded-full bg-[#d4af37] px-4 text-xs font-bold text-black"><Plus size={15}/>เพิ่มวัตถุดิบ</button>}<button onClick={openCount} className="min-h-11 rounded-full border border-slate-300 bg-white px-4 text-xs font-bold">{admin?"นับของจริง":"ส่งผลนับของจริง"}</button></div>
     </header>
 
     {pendingStockIntent&&<div className="mt-3 rounded-2xl border border-red-300 bg-red-50 p-3 text-sm text-red-900"><b>มีรายการ Stock เดิมที่ยังไม่ทราบผล</b><p className="mt-1 text-xs">ระบบล็อกการปรับ Stock ใหม่และจะส่ง Request เดิมซ้ำอย่างปลอดภัยเมื่อเชื่อมต่อ · {pendingStockIntent.operation} · Request …{pendingStockIntent.body.requestKey.slice(-8)}</p><button disabled={busy} onClick={()=>submitStockIntent(pendingStockIntent,true)} className="mt-2 min-h-11 rounded-xl bg-red-800 px-4 text-xs font-bold text-white disabled:opacity-40">ตรวจผล Request เดิม</button></div>}
@@ -447,16 +457,29 @@ function StockView({session}:{session:Session}){
     {admin&&countProposals.filter(x=>x.status==="pending").length>0&&<div className="mt-3 rounded-[20px] border border-blue-200 bg-blue-50 p-3"><div className="flex items-center gap-2 text-sm font-semibold text-blue-800"><AlertTriangle size={16}/>รอ Owner ตรวจผลนับ {countProposals.filter(x=>x.status==="pending").length} รายการ</div><div className="mt-2 space-y-2">{countProposals.filter(x=>x.status==="pending").slice(0,5).map(p=><div key={p.id} className="rounded-2xl border border-blue-100 bg-white p-3 text-sm"><div className="flex flex-wrap items-start justify-between gap-2"><div><b>{p.submittedBy}</b><small className="ml-2 text-slate-500">{new Date(p.submittedAt).toLocaleTimeString("th-TH",{timeZone:"Asia/Bangkok",hour:"2-digit",minute:"2-digit"})}</small><div className="mt-1 text-xs text-slate-500">{p.adjustments.filter(x=>Math.abs(Number(x.variance||0))>0.000001).slice(0,4).map(x=>x.name+" "+(x.variance>0?"+":"")+Number(x.variance).toLocaleString()+" "+x.unit).join(" · ")||"นับตรงทุกรายการ"}</div></div><div className="flex gap-2"><button disabled={busy} onClick={()=>reviewCountProposal(p,false)} className="min-h-10 rounded-xl border border-slate-300 px-3 text-xs">ตีกลับ</button><button disabled={busy} onClick={()=>reviewCountProposal(p,true)} className="min-h-10 rounded-xl bg-[#d4af37] px-3 text-xs font-bold text-black">อนุมัติ</button></div></div></div>)}</div></div>}
     {!admin&&countProposals.some(x=>x.status==="pending")&&<div className="mt-3 rounded-[20px] border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">ผลนับล่าสุดกำลังรอ Owner ตรวจ · ระบบยังไม่เปลี่ยนยอด Stock</div>}
 
-    <div className="mt-3 grid gap-2 sm:grid-cols-[auto_1fr]"><div className="glass flex rounded-full p-1"><button onClick={()=>setTab("active")} className={"rounded-full px-4 py-2 text-xs "+(tab==="active"?"bg-[#d4af37] font-bold text-black":"text-slate-600")}>ใช้งาน</button><button onClick={()=>setTab("archived")} className={"rounded-full px-4 py-2 text-xs "+(tab==="archived"?"bg-[#d4af37] font-bold text-black":"text-slate-600")}>เก็บแล้ว</button></div><div className="glass flex items-center gap-2 rounded-full px-3 py-2.5"><Search size={17} className="text-slate-500"/><input value={q} onChange={e=>setQ(e.target.value)} placeholder="ค้นหาวัตถุดิบ / บรรจุภัณฑ์" className="w-full bg-transparent outline-none"/></div></div>
+    <section aria-label="ของที่ทำให้เมนูหยุดขาย" className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-amber-950">
+      <div className="flex flex-wrap items-center justify-between gap-2"><h2 className="text-sm font-bold">ของที่ทำให้เมนูหยุดขาย</h2><button aria-label="ตรวจข้อมูลล่าสุด" disabled={refreshing} aria-busy={refreshing} onClick={()=>load().catch(()=>{})} className="min-h-11 rounded-xl border border-amber-300 bg-white px-3 text-xs font-bold">ตรวจใหม่</button></div>
+      <p className="mt-1 text-xs">ตรวจของจริงก่อนรับเข้าหรือนับใหม่ · ระบบไม่เติมยอดให้เอง</p>
+      {loadError?<p role="alert" className="mt-2 text-sm font-semibold text-red-800">ยังโหลดข้อมูลสต็อกล่าสุดไม่ได้ กรุณาตรวจใหม่ก่อนใช้รายการของขาด</p>:!data?<p role="status" className="mt-2 text-xs">กำลังโหลดข้อมูลสต็อก…</p>:!data.attention?<p role="status" className="mt-2 text-xs">ยังอ่านรายการของขาดไม่ได้ กรุณาตรวจข้อมูลล่าสุดอีกครั้ง</p>:<>
+        <p role="status" className="mt-2 text-xs">{data.attention.blockedMenus?data.attention.ingredients.length+" วัตถุดิบ · กระทบ "+data.attention.blockedMenus+" เมนู (รวมบางสูตรที่ขายไม่ได้)":"ไม่พบของขาดที่ทำให้เมนูหยุดขายจากข้อมูลล่าสุด"}</p>
+        {data.attention.missingReferences>0&&<p className="mt-2 text-xs">มีสูตรอ้างอิงวัตถุดิบที่ไม่พบหรือเก็บแล้ว {data.attention.missingReferences} รายการ ให้เจ้าของร้านตรวจสูตรก่อนรับเข้า</p>}
+      </>}
+      <div className="mt-3 flex flex-wrap gap-2"><button aria-label="เฉพาะของที่ทำให้เมนูหยุดขาย" aria-pressed={attentionOnly} onClick={()=>router.replace("/stock?attention=shortage",{scroll:false})} className={"min-h-11 rounded-xl border border-amber-400 px-3 text-xs font-bold "+(attentionOnly?"bg-amber-100":"bg-white")}>ของที่ขาด</button>{attentionOnly&&<button aria-label="ดูวัตถุดิบทั้งหมด" onClick={()=>router.replace("/stock",{scroll:false})} className="min-h-11 rounded-xl border border-slate-300 bg-white px-3 text-xs font-semibold text-slate-700">ดูทั้งหมด</button>}</div>
+    </section>
+
+    <div className="mt-3 grid gap-2 sm:grid-cols-[auto_1fr]"><div className="glass flex rounded-full p-1"><button onClick={()=>setTab("active")} className={"min-h-11 rounded-full px-4 py-2 text-xs "+(tab==="active"?"bg-[#d4af37] font-bold text-black":"text-slate-600")}>ใช้งาน</button><button onClick={()=>{setTab("archived");router.replace("/stock",{scroll:false})}} className={"min-h-11 rounded-full px-4 py-2 text-xs "+(tab==="archived"?"bg-[#d4af37] font-bold text-black":"text-slate-600")}>เก็บแล้ว</button></div><div className="glass flex items-center gap-2 rounded-full px-3 py-2.5"><Search size={17} className="text-slate-500"/><input aria-label="ค้นหาวัตถุดิบ / บรรจุภัณฑ์" value={q} onChange={e=>setQ(e.target.value)} placeholder="ค้นหาวัตถุดิบ / บรรจุภัณฑ์" className="w-full bg-transparent outline-none"/></div></div>
 
     <div className="mt-3 grid gap-2 lg:grid-cols-2 2xl:grid-cols-3">
-      {rows.map(x=><article key={x.id} className={"glass card p-4 "+(x.lowStock?"border-amber-300":"")}>
-        <div className="flex items-start justify-between gap-3"><div><small className="text-[9px] uppercase tracking-widest text-slate-400">{x.id}</small><h2 className="mt-1 font-semibold">{x.name}</h2></div>{x.archived?<span className="rounded-full bg-slate-100 px-2 py-1 text-[10px]">ARCHIVED</span>:x.lowStock?<span className="rounded-full bg-amber-100 px-2 py-1 text-[10px] text-amber-700">LOW</span>:null}</div>
+      {rows.map(x=><article aria-label={x.name} key={x.id} className={"glass card p-4 "+(x.lowStock?"border-amber-300":"")}>
+        <div className="flex items-start justify-between gap-3"><div><small className="text-[9px] uppercase tracking-widest text-slate-400">{x.id}</small><h2 className="mt-1 font-semibold">{x.name}</h2></div>{x.archived?<span className="rounded-full bg-slate-100 px-2 py-1 text-[10px]">เก็บแล้ว</span>:x.lowStock?<span className="rounded-full bg-amber-100 px-2 py-1 text-[10px] text-amber-700">ใกล้หมด</span>:null}</div>
         <div className="mt-3 flex items-end justify-between gap-3"><div><small className="text-slate-500">คงเหลือที่สูตรใช้ได้</small><div className="mt-1 text-2xl font-semibold text-[#765b08]">{x.qty.toLocaleString()} <span className="text-xs text-slate-500">{x.unit}</span></div>{x.purchaseProfile&&<small className="mt-1 block text-slate-500">1 {x.purchaseProfile.packageUnit} = {Number(x.purchaseProfile.quantityPerPackage||0).toLocaleString()} {x.unit}</small>}</div><div className="text-right text-xs text-slate-500">ต้นทุนล่าสุด<br/><b className="text-slate-700">฿{x.unitCost.toFixed(4)}/{x.unit}</b></div></div>
+        {attentionOnly&&<p className="mt-2 break-words text-xs font-semibold text-amber-900">กระทบเมนู: {data?.attention?.ingredients.find(row=>row.id===x.id)?.menuNames.join(", ")}</p>}
         {!x.archived&&<><p className="mt-3 text-[11px] text-slate-500">ต้นทุนซื้อจริงต้องบันทึกจาก “รับเข้า” เพื่อเก็บราคา วันที่ และแหล่งซื้อย้อนหลัง</p><div className="mt-4 grid grid-cols-2 gap-2"><button onClick={()=>openPurchase(x)} className="flex min-h-11 items-center justify-center gap-2 rounded-2xl border border-emerald-300 text-xs font-semibold text-emerald-700"><ArrowUpCircle size={15}/>รับเข้า</button><button onClick={()=>openWaste(x)} className="flex min-h-11 items-center justify-center gap-2 rounded-2xl border border-red-200 text-xs font-semibold text-red-600"><ArrowDownCircle size={15}/>ของเสีย</button></div></>}
-        {admin&&<div className="mt-2 grid grid-cols-2 gap-2">{x.archived?<><button onClick={()=>ingredientAction(x,"restore")} className="min-h-11 rounded-2xl border border-amber-300 text-xs font-semibold text-amber-700"><RotateCcw size={14} className="mr-1 inline"/>กู้คืน</button><button onClick={()=>purgeIngredient(x)} className="min-h-11 rounded-2xl border border-red-200 text-xs font-semibold text-red-600"><Trash2 size={14} className="mr-1 inline"/>ลบถาวร</button></>:<><button onClick={()=>openMaster(x)} className="min-h-11 rounded-2xl border border-slate-200 text-xs text-slate-700"><Edit3 size={14} className="mr-1 inline"/>แก้ Master</button>{latestPurchase(x)?<button onClick={()=>setPurchaseEdit({ingredient:x,purchase:{...latestPurchase(x)!}})} className="min-h-11 rounded-2xl border border-slate-200 text-xs text-slate-700">แก้ข้อมูลซื้อล่าสุด</button>:<button onClick={()=>ingredientAction(x,"reset")} className="min-h-11 rounded-2xl border border-red-200 text-xs text-red-600">ล้างข้อมูลทดลอง</button>}</>}</div>}
+        {admin&&<details className="mt-2 rounded-xl border border-slate-200 px-3"><summary className="min-h-11 cursor-pointer py-3 text-xs font-semibold text-slate-700">จัดการข้อมูลวัตถุดิบ</summary><div className="grid grid-cols-2 gap-2 pb-3">{x.archived?<><button onClick={()=>ingredientAction(x,"restore")} className="min-h-11 rounded-2xl border border-amber-300 text-xs font-semibold text-amber-700"><RotateCcw size={14} className="mr-1 inline"/>กู้คืน</button><button onClick={()=>purgeIngredient(x)} className="min-h-11 rounded-2xl border border-red-200 text-xs font-semibold text-red-600"><Trash2 size={14} className="mr-1 inline"/>ลบถาวร</button></>:<><button onClick={()=>openMaster(x)} className="min-h-11 rounded-2xl border border-slate-200 text-xs text-slate-700"><Edit3 size={14} className="mr-1 inline"/>แก้ข้อมูลวัตถุดิบ</button>{latestPurchase(x)?<button onClick={()=>setPurchaseEdit({ingredient:x,purchase:{...latestPurchase(x)!}})} className="min-h-11 rounded-2xl border border-slate-200 text-xs text-slate-700">แก้ข้อมูลซื้อล่าสุด</button>:<button onClick={()=>ingredientAction(x,"reset")} className="min-h-11 rounded-2xl border border-red-200 text-xs text-red-600">ล้างข้อมูลทดลอง</button>}</>}</div></details>}
       </article>)}
     </div>
+
+    {data&&!loadError&&(!attentionOnly||data.attention)&&rows.length===0&&<p role="status" className="mt-3 rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-700">{q.trim()?"ไม่พบรายการตามคำค้น":attentionOnly?"ไม่มีวัตถุดิบในรายการของขาดที่แสดงได้ ดูวัตถุดิบทั้งหมดเพื่อตรวจรายการอื่น":"ยังไม่มีวัตถุดิบในหมวดนี้"}</p>}
 
     {admin&&purchaseHistory.length>0&&<div className="glass card mt-4 overflow-hidden p-2"><div className="p-3"><p className="text-[10px] tracking-[.25em] text-slate-500">PURCHASE HISTORY</p><h2 className="mt-1 text-base">ข้อมูลซื้อที่นำกลับมาใช้ซ้ำได้ / รับเข้า</h2><p className="mt-1 text-xs text-slate-500">ถ้ากรอกวัตถุดิบผิด ให้ใช้ “ยกเลิกรับเข้า” แทนการลบ Stock Master</p></div><div className="soft-scroll max-h-[340px] overflow-auto"><table className="w-full min-w-[780px] text-sm"><thead className="sticky top-0 bg-slate-100 text-left text-[10px] text-slate-500"><tr><th className="p-3">รายการ</th><th>วันที่</th><th>ร้าน/แหล่ง</th><th>จำนวนรับ</th><th>ราคา</th><th>แพ็ก</th><th>สถานะ / จัดการ</th></tr></thead><tbody>{purchaseHistory.map(({ingredient,p})=><tr key={p.id} className={"border-t border-slate-100 "+(p.cancelled?"bg-slate-50 text-slate-400":"")}><td className="p-3"><b className={p.cancelled?"line-through":""}>{ingredient.name}</b>{p.cancelled&&p.cancelReason&&<small className="mt-1 block max-w-[220px]">เหตุผล: {p.cancelReason}</small>}</td><td>{p.purchaseDate}</td><td>{p.supplier||"—"}</td><td>{p.quantityReceived.toLocaleString()} {p.usageUnit}</td><td>฿{compactMoney(p.totalCost)}</td><td>{p.packageQty||"—"} {p.packageUnit}</td><td>{p.cancelled?<span className="rounded-full bg-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600">ยกเลิกแล้ว</span>:<div className="flex gap-2"><button disabled={busy} onClick={()=>setPurchaseEdit({ingredient,purchase:{...p}})} className="rounded-full border px-3 py-1.5 text-xs disabled:opacity-40">แก้</button><button disabled={busy} onClick={()=>cancelPurchase(ingredient,p)} className="rounded-full border border-red-200 px-3 py-1.5 text-xs font-semibold text-red-600 disabled:opacity-40">ยกเลิกรับเข้า</button></div>}</td></tr>)}</tbody></table></div></div>}
 

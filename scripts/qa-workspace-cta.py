@@ -42,7 +42,7 @@ with sync_playwright() as p:
             else:cta.focus();cta.press(mode)
             guide=page.locator('#workspace-stock-guidance');expect(guide).to_be_visible();expect(guide).to_be_focused()
             expect(guide.get_by_text('ขาด นม Meiji',exact=True)).to_be_visible()
-            expect(guide.get_by_role('link')).to_have_attribute('href','/stock')
+            expect(guide.get_by_role('link')).to_have_attribute('href','/stock?attention=shortage')
             expect(cta).to_have_attribute('aria-expanded','true')
             assert not errors,errors
             assert not writes,writes

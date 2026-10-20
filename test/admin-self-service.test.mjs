@@ -19,7 +19,7 @@ test('stock admin supports self-service master create edit archive restore reset
   assert.match(api,/UPDATE field_stock_transactions SET qty_delta=/);
   assert.match(api,/purchase_correction_stock_negative/);
   assert.match(api,/stock_purchase_update/);
-  assert.match(ui,/เพิ่ม Stock/);
+  assert.match(ui,/เพิ่มวัตถุดิบ/);
   assert.match(ui,/ล้างยอด\/ราคาทดลอง/);
   assert.match(ui,/แก้ข้อมูลซื้อล่าสุด/);
   assert.match(ui,/ข้อมูลซื้อที่นำกลับมาใช้ซ้ำได้/);

@@ -17,7 +17,7 @@ with sync_playwright() as p:
             if route.request.method!='GET' and path!='telemetry/web-vitals':writes.append(path)
             if path=='auth/session':data={'user':{'id':'owner','username':'owner','role':'admin','permissions':{}},'csrf':'test'}
             elif path=='control-center':
-                catalog={'status':'READY' if scenario['ready'] else 'REVIEW','activeMenus':1,'availableMenus':1 if scenario['ready'] else 0,'issues':[] if scenario['ready'] else [{'code':'stock_shortage','title':'วัตถุดิบไม่พอสำหรับบางเมนู','href':'/stock','action':'ไปตรวจของจริง / รับเข้า','count':1,'items':[{'name':'Matcha Latte','detail':'ขาด นม Meiji'}]},{'code':'cost_unconfirmed','title':'ต้นทุนยังไม่ครบหรือยังไม่ยืนยัน','href':'/costs','action':'ไปตรวจต้นทุน','count':1,'items':[{'name':'Milk','detail':'ยังไม่ยืนยันต้นทุน'}]}]}
+                catalog={'status':'READY' if scenario['ready'] else 'REVIEW','activeMenus':1,'availableMenus':1 if scenario['ready'] else 0,'issues':[] if scenario['ready'] else [{'code':'stock_shortage','title':'วัตถุดิบไม่พอสำหรับบางเมนู','href':'/stock?attention=shortage','action':'ไปตรวจของจริง / รับเข้า','count':1,'items':[{'name':'Matcha Latte','detail':'ขาด นม Meiji'}]},{'code':'cost_unconfirmed','title':'ต้นทุนยังไม่ครบหรือยังไม่ยืนยัน','href':'/costs','action':'ไปตรวจต้นทุน','count':1,'items':[{'name':'Milk','detail':'ยังไม่ยืนยันต้นทุน'}]}]}
                 data={'analysis':{'generatedAt':1,'date':'2026-10-20','level':'OK','signals':[],'recommendations':[],'metrics':{},'evidence':{'lowStock':[],'largeMovements':[],'highRiskActions':[],'pendingOwnerApprovals':[],'stockIntegrity':[]},'readiness':{'generatedAt':1,'date':'2026-10-20','status':'READY','score':100,'summary':{'total':0,'ready':0,'warn':0,'blocked':0},'checks':[],'nextActions':[],'catalog':catalog}}}
             else:data={}
             route.fulfill(status=200,content_type='application/json',body=json.dumps(data))
@@ -27,7 +27,7 @@ with sync_playwright() as p:
         expect(card.get_by_text('ผลตรวจระบบปกติไม่ได้ยืนยันว่าทุกเมนูมีของพร้อมขาย',exact=False)).to_be_visible()
         card.get_by_text('วัตถุดิบไม่พอสำหรับบางเมนู · 1 รายการ',exact=True).click()
         expect(card.get_by_text('ขาด นม Meiji',exact=True)).to_be_visible()
-        expect(card.get_by_role('link',name='ไปตรวจของจริง / รับเข้า',exact=True)).to_have_attribute('href','/stock')
+        expect(card.get_by_role('link',name='ไปตรวจของจริง / รับเข้า',exact=True)).to_have_attribute('href','/stock?attention=shortage')
         expect(page.get_by_text('ตรวจระบบและบัญชีแบบละเอียด',exact=True)).to_be_visible()
         assert card.evaluate('(e)=>e.scrollWidth<=e.clientWidth')
         page.screenshot(path=str(out/f'{width}-catalog-review.png'))
