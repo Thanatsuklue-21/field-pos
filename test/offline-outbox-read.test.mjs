@@ -69,7 +69,7 @@ test('POS validates existing offline bills before capturing another offline sale
   const start=source.indexOf('if(offlineAtStart)'),end=source.indexOf('if(method==="promptpay")',start);
   const block=source.slice(start,end);
   assert.ok(block.indexOf('await refreshOfflineStats()')>=0);
-  assert.ok(block.indexOf('await refreshOfflineStats()')<block.indexOf('queueOfflineCashSale(body)'));
+  assert.ok(block.indexOf('await refreshOfflineStats()')<block.indexOf('queueOfflineCashSale(body,{projectStock:true})'));
   assert.match(source,/ยังอ่านบิลที่เก็บในเครื่องไม่ได้/);
   assert.match(source,/ห้ามล้างข้อมูลแอปหรือเบราว์เซอร์/);
 });
@@ -78,6 +78,7 @@ test('unreadable outbox produces neither a zero summary nor sync mutations',asyn
   const api=await loadBrowserModule('lib/offline-sales.ts',{
     id:'unreadable-summary-sync',
     replace:source=>source
+      .replace(/^import .*availability.mjs.*;$/m,'const cartAvailability=()=>{throw new Error("unexpected_capture")};')
       .replace(/^import .*api-client.*;$/m,'export const mutations=[]; const api=async()=>{mutations.push("checkout");return {}};')
       .replace(/^import .*offline-db.*;$/m,'const offlineCashList=async()=>{throw new Error("offline_storage_unavailable")}; const offlineCashPatch=async()=>mutations.push("patch"); const offlineCashDelete=async()=>mutations.push("delete"); const offlineCashPut=async()=>mutations.push("put");')
       .replace(/^import .*money.mjs.*;$/m,'const sumMoney=()=>{throw new Error("unexpected_money_read")};')

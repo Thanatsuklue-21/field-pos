@@ -1,4 +1,5 @@
 "use client";
+import {sumMoney,multiplyMoney} from "@/lib/domain/money.mjs";
 import {create} from "zustand";
 import {persist} from "zustand/middleware";
 
@@ -25,7 +26,7 @@ export const useCartStore=create<S>()(persist((set,get)=>({
   updateQuantity:(key,qty)=>set(s=>({items:qty<=0?s.items.filter(i=>i.key!==key):s.items.map(i=>i.key===key?{...i,qty}:i)})),
   replaceItems:items=>set({items}),
   clearCart:()=>set({items:[]}),
-  getSubtotal:()=>get().items.reduce((s,i)=>s+i.price*i.qty,0),
+  getSubtotal:()=>sumMoney(get().items.map(i=>multiplyMoney(i.price,i.qty))),
   getTax:()=>0,
   getTotal:()=>get().getSubtotal()
 }),{name:"field-pos-cart-v1",partialize:s=>({items:s.items}) as S}));

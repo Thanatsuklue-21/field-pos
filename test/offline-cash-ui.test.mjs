@@ -31,7 +31,8 @@ test('offline local stock projection prevents the cart from forgetting already-s
   const sync=await read('lib/offline-sales.ts'),pos=await read('app/pos/page.tsx');
   assert.match(sync,/applyOfflineCashToBootstrap/);
   assert.match(sync,/Number\(stock\[ingredientId\]\.qty\)-qty/);
-  assert.match(pos,/cachePut\(\"\/api\/pos\/bootstrap\",projected\)/);
+  assert.match(pos,/queueOfflineCashSale\(body,\{projectStock:true\}\)/);
+  assert.match(pos,/bootstrap:queued\.bootstrap/);
 });
 
 test('server marks synced offline orders returned so they never re-enter production FIFO',async()=>{
