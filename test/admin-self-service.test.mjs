@@ -38,7 +38,8 @@ test('daily count separates package counting from recipe usage units',async()=>{
   assert.match(ui,/นับเป็นกล่อง\/แพ็กก่อน ระบบค่อยแปลงเป็นหน่วยใช้ในสูตร/);
   assert.match(ui,/quantityPerPackage/);
   assert.match(ui,/เศษ\/เปิดแล้ว/);
-  assert.match(ui,/countedQty:per>0\?Number\(row\.packs/);
+  assert.match(ui,/countedQuantity\(row,per\)/);
+  assert.match(ui,/if\(qty===null\)throw new Error\("invalid_cycle_count"\)/);
 });
 
 test('purchase form leads with price and can reuse recent supplier source and package evidence',async()=>{

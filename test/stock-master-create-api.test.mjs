@@ -9,6 +9,16 @@ import {createApi} from "../lib/api.mjs";
 import {digest} from "../lib/security.mjs";
 
 const origin="https://field.test";
+test('real libSQL set master receives 50 sets and replays without duplicate stock',async t=>{
+ const {db,handler}=await setup(t),create={requestKey:'set-master-0001',name:'Hot cup and lid',unit:'set',safetyStock:0,costKind:'other',wasteMargin:0};
+ const master=await send(handler,req('token-1','csrf-1',create));assert.equal(master.status,201);
+ const body={requestKey:'set-receipt-0001',ingredientId:master.body.ingredient.id,type:'PURCHASE',unit:'set',packageQty:1,packageUnit:'แพ็ก',packSize:50,packSizeUnit:'set',purchaseCost:200};
+ const request=()=>({...req('token-1','csrf-1',body),query:{route:'stock/transactions'}});
+ assert.equal((await send(handler,request())).status,201);assert.equal((await send(handler,request())).status,200);
+ const state=JSON.parse((await db.execute('SELECT document FROM field_state WHERE singleton=1')).rows[0].document);
+ assert.equal(state.ingredients[body.ingredientId].qty,50);assert.equal(state.ingredients[body.ingredientId].unit,'set');
+ assert.equal(Number((await db.execute("SELECT COUNT(*) AS n FROM field_stock_transactions WHERE request_key='set-receipt-0001'")).rows[0].n),1);
+});
 async function setup(t){
   const dir=await mkdtemp(join(tmpdir(),"field-stock-master-create-")),db=createClient({url:"file:"+join(dir,"test.db")});
   t.after(async()=>{db.close();try{await rm(dir,{recursive:true,force:true})}catch(error){if(process.platform!=="win32"||error.code!=="EBUSY")throw error}});

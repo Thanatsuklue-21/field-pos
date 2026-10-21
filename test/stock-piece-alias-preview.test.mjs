@@ -15,11 +15,11 @@ test("one pack of 100 pieces converts correctly into legacy pcs stock",()=>{
 });
 
 test("stock purchase preview delegates to the shared unit conversion domain",async()=>{
-  const source=await readFile(new URL("../app/stock/page.tsx",import.meta.url),"utf8");
+  const source=await readFile(new URL("../lib/stock-entry-guidance.mjs",import.meta.url),"utf8");
   const start=source.indexOf("function previewReceived");
-  const end=source.indexOf("function compactMoney",start);
+  const end=source.indexOf("// Text inputs",start);
   const block=source.slice(start,end);
   assert.match(source,/calculateReceivedQuantity/);
-  assert.match(block,/calculateReceivedQuantity\(\{packageQty:packs,packSize:size,packSizeUnit:fromUnit,usageUnit:toUnit\}\)/);
+  assert.match(block,/calculateReceivedQuantity\(\{packageQty,packSize,packSizeUnit:fromUnit,usageUnit:toUnit\}\)/);
   assert.doesNotMatch(block,/from==="piece"&&\(to==="piece"\|\|to==="ชิ้น"\)/);
 });
