@@ -9,7 +9,7 @@ test("operational overlays use the shared modal keyboard and safe-area contract"
     ["app/orders/page.tsx",["payment-recovery-title","refund-review-title","cash-action-review-title","order-detail-title"],4],
     ["app/stock/page.tsx",["stock-ingredient-review-title","stock-count-review-title","stock-transaction-title","stock-master-title","stock-daily-count-title","stock-purchase-edit-title"],6],
     ["app/products/page.tsx",["product-structure-title","product-edit-title","product-archive-title"],3],
-    ["app/settlements/page.tsx",["settlement-reconcile-title"],1],
+    ["app/settlements/page.tsx",["settlement-reconcile-title","settlement-cancel-title"],2],
     ["components/ai-supervisor.tsx",["ai-supervisor-title"],1],
     ["app/expenses/page.tsx",["expense-dialog-title"],1],
     ["app/close/page.tsx",["open-shift-review-title","close-day-review-title","cash-drawer-dialog-title"],3],
@@ -45,6 +45,7 @@ test("financial and stock mutation modals cannot escape-dismiss while busy",asyn
   assert.ok((await read("app/close/page.tsx")).includes('onEscape={busy?undefined:()=>setOpenShiftReview(null)}'));
   assert.ok((await read("app/close/page.tsx")).includes('onEscape={busy?undefined:()=>setCloseDayReview(null)}'));
   assert.ok(settlements.includes('onEscape={busy?undefined:()=>setSelected(null)}'));
+  assert.ok(settlements.includes('onEscape={busy?undefined:closeCancelReview}'));
   assert.ok(products.includes('onEscape={busy?undefined:()=>setStructureOpen(false)}'));
   assert.ok(products.includes('onEscape={busy?undefined:()=>{setEdit(null);setPendingImage("")}}'));
   assert.ok(products.includes('onEscape={busy?undefined:()=>setDel(null)}'));

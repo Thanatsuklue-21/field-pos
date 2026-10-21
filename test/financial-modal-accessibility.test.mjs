@@ -32,3 +32,18 @@ test("shared modal focus preserves a valid React autofocus target unless caller 
   assert.ok(modal.includes('event.key==="Tab"'));
   assert.ok(modal.includes('event.key==="Escape"'));
 });
+
+
+test("settlement cancellation uses a guided in-app financial review",async()=>{
+  const settlements=await read("app/settlements/page.tsx");
+  assert.ok(!settlements.includes("window.prompt"));
+  assert.ok(!settlements.includes("window.confirm"));
+  assert.ok(settlements.includes('labelId="settlement-cancel-title"'));
+  assert.ok(settlements.includes('initialFocusSelector="#settlement-cancel-reason"'));
+  assert.ok(settlements.includes('aria-label="ปิดการยกเลิกการกระทบยอด"'));
+  assert.ok(settlements.includes('data-settlement-cancel-confirm'));
+  assert.ok(settlements.includes('cancelReason.trim().length<3'));
+  assert.ok(settlements.includes('ยืนยันยกเลิก'));
+  assert.ok(settlements.includes('ไม่ลบ Audit เดิม'));
+  assert.ok(settlements.includes('min-h-12'));
+});
