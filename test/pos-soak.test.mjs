@@ -426,7 +426,7 @@ test('mixed cash and PromptPay split refund requires manual PromptPay confirmati
   const db=fakeDb();
   const started=await startSplitPayment({db,user,now:6100,body:{requestKey:'split-refund-mixed-start',cart:[{...cart[0],qty:2}],date}});
   await paySplitPayment({db,user,now:6110,body:{requestKey:'split-refund-mixed-cash',sessionId:started.session.id,method:'cash',received:55,allocations:[{index:0,qty:1}]}});
-  const completed=await paySplitPayment({db,user,now:6120,body:{requestKey:'split-refund-mixed-pp',sessionId:started.session.id,method:'promptpay',paymentReference:'pp-split-1',paymentVerified:'charge-paid',paymentProviderAmount:55,allocations:[{index:0,qty:1}]}});
+  const completed=await paySplitPayment({db,user,now:6120,body:{requestKey:'split-refund-mixed-pp',sessionId:started.session.id,method:'promptpay',paymentReference:'pp-split-1',paymentVerified:'pp-split-1',paymentProviderAmount:55,paymentProvider:'beam',paymentProviderCurrency:'THB',paymentProviderReference:started.session.id,allocations:[{index:0,qty:1}]}});
   await assert.rejects(()=>refundSale({db,user,now:6130,body:{requestKey:'split-refund-mixed-no-confirm',saleId:completed.saleId}}),/promptpay_manual_refund_required/);
   const refunded=await refundSale({db,user,now:6140,body:{requestKey:'split-refund-mixed-confirm',saleId:completed.saleId,manualConfirmed:true,manualReference:'refund-bank-001',reason:'full refund'}});
   assert.equal(refunded.refundMethod,'split_manual');
@@ -493,7 +493,7 @@ test('multi-sale refund requires external confirmation when any add-on used bank
 
 test('PromptPay refund requires explicit external manual confirmation and reference',async()=>{
   const db=fakeDb();
-  await checkoutPos({db,user,now:5300,body:{requestKey:'refund-pp-checkout-001',cart,date,payment:'promptpay',paymentVerified:'chrg_test_paid',paymentProviderAmount:55,paymentReference:'chrg_test_paid'}});
+  await checkoutPos({db,user,now:5300,body:{requestKey:'refund-pp-checkout-001',cart,date,payment:'promptpay',paymentVerified:'chrg_test_paid',paymentProviderAmount:55,paymentReference:'chrg_test_paid',paymentProvider:'opn',paymentProviderCurrency:'THB',paymentProviderReference:'refund-pp-checkout-001'}});
   const sale=JSON.parse(db.storage.document).sales[0];
   await assert.rejects(()=>refundSale({db,user,now:5310,body:{requestKey:'refund-pp-0001',saleId:sale.id}}),/promptpay_manual_refund_required/);
   const ok=await refundSale({db,user,now:5320,body:{requestKey:'refund-pp-0002',saleId:sale.id,manualConfirmed:true,manualReference:'bank-transfer-123',reason:'manual returned'}});
@@ -737,7 +737,7 @@ test('PromptPay full reservation freezes CRM discount and provider amount at net
   const db=fakeDb(seed);
   const started=await startSplitPayment({db,user,now:1000,body:{requestKey:'crm-pp-start-001',cart,date,customerId:'cus-1',pointsRedeemed:5,mode:'promptpay_full'}});
   assert.equal(started.session.subtotal,55);assert.equal(started.session.discountTotal,10);assert.equal(started.session.total,45);
-  const paid=await paySplitPayment({db,user,now:1100,body:{requestKey:'crm-pp-pay-001',sessionId:started.session.id,method:'promptpay',allocations:[{index:0,qty:1}],paymentReference:'beam-test',paymentVerified:'beam-test',paymentProviderAmount:45}});
+  const paid=await paySplitPayment({db,user,now:1100,body:{requestKey:'crm-pp-pay-001',sessionId:started.session.id,method:'promptpay',allocations:[{index:0,qty:1}],paymentReference:'beam-test',paymentVerified:'beam-test',paymentProviderAmount:45,paymentProvider:'beam',paymentProviderCurrency:'THB',paymentProviderReference:started.session.id}});
   assert.equal(paid.completed,true);
   const state=JSON.parse(db.storage.document),sale=state.sales[0],customer=state.customers[0];
   assert.equal(sale.total,45);assert.equal(sale.pointsRedeemed,5);assert.equal(customer.points,15);assert.equal(customer.totalSpend,45);

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createPromptPayCharge,getPromptPayCharge,promptPayConfig} from '../lib/payment-opn.mjs';
+import {createPromptPayCharge,getPromptPayCharge,promptPayConfig,verifyPromptPayWebhook} from '../lib/payment-opn.mjs';
 
 const originalFetch=globalThis.fetch;
 const originalKey=process.env.OMISE_SECRET_KEY;
@@ -73,4 +73,25 @@ test('Opn provider timeout fails closed instead of hanging checkout',async()=>{
     ()=>createPromptPayCharge({amount:55,reference:'A001'}),
     error=>error?.message==='payment_provider_timeout'&&error?.status===502
   );
+});
+
+test('Opn preserves the intended FIELD reference and normalizes a verified completion event',async()=>{
+  process.env.OMISE_SECRET_KEY='skey_test_123';
+  globalThis.fetch=async(_url,init)=>{
+    if(init?.method==='POST'){
+      const form=new URLSearchParams(String(init.body));
+      assert.equal(form.get('metadata[field_reference]'),'split-intended');
+    }
+    return new Response(JSON.stringify({id:'chrg_bound',status:'successful',paid:true,amount:5500,currency:'THB',metadata:{field_reference:'split-intended'},source:{scannable_code:{image:{download_uri:'https://example.test/qr.png'}}}}),{status:200});
+  };
+  assert.equal((await createPromptPayCharge({amount:55,reference:'split-intended'})).referenceId,'split-intended');
+  const event=await verifyPromptPayWebhook({key:'charge.complete',data:{id:'chrg_bound',paid:false}});
+  assert.equal(event.eventType,'charge.succeeded');assert.equal(event.charge.referenceId,'split-intended');
+});
+
+test('Opn legacy FIELD description is recovered only from live provider response',async()=>{
+  process.env.OMISE_SECRET_KEY='skey_test_123';
+  globalThis.fetch=async()=>new Response(JSON.stringify({id:'chrg_legacy',status:'pending',amount:5500,currency:'THB',description:'FIELD split-legacy'}),{status:200});
+  const event=await verifyPromptPayWebhook({key:'charge.complete',data:{id:'chrg_legacy',paid:true,description:'FIELD forged'}});
+  assert.equal(event.charge.referenceId,'split-legacy');assert.notEqual(event.eventType,'charge.succeeded');
 });
