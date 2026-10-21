@@ -3,6 +3,7 @@
 import {useEffect,useMemo,useRef,useState} from "react";
 import {useRouter} from "next/navigation";
 import dynamic from "next/dynamic";
+import Link from "next/link";
 import {ArrowRight,CheckCircle2,ClipboardList,Clock3,Minus,Plus,Search,Trash2,WalletCards,X} from "lucide-react";
 import AuthGate from "@/components/auth-gate";
 import {api,type Bootstrap,type MenuItem,type RevisionUnchanged,type Session} from "@/lib/api-client";
@@ -301,6 +302,7 @@ function PosView({session}:{session:Session}){
 
   const cats=useMemo(()=>["ทั้งหมด",...Array.from(new Set((data?.menu||[]).filter(sellable).map(x=>x.category||"อื่นๆ")))], [data?.menu]);
   const menu=useMemo(()=>{const needle=q.trim().toLowerCase();return (data?.menu||[]).filter(x=>sellable(x)&&(cat==="ทั้งหมด"||(x.category||"อื่นๆ")===cat)&&(!needle||x.name.toLowerCase().includes(needle)))},[data?.menu,cat,q]);
+  const hasConfiguredMenu=(data?.menu||[]).some(sellable);
   const allUnavailable=menu.length>0&&menu.every(x=>!x.available);
   const unavailableNames=useMemo(()=>Array.from(new Set(menu.flatMap(x=>x.variants.flatMap(v=>v.missingIngredients||[]).map(i=>i.name)))).slice(0,4),[menu]);
   const cartStockState=useMemo(()=>cartAvailability({cart:cart.items,menu:data?.menu||[],stock:data?.availabilityStock||{}}),[cart.items,data?.menu,data?.availabilityStock]);
@@ -913,7 +915,7 @@ function PosView({session}:{session:Session}){
   const splitRemainingQty=splitPaymentPending?cart.items.reduce((sum,item)=>sum+item.qty,0):0;
 
   return <section className="flex h-full min-h-0">
-    <div className="flex min-w-0 flex-1 flex-col p-3 sm:p-4 md:p-6">
+    <div className="field-pos-catalog-pane flex min-w-0 flex-1 flex-col p-3 sm:p-4 md:p-6">
       <div className="mb-3 flex items-center justify-between gap-2">
         <div><p className="gold m-0 text-[10px] font-bold tracking-[.3em]">FIELD POS</p><h1 className="m-0 mt-1 text-xl font-semibold tracking-wide md:text-2xl">รับออเดอร์</h1><p className="mt-0.5 text-[11px] text-slate-500">แตะเมนู → ตรวจออเดอร์ → ชำระเงิน</p></div>
         <div className="flex items-center gap-1.5 sm:gap-2">
@@ -930,7 +932,7 @@ function PosView({session}:{session:Session}){
       {!payOpen&&(workspaceActionVisible?<div role="status" aria-live="polite" className={"mb-3 flex items-center justify-between gap-3 rounded-2xl border px-3 py-2.5 "+(workspaceNextAction.tone==="critical"?"border-red-300 bg-red-50 text-red-900":workspaceNextAction.tone==="warn"?"border-amber-300 bg-amber-50 text-amber-900":"border-[#d4af37]/50 bg-[#fff8dc] text-slate-900")}>
         <div className="min-w-0"><span className="text-[9px] font-black uppercase tracking-[.16em] text-slate-500">ทำต่อก่อน</span><b className="mt-0.5 block text-sm">{workspaceNextAction.label}</b><span className="mt-0.5 block text-[11px] leading-4">{workspaceNextAction.detail}</span></div>
         <button type="button" disabled={busy||payOpen} onClick={runWorkspaceNextAction} className="min-h-11 shrink-0 rounded-xl border border-[#b98b00] bg-[#d4af37] px-3 text-xs font-black text-black shadow-sm disabled:opacity-40">{workspaceActionLabel}</button>
-      </div>:!allUnavailable?<div role="status" aria-live="polite" className={"mb-3 rounded-2xl border px-3 py-2.5 "+(cashierGuide.tone==="warn"?"border-amber-300 bg-amber-50 text-amber-900":cashierGuide.tone==="ready"?"border-emerald-200 bg-emerald-50 text-emerald-900":"border-[#d4af37]/40 bg-[#fffaf0] text-slate-800")}>
+      </div>:!allUnavailable&&hasConfiguredMenu?<div role="status" aria-live="polite" className={"mb-3 rounded-2xl border px-3 py-2.5 "+(cashierGuide.tone==="warn"?"border-amber-300 bg-amber-50 text-amber-900":cashierGuide.tone==="ready"?"border-emerald-200 bg-emerald-50 text-emerald-900":"border-[#d4af37]/40 bg-[#fffaf0] text-slate-800")}>
         <b className="block text-sm">{cashierGuide.title}</b>
         <span className="mt-0.5 block text-[11px]">{cashierGuide.detail}</span>
       </div>:null)}
@@ -939,11 +941,16 @@ function PosView({session}:{session:Session}){
       {notice&&<div className="mb-3 flex items-start justify-between gap-3 rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900"><span>{notice}</span><button onClick={()=>setNotice("")} className="shrink-0"><X size={16}/></button></div>}
       {allUnavailable&&<div className="mb-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-900"><b>เมนูที่แสดงยังขายไม่ได้</b><p className="mt-1 text-xs">{unavailableNames.length?"ต้องตรวจยอดวัตถุดิบจริงก่อนรับออเดอร์ · ขาด: "+unavailableNames.join(", "):"ให้เจ้าของร้านตรวจสูตรและสถานะเมนูก่อนขาย"}</p>{unavailableNames.length>0&&(session.user.role==="admin"||session.user.permissions?.stock===true?<button onClick={()=>openWorkspace("stock")} className="mt-3 min-h-11 rounded-full bg-red-700 px-4 py-2 text-xs font-bold text-white">ตรวจสต็อกตรงนี้</button>:<p className="mt-2 text-xs font-semibold">ให้ผู้ดูแลสต็อกหรือเจ้าของร้านตรวจของจริงก่อนขาย</p>)}</div>}
 
-      <div className="glass mb-2.5 flex items-center gap-2.5 rounded-2xl px-3 py-2.5 sm:mb-3 sm:gap-3 sm:px-4 sm:py-3"><Search size={17} className="text-slate-500"/><input value={q} onChange={e=>setQ(e.target.value)} placeholder="ค้นหาเมนู เช่น มัทฉะ / กาแฟ" className="w-full bg-transparent outline-none"/></div>
+      <div className="glass mb-2.5 flex items-center gap-2.5 rounded-2xl px-3 py-2.5 sm:mb-3 sm:gap-3 sm:px-4 sm:py-3"><Search size={17} className="text-slate-500"/><input aria-label="ค้นหาเมนู" value={q} onChange={e=>setQ(e.target.value)} placeholder="ค้นหาเมนู เช่น มัทฉะ / กาแฟ" className="min-w-0 w-full bg-transparent outline-none"/>{q&&<button type="button" aria-label="ล้างคำค้นเมนู" onClick={()=>setQ("")} className="grid h-11 w-11 shrink-0 place-items-center rounded-xl text-slate-700 hover:bg-slate-100"><X size={18}/></button>}</div>
 
       <div className="soft-scroll mb-3 flex gap-1.5 overflow-x-auto sm:mb-4 sm:gap-2">{cats.map(x=><button key={x} onClick={()=>setCat(x)} className={"min-h-11 shrink-0 rounded-full border px-3 py-1.5 text-[11px] font-semibold sm:px-4 sm:py-2 sm:text-xs "+(cat===x?"border-[#c59b19] bg-[#d4af37] text-black shadow-sm":"border-slate-300 bg-white text-slate-700")}>{x}</button>)}</div>
 
-      <div className="soft-scroll min-h-0 flex-1 overflow-auto pb-28 lg:pb-0">
+      <div className="field-pos-menu-list soft-scroll min-h-0 flex-1 overflow-auto pb-28 lg:pb-0">
+        {data&&menu.length===0&&<div role="status" className="rounded-2xl border border-slate-200 bg-white p-5 text-center text-slate-700">
+          <h2 className="text-sm font-bold">{hasConfiguredMenu?"ไม่พบเมนูที่ตรงกับคำค้นหรือหมวดนี้":"ยังไม่มีเมนูที่เปิดขาย"}</h2>
+          <p className="mt-2 text-xs">{hasConfiguredMenu?"ลองดูเมนูทั้งหมด แล้วเลือกเมนูอีกครั้ง ออเดอร์ที่เลือกไว้ยังอยู่":"ให้เจ้าของร้านตรวจเมนู ราคา และสูตรก่อนเริ่มรับออเดอร์"}</p>
+          {hasConfiguredMenu?<button type="button" onClick={()=>{setQ("");setCat("ทั้งหมด")}} className="mt-4 min-h-11 rounded-xl border border-[#b98b00] bg-[#fff8dc] px-4 text-sm font-bold text-[#6f5510]">ดูทุกเมนู</button>:session.user.role==="admin"?<Link prefetch={false} href="/products" className="mt-4 inline-flex min-h-11 items-center rounded-xl border border-[#b98b00] bg-[#fff8dc] px-4 text-sm font-bold text-[#6f5510]">ไปจัดเมนู</Link>:null}
+        </div>}
         <div className="grid grid-cols-2 items-stretch gap-2 sm:gap-3 lg:grid-cols-3 2xl:grid-cols-4">{menu.map(x=><button key={x.id} disabled={!x.available} onClick={()=>chooseMenu(x)} className="glass pos-menu-card group flex min-h-[154px] flex-col overflow-hidden rounded-[20px] text-left sm:min-h-[190px] sm:rounded-[24px] hover:border-[#c59b19] disabled:border-slate-200 disabled:bg-slate-100"><div className="relative h-20 shrink-0 bg-[#f4ecd0] sm:h-24">{x.image?<img src={x.image} alt={x.name} loading="lazy" decoding="async" className="h-full w-full object-cover"/>:<div className="grid h-full place-items-center text-2xl font-bold text-[#765b08]">{x.name.slice(0,1)}</div>}<div className="absolute right-2 top-2">{!x.available?<span className="rounded-full bg-red-100 px-2 py-1 text-[10px] font-bold text-red-700">หมดชั่วคราว</span>:x.lowStock?<span className="rounded-full bg-amber-100 px-2 py-1 text-[10px] font-bold text-amber-800">เหลือประมาณ {x.maxServings} แก้ว</span>:null}</div></div><div className="flex flex-1 flex-col p-3 sm:p-4"><div className="text-[9px] uppercase tracking-widest text-slate-500 sm:text-[10px]">{x.category||"DRINK"}</div><b className="mt-1 block line-clamp-2 text-sm sm:text-base">{x.name}</b><div className="mt-auto pt-2 text-base font-semibold text-[#765b08] sm:pt-3 sm:text-lg">฿{formatBaht(x.price)}</div>{!x.available&&<small className="mt-2 block text-xs text-red-600">{Array.from(new Set(x.variants.flatMap(v=>v.missingIngredients||[]).map(i=>i.name))).slice(0,2).join(", ")||"สูตรยังไม่พร้อม"}</small>}</div></button>)}</div>
       </div>
     </div>

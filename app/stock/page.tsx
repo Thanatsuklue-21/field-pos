@@ -5,6 +5,7 @@ import {AlertTriangle,Archive,ArrowDownCircle,ArrowUpCircle,Edit3,Plus,RotateCcw
 import AuthGate from "@/components/auth-gate";
 import ModalFocus from "@/components/modal-focus";
 import {api,type Session} from "@/lib/api-client";
+import {purchaseCostLabel} from "@/lib/stock-entry-guidance.mjs";
 import {calculateReceivedQuantity} from "@/lib/domain/stock-units.mjs";
 import {prepareStockWriteIntent,readStockWriteIntent,sendStockWriteIntent,type StockWriteIntent,type StockWriteOperation} from "@/lib/stock-write-recovery";
 
@@ -228,7 +229,6 @@ function StockView({session}:{session:Session}){
   function setFromPurchase(x:Ingredient,p?:Purchase|null){
     const profile=x.purchaseProfile;
     setPurchaseCost(String(p?.totalCost??profile?.purchaseCost??""));
-    setPurchaseDate(p?.purchaseDate||profile?.purchaseDate||today());
     setSupplier(p?.supplier||profile?.supplier||"");
     setSourceUrl(p?.sourceUrl||profile?.sourceUrl||"");
     setImageUrl(p?.imageUrl||profile?.imageUrl||"");
@@ -240,7 +240,7 @@ function StockView({session}:{session:Session}){
     setPackSizeUnit(p?.packSizeUnit||profile?.packSizeUnit||((x.unit==="ml")?"ml":x.unit==="piece"?"piece":"g"));
     setPresetId(p?.id||"");
   }
-  function openPurchase(x:Ingredient){if(pendingStockIntent||stockRecoveryBlocked){setMsg(stockError(stockRecoveryBlocked?"stock_recovery_unavailable":"pending_stock_write_exists"));return}setMsg("");setType("PURCHASE");setTxOpen(x);setFromPurchase(x,latestPurchase(x))}
+  function openPurchase(x:Ingredient){if(pendingStockIntent||stockRecoveryBlocked){setMsg(stockError(stockRecoveryBlocked?"stock_recovery_unavailable":"pending_stock_write_exists"));return}setMsg("");setType("PURCHASE");setPurchaseDate(today());setTxOpen(x);setFromPurchase(x,latestPurchase(x))}
   function openWaste(x:Ingredient){if(pendingStockIntent||stockRecoveryBlocked){setMsg(stockError(stockRecoveryBlocked?"stock_recovery_unavailable":"pending_stock_write_exists"));return}setMsg("");setType("WASTE");setTxOpen(x);setWasteQty("");setNote("")}
 
   async function openMaster(x?:Ingredient){
@@ -515,18 +515,39 @@ function StockView({session}:{session:Session}){
       </ModalFocus>
     </div>}
 
-    {txOpen&&<div className="field-modal-overlay fixed inset-0 z-[80] grid place-items-center overflow-auto bg-black/70"><ModalFocus labelId="stock-transaction-title" onEscape={busy?undefined:()=>setTxOpen(null)} className="field-modal-panel glass card soft-scroll my-4 w-full max-w-lg overflow-auto p-4 sm:p-6"><div className="flex justify-between"><div><p className="gold text-[10px] tracking-[.25em]">{type}</p><h3 id="stock-transaction-title" className="mt-1 text-lg">{txOpen.name}</h3></div><button disabled={busy} aria-label="ปิดรายการสต๊อก" onClick={()=>setTxOpen(null)} className="grid h-11 w-11 place-items-center rounded-xl disabled:opacity-40"><X/></button></div>
-      <div className="mt-4 grid gap-3">{type==="WASTE"?<><label className="text-xs text-slate-500">จำนวนของเสีย ({txOpen.unit})</label><input inputMode="decimal" value={wasteQty} onChange={e=>setWasteQty(e.target.value)} className="rounded-2xl border bg-slate-50 px-4 py-3"/><input value={note} onChange={e=>setNote(e.target.value)} placeholder="เหตุผล / หมายเหตุ" className="rounded-2xl border bg-slate-50 px-4 py-3"/></>:<>
-        <label className="text-xs font-semibold text-slate-700">1. ราคาซื้อรวม (บาท)</label><input inputMode="decimal" value={purchaseCost} onChange={e=>setPurchaseCost(e.target.value)} placeholder="เช่น 199" className="rounded-2xl border bg-slate-50 px-4 py-3 text-lg font-semibold"/>
-        <div className="grid grid-cols-2 gap-2"><div><label className="mb-1 block text-xs text-slate-500">วันที่ซื้อ</label><input type="date" max={today()} value={purchaseDate} onChange={e=>setPurchaseDate(e.target.value)} className="w-full rounded-2xl border bg-slate-50 px-3 py-3"/></div><div><label className="mb-1 block text-xs text-slate-500">ข้อมูลเดิม</label><select value={presetId} onChange={e=>{const p=txOpen.recentPurchases.find(p=>p.id===e.target.value&&!p.cancelled);setFromPurchase(txOpen,p)}} className="w-full rounded-2xl border bg-white px-3 py-3"><option value="">ไม่ใช้</option>{txOpen.recentPurchases.filter(p=>!p.cancelled).map(p=><option key={p.id} value={p.id}>{p.purchaseDate} · ฿{compactMoney(p.totalCost)}</option>)}</select></div></div>
-        <label className="text-xs text-slate-500">ร้าน / แหล่งซื้อ</label><input value={supplier} onChange={e=>setSupplier(e.target.value)} placeholder="เช่น Makro, Shopee, ร้านประจำ" className="rounded-2xl border bg-slate-50 px-4 py-3"/><label className="text-xs text-slate-500">ช่องทางที่จ่ายค่าของ</label><select value={purchasePaymentMethod} onChange={e=>setPurchasePaymentMethod(e.target.value)} className="rounded-2xl border bg-white px-4 py-3"><option value="bank">โอน/บัญชีธนาคาร</option><option value="cash">เงินสดจากลิ้นชัก</option><option value="other">ช่องทางอื่น</option></select>{purchasePaymentMethod==="cash"&&<p className="rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-800">รายการนี้จะถูกหักออกจาก Expected Cash ตอนปิดวัน</p>}
-        <label className="text-xs text-slate-500">ลิงก์สินค้า/แหล่งซื้อ</label><input value={sourceUrl} onChange={e=>setSourceUrl(e.target.value)} placeholder="ใส่ https://... หรือ shopee.co.th/..." className="rounded-2xl border bg-slate-50 px-4 py-3"/>
-        <label className="text-xs font-semibold text-slate-700">2. จำนวนที่ซื้อ</label><div className="grid grid-cols-2 gap-2"><input inputMode="decimal" value={packageQty} onChange={e=>setPackageQty(e.target.value)} placeholder="จำนวนแพ็ก" className="rounded-2xl border bg-slate-50 px-4 py-3"/><select value={packageUnit} onChange={e=>setPackageUnit(e.target.value)} className="rounded-2xl border bg-white px-3 py-3">{packageUnits.map(u=><option key={u}>{u}</option>)}</select></div>
-        <div className="grid grid-cols-2 gap-2"><input inputMode="decimal" value={packSize} onChange={e=>setPackSize(e.target.value)} placeholder={"ปริมาณต่อ 1 "+packageUnit} className="rounded-2xl border bg-slate-50 px-4 py-3"/><select value={packSizeUnit} onChange={e=>setPackSizeUnit(e.target.value)} className="rounded-2xl border bg-white px-3 py-3"><option value="g">g</option><option value="kg">kg</option><option value="ml">ml</option><option value="l">L</option><option value="piece">ชิ้น</option></select></div>
-        <div className="rounded-2xl bg-slate-50 p-3 text-sm"><span className="text-slate-500">ระบบจะเพิ่มเข้าหน่วยที่สูตรใช้</span><b className="mt-1 block">{previewReceived(packageQty,packSize,packSizeUnit,txOpen.unit).label}</b></div>
-        <input value={note} onChange={e=>setNote(e.target.value)} placeholder="สถานที่/สาขา/หมายเหตุ" className="rounded-2xl border bg-slate-50 px-4 py-3"/><input value={imageUrl} onChange={e=>setImageUrl(e.target.value)} placeholder="ลิงก์รูปสินค้า (ถ้ามี)" className="rounded-2xl border bg-slate-50 px-4 py-3"/>
-      </>}
-      <button disabled={busy||(type==="PURCHASE"&&(!(Number(purchaseCost)>=0)||!(Number(packageQty)>0)||!(Number(packSize)>0)))||(type==="WASTE"&&!(Number(wasteQty)>0))} onClick={saveTx} className="min-h-12 rounded-full bg-[#d4af37] font-bold text-black disabled:opacity-40">{busy?"กำลังบันทึก...":"ยืนยันและบันทึก"}</button></div></ModalFocus></div>}
+    {txOpen&&<div className="field-modal-overlay fixed inset-0 z-[80] grid place-items-center overflow-auto bg-black/70"><ModalFocus labelId="stock-transaction-title" onEscape={busy?undefined:()=>setTxOpen(null)} className="field-modal-panel glass card soft-scroll my-4 w-full max-w-lg overflow-auto p-4 sm:p-6">
+      <div className="flex justify-between gap-3"><div><p className="gold text-[10px] tracking-[.25em]">{type==="PURCHASE"?"รับเข้าวัตถุดิบ":"บันทึกของเสีย"}</p><h3 id="stock-transaction-title" className="mt-1 text-lg">{txOpen.name}</h3></div><button disabled={busy} aria-label="ปิดรายการสต๊อก" onClick={()=>setTxOpen(null)} className="grid h-11 w-11 shrink-0 place-items-center rounded-xl disabled:opacity-40"><X/></button></div>
+      <div className="mt-4 grid min-w-0 gap-3">{type==="WASTE"?<>
+        <label className="text-xs text-slate-600">จำนวนของเสีย ({txOpen.unit})<input inputMode="decimal" value={wasteQty} onChange={e=>setWasteQty(e.target.value)} className="mt-1 w-full rounded-2xl border bg-slate-50 px-4 py-3 text-base"/></label>
+        <label className="text-xs text-slate-600">เหตุผล / หมายเหตุ<input value={note} onChange={e=>setNote(e.target.value)} className="mt-1 w-full rounded-2xl border bg-slate-50 px-4 py-3 text-base"/></label>
+      </>:<>
+        <div className="grid min-w-0 gap-3 sm:grid-cols-2">
+          <label className="min-w-0 text-xs font-semibold text-slate-700">ราคาซื้อรวม (บาท)<input inputMode="decimal" value={purchaseCost} onChange={e=>setPurchaseCost(e.target.value)} placeholder="เช่น 199" className="mt-1 w-full min-w-0 rounded-2xl border bg-slate-50 px-4 py-3 text-lg font-semibold"/></label>
+          <label className="min-w-0 text-xs text-slate-600">วันที่ซื้อ<input type="date" max={today()} value={purchaseDate} onChange={e=>setPurchaseDate(e.target.value)} className="mt-1 w-full min-w-0 max-w-full rounded-2xl border bg-slate-50 px-3 py-3 text-base"/></label>
+        </div>
+        <label className="min-w-0 text-xs text-slate-600">ช่องทางที่จ่ายค่าของ<select aria-label="ช่องทางที่จ่ายค่าของ" value={purchasePaymentMethod} onChange={e=>setPurchasePaymentMethod(e.target.value)} className="mt-1 w-full min-w-0 rounded-2xl border bg-white px-4 py-3 text-base"><option value="bank">โอน/บัญชีธนาคาร</option><option value="cash">เงินสดจากลิ้นชัก</option><option value="other">ช่องทางอื่น</option></select></label>
+        {purchasePaymentMethod==="cash"&&<p className="rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-800">รายการนี้จะถูกหักออกจาก Expected Cash ตอนปิดวัน</p>}
+        <div className="grid min-w-0 grid-cols-2 gap-2">
+          <label className="min-w-0 text-xs text-slate-600">จำนวนแพ็ก<input inputMode="decimal" value={packageQty} onChange={e=>setPackageQty(e.target.value)} className="mt-1 w-full min-w-0 rounded-2xl border bg-slate-50 px-4 py-3 text-base"/></label>
+          <label className="min-w-0 text-xs text-slate-600">หน่วยซื้อ<select aria-label="หน่วยซื้อ" value={packageUnit} onChange={e=>setPackageUnit(e.target.value)} className="mt-1 w-full min-w-0 rounded-2xl border bg-white px-3 py-3 text-base">{packageUnits.map(u=><option key={u}>{u}</option>)}</select></label>
+          <label className="min-w-0 text-xs text-slate-600">ปริมาณต่อ 1 {packageUnit}<input inputMode="decimal" value={packSize} onChange={e=>setPackSize(e.target.value)} className="mt-1 w-full min-w-0 rounded-2xl border bg-slate-50 px-4 py-3 text-base"/></label>
+          <label className="min-w-0 text-xs text-slate-600">หน่วยต่อแพ็ก<select aria-label="หน่วยต่อแพ็ก" value={packSizeUnit} onChange={e=>setPackSizeUnit(e.target.value)} className="mt-1 w-full min-w-0 rounded-2xl border bg-white px-3 py-3 text-base"><option value="g">g</option><option value="kg">kg</option><option value="ml">ml</option><option value="l">L</option><option value="piece">ชิ้น</option></select></label>
+        </div>
+        <div role="status" className="rounded-2xl bg-slate-50 p-3 text-sm"><span className="text-slate-600">ระบบจะเพิ่มเข้าหน่วยที่สูตรใช้</span><b className="mt-1 block">{previewReceived(packageQty,packSize,packSizeUnit,txOpen.unit).label}</b></div>
+        <details className="min-w-0 rounded-xl border border-slate-200 px-3"><summary className="min-h-11 cursor-pointer py-3 text-xs font-semibold text-slate-700">รายละเอียดเพิ่มเติม / ใช้ข้อมูลซื้อเดิม</summary><div className="grid min-w-0 gap-3 pb-3">
+          <label className="min-w-0 text-xs text-slate-600">ใช้ข้อมูลซื้อเดิม<select aria-label="ใช้ข้อมูลซื้อเดิม" value={presetId} onChange={e=>{const p=txOpen.recentPurchases.find(p=>p.id===e.target.value&&!p.cancelled);setFromPurchase(txOpen,p)}} className="mt-1 w-full min-w-0 rounded-2xl border bg-white px-3 py-3 text-base"><option value="">ไม่ใช้</option>{txOpen.recentPurchases.filter(p=>!p.cancelled).map(p=><option key={p.id} value={p.id}>{p.purchaseDate} · ฿{compactMoney(p.totalCost)}</option>)}</select></label>
+          <p className="text-xs text-slate-600">เรียกราคาและข้อมูลแพ็กเดิม วันที่ซื้อที่เลือกไว้จะไม่เปลี่ยน</p>
+          <label className="text-xs text-slate-600">ร้าน / แหล่งซื้อ<input value={supplier} onChange={e=>setSupplier(e.target.value)} placeholder="เช่น Makro, Shopee, ร้านประจำ" className="mt-1 w-full min-w-0 rounded-2xl border bg-slate-50 px-4 py-3 text-base"/></label>
+          <label className="text-xs text-slate-600">ลิงก์สินค้า / แหล่งซื้อ<input value={sourceUrl} onChange={e=>setSourceUrl(e.target.value)} placeholder="ใส่ https://... หรือ shopee.co.th/..." className="mt-1 w-full min-w-0 rounded-2xl border bg-slate-50 px-4 py-3 text-base"/></label>
+          <label className="text-xs text-slate-600">หมายเหตุรับเข้า<input value={note} onChange={e=>setNote(e.target.value)} className="mt-1 w-full min-w-0 rounded-2xl border bg-slate-50 px-4 py-3 text-base"/></label>
+          <label className="text-xs text-slate-600">ลิงก์รูปสินค้า (ถ้ามี)<input value={imageUrl} onChange={e=>setImageUrl(e.target.value)} className="mt-1 w-full min-w-0 rounded-2xl border bg-slate-50 px-4 py-3 text-base"/></label>
+        </div></details>
+      </>}</div>
+      <div className="sticky bottom-0 -mx-4 mt-4 border-t border-slate-200 bg-white/95 px-4 pb-1 pt-3 backdrop-blur sm:-mx-6 sm:px-6">
+        {type==="PURCHASE"&&<p className="mb-2 break-words text-xs text-slate-700">รับเข้า {previewReceived(packageQty,packSize,packSizeUnit,txOpen.unit).label} · {purchaseCostLabel(purchaseCost)} · {purchaseDate}</p>}
+        <button disabled={busy||(type==="PURCHASE"&&(!(Number(purchaseCost)>=0)||!(Number(packageQty)>0)||!(Number(packSize)>0)))||(type==="WASTE"&&!(Number(wasteQty)>0))} onClick={saveTx} className="min-h-12 w-full rounded-full bg-[#d4af37] font-bold text-black disabled:opacity-40">{busy?"กำลังบันทึก...":"ยืนยันและบันทึก"}</button>
+      </div>
+    </ModalFocus></div>}
 
     {master&&<div className="field-modal-overlay fixed inset-0 z-[80] grid place-items-center overflow-auto bg-black/70"><ModalFocus labelId="stock-master-title" onEscape={busy?undefined:()=>{setMaster(null);setMasterMsg("")}} className="field-modal-panel glass card soft-scroll w-full max-w-md overflow-auto p-5"><div className="flex justify-between"><div><p className="gold text-[10px] tracking-[.25em]">STOCK MASTER</p><h3 id="stock-master-title" className="mt-1 text-lg">{master.id?"แก้ไขรายการ":"เพิ่มรายการใหม่"}</h3>{master.id&&<p className="mt-1 text-[11px] text-slate-500">ID: {master.id} · โหลดข้อมูลล่าสุดจากฐานข้อมูลเมื่อเปิดหน้าต่างนี้</p>}</div><button disabled={busy} aria-label="ปิด Stock Master" onClick={()=>{setMaster(null);setMasterMsg("")}} className="grid h-11 w-11 place-items-center rounded-xl disabled:opacity-40"><X/></button></div>
       <div className="mt-4 grid gap-3">
