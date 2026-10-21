@@ -74,7 +74,7 @@ with sync_playwright() as p:
     variant=page.get_by_role("dialog")
     expect(variant).to_be_visible()
     tap(variant.get_by_role("button",name=re.compile(r"หวานน้อย.*50%")).first)
-    expect(page.get_by_text("ลูกค้าสั่งครบหรือยัง?",exact=True)).to_be_visible()
+    expect(page.get_by_text("แตะเมนูเพิ่ม หรือกดชำระเงินเมื่อสั่งครบ",exact=True)).to_be_visible()
     tap(page.get_by_role("button",name="ชำระเงิน",exact=True))
     payment=page.get_by_role("dialog",name="ชำระเงิน ฿55")
     expect(payment).to_be_visible()

@@ -26,6 +26,7 @@ with sync_playwright() as p:
                 bootstraps.append(path)
                 variant=lambda label:{'label':label,'available':True,'maxServings':20,'lowStock':False,'recipeItems':{'matcha':5},'missingIngredients':[],'reason':None}
                 data={'revision':1,'menu':[{'id':'single','name':'เมนูเดี่ยวทดสอบ','category':'ONE','price':55.5,'enabled':True,'available':True,'maxServings':20,'lowStock':False,'variants':[variant('50%')]},{'id':'multi','name':'เมนูหลายสูตรทดสอบ','category':'TWO','price':65.25,'enabled':True,'available':True,'maxServings':20,'lowStock':False,'variants':[variant('100%'),variant('0%')]}],'availabilityStock':{'matcha':{'qty':100,'name':'Matcha'}},'settings':{}}
+                data['menu'].insert(0,{'id':'unavailable','name':'เมนูหมดทดสอบ','category':'ONE','price':45,'enabled':True,'available':False,'maxServings':0,'lowStock':False,'variants':[{**variant('50%'),'available':False,'maxServings':0,'missingIngredients':[{'id':'matcha','name':'Matcha'}],'reason':'stock_shortage'}]})
                 if scene['catalogEmpty']:data['menu']=[]
             elif path=='customers':data={'customers':[],'loyalty':{}}
             elif path=='payments/promptpay/config':data={'ready':False,'configured':False}
@@ -41,6 +42,14 @@ with sync_playwright() as p:
         page.route('**/api/**',handler)
         if args.part in ['all','front']:
             page.goto(args.base_url+'/pos',wait_until='networkidle');search=page.get_by_placeholder('ค้นหาเมนู เช่น มัทฉะ / กาแฟ',exact=True)
+            expect(page.locator('.pos-menu-card').first).to_contain_text('เมนูเดี่ยวทดสอบ')
+            expect(page.get_by_role('button',name='บิลที่พักไว้',exact=True)).to_be_visible()
+            expect(page.get_by_text('เลือกเมนู แล้วเลือกระดับหวานหรือสูตรตามที่ลูกค้าบอก',exact=True)).to_have_count(0)
+            expect(page.get_by_role('button',name=re.compile('เมนูหมดทดสอบ'))).to_be_disabled()
+            page.screenshot(path=str(out/f'{width}x{height}-order.png'))
+            page.get_by_role('button',name='บิลที่พักไว้',exact=True).press('Enter')
+            held=page.get_by_role('dialog',name='บิลที่พักไว้ · 0',exact=True);expect(held).to_be_visible()
+            held.get_by_role('button',name='ปิดบิลที่พักไว้',exact=True).click();expect(held).to_have_count(0);assert not writes
             search.fill('ไม่พบxyz');expect(page.get_by_text('ไม่พบเมนูที่ตรงกับคำค้นหรือหมวดนี้',exact=True)).to_be_visible();requests=len(bootstraps)
             page.get_by_role('button',name='ดูทุกเมนู',exact=True).tap();expect(page.get_by_role('button',name=re.compile('เมนูเดี่ยวทดสอบ'))).to_be_visible();assert len(bootstraps)==requests
             page.get_by_role('button',name='TWO',exact=True).tap();search.fill('เมนูเดี่ยว');page.get_by_role('button',name='ดูทุกเมนู',exact=True).press('Enter');expect(page.get_by_role('button',name=re.compile('เมนูเดี่ยวทดสอบ'))).to_be_visible()

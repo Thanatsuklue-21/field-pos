@@ -10,7 +10,7 @@ test("POS teaches the core sale flow with visible 1-2-3 guidance",async()=>{
   assert.ok(pos.includes('["1","เลือกเมนู"]'));
   assert.ok(pos.includes('["2","ตรวจออเดอร์"]'));
   assert.ok(pos.includes('["3","ชำระเงิน"]'));
-  assert.ok(pos.includes("แตะเมนู → ตรวจออเดอร์ → ชำระเงิน"));
+  assert.ok(pos.includes('aria-current={active?"step":undefined}'));
 });
 
 test("single-variant products add directly while multi-variant drinks still ask for a choice",async()=>{
