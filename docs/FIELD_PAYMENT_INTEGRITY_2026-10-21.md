@@ -10,6 +10,7 @@ Based on exact main 42edb310d637f42228516efef840ef31c4a34dcb. Fixes the readines
 - Full restore retains current consumed-charge guards and merges backup guards without replacing existing evidence. Restoring a backup taken before payment therefore cannot make that charge spendable again. Restored unresolved sessions still require reconciliation with the provider; restore cannot reverse real-world payments.
 - Owner test-sales and full-test-data cleanup also retain these provider guards; clearing local test history cannot reverse a payment at the provider.
 - Opn creation stores the FIELD reference in metadata; lookup restores that reference (with legacy FIELD description fallback). Webhook normalization maps charge.complete to the application's succeeded/failed contract using independently fetched provider state. [Official provider webhook contract](https://docs.omise.co/api-webhooks).
+- Opn currency is normalized to uppercase so provider `thb` responses pass the same THB check as Beam. An HTTP integration test finalizes one sale through Opn webhook and verifies duplicate delivery creates no additional sale or stock deduction. [Official charge response contract](https://docs.omise.co/charges-api).
 - Cashier errors explain a reused receipt or mismatching payment in Thai without encouraging another charge.
 
 No price, recipe, stock deduction, refund amount, loyalty or accounting calculation has changed. No production test sale or provider payment is part of validation.

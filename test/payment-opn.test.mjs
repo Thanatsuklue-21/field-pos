@@ -82,11 +82,12 @@ test('Opn preserves the intended FIELD reference and normalizes a verified compl
       const form=new URLSearchParams(String(init.body));
       assert.equal(form.get('metadata[field_reference]'),'split-intended');
     }
-    return new Response(JSON.stringify({id:'chrg_bound',status:'successful',paid:true,amount:5500,currency:'THB',metadata:{field_reference:'split-intended'},source:{scannable_code:{image:{download_uri:'https://example.test/qr.png'}}}}),{status:200});
+    return new Response(JSON.stringify({id:'chrg_bound',status:'successful',paid:true,amount:5500,currency:'thb',metadata:{field_reference:'split-intended'},source:{scannable_code:{image:{download_uri:'https://example.test/qr.png'}}}}),{status:200});
   };
   assert.equal((await createPromptPayCharge({amount:55,reference:'split-intended'})).referenceId,'split-intended');
   const event=await verifyPromptPayWebhook({key:'charge.complete',data:{id:'chrg_bound',paid:false}});
   assert.equal(event.eventType,'charge.succeeded');assert.equal(event.charge.referenceId,'split-intended');
+  assert.equal(event.charge.currency,'THB');
 });
 
 test('Opn legacy FIELD description is recovered only from live provider response',async()=>{
