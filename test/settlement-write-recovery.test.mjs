@@ -42,6 +42,14 @@ test("inexact settlement ACK remains recoverable",async t=>{
   assert.equal(x.readSettlementWriteIntent("owner",store)?.body.requestKey,intent.body.requestKey);
 });
 
+test("legacy fractional-satang intent accepts only the server-rounded amount with matching identity",async t=>{
+ const x=await mod(t),store=storage(),intent=x.prepareSettlementWriteIntent('owner',reconcile({receivedAmount:70.001}),store);
+ const ack={ok:true,requestKey:intent.body.requestKey,performedBy:'owner',operation:'reconcile',reconciliation:{id:'legacy',saleDate:intent.body.saleDate,platform:intent.body.platform,receivedAmount:70,receivedDate:intent.body.receivedDate,note:intent.body.note}};
+ assert.equal(x.exactSettlementWriteAck(ack,intent),true);
+ assert.equal(x.exactSettlementWriteAck({...ack,reconciliation:{...ack.reconciliation,receivedAmount:70.01}},intent),false);
+ assert.equal(x.exactSettlementWriteAck({...ack,performedBy:'other'},intent),false);
+});
+
 test("settlement UI persists reconcile and cancel before send and auto-replays exact request",async()=>{
   const ui=await readFile(new URL("../app/settlements/page.tsx",import.meta.url),"utf8");
   assert.match(ui,/prepareSettlementWriteIntent/);

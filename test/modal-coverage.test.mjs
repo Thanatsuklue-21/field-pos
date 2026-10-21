@@ -44,7 +44,7 @@ test("financial and stock mutation modals cannot escape-dismiss while busy",asyn
   assert.ok(stock.includes('onEscape={busy?undefined:()=>setPurchaseEdit(null)}'));
   assert.ok((await read("app/close/page.tsx")).includes('onEscape={busy?undefined:()=>setOpenShiftReview(null)}'));
   assert.ok((await read("app/close/page.tsx")).includes('onEscape={busy?undefined:()=>setCloseDayReview(null)}'));
-  assert.ok(settlements.includes('onEscape={busy||!!pendingSettlementIntent?undefined:()=>setSelected(null)}'));
+  assert.ok(settlements.includes('onEscape={busy?undefined:()=>setSelected(null)}'));
   assert.ok(products.includes('onEscape={busy?undefined:()=>setStructureOpen(false)}'));
   assert.ok(products.includes('onEscape={busy?undefined:()=>{setEdit(null);setPendingImage("")}}'));
   assert.ok(products.includes('onEscape={busy?undefined:()=>setDel(null)}'));

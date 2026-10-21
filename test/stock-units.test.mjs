@@ -21,6 +21,15 @@ test('count units cannot be mixed with mass or volume',()=>{
   assert.throws(()=>convertQuantityToUsageUnit(10,'ml','piece'),/incompatible_stock_unit/);
 });
 
+test('sets and servings accept their own pack unit without assuming pieces are sets',()=>{
+ for(const [from,to] of [['set','set'],['ชุด','set'],['serve','serve'],['เสิร์ฟ','serve']]){
+  assert.equal(calculateReceivedQuantity({packageQty:1,packSize:50,packSizeUnit:from,usageUnit:to}).quantity,50);
+ }
+ for(const [from,to] of [['piece','set'],['set','piece'],['serve','set'],['g','set'],['set','ml']])assert.throws(()=>convertQuantityToUsageUnit(50,from,to),/incompatible_stock_unit/);
+ const write=normalizeStockWrite({requestKey:'cup-set-0001',ingredientId:'hotcupset',type:'PURCHASE',unit:'set',packageQty:1,packageUnit:'แพ็ก',packSize:50,packSizeUnit:'set',purchaseCost:200});
+ assert.equal(write.qtyDelta,50);assert.equal(write.unit,'set');assert.equal(write.conversionApproximate,false);
+});
+
 test('server derives purchase qtyDelta from package information',()=>{
   const out=normalizeStockWrite({
     requestKey:'package-0001',ingredientId:'syrup',type:'PURCHASE',unit:'g',

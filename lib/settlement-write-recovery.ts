@@ -71,7 +71,7 @@ export function exactSettlementWriteAck(result:any,intent:SettlementWriteIntent)
   if(body.operation==="reconcile"){
     const rec=result?.reconciliation;
     return typeof rec?.id==="string"&&rec.id.length>0&&String(rec.saleDate||"")===body.saleDate&&String(rec.platform||"")===body.platform
-      &&Number(rec.receivedAmount)===body.receivedAmount&&String(rec.receivedDate||"")===body.receivedDate&&String(rec.note||"")===body.note;
+      &&Number(rec.receivedAmount)===Math.round((body.receivedAmount+Number.EPSILON)*100)/100&&String(rec.receivedDate||"")===body.receivedDate&&String(rec.note||"")===body.note;
   }
   return String(result.id||"")===body.settlementId&&String(result.reason||"")===body.reason&&Number.isFinite(Number(result.cancelledAt))&&String(result.cancelledBy||"")===intent.actorId;
 }
