@@ -95,3 +95,17 @@ test('pre-migration paid charge evidence blocks reuse without a consumption row'
   await db.execute({sql:'UPDATE field_state SET document=? WHERE singleton=1',args:[JSON.stringify(doc)]});
   await assert.rejects(checkoutPos({db,user,body:{requestKey,cart:[{...cart[0],qty:1}],date:bangkokDate(),payment:'promptpay',...metadata(requestKey)}}),/promptpay_charge_already_used/);
 });
+
+test('restoring a pre-payment backup cannot make a consumed QR reusable',async t=>{
+  const db=await setup(t),api=createApi({db,origin:'https://field.test'});
+  const s=await startSplitPayment({db,user,body:{requestKey:'old-backup-start',cart,date:bangkokDate()}});
+  const stateRow=(await db.execute('SELECT * FROM field_state')).rows[0],tables={};
+  for(const [key,table] of Object.entries(FULL_BACKUP_TABLES))tables[key]=(await db.execute('SELECT * FROM '+table)).rows;
+  const backup=validateFullBackup(buildFullBackup({stateRow,tables}));
+  const body={requestKey:'old-backup-pay-one',sessionId:s.session.id,method:'promptpay',allocations:[{index:0,qty:1}],...metadata(s.session.id)};
+  await paySplitPayment({db,user,body});
+  const current=(await db.execute('SELECT revision FROM field_state')).rows[0];
+  const restored=await post(api,['admin','backup','restore'],{requestKey:'restore-pre-payment',confirm:true,expectedRevision:Number(current.revision),backup,backupFingerprint:digest(JSON.stringify(backup))});
+  assert.equal(restored.status,200);
+  await assert.rejects(paySplitPayment({db,user,body:{...body,requestKey:'old-backup-pay-two'}}),/promptpay_charge_already_used/);
+});
