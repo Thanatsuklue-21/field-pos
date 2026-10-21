@@ -677,6 +677,8 @@ function PosView({session}:{session:Session}){
       code==="promptpay_provider_not_configured"?"ยังไม่ได้ตั้งค่า Beam Merchant ID / API Key":
       code==="promptpay_webhook_not_configured"?"ยังไม่ได้ตั้งค่า Beam Webhook HMAC Key":
       code==="promptpay_failed"?"PromptPay ไม่สำเร็จ กรุณาลองใหม่":
+      code==="promptpay_charge_already_used"?"เลขชำระนี้ถูกบันทึกแล้ว กรุณาตรวจประวัติออเดอร์ก่อนรับเงินซ้ำ":
+      ["promptpay_reference_mismatch","promptpay_currency_mismatch"].includes(code)?"ข้อมูลการชำระไม่ตรงกับรายการนี้ กรุณาคงรายการไว้และให้ผู้ดูแลตรวจสอบ":
       code==="pending_promptpay_exists"?"มี PromptPay รายการเดิมที่ยังไม่สิ้นสุด กรุณาชำระหรือรอผลรายการเดิม":
       code==="pending_cash_checkout_exists"?"มีออเดอร์เงินสดเดิมที่ยังไม่ทราบผล กรุณารอระบบตรวจรายการเดิมก่อนรับบิลใหม่":
       code==="business_date_changed"?"วันธุรกิจเปลี่ยนแล้ว กรุณาตรวจ Orders ก่อนทำรายการใหม่":
