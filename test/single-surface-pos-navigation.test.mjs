@@ -25,7 +25,7 @@ test("POS hides duplicate workspace launcher on phones but keeps it on desktop",
 
 test("order teaching steps do not compete with a higher-priority store task",async()=>{
   const pos=await read("app/pos/page.tsx");
-  assert.match(pos,/\{!workspaceActionVisible&&<div className="mb-3 grid grid-cols-3/);
+  assert.match(pos,/\{!workspaceActionVisible&&<div[^>]*aria-label="ขั้นตอนรับออเดอร์"/);
   assert.match(pos,/workspaceNextAction\.label/);
   assert.match(pos,/workspaceActionLabel/);
 });
