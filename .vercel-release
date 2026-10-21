@@ -1,3 +1,3 @@
 FIELD POS production release marker
-source_main=ca716c9746887b851f8f5262f99817c8a879a291
-purpose=release-payment-integrity-and-recovery-guards
+source_main=5fd67e3de3b64b7b9a335239826913efa412e877
+purpose=release-guided-settlement-cancel
