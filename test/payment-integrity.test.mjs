@@ -109,3 +109,13 @@ test('restoring a pre-payment backup cannot make a consumed QR reusable',async t
   assert.equal(restored.status,200);
   await assert.rejects(paySplitPayment({db,user,body:{...body,requestKey:'old-backup-pay-two'}}),/promptpay_charge_already_used/);
 });
+
+test('owner test-data cleanup retains provider charge guards',async t=>{
+  for(const [route,confirm] of [['sales-reset','RESET TEST SALES'],['full-reset','RESET ALL TEST DATA']]){
+    const db=await setup(t),api=createApi({db,origin:'https://field.test'}),requestKey='cleanup-qr-key';
+    await checkoutPos({db,user,body:{requestKey,cart:[{...cart[0],qty:1}],date:bangkokDate(),payment:'promptpay',...metadata(requestKey)}});
+    const result=await post(api,['admin','test-data',route],{confirm,confirmOpenOrders:true});
+    assert.equal(result.status,200);
+    assert.equal((await db.execute("SELECT * FROM field_pos_requests WHERE request_key LIKE 'payment-charge:%'")).rows.length,1);
+  }
+});
