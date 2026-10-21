@@ -194,3 +194,10 @@ html,body{overscroll-behavior:none}
   background:var(--field-menu-unavailable-bg);color:var(--field-menu-unavailable-fg);opacity:1;
 }
 .field-app-root .field-unavailable-variant:disabled small{color:var(--field-menu-unavailable-reason)}
+
+/* Short phones/landscape must scroll controls rather than compressing them under menu cards. */
+@media (max-width:1023px) and (max-height:600px){
+  .field-pos-catalog-pane{overflow-y:auto;scroll-padding-top:.75rem;scroll-padding-bottom:10rem}
+  .field-pos-catalog-pane > *{flex-shrink:0}
+  .field-pos-catalog-pane .field-pos-menu-list{flex:none;overflow:visible}
+}

@@ -43,12 +43,12 @@ test('daily count separates package counting from recipe usage units',async()=>{
 
 test('purchase form leads with price and can reuse recent supplier source and package evidence',async()=>{
   const ui=await read('app/stock/page.tsx');
-  const price=ui.indexOf('1. ราคาซื้อรวม'),qty=ui.indexOf('2. จำนวนที่ซื้อ');
+  const price=ui.indexOf('ราคาซื้อรวม (บาท)'),qty=ui.indexOf('จำนวนแพ็ก<input');
   assert.ok(price>0&&qty>price);
-  assert.match(ui,/ข้อมูลเดิม/);
+  assert.match(ui,/ใช้ข้อมูลซื้อเดิม/);
   assert.match(ui,/recentPurchases/);
   assert.match(ui,/setFromPurchase/);
-  assert.match(ui,/ลิงก์สินค้า\/แหล่งซื้อ/);
+  assert.match(ui,/ลิงก์สินค้า \/ แหล่งซื้อ/);
   assert.match(ui,/ถ้าแก้จำนวนแพ็ก\/ขนาด ระบบจะคำนวณส่วนต่าง/);
 });
 
