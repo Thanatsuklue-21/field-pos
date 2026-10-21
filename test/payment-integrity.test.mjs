@@ -119,3 +119,16 @@ test('owner test-data cleanup retains provider charge guards',async t=>{
     assert.equal((await db.execute("SELECT * FROM field_pos_requests WHERE request_key LIKE 'payment-charge:%'")).rows.length,1);
   }
 });
+
+test('Opn lowercase-currency completion webhook finalizes once and tolerates duplicate delivery',async t=>{
+  const originalFetch=globalThis.fetch,originalProvider=process.env.PROMPTPAY_PROVIDER,originalKey=process.env.OMISE_SECRET_KEY;
+  t.after(()=>{globalThis.fetch=originalFetch;for(const [k,v] of [['PROMPTPAY_PROVIDER',originalProvider],['OMISE_SECRET_KEY',originalKey]]){if(v===undefined)delete process.env[k];else process.env[k]=v}});
+  process.env.PROMPTPAY_PROVIDER='opn';process.env.OMISE_SECRET_KEY='skey_test_fixture';
+  const db=await setup(t),api=createApi({db,origin:'https://field.test'});
+  const s=await startSplitPayment({db,user,body:{requestKey:'webhook-qr-start',cart:[{...cart[0],qty:1}],date:bangkokDate(),mode:'promptpay_full'}});
+  globalThis.fetch=async()=>new Response(JSON.stringify({id:'chrg_webhook',status:'successful',paid:true,amount:5500,currency:'thb',metadata:{field_reference:s.session.id}}),{status:200});
+  const event={key:'charge.complete',data:{id:'chrg_webhook'}};
+  const first=await post(api,['payments','promptpay','webhook'],event);assert.equal(first.status,200);assert.equal(first.body.finalized,true);
+  const second=await post(api,['payments','promptpay','webhook'],event);assert.equal(second.status,200);assert.equal(second.body.alreadyCompleted,true);
+  const state=JSON.parse((await db.execute('SELECT document FROM field_state')).rows[0].document);assert.equal(state.sales.length,1);assert.equal(state.ingredients.matcha.qty,995);
+});
