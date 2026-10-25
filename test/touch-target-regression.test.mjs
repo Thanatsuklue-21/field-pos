@@ -9,8 +9,8 @@ test("admin product and cost controls keep mobile-safe touch targets",async()=>{
   const costs=await read("app/costs/page.tsx");
 
   assert.doesNotMatch(products,/grid h-9 w-9 place-items-center rounded-full border/);
-  assert.match(products,/aria-label={"แก้เมนู "+x\.name}/);
-  assert.match(products,/aria-label={"เก็บเมนู "+x\.name}/);
+  assert.ok(products.includes('aria-label={"แก้เมนู "+x.name}'));
+  assert.ok(products.includes('aria-label={"เก็บเมนู "+x.name}'));
   assert.ok((products.match(/min-h-11/g)||[]).length>=10);
   assert.doesNotMatch(products,/rounded-lg border px-2 py-1 text-xs/);
 
