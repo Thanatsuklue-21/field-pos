@@ -1,6 +1,6 @@
 # FIELD Café POS
 
-Latest evidence and open release blockers: [19 October 2026 production audit](docs/PRODUCTION_AUDIT_2026-10-19.md). Main, candidate and production can have different SHAs; verify the exact deployment before release.
+**Cross-device / Codex handoff:** Read [FIELD information authority and source-of-truth rules](docs/FIELD_INFORMATION_AUTHORITY.md) and the currently deployed SHA before assuming status from ChatGPT memory or older audit documents. The [19 October 2026 production audit](docs/PRODUCTION_AUDIT_2026-10-19.md) is a historical snapshot, **not** the latest release checklist. Main, candidate and production can have different SHAs; verify the exact deployment before release.
 
 Single-shop POS for a small team, using Next.js/React, Vercel Functions and Turso/libSQL. The current application is the `app/` frontend: `/pos`, `/queue`, `/orders`, `/stock`, `/costs`, `/recipes`, `/expenses`, `/customers`, `/close`, `/reports`, `/backup`, `/users`, `/audit` and `/settings`.
 
