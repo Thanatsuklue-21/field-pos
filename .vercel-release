@@ -1,3 +1,3 @@
 FIELD POS production release marker
-source_main=05ac21ee3297a52194c6d9cb14a9c63fe9191d17
-purpose=release-touch-target-audit
+source_main=0a8b88bf2f42af21355f681656965cfa759553b2
+purpose=release-fifo-stock-actual-cost
