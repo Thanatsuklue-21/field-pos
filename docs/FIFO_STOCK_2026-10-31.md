@@ -63,8 +63,10 @@ Before real trading, use the existing guarded test-data reset and actual stock
 count/receipt workflow to establish the real opening inventory and confirmed
 cost evidence. No test data is deleted automatically by this change. Stock reset
 epochs invalidate prior opening snapshots, so test quantities cannot reappear as
-the real opening list. Existing confirmed receipt lots remain the actual cost
-source; subsequent receipts follow them in FIFO order. Backups already include
+the real opening list. Opening lot identities include their reset epoch, so test
+and real opening lots cannot be confused in historical provenance. Confirmed
+receipt lots remain the actual cost source; subsequent receipts follow them in
+FIFO order. Backups already include
 the state, stock ledger, purchase records, sessions and cost snapshot documents.
 
 ## Verification and release gate

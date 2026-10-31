@@ -222,3 +222,13 @@ test('a purchase reserved by a pending payment cannot be cancelled out from unde
   const paid=await paySplitPayment({db,user,body:{requestKey:'reserved-cancel-pay',sessionId:session.session.id,allocations:[{index:0,qty:1}],method:'cash',received:50}});
   assert.equal(paid.completed,true);assert.equal((await state(db)).sales[0].costTotal,6);
 });
+
+test('a new opening after a stock reset has a distinct lot identity from the prior opening',async t=>{
+  const db=await setup(t),doc=await state(db);doc.ingredients.milk.qty=10;await put(db,doc);
+  await sell(db,'opening-identity-before');
+  const old=(await snapshots(db))[0].document.consumptions[0].lotId;
+  const reset=await state(db);reset.ingredients.milk.qty=10;reset.ingredients.milk.historyResetAt=Date.now();await put(db,reset);
+  await sell(db,'opening-identity-after');
+  const parts=(await snapshots(db)).flatMap(x=>x.document.consumptions||[]);
+  assert.notEqual(parts[1].lotId,old);
+});

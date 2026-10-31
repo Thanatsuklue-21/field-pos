@@ -48,6 +48,7 @@ with sync_playwright() as p:
         expect(opening).to_be_visible();opening.click()
         expect(page.get_by_role('list',name='รายการยอดยกมา')).to_contain_text('Milk')
         expect(page.get_by_role('list',name='รายการยอดยกมา')).to_contain_text('10 g')
+        assert not errors,errors
         context.close()
     browser.close()
 print('PASS: server stock changes block stale taps at 320/360/390/412 px; no runtime errors or business writes')
