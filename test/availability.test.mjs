@@ -5,6 +5,13 @@ import {additionalServingsAvailable,additionalServingsForVariant,buildPosAvailab
 const stock={matcha:{name:'มัทฉะ',qty:20},milk:{name:'นมสด',qty:150},cup:{name:'แก้ว',qty:10}};
 const recipe={items:{matcha:5,milk:100,cup:1}};
 
+test('decimal serving boundary and shared cart demand do not lose a serving to binary float',()=>{
+  const payload=buildPosAvailability({menu:[{id:'a',variants:[{label:'S',recipe:{items:{milk:0.1}}}]}],ingredients:{milk:{qty:0.3}}});
+  assert.equal(payload.menu[0].variants[0].maxServings,3);
+  assert.equal(cartAvailability({cart:[{id:'a',variant:'S',qty:3}],menu:payload.menu,stock:payload.stock}).available,true);
+  assert.equal(additionalServingsAvailable({cart:[{id:'a',variant:'S',qty:2}],menu:payload.menu,stock:payload.stock,menuId:'a',variantLabel:'S'}),1);
+});
+
 test('sufficient stock returns available and exact max servings',()=>{assert.deepEqual(variantAvailability({recipe,ingredients:stock,lowServings:1}),{available:true,maxServings:1,lowStock:true,recipeItems:recipe.items,missingIngredients:[],reason:null})});
 test('zero stock returns unavailable',()=>{const r=variantAvailability({recipe,ingredients:{...stock,milk:{name:'นมสด',qty:0}}});assert.equal(r.available,false);assert.equal(r.maxServings,0)});
 test('one ingredient shortage returns unavailable with its employee-facing name',()=>{const r=variantAvailability({recipe,ingredients:{...stock,cup:{name:'แก้ว 16 oz',qty:0}}});assert.deepEqual(r.missingIngredients,[{id:'cup',name:'แก้ว 16 oz'}])});

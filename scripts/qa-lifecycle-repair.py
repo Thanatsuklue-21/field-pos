@@ -3,10 +3,10 @@ import argparse,json
 from datetime import datetime,timezone,timedelta
 from pathlib import Path
 from playwright.sync_api import sync_playwright,expect
-parser=argparse.ArgumentParser();parser.add_argument('--base-url',default='http://localhost:3000');parser.add_argument('--output',default='/tmp/field-lifecycle-repair');parser.add_argument('--part',choices=['all','stock','settlement'],default='all');args=parser.parse_args()
+parser=argparse.ArgumentParser();parser.add_argument('--base-url',default='http://localhost:3000');parser.add_argument('--output',default='/tmp/field-lifecycle-repair');parser.add_argument('--browser',default='');parser.add_argument('--part',choices=['all','stock','settlement'],default='all');args=parser.parse_args()
 out=Path(args.output);out.mkdir(parents=True,exist_ok=True);today=datetime.now(timezone(timedelta(hours=7))).date().isoformat();results=[]
 with sync_playwright() as p:
- browser=p.chromium.launch(args=['--no-sandbox'])
+ browser=p.chromium.launch(args=['--no-sandbox'],**({'executable_path':args.browser} if args.browser else {}))
  for width,height in [(320,740),(360,740),(390,844),(412,915),(1280,800)]:
   context=browser.new_context(viewport={'width':width,'height':height},has_touch=True);page=context.new_page();errors=[];stock=[];settlements=[];counts=[]
   page.on('pageerror',lambda e:errors.append(str(e)))

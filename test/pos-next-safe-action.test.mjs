@@ -20,6 +20,7 @@ async function bootstrap(doc,permissions){
       role:"staff",permissions:JSON.stringify(permissions),active:1
     }]};
     if(sql.startsWith("SELECT revision,document FROM field_state"))return {rows:[{revision:7,document}]};
+    if(sql==='SELECT rowid AS sequence,* FROM field_stock_transactions ORDER BY created_at,rowid'||sql.startsWith('SELECT p.*,h.cost_status AS fifo_cost_status FROM field_purchase_records')||sql==='SELECT sale_id,document FROM field_cost_snapshots ORDER BY created_at,rowid')return {rows:[]};
     throw new Error("Unexpected SQL: "+sql);
   }};
   const res={writeHead(status,headers){this.status=status;this.headers=headers},end(body){this.body=JSON.parse(body)}};

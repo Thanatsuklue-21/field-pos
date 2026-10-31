@@ -443,8 +443,8 @@ test('real libSQL: called queues wait for pickup without blocking production or 
 });
 
 
-test('real libSQL: fulfilled offline cash sync skips live queue and reconciles actual negative stock',async t=>{
-  const doc=seed();doc.ingredients.matcha.qty=3;doc.ingredients.milk.qty=50;
+test('real libSQL: fulfilled offline cash sync skips live queue when physical stock is sufficient',async t=>{
+  const doc=seed();
   const db=await setup(t,doc),now=Date.now();
   const result=await checkoutPos({db,user,now,body:{
     requestKey:'offline-sync-0001',cart,date:bangkokDate(),payment:'cash',received:200,total:110,checkoutMode:'full',
@@ -452,8 +452,8 @@ test('real libSQL: fulfilled offline cash sync skips live queue and reconciles a
   }});
   assert.equal(result.offlineFulfilled,true);
   assert.equal(result.pager,0);
-  assert.equal(result.stockReconciliationRequired,true);
-  assert.equal(result.stockShortages.length,2);
+  assert.equal(result.stockReconciliationRequired,false);
+  assert.equal(result.stockShortages.length,0);
   const saved=await state(db),order=saved.orders[0],sale=saved.sales[0];
   assert.equal(order.status,'returned');
   assert.equal(order.offlineFulfilled,true);
@@ -461,11 +461,19 @@ test('real libSQL: fulfilled offline cash sync skips live queue and reconciles a
   assert.equal(order.items[0].calledQty,2);
   assert.equal(sale.offlineFulfilled,true);
   assert.equal(sale.offlineMenuRevision,7);
-  assert.equal(saved.ingredients.matcha.qty,-7);
-  assert.equal(saved.ingredients.milk.qty,-170);
+  assert.equal(saved.ingredients.matcha.qty,990);
+  assert.equal(saved.ingredients.milk.qty,29780);
   assert.equal((await getQueueSnapshot({db})).orders.length,0);
   assert.equal((await db.execute("SELECT COUNT(*) AS n FROM field_stock_transactions WHERE tx_type='SALE'")).rows[0].n,2);
   assert.equal((await db.execute("SELECT action FROM field_audit ORDER BY id DESC LIMIT 1")).rows[0].action,'pos_checkout_offline_sync');
+});
+
+test('real libSQL: insufficient offline sync cannot finalize a sale or create negative stock',async t=>{
+  const doc=seed();doc.ingredients.matcha.qty=3;doc.ingredients.milk.qty=50;
+  const db=await setup(t,doc),now=Date.now(),before=await state(db);
+  await assert.rejects(checkoutPos({db,user,now,body:{requestKey:'offline-no-negative',cart,date:bangkokDate(),payment:'cash',received:200,total:110,checkoutMode:'full',offlineFulfilled:true,offlineCreatedAt:now-1000,offlineMenuRevision:7}}),/stock_shortage/);
+  assert.deepEqual(await state(db),before);
+  assert.equal((await db.execute('SELECT * FROM field_stock_transactions')).rows.length,0);
 });
 
 test('real libSQL: offline cash sync refuses stale price and unsafe payment modes without changing stock',async t=>{

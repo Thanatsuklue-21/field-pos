@@ -109,6 +109,7 @@ function PosView({session}:{session:Session}){
   const cashReconcileRef=useRef(false);
   const promptReconcileRef=useRef(false);
   const checkoutInFlightRef=useRef(false);
+  const cartCheckInFlightRef=useRef(false);
   const cart=useCartStore();
   const heldBills=useHeldCartStore();
 
@@ -442,10 +443,31 @@ function PosView({session}:{session:Session}){
     return "มีเมนูหรือตัวเลือกที่หมดชั่วคราว กรุณาตรวจตะกร้า";
   }
 
+  async function validateCartChange(next:{id:string;variant:string;qty:number}[],apply:()=>void,allowShortage=false){
+    if(cartCheckInFlightRef.current||checkoutInFlightRef.current)return;
+    cartCheckInFlightRef.current=true;
+    const before=JSON.stringify(useCartStore.getState().items);
+    try{
+      // Refresh the authoritative stock projection before changing the cart.
+      // The checkout transaction remains the final concurrency guard.
+      const fresh=await api<Bootstrap>("/api/pos/bootstrap");
+      if(JSON.stringify(useCartStore.getState().items)!==before)return;
+      if(fresh.revision<(revisionRef.current||0)){setNotice("ข้อมูลสต็อกเปลี่ยน กรุณาลองอีกครั้ง");return}
+      acceptBootstrap(fresh);
+      const checked=cartAvailability({cart:next,menu:fresh.menu,stock:fresh.availabilityStock||{}});
+      if(!checked.available){setNotice(availabilityMessage(checked));if(!allowShortage)return}
+      apply();
+    }catch{setNotice("ยังตรวจสอบสต็อกล่าสุดไม่ได้ กรุณาเชื่อมต่อแล้วลองอีกครั้ง")}
+    finally{cartCheckInFlightRef.current=false}
+  }
+
   function addVariant(product:MenuItem,variant:MenuItem["variants"][number]){
     const remaining=additionalServingsForVariant({variant,demand:cartStockState.demand,stock:data?.availabilityStock||{}});
     if(!variant.available||remaining<1){setNotice("วัตถุดิบเพียงพออีก 0 แก้วเท่านั้น"+(variant.missingIngredients?.length?" · ขาด: "+variant.missingIngredients.map(x=>x.name).join(", "):""));return}
-    cart.addItem({id:product.id,name:product.name,variant:variant.label,price:product.price});setSelected(null);
+    const next=cart.items.map(x=>({id:x.id,variant:x.variant,qty:x.qty}));
+    const existing=next.find(x=>x.id===product.id&&x.variant===variant.label);
+    if(existing)existing.qty+=1;else next.push({id:product.id,variant:variant.label,qty:1});
+    void validateCartChange(next,()=>{cart.addItem({id:product.id,name:product.name,variant:variant.label,price:product.price});setSelected(null)});
   }
 
   function chooseMenu(product:MenuItem){
@@ -458,10 +480,11 @@ function PosView({session}:{session:Session}){
 
   function updateCartQuantity(key:string,nextQty:number){
     const item=cart.items.find(x=>x.key===key);if(!item)return;
-    if(nextQty<=item.qty){cart.updateQuantity(key,nextQty);return}
+    const next=cart.items.map(x=>({id:x.id,variant:x.variant,qty:x.key===key?nextQty:x.qty})).filter(x=>x.qty>0);
+    if(nextQty<=item.qty){void validateCartChange(next,()=>cart.updateQuantity(key,nextQty),true);return}
     const remaining=additionalServingsAvailable({cart:cart.items,menu:data?.menu||[],stock:data?.availabilityStock||{},menuId:item.id,variantLabel:item.variant,demand:cartStockState.demand});
     if(remaining<1){setNotice("วัตถุดิบเพียงพออีก 0 แก้วเท่านั้น");return}
-    cart.updateQuantity(key,nextQty);
+    void validateCartChange(next,()=>cart.updateQuantity(key,nextQty));
   }
 
   function holdCurrentBill(){
@@ -842,6 +865,7 @@ function PosView({session}:{session:Session}){
   }
 
   function openPayment(){
+    if(cartCheckInFlightRef.current){setNotice("กำลังตรวจสต็อกล่าสุด กรุณารอสักครู่");return}
     if(!cart.items.length)return;
     const byId=new Map((data?.menu||[]).filter(sellable).map(x=>[x.id,x]));
     const blocked=cart.items.filter(item=>{

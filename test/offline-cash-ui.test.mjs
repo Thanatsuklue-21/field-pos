@@ -39,7 +39,7 @@ test('server marks synced offline orders returned so they never re-enter product
   assert.match(api,/offlineFulfilled\?'returned':'assigned'/);
   assert.match(api,/readyQty:offlineFulfilled\?x\.qty:0/);
   assert.match(api,/calledQty:offlineFulfilled\?x\.qty:0/);
-  assert.match(api,/allowNegative:offlineFulfilled/);
+  assert.doesNotMatch(api,/allowNegative:offlineFulfilled/);
   assert.match(api,/offline_price_changed/);
   assert.match(api,/pos_checkout_offline_sync/);
 });
