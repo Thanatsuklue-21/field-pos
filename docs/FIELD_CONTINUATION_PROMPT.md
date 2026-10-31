@@ -1,3 +1,8 @@
+> ⚠️ **CURRENT HANDOFF OVERRIDE — 2026-11-01 (Asia/Bangkok)**  
+> ข้อมูลภายใต้บรรทัดนี้เป็นบันทึก **ประวัติ** ไม่ใช่ Current Backlog หรือ Current main. ณ จุดตรวจพบ `main = 379fbacd0cac574424d2c0442e31b28b84b000bd` หลัง merged PR #490 (server cart availability + atomic FIFO actual-cost snapshots). SHA นี้เป็น snapshot; ต้อง `git fetch origin main`, อ่าน PR/CI/Production ล่าสุดใหม่ทุกครั้ง. ห้ามเริ่มจาก PR #255/#271/#288 หรือเสนอทำฟีเจอร์ที่อยู่ใน #490 อีกโดยไม่ตรวจโค้ดจริง.  
+> อ่าน [FIELD_INFORMATION_AUTHORITY.md](FIELD_INFORMATION_AUTHORITY.md) ก่อนรับงานทุกเครื่อง และตรวจทะเบียน Google Doc ชื่อ **FIELD_MASTER_CONTROL_LIVE** (ต้องอ่านเวอร์ชันปัจจุบันจากบัญชีเจ้าของ; ห้ามสมมุติว่า Google Drive sync อัตโนมัติ). ข้อมูล R&D อยู่ต่าง repo/ฐานข้อมูล, และแบบร้าน 26 ต.ค. preliminary open-air supersede แปลนกระจก/หลังคาแบนเดิม.  
+> **Release != Go-live acceptance**; PR #490 มี CI/backend/browser mock และ production read-only smoke เท่านั้น; payment/device/live trading ยังต้องทดสอบแยกกัน.  
+
 # Prompt ส่งต่อให้ FIELD
 
 > Satang labels 2026-10-20: รอบล่าสุดเริ่มจาก main `bc457ad` หลัง #473; อ่าน `FIELD_POS_SATANG_HANDOFF.md` และตรวจ PR/CI ล่าสุดก่อนทำซ้ำ การแก้รอบนี้รักษาสตางค์บนหน้าขาย โดยไม่เปลี่ยน financial calculations หรือ master data
