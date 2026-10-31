@@ -16,7 +16,7 @@ type Purchase={
 type PurchaseProfile={packageUnit:string;packSize:number;packSizeUnit:string;quantityPerPackage:number;usageUnit:string;conversionApproximate?:boolean;supplier?:string;sourceUrl?:string;imageUrl?:string;purchaseCost?:number|null;purchaseDate?:string;note?:string;paymentMethod?:string;updatedAt?:number};
 type Ingredient={id:string;name:string;qty:number;unit:string;safetyStock:number;unitCost:number;costStatus:string;costKind:string;wasteMargin:number;lowStock:boolean;archived:boolean;archivedAt?:number|null;historyResetAt?:number;purchaseProfile?:PurchaseProfile|null;recentPurchases:Purchase[]};
 type Tx={id:string;ingredientId:string;type:string;qtyDelta:number;unit:string;reason:string;createdAt:number};
-type Overview={revision:number;ingredients:Ingredient[];transactions:Tx[];attention?:{blockedMenus:number;ingredients:Array<{id:string;menuNames:string[]}>;missingReferences:number}};
+type Overview={revision:number;ingredients:Ingredient[];transactions:Tx[];openingInventory?:{revision:number;items:Array<{id:string;name:string;qty:number;unit:string;capturedAt:number|null;costStatus:string}>};attention?:{blockedMenus:number;ingredients:Array<{id:string;menuNames:string[]}>;missingReferences:number}};
 type CountInput={packs:string;loose:string;base:string};
 type CountAdjustment={ingredientId:string;name:string;expectedQty:number;countedQty:number;variance:number;unit:string};
 type CountProposal={id:string;date:string;status:string;submittedAt:number;submittedBy:string;adjustments:CountAdjustment[];rejectReason?:string};
@@ -73,6 +73,7 @@ function StockView({session}:{session:Session}){
       purchase_not_found:"ไม่พบรายการรับเข้าต้นทาง · ระบบยังไม่ได้แก้ Stock/ต้นทุนจาก Request นี้",
       purchase_already_cancelled:"รายการรับเข้านี้ถูกยกเลิกไปแล้ว · กรุณาตรวจประวัติก่อนทำต่อ",
       purchase_before_reset_read_only:"รายการนี้อยู่ก่อนจุดล้างข้อมูลทดลอง จึงแก้ย้อนหลังไม่ได้",
+      purchase_has_fifo_consumption:"รายการรับเข้านี้มีการจองหรือใช้ผลิตแล้ว จึงแก้ต้นทุนเดิมไม่ได้ กรุณาตรวจประวัติและใช้รายการปรับปรุงแยกต่างหาก",
       invalid_cycle_count:"กรอกจำนวนจริงให้ครบและไม่ติดลบ · ถ้าไม่มีของให้ใส่ 0",
       invalid_purchase_date:"วันที่ซื้อไม่ถูกต้อง · กรุณาตรวจวันที่แล้วส่งใหม่",
       invalid_purchase_cost:"ราคาซื้อไม่ถูกต้อง · กรุณาตรวจยอดรวม",
@@ -138,13 +139,13 @@ function StockView({session}:{session:Session}){
       "high_risk_confirmation_required","high_risk_reason_required"
     ]);
     if(operation==="purchaseEdit")return new Set([
-      "invalid_request_key","admin_required","purchase_not_found","purchase_already_cancelled","ingredient_missing","purchase_before_reset_read_only",
+      "invalid_request_key","admin_required","purchase_not_found","purchase_already_cancelled","ingredient_missing","purchase_before_reset_read_only","purchase_has_fifo_consumption",
       "invalid_purchase_date","future_purchase_date","purchase_date_closed","invalid_purchase_cost","incomplete_purchase_packaging",
       "unsupported_stock_unit","incompatible_stock_unit","purchase_correction_stock_negative","invalid_purchase_url","invalid_purchase_payment_method"
     ]);
     if(operation==="purchaseCancel")return new Set([
       "invalid_request_key","admin_required","purchase_cancel_confirmation_required","purchase_cancel_reason_required","purchase_not_found","ingredient_missing",
-      "purchase_already_cancelled","purchase_before_reset_read_only","purchase_date_closed","purchase_stock_transaction_missing",
+      "purchase_already_cancelled","purchase_before_reset_read_only","purchase_date_closed","purchase_stock_transaction_missing","purchase_has_fifo_consumption",
       "purchase_cancel_has_later_movement","purchase_cancel_stock_negative","invalid_purchase_quantity"
     ]);
     if(operation==="cycleCountProposalApprove")return new Set(["invalid_request_key","cycle_count_approval_confirmation_required","cycle_count_proposal_id_mismatch","cycle_count_proposal_not_found","cycle_count_proposal_not_pending","cycle_count_proposal_day_closed","request_key_conflict","admin_required"]);
@@ -441,6 +442,8 @@ function StockView({session}:{session:Session}){
       <div><p className="gold m-0 text-[9px] font-bold tracking-[.26em] sm:text-[10px]">INVENTORY</p><h1 className="mt-1 text-xl font-semibold sm:text-2xl">วัตถุดิบและบรรจุภัณฑ์</h1><p className="mt-1 text-xs text-slate-500">นับเป็นกล่อง/แพ็กได้ · สูตรหักใช้ตามหน่วยจริงแยกกัน</p></div>
       <div className="flex flex-wrap gap-2">{admin&&<button onClick={()=>openMaster()} className="flex min-h-11 items-center gap-2 rounded-full bg-[#d4af37] px-4 text-xs font-bold text-black"><Plus size={15}/>เพิ่มวัตถุดิบ</button>}<button onClick={openCount} className="min-h-11 rounded-full border border-slate-300 bg-white px-4 text-xs font-bold">{admin?"นับของจริง":"ส่งผลนับของจริง"}</button></div>
     </header>
+
+    {data?.openingInventory&&<details className="mt-3 rounded-2xl border border-slate-300 bg-white p-3"><summary className="min-h-11 cursor-pointer py-3 text-sm font-bold text-slate-800">ยอดยกมาก่อนเปิดใช้จริง</summary><p className="mt-1 text-xs text-slate-600">ตรวจวัตถุดิบและจำนวนตั้งต้นให้ตรงกับของจริง ข้อมูลที่ใช้ทดสอบต้องตั้งยอดจริงใหม่ก่อนเริ่มขาย และยืนยันต้นทุนจากหลักฐานซื้อ</p><ul aria-label="รายการยอดยกมา" className="mt-3 divide-y divide-slate-200">{data.openingInventory.items.map(item=><li key={item.id} className="flex justify-between gap-3 py-2 text-sm"><span>{item.name}</span><b className="shrink-0">{item.qty.toLocaleString("th-TH")} {item.unit}</b></li>)}</ul></details>}
 
     {pendingStockIntent&&<div className="mt-3 rounded-2xl border border-red-300 bg-red-50 p-3 text-sm text-red-900"><b>มีรายการ Stock เดิมที่ยังไม่ทราบผล</b><p className="mt-1 text-xs">ระบบล็อกการปรับ Stock ใหม่และจะส่ง Request เดิมซ้ำอย่างปลอดภัยเมื่อเชื่อมต่อ · {pendingStockIntent.operation} · Request …{pendingStockIntent.body.requestKey.slice(-8)}</p><button disabled={busy} onClick={()=>submitStockIntent(pendingStockIntent,true)} className="mt-2 min-h-11 rounded-xl bg-red-800 px-4 text-xs font-bold text-white disabled:opacity-40">ตรวจผล Request เดิม</button></div>}
     {stockRecoveryBlocked&&<div className="mt-3 rounded-2xl border border-red-400 bg-red-50 p-3 text-sm text-red-900"><b>อ่าน Recovery ของ Stock ไม่ได้</b><p className="mt-1 text-xs">ระบบหยุดรายการ Stock ใหม่แบบ Fail Closed เพื่อป้องกันตัด/เพิ่ม Stock ซ้ำ กรุณาแก้ storage แล้วรีเฟรช</p></div>}

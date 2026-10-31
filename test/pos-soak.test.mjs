@@ -30,6 +30,9 @@ function fakeDb(seed=initialState()){
 
   function executeOn(target,query){
     const {sql,args=[]}=typeof query==='string'?{sql:query,args:[]}:query;
+    if(sql==='SELECT rowid AS sequence,* FROM field_stock_transactions ORDER BY created_at,rowid')return {rows:target.stockTx.map((a,index)=>({sequence:index,id:a[0],ingredient_id:a[1],tx_type:a[2],qty_delta:a[3],unit:a[4],reference_type:a[5],reference_id:a[6],request_key:a[7],created_at:a[10]})).sort((a,b)=>a.created_at-b.created_at||a.sequence-b.sequence)};
+    if(sql.startsWith('SELECT p.*,h.cost_status AS fifo_cost_status FROM field_purchase_records'))return {rows:[]};
+    if(sql.includes('FROM field_cost_snapshots'))return {rows:target.costSnapshots.map(a=>({id:a[0],sale_id:a[1],order_id:a[2],order_item_id:a[3],menu_id:a[4],recipe_version:a[5],standard_cost:a[6],document:a[7],created_at:a[8]})).filter(row=>!sql.includes('WHERE sale_id=?')||row.sale_id===args[0])};
     if(sql.startsWith('SELECT response,request_hash FROM field_pos_requests'))return {rows:target.requests.filter(r=>r.key===args[0]).map(r=>({response:r.response,request_hash:r.hash}))};
     if(sql.startsWith('INSERT INTO field_pos_requests')){target.requests.push({key:args[0],response:args[1],hash:args[3]});return {rows:[]}}
     if(sql.startsWith('SELECT revision,document FROM field_state')){
@@ -121,7 +124,8 @@ test('30-order POS soak keeps bills unique, stock exact and queues returnable',a
 
   const state=JSON.parse(db.storage.document);
   assert.equal(state.sales.length,30);
-  assert.ok(state.sales.every(s=>s.costStatus==='CONFIRMED'));
+  assert.ok(state.sales.every(s=>s.costStatus==='PROVISIONAL'));
+  assert.ok(state.sales.every(s=>s.items.every(item=>item.consumptions.every(part=>part.source==='LEGACY_OPENING'))));
   assert.equal(new Set(state.sales.map(s=>s.id)).size,30);
   assert.equal(new Set(state.sales.map(s=>s.billNo)).size,30);
   assert.equal(state.orders.length,30);
@@ -303,7 +307,9 @@ test('cash sale void before production restores stock exactly once and preserves
   assert.equal(state.ingredients.cup16.qty,500);
   assert.equal(buildPosAvailability({menu:state.menu,ingredients:state.ingredients}).menu[0].available,true);
   assert.equal(db.storage.stockTx.length,6);
-  assert.equal(db.storage.costSnapshots.length,1);
+  assert.equal(db.storage.costSnapshots.length,2);
+  assert.equal(JSON.parse(db.storage.costSnapshots[0][7]).consumptions.length,3);
+  assert.equal(JSON.parse(db.storage.costSnapshots[1][7]).type,'COMPENSATING_REVERSAL');
   assert.equal(db.storage.stockTx.filter(args=>args[2]==='VOID_REVERSAL').length,3);
 });
 
