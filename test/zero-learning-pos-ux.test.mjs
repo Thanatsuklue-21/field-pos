@@ -240,3 +240,26 @@ test("split bill and loyalty stay out of the normal payment path but reopen auto
   assert.match(options,/ลูกค้าทั่วไป \/ ไม่สะสมแต้ม/);
   assert.match(options,/กลุ่มเดียวกัน · คิว \{splitGroup\.queueNo\}/);
 });
+
+
+test("disabled operational controls look disabled and explain locked state",async()=>{
+  const pos=await read("app/pos/page.tsx");
+  const workspace=await read("components/pos-daily-workspace.tsx");
+  const queue=await read("app/queue/page.tsx");
+  const close=await read("app/close/page.tsx");
+
+  assert.match(pos,/disabled=\{hasPendingPrompt\}[\s\S]{0,220}title=\{hasPendingPrompt\?"รอผล QR เดิมก่อนเลือกช่องทางอื่น"/);
+  assert.match(pos,/ช่องทางอื่น<\/button>/);
+  assert.match(pos,/disabled:cursor-not-allowed disabled:opacity-45/);
+
+  assert.match(workspace,/pendingExpense\?"มีรายจ่ายเดิมรอยืนยัน"/);
+  assert.match(workspace,/expenseRecoveryBlocked\?"ระบบป้องกันรายการซ้ำยังไม่พร้อม"/);
+  assert.match(workspace,/disabled:cursor-not-allowed disabled:opacity-40/);
+
+  assert.match(queue,/queueActionLocked\?"กำลังตรวจรายการคิวเดิม"/);
+  assert.match(queue,/เรียกบัตร \{first\.pagerNo\}<\/button>/);
+  assert.match(queue,/disabled:cursor-not-allowed disabled:opacity-45/);
+
+  assert.ok((close.match(/title=\{movementLocked\?"กำลังตรวจรายการเงินสดเดิม":undefined\}/g)||[]).length>=2);
+  assert.ok((close.match(/disabled:cursor-not-allowed disabled:opacity-40/g)||[]).length>=2);
+});
