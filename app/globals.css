@@ -235,3 +235,14 @@ html,body{overscroll-behavior:none}
   .field-bump{animation:none}
   .field-app-root .pos-menu-card:active:not(:disabled){transform:none}
 }
+
+/* Android large-text / narrow phones: the mode label truncates instead of
+   overlapping the front/back switch. */
+.field-mode-label > *{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* Disabled checkout/hold actions stay readable (not a faded gold block). */
+.field-app-root .field-cart-action:disabled{
+  background:var(--field-button-disabled-bg);
+  color:var(--field-button-disabled-fg);
+  border-color:#cbd5e1;
+  opacity:1;
+}

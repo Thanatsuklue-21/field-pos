@@ -65,7 +65,7 @@ export default function AppShell({children}:{children:React.ReactNode}){
       </aside>
       <main className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-[20px] border border-slate-300/80 bg-[#f3f5f7] shadow-[0_10px_30px_rgba(15,23,42,.08)] sm:rounded-[24px] md:rounded-[32px]">
         {session&&<header className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-200 bg-white px-3 py-2" aria-label="โหมดการทำงาน">
-          <div className="min-w-0"><b className="block text-xs text-[#1f4d3a]">{currentMode==="front"?"โหมดหน้าร้าน":"โหมดหลังร้าน"}</b><NetworkStatus/></div>
+          <div className="field-mode-label min-w-0 flex-1 overflow-hidden"><b className="block truncate text-xs text-[#1f4d3a]">{currentMode==="front"?"โหมดหน้าร้าน":"โหมดหลังร้าน"}</b><NetworkStatus/></div>
           <nav aria-label="สลับโหมดการทำงาน" className="flex shrink-0 gap-1">
             {frontHome&&<Link href={frontHome} prefetch={false} aria-current={currentMode==="front"?"page":undefined} className={"flex min-h-11 items-center rounded-xl border px-3 text-xs font-bold "+(currentMode==="front"?"border-[#1f4d3a] bg-[#1f4d3a] text-white":"border-slate-200 bg-white text-slate-700")}>หน้าร้าน</Link>}
             {backHome&&<Link href={backHome} prefetch={false} aria-current={currentMode==="back"?"page":undefined} className={"flex min-h-11 items-center rounded-xl border px-3 text-xs font-bold "+(currentMode==="back"?"border-[#d4af37] bg-[#d4af37] text-black":"border-slate-200 bg-white text-slate-700")}>หลังร้าน</Link>}
