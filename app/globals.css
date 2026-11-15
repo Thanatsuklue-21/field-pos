@@ -201,3 +201,37 @@ html,body{overscroll-behavior:none}
   .field-pos-catalog-pane > *{flex-shrink:0}
   .field-pos-catalog-pane .field-pos-menu-list{flex:none;overflow:visible}
 }
+
+/* iOS-like touch feel: press-in is immediate, release springs back.
+   Pure presentation; no handler, focus or disabled behaviour changes. */
+:root{
+  --ease-spring:cubic-bezier(.34,1.36,.64,1);
+  --motion-press:70ms;
+  --motion-release:240ms;
+}
+.field-app-root :is(button,a[href],[role="button"]){
+  transition-property:background-color,border-color,color,box-shadow,transform,opacity;
+  transition-duration:var(--motion-standard),var(--motion-standard),var(--motion-standard),var(--motion-standard),var(--motion-release),var(--motion-fast);
+  transition-timing-function:var(--ease-smooth),var(--ease-smooth),var(--ease-smooth),var(--ease-smooth),var(--ease-spring),var(--ease-smooth);
+}
+.field-app-root :is(button,a[href],[role="button"]):active:not(:disabled){
+  transition-duration:var(--motion-standard),var(--motion-standard),var(--motion-standard),var(--motion-standard),var(--motion-press),var(--motion-fast);
+  transition-timing-function:var(--ease-smooth);
+}
+.field-app-root .pos-menu-card:active:not(:disabled){transform:scale(.965)}
+/* Momentum scrolling that does not drag the whole page or trigger pull-to-refresh. */
+.field-app-root :is(.soft-scroll,.overflow-auto,.overflow-y-auto,.field-modal-panel){
+  overscroll-behavior:contain;
+  -webkit-overflow-scrolling:touch;
+}
+/* Cart total/count confirmation after each tap. */
+@keyframes field-bump{
+  0%{transform:scale(1)}
+  35%{transform:scale(1.08)}
+  100%{transform:scale(1)}
+}
+.field-bump{animation:field-bump var(--motion-release) var(--ease-spring);transform-origin:left center}
+@media (prefers-reduced-motion:reduce){
+  .field-bump{animation:none}
+  .field-app-root .pos-menu-card:active:not(:disabled){transform:none}
+}

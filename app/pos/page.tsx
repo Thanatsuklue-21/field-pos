@@ -10,6 +10,7 @@ import {api,type Bootstrap,type MenuItem,type RevisionUnchanged,type Session} fr
 import {cacheGet,cachePut} from "@/lib/offline-db";
 import {applyOfflineCashToBootstrap,getOfflineCashSummary,queueOfflineCashSale,syncOfflineCashSales,type OfflineCashSummary} from "@/lib/offline-sales";
 import {additionalServingsAvailable,additionalServingsForVariant,cartAvailability} from "@/lib/domain/availability.mjs";
+import {planCartChange} from "@/lib/domain/cart-change-policy.mjs";
 import {useCartStore} from "@/stores/cart-store";
 import {useHeldCartStore} from "@/stores/held-cart-store";
 import {writeQueueSnapshotCache} from "@/lib/queue-cache";
@@ -26,6 +27,12 @@ const PosDailyWorkspace=dynamic(loadPosDailyWorkspace,{
   ssr:false,
   loading:()=> <div role="status" aria-live="polite" className="fixed inset-0 z-[90] grid place-items-center bg-black/20"><div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 shadow-xl">กำลังเปิดงานร้าน…</div></div>
 });
+
+type CartItems=ReturnType<typeof useCartStore.getState>["items"];
+
+// Light confirmation tick where the platform supports it (Android/Chrome).
+// iOS Safari ignores navigator.vibrate; the visual bump still confirms the tap.
+function tapHaptic(){try{navigator.vibrate?.(8)}catch{}}
 
 export default function Pos(){return <AuthGate preloadPath="/api/pos/bootstrap">{s=><PosView session={s}/>}</AuthGate>}
 
@@ -110,6 +117,8 @@ function PosView({session}:{session:Session}){
   const promptReconcileRef=useRef(false);
   const checkoutInFlightRef=useRef(false);
   const cartCheckInFlightRef=useRef(false);
+  // When the in-memory stock projection was last confirmed by a bootstrap read.
+  const projectionAtRef=useRef(0);
   const cart=useCartStore();
   const heldBills=useHeldCartStore();
 
@@ -127,7 +136,9 @@ function PosView({session}:{session:Session}){
     return()=>window.clearTimeout(timer);
   },[]);
 
-  const acceptBootstrap=(next:Bootstrap|RevisionUnchanged)=>{
+  const acceptBootstrap=(next:Bootstrap|RevisionUnchanged,confirmed=true)=>{
+    // An "unchanged" answer still confirms the current projection is fresh.
+    if(confirmed)projectionAtRef.current=Date.now();
     if(next?.unchanged===true)return false;
     revisionRef.current=Math.max(revisionRef.current||0,Number(next.revision)||0);
     setData(prev=>!prev||next.revision>=prev.revision?next:prev);
@@ -143,7 +154,7 @@ function PosView({session}:{session:Session}){
     // Render the last known sellable catalog immediately, then revalidate from Cloud.
     // acceptBootstrap is revision-aware, so a late cache read cannot overwrite newer server data.
     cacheGet<Bootstrap>("/api/pos/bootstrap",BOOTSTRAP_CACHE_MAX_AGE_MS)
-      .then(cached=>{if(active&&cached)acceptBootstrap(cached)})
+      .then(cached=>{if(active&&cached)acceptBootstrap(cached,false)})
       .catch(()=>{});
     load(true).catch(()=>{});
 
@@ -445,6 +456,16 @@ function PosView({session}:{session:Session}){
 
   async function validateCartChange(next:{id:string;variant:string;qty:number}[],apply:()=>void,allowShortage=false){
     if(cartCheckInFlightRef.current||checkoutInFlightRef.current)return;
+    // Fast path: a fresh local projection that already allows the change is
+    // applied in the same frame. Precheck never reserves stock; payment opening
+    // and the server checkout transaction remain the stock authority.
+    const plan=planCartChange({next,menu:data?.menu,stock:data?.availabilityStock,allowShortage,projectionAt:projectionAtRef.current});
+    if(plan.mode==="apply-local"){
+      const before=useCartStore.getState().items;
+      apply();
+      revalidateCartInBackground(allowShortage?null:{before,after:useCartStore.getState().items});
+      return;
+    }
     cartCheckInFlightRef.current=true;
     const before=JSON.stringify(useCartStore.getState().items);
     try{
@@ -461,13 +482,31 @@ function PosView({session}:{session:Session}){
     finally{cartCheckInFlightRef.current=false}
   }
 
+  // Revision-aware refresh after an instant cart change. GET requests are
+  // coalesced by the API client, so rapid taps share one network read.
+  // If the server says the tap is no longer sellable (sold on another device),
+  // the instant change is rolled back so the cart matches the tap-time precheck.
+  function revalidateCartInBackground(guard:{before:CartItems;after:CartItems}|null){
+    api<Bootstrap|RevisionUnchanged>("/api/pos/bootstrap",revisionRef.current!==null?{headers:{"X-Field-Revision":String(revisionRef.current)}}:{}).then(res=>{
+      if(!acceptBootstrap(res))return;
+      const fresh=res as Bootstrap,latest=useCartStore.getState().items;
+      if(!latest.length)return;
+      const checked=cartAvailability({cart:latest,menu:fresh.menu,stock:fresh.availabilityStock||{}});
+      if(checked.available)return;
+      if(guard&&useCartStore.getState().items===guard.after)cart.replaceItems(guard.before);
+      setNotice(availabilityMessage(checked));
+    }).catch(()=>{});
+  }
+
   function addVariant(product:MenuItem,variant:MenuItem["variants"][number]){
     const remaining=additionalServingsForVariant({variant,demand:cartStockState.demand,stock:data?.availabilityStock||{}});
     if(!variant.available||remaining<1){setNotice("วัตถุดิบเพียงพออีก 0 แก้วเท่านั้น"+(variant.missingIngredients?.length?" · ขาด: "+variant.missingIngredients.map(x=>x.name).join(", "):""));return}
-    const next=cart.items.map(x=>({id:x.id,variant:x.variant,qty:x.qty}));
+    // Read the live store, not the render snapshot, so two taps in one frame
+    // are both counted in the availability check.
+    const next=useCartStore.getState().items.map(x=>({id:x.id,variant:x.variant,qty:x.qty}));
     const existing=next.find(x=>x.id===product.id&&x.variant===variant.label);
     if(existing)existing.qty+=1;else next.push({id:product.id,variant:variant.label,qty:1});
-    void validateCartChange(next,()=>{cart.addItem({id:product.id,name:product.name,variant:variant.label,price:product.price});setSelected(null)});
+    void validateCartChange(next,()=>{cart.addItem({id:product.id,name:product.name,variant:variant.label,price:product.price});setSelected(null);tapHaptic()});
   }
 
   function chooseMenu(product:MenuItem){
@@ -479,8 +518,9 @@ function PosView({session}:{session:Session}){
   }
 
   function updateCartQuantity(key:string,nextQty:number){
-    const item=cart.items.find(x=>x.key===key);if(!item)return;
-    const next=cart.items.map(x=>({id:x.id,variant:x.variant,qty:x.key===key?nextQty:x.qty})).filter(x=>x.qty>0);
+    const liveItems=useCartStore.getState().items;
+    const item=liveItems.find(x=>x.key===key);if(!item)return;
+    const next=liveItems.map(x=>({id:x.id,variant:x.variant,qty:x.key===key?nextQty:x.qty})).filter(x=>x.qty>0);
     if(nextQty<=item.qty){void validateCartChange(next,()=>cart.updateQuantity(key,nextQty),true);return}
     const remaining=additionalServingsAvailable({cart:cart.items,menu:data?.menu||[],stock:data?.availabilityStock||{},menuId:item.id,variantLabel:item.variant,demand:cartStockState.demand});
     if(remaining<1){setNotice("วัตถุดิบเพียงพออีก 0 แก้วเท่านั้น");return}
@@ -982,13 +1022,13 @@ function PosView({session}:{session:Session}){
     </div>
 
     <div className="field-pos-mobile-cartbar fixed left-2 right-2 z-30 flex items-center justify-between gap-2 rounded-[18px] border border-slate-300 bg-white/95 p-1.5 pl-3 shadow-lg backdrop-blur sm:left-4 sm:right-4 sm:rounded-[22px] sm:p-2 sm:pl-5 lg:hidden">
-      <div className="min-w-0 flex-1"><small className="block text-[10px] tracking-widest text-slate-500">{cart.items.reduce((s,i)=>s+i.qty,0)} แก้ว</small><b className="text-lg text-[#765b08]">฿{formatBaht(total)}</b></div>
+      <div className="min-w-0 flex-1"><small className="block text-[10px] tracking-widest text-slate-500">{cart.items.reduce((s,i)=>s+i.qty,0)} แก้ว</small><b key={total} className="field-bump block text-lg text-[#765b08]">฿{formatBaht(total)}</b></div>
       <button disabled={!cart.items.length} onClick={holdCurrentBill} className="min-h-11 shrink-0 rounded-2xl border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 disabled:opacity-30"><Clock3 size={14} className="mx-auto mb-0.5"/>พักบิล</button>
       <button aria-label="ชำระเงิน" disabled={!cart.items.length} onClick={openPayment} className="min-h-11 shrink-0 rounded-2xl bg-[#d4af37] px-4 py-2.5 text-sm font-bold text-black disabled:opacity-30 sm:px-5 sm:py-3">ชำระเงิน ฿{formatBaht(total)}</button>
     </div>
 
     <aside className="glass m-3 ml-0 hidden w-[360px] shrink-0 flex-col rounded-[24px] p-5 lg:flex">
-      <div className="mb-4 flex items-center justify-between"><div><p className="m-0 text-[10px] tracking-[.25em] text-slate-500">ขั้นตอน 2 · ตรวจออเดอร์</p><h2 className="m-0 mt-1 text-lg">รายการที่สั่ง</h2></div><span className="rounded-full border border-slate-200 bg-slate-100 px-3 py-1 text-xs">{cart.items.reduce((s,i)=>s+i.qty,0)} แก้ว</span></div>
+      <div className="mb-4 flex items-center justify-between"><div><p className="m-0 text-[10px] tracking-[.25em] text-slate-500">ขั้นตอน 2 · ตรวจออเดอร์</p><h2 className="m-0 mt-1 text-lg">รายการที่สั่ง</h2></div><span key={cart.items.reduce((s,i)=>s+i.qty,0)} className="field-bump rounded-full border border-slate-200 bg-slate-100 px-3 py-1 text-xs">{cart.items.reduce((s,i)=>s+i.qty,0)} แก้ว</span></div>
       <div className="soft-scroll min-h-0 flex-1 overflow-auto">{cart.items.length===0?<div className="grid h-full place-items-center text-sm text-slate-400">1. แตะเมนูเพื่อเริ่มออเดอร์</div>:cart.items.map(i=><div key={i.key} className="mb-3 rounded-[18px] border border-slate-200 bg-slate-100/70 p-4"><div className="flex gap-3"><div className="flex-1"><b className="text-sm">{i.name}</b><small className="mt-1 block text-slate-500">{i.variant}</small></div><button aria-label={"ลบ "+i.name} onClick={()=>cart.removeItem(i.key)} className="grid h-11 w-11 place-items-center rounded-xl text-slate-500 hover:bg-red-50 hover:text-red-600"><Trash2 size={16}/></button></div><div className="mt-3 flex items-center justify-between"><div className="flex items-center gap-2"><button aria-label={"ลดจำนวน "+i.name} onClick={()=>updateCartQuantity(i.key,i.qty-1)} className="grid h-11 w-11 place-items-center rounded-xl border border-slate-300 bg-white"><Minus size={13}/></button><span className="w-5 text-center">{i.qty}</span><button aria-label={"เพิ่มจำนวน "+i.name} onClick={()=>updateCartQuantity(i.key,i.qty+1)} className="grid h-11 w-11 place-items-center rounded-xl border border-slate-300 bg-white"><Plus size={13}/></button></div><b className="text-[#765b08]">฿{formatBaht((i.price*i.qty))}</b></div></div>)}</div>
       <div className="border-t border-slate-300 pt-4"><div className="mb-2 flex justify-between text-sm text-slate-600"><span>ยอดสินค้า</span><span>฿{formatBaht(cart.getSubtotal())}</span></div><div className="mb-4 flex justify-between text-xl font-semibold"><span>รวมสุทธิ</span><span className="text-[#765b08]">฿{formatBaht(total)}</span></div><div className="grid grid-cols-[auto_1fr] gap-2"><button disabled={!cart.items.length} onClick={holdCurrentBill} className="flex min-h-12 items-center justify-center gap-2 rounded-2xl border border-slate-300 bg-white px-4 text-sm font-bold text-slate-700 disabled:opacity-30"><Clock3 size={17}/>พักบิล</button><button aria-label="ชำระเงิน" disabled={!cart.items.length} onClick={openPayment} className="flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-[#d4af37] px-4 font-bold text-black disabled:opacity-30"><WalletCards size={18}/>ชำระเงิน</button></div></div>
     </aside>
