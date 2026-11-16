@@ -139,6 +139,8 @@ function PosView({session}:{session:Session}){
   // Instant QR (owner-approved 2026-11-16): the identical QR drawn locally while the
   // server opens the charge. Display only; payment is still confirmed server-side.
   const [qrPreview,setQrPreview]=useState<{total:number;url:string}|null>(null);
+  const [cancelPromptArmed,setCancelPromptArmed]=useState(false);
+  const [cancelPromptBusy,setCancelPromptBusy]=useState(false);
   const qrPreviewRef=useRef<typeof qrPreview>(null);qrPreviewRef.current=qrPreview;
   // Own-account PromptPay: two-step manual confirm when the bank notification does not arrive.
   const [directConfirmArmed,setDirectConfirmArmed]=useState(false);
@@ -777,6 +779,27 @@ function PosView({session}:{session:Session}){
     setNotice("QR ฿"+formatBaht(p.total)+" รอเงินเข้าอยู่เบื้องหลัง · รับออเดอร์ถัดไปได้เลย");
   }
 
+  // Escape hatch for a QR that is open (or stuck) in the payment sheet: release the
+  // server reservation/charge, then unlock the sheet. A paid QR is never cancelled.
+  async function cancelActivePrompt(){
+    const p=pendingRead();
+    if(!p||p.parked||cancelPromptBusy)return;
+    setCancelPromptBusy(true);
+    try{
+      let q=p;
+      // A promptpay session can only be released with its QR reference; resume the
+      // (idempotent) QR open first when an interrupted attempt left none.
+      if(q.sessionId&&!q.paymentReference)q=(await ensurePendingPrompt(q)).pending;
+      await cancelPendingReservation(q);
+      pendingClear();
+      setPrompt(null);setQrPreview(null);setDirectConfirmArmed(false);setCancelPromptArmed(false);
+      setResult("ยกเลิก QR ฿"+formatBaht(p.total)+" แล้ว · เลือกเงินสดหรือสร้าง QR ใหม่ได้");
+    }catch(e:any){
+      setCancelPromptArmed(false);
+      setResult(e?.message==="promptpay_already_paid"?"QR นี้ได้รับเงินแล้ว · ระบบกำลังบันทึกเข้าคิว ห้ามรับเงินซ้ำ":"ยกเลิกไม่สำเร็จ ("+errorText(String(e?.message||""))+") · ลองอีกครั้ง");
+    }finally{setCancelPromptBusy(false)}
+  }
+
   async function cancelParkedPrompt(){
     const p=pendingRead();
     if(!p?.parked||parkedBusy)return;
@@ -1336,6 +1359,12 @@ function PosView({session}:{session:Session}){
       <p className="mt-4 text-xs font-semibold text-slate-600">เลือกวิธีชำระ</p><div className="mt-2 grid grid-cols-3 gap-2 rounded-2xl bg-slate-100 p-1"><button disabled={hasPendingPrompt||cashShiftUnavailable} onClick={()=>{setMethod("cash");setOtherPaymentOpen(false);setManualPaymentReference("")}} title={cashShiftUnavailable?"ต้องเปิดกะเงินสดก่อนรับเงินสด":undefined} className={"rounded-xl p-3 text-xs disabled:cursor-not-allowed disabled:opacity-45 sm:text-sm "+(method==="cash"?"bg-[#d4af37] font-semibold text-black shadow-sm":"text-slate-700")}>เงินสด</button><button disabled={(online?promptConfig?.ready!==true:!offlineQrId)||netPayable<=0||!!parkedRecord} onClick={()=>{setMethod("promptpay");setOtherPaymentOpen(false);setManualPaymentReference("")}} title={!online?(offlineQrId?"เน็ตหลุด · สร้าง QR ในเครื่องได้":"PromptPay ต้องใช้อินเทอร์เน็ต"):promptConfig?.ready===true?"PromptPay พร้อมใช้งาน":"รอ Beam อนุมัติ / ตั้งค่า API และ Webhook"} className={"rounded-xl p-3 text-xs sm:text-sm disabled:cursor-not-allowed disabled:opacity-45 "+(method==="promptpay"?"bg-[#d4af37] font-semibold text-black shadow-sm":"text-slate-700")}>PromptPay{promptConfig?.selectedProvider==="beam"&&promptConfig?.mode==="test"?" · TEST":""}</button><button type="button" aria-expanded={showOtherPayments} aria-controls="field-other-payment-methods" disabled={hasPendingPrompt} onClick={()=>{if(!otherPaymentActive)setOtherPaymentOpen(v=>!v)}} className={"rounded-xl p-3 text-xs font-semibold sm:text-sm "+(showOtherPayments?"bg-white text-[#765b08] shadow-sm":"text-slate-700")}>ช่องทางอื่น</button></div>
       {showOtherPayments&&<div id="field-other-payment-methods" className="mt-2 rounded-2xl border border-slate-200 bg-white p-2"><div className="mb-2 px-1 text-[11px] text-slate-500">ใช้เมื่อไม่ได้รับเงินสดหรือ PromptPay</div><div className="grid grid-cols-3 gap-2"><button disabled={!online||hasPendingPrompt} onClick={()=>{setMethod("bank");setOtherPaymentOpen(true);setReceived("")}} className={"min-h-11 rounded-xl border px-3 text-xs sm:text-sm disabled:opacity-45 "+(method==="bank"?"border-[#d4af37] bg-[#fff8dc] font-semibold text-[#765b08]":"border-slate-200 bg-white text-slate-700")}>โอน</button><button disabled={!online||hasPendingPrompt} onClick={()=>{setMethod("card");setOtherPaymentOpen(true);setReceived("")}} className={"min-h-11 rounded-xl border px-3 text-xs sm:text-sm disabled:opacity-45 "+(method==="card"?"border-[#d4af37] bg-[#fff8dc] font-semibold text-[#765b08]":"border-slate-200 bg-white text-slate-700")}>บัตร</button><button disabled={!online||hasPendingPrompt} onClick={()=>{setMethod("delivery");setOtherPaymentOpen(true);setSplitBill(false);setSplitSelection({});setReceived("");setManualPaymentReference("")}} className={"min-h-11 rounded-xl border px-3 text-xs sm:text-sm disabled:opacity-45 "+(method==="delivery"?"border-[#d4af37] bg-[#fff8dc] font-semibold text-[#765b08]":"border-slate-200 bg-white text-slate-700")}>เดลิเวอรี</button></div></div>}
       {hasPendingPrompt&&<div className="mt-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-900"><b>กำลังรอผล PromptPay เดิม</b> · รายการและช่องทางรับเงินอื่นถูกล็อกชั่วคราว ระบบจะตรวจ QR เดิมอัตโนมัติเพื่อป้องกันรับเงินซ้ำ</div>}
+      {hasPendingPrompt&&!prompt?.paid&&(!cancelPromptArmed?<button type="button" data-cancel-prompt disabled={busy||cancelPromptBusy} onClick={()=>setCancelPromptArmed(true)} className="mt-2 min-h-11 w-full rounded-2xl border border-slate-300 bg-white px-4 text-sm font-bold text-slate-700 disabled:opacity-40">ยกเลิก QR นี้ · ลูกค้าจ่ายวิธีอื่น</button>:
+        <div role="alertdialog" aria-label="ยืนยันยกเลิก QR" className="mt-2 rounded-2xl border border-amber-300 bg-amber-50 p-3">
+          <b className="text-sm text-amber-950">ลูกค้ายังไม่ได้โอนใช่ไหม?</b>
+          <p className="mt-1 text-[11px] text-amber-900">ถ้าไม่แน่ใจ ดูแอปธนาคารก่อน · ถ้าเงินเข้าแล้วระบบจะไม่ยอมยกเลิก</p>
+          <div className="mt-2 grid grid-cols-2 gap-2"><button type="button" onClick={()=>setCancelPromptArmed(false)} className="min-h-11 rounded-xl border border-slate-300 bg-white text-xs font-bold text-slate-700">กลับ</button><button type="button" data-cancel-prompt-yes disabled={cancelPromptBusy} onClick={()=>cancelActivePrompt()} className="min-h-11 rounded-xl bg-[#9A3412] text-xs font-black text-white disabled:opacity-40">{cancelPromptBusy?"กำลังยกเลิก...":"ยกเลิก QR"}</button></div>
+        </div>)}
       {hasPendingPrompt&&method==="promptpay"&&!splitBill&&!splitGroup&&String(prompt?.status||"").toLowerCase()==="pending"&&!prompt?.paid&&<button type="button" data-park-prompt onClick={parkPendingPrompt} className="mt-3 flex min-h-12 w-full items-center justify-center rounded-2xl border-2 border-[#1F4D3A] bg-white px-4 text-sm font-black text-[#1F4D3A]">ลูกค้าสแกนแล้ว · รับออเดอร์ถัดไประหว่างรอเงินเข้า</button>}
       {cashShiftUnavailable&&<div className="mt-3 rounded-2xl border border-amber-300 bg-amber-50 px-3 py-3 text-xs text-amber-900"><div className="flex items-center justify-between gap-3"><div><b>เงินสดยังไม่พร้อม</b><p className="mt-1">ต้องเปิดกะเงินสดก่อน เพื่อให้ยอดตั้งต้น เงินทอน และปิดวันกระทบกันได้ถูกต้อง</p></div>{session.user.role==="admin"&&<button type="button" onClick={()=>{setPayOpen(false);setWorkspaceMounted(true);setWorkspaceOpen(true)}} className="min-h-11 shrink-0 rounded-xl border border-[#b98b00] bg-[#d4af37] px-3 font-bold text-black">เปิดกะตรงนี้</button>}</div>{session.user.role!=="admin"&&<p className="mt-2 font-semibold">ให้เจ้าของร้านเปิดกะ หรือเลือก PromptPay/ช่องทางอื่น</p>}</div>}
       {online&&promptConfig?.ready!==true&&<div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">PromptPay ยังไม่เปิดรับเงินจริง · ใช้เงินสดหรือช่องทางอื่นไปก่อน และให้เจ้าของร้านตรวจการตั้งค่า PromptPay</div>}
