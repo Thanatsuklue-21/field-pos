@@ -97,7 +97,7 @@ html{-webkit-text-size-adjust:100%}
 
 /* Zero-learning operator UX: reliable touch, input and menu rendering. */
 html,body{overscroll-behavior:none}
-.pos-menu-card{content-visibility:auto;contain-intrinsic-size:190px}
+.pos-menu-card{content-visibility:auto;contain-intrinsic-size:96px}
 .field-app-root :is(button,a[href],[role="button"]){
   min-block-size:44px;
   min-inline-size:44px;
