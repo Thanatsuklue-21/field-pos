@@ -75,8 +75,11 @@ with sync_playwright() as p:
     payment.get_by_role("button",name="สร้าง QR ให้ลูกค้า",exact=True).click()
     preview=payment.locator("[data-qr-preview] img")
     expect(preview).to_be_visible(timeout=5000)
-    page.wait_for_timeout(300)
-    assert len(held)==1,("server create must still be pending while the QR is shown",len(held))
+    # Production opens the charge in several seconds; the 2 s background check must
+    # not start a second create while checkout is still in flight (field report 2026-11-16).
+    page.wait_for_timeout(5000)
+    assert len(held)==1,("exactly one server create while the slow request is in flight",len(held))
+    expect(preview).to_be_visible()
     src=preview.get_attribute("src") or ""; assert src.startswith("data:image/png;base64,"),src[:40]
     page.screenshot(path=str(output/"instant-qr-390.png"))
     held[0].fulfill(status=200,content_type="application/json",body=json.dumps({"chargeId":"pd_0123456789abcdef01234567","provider":"direct","status":"pending","paid":False,"amount":55,"currency":"THB","qrUrl":"data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==","referenceId":"split-pp-1"}))

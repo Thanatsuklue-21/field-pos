@@ -46,3 +46,12 @@ test('cancelling a parked QR releases the reservation and restores cups only int
   assert.ok(fn.indexOf('cancelPendingReservation(p)')<fn.indexOf('pendingClear()'));
   assert.match(fn,/if\(!useCartStore\.getState\(\)\.items\.length&&data\)/);
 });
+
+test('background PromptPay reconcile never runs while checkout is still opening the QR (field report 2026-11-16)',async()=>{
+  const {readFile}=await import('node:fs/promises');
+  const pos=await readFile(new URL('../app/pos/page.tsx',import.meta.url),'utf8');
+  assert.match(pos,/const tick=\(\)=>\{if\(checkoutInFlightRef\.current\)return;const p=pendingRead\(\);if\(p&&!p\.parked\)recoverPending\(\)/);
+  const rec=pos.slice(pos.indexOf('async function recoverPending(){'),pos.indexOf('async function recoverPending(){')+200);
+  assert.match(rec,/if\(checkoutInFlightRef\.current\)return;/);
+  assert.match(pos,/if\(promptReconcileRef\.current\)\{setResult\("กำลังตรวจ QR เดิม/);
+});
