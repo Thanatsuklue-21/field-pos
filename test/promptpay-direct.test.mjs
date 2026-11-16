@@ -5,7 +5,7 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {createClient} from '@libsql/client';
 import {SCHEMA} from '../lib/schema.mjs';
-import {startSplitPayment} from '../lib/pos-api.mjs';
+import {startSplitPayment,beginSplitPaymentProviderCharge} from '../lib/pos-api.mjs';
 import {createApi} from '../lib/api.mjs';
 import {digest} from '../lib/security.mjs';
 import {bangkokDate} from '../lib/time.mjs';
@@ -174,4 +174,22 @@ test('bank notification accepts text/plain so quotes in the bank text cannot bre
   const route=await readFile(new URL('../app/api/[...route]/route.js',import.meta.url),'utf8');
   assert.match(route,/route\.join\("\/"\)==="payments\/bank-notification"&&!String\(headers\["content-type"\]\|\|""\)\.includes\("json"\)/);
   assert.match(route,/body=\{text:raw\.slice\(0,2000\)\}/);
+});
+
+// Field report 2026-11-16: two concurrent creates left the attempt "creating" with no
+// charge attached; every retry then failed with promptpay_charge_creation_unknown.
+test('HTTP: an interrupted own-account QR attempt resumes on retry and is attached exactly once',async t=>{
+  withEnv(t,{PROMPTPAY_PROVIDER:'direct',PROMPTPAY_DIRECT_ID:'0812345678',BANK_NOTIFY_SECRET:SECRET,PUBLIC_ORIGIN:'https://field.test'});
+  const db=await setup(t),api=createApi({db,origin:'https://field.test'});
+  const s=await startSplitPayment({db,user,body:{requestKey:'pp-stuck-1',cart:[{id:'latte',variant:'100%',qty:1}],date:bangkokDate(),mode:'promptpay_full'}});
+  // Simulate the crashed/collided first create: attempt begun, nothing attached.
+  await beginSplitPaymentProviderCharge({db,user,body:{sessionId:s.session.id,provider:'direct',attemptKey:'promptpay:'+s.session.id}});
+  const a=await call(api,['payments','promptpay','create'],{reference:s.session.id});
+  assert.equal(a.status,200,JSON.stringify(a.body));assert.match(a.body.chargeId,/^pd_/);
+  const b=await call(api,['payments','promptpay','create'],{reference:s.session.id});
+  assert.equal(b.status,200,JSON.stringify(b.body));assert.equal(b.body.chargeId,a.body.chargeId);
+  const rows=(await db.execute('SELECT COUNT(*) AS n FROM field_promptpay_direct')).rows[0];
+  assert.equal(Number(rows.n),1);
+  const doc=await state(db);const sess=doc.paymentSessions.find(x=>x.id===s.session.id);
+  assert.equal(sess.providerCharge.chargeId,a.body.chargeId);
 });
