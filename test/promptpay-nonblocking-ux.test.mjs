@@ -8,7 +8,7 @@ test("PromptPay checkout no longer blocks the cashier in a 15 minute polling loo
   assert.doesNotMatch(pos,/deadline=Date\.now\(\)\+15\*60\*1000/);
   assert.doesNotMatch(pos,/while\(!st\.paid&&Date\.now\(\)<deadline\)/);
   assert.match(pos,/QR พร้อมชำระ · ระบบตรวจ QR เดิมอัตโนมัติทุก 3 วินาที/);
-  assert.match(pos,/setInterval\(tick,3000\)/);
+  assert.match(pos,/setInterval\(tick,2000\)/);
 });
 
 test("PromptPay background reconciliation is serialized and reuses the existing pending record",async()=>{
@@ -26,8 +26,9 @@ test("PromptPay background reconciliation is serialized and reuses the existing 
 
 test("an unresolved PromptPay locks order edits and alternate tenders",async()=>{
   const pos=await read("app/pos/page.tsx");
-  assert.match(pos,/const hasPendingPrompt=!!pendingRead\(\)/);
-  assert.match(pos,/unresolvedPrompt&&method!==\"promptpay\"/);
+  // Owner-approved 2026-11-16: only an unparked pending QR locks the sheet.
+  assert.match(pos,/const hasPendingPrompt=!!pendingRead\(\)&&!pendingRead\(\)\?\.parked/);
+  assert.match(pos,/unresolvedPrompt&&!unresolvedPrompt\.parked&&method!==\"promptpay\"/);
   assert.match(pos,/ช่องทางรับเงินอื่นถูกพักเพื่อป้องกันรับเงินซ้ำ/);
   assert.match(pos,/disabled=\{busy\|\|hasPendingPrompt\}/);
   assert.match(pos,/disabled=\{!online\|\|hasPendingPrompt\}/);
@@ -42,6 +43,8 @@ test("PromptPay paid recovery still finalizes through the existing durable sessi
   const block=pos.slice(start,end);
   assert.match(block,/\/api\/pos\/split\/status/);
   assert.match(block,/\/api\/pos\/split\/pay/);
-  assert.match(block,/pendingClear\(\)/);
-  assert.match(block,/finishSale\(/);
+  assert.match(block,/completePrompt\(p,/);
+  const helper=pos.slice(pos.indexOf("function completePrompt"),pos.indexOf("function parkPendingPrompt"));
+  assert.match(helper,/pendingClear\(\)/);
+  assert.match(helper,/finishSale\(r,opts\)/);
 });
