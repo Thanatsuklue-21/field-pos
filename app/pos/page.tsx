@@ -327,7 +327,9 @@ function PosView({session}:{session:Session}){
 
   useEffect(()=>{
     if(!online||method!=="promptpay"||!payOpen)return;
-    const tick=()=>{const p=pendingRead();if(p&&!p.parked)recoverPending().catch(()=>{})};
+    // Never reconcile while checkout itself is still opening this QR: two concurrent
+    // ensurePendingPrompt calls collide and the QR vanished (field report 2026-11-16).
+    const tick=()=>{if(checkoutInFlightRef.current)return;const p=pendingRead();if(p&&!p.parked)recoverPending().catch(()=>{})};
     const timer=window.setInterval(tick,2000);
     return()=>window.clearInterval(timer);
   },[online,method,payOpen,session.csrf]);
@@ -870,6 +872,7 @@ function PosView({session}:{session:Session}){
 
   async function recoverPending(){
     if(promptReconcileRef.current)return;
+    if(checkoutInFlightRef.current)return;
     promptReconcileRef.current=true;
     let p=pendingRead();
     if(!p){promptReconcileRef.current=false;return}
@@ -1029,6 +1032,7 @@ function PosView({session}:{session:Session}){
 
       if(method==="promptpay"){
         if(promptConfig?.ready!==true)throw Object.assign(new Error("promptpay_not_ready"),{status:503});
+        if(promptReconcileRef.current){setResult("กำลังตรวจ QR เดิม · กดอีกครั้งใน 2 วินาที");return}
         let st:any=null;
         let activePending:PendingPrompt|null=null;
         const existing=pendingRead();
