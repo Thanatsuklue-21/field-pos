@@ -1,3 +1,3 @@
 FIELD POS production release marker
-source_main=bd98c25fbf25c1ec8437b966e025c906f06f61c5
-purpose=release-db-http-transport
+source_main=104bdefb967355096a1780e7aefc0a9227ac44c9
+purpose=release-db-protocol-diagnostic
