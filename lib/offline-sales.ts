@@ -4,7 +4,7 @@ import {sumMoney} from "@/lib/domain/money.mjs";
 
 type CartLine={id:string;variant:string;qty:number};
 export type OfflineCashSummary={pending:number;needsReview:number;total:number};
-export type OfflineCashSyncResult=OfflineCashSummary&{synced:number};
+export type OfflineCashSyncResult=OfflineCashSummary&{synced:number;promptPayMatched:number;promptPayUnverified:number};
 
 export async function queueOfflineCashSale(body:Record<string,any>){
   const createdAt=Number(body.offlineCreatedAt)||Date.now();
@@ -65,7 +65,7 @@ export function applyOfflineCashToBootstrap(data:Bootstrap|null,cart:CartLine[])
 
 export async function syncOfflineCashSales(session:Session):Promise<OfflineCashSyncResult>{
   const rows=await offlineCashList();
-  let synced=0;
+  let synced=0,promptPayMatched=0,promptPayUnverified=0;
   for(const row of rows){
     if(row.status!=="pending")continue;
     if(typeof navigator!=="undefined"&&!navigator.onLine)break;
@@ -90,6 +90,7 @@ export async function syncOfflineCashSales(session:Session):Promise<OfflineCashS
       if(!confirmed)throw Object.assign(new Error("offline_sync_unconfirmed"),{status:0});
       await offlineCashDelete(row.requestKey);
       synced++;
+      if(row.body.payment==="promptpay"){if(response.offlinePromptPay==="matched")promptPayMatched++;else promptPayUnverified++}
     }catch(error:any){
       const code=String(error?.message||"sync_failed");
       if(code==="offline_sync_unconfirmed"){
@@ -106,5 +107,5 @@ export async function syncOfflineCashSales(session:Session):Promise<OfflineCashS
     }
   }
   const summary=await getOfflineCashSummary();
-  return {...summary,synced};
+  return {...summary,synced,promptPayMatched,promptPayUnverified};
 }

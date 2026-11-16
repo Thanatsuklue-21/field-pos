@@ -28,7 +28,7 @@ test('a parked bill completing in the background never touches the new order',as
 test('only one QR at a time; cash stays available while a QR is parked',async()=>{
   const pos=await read('app/pos/page.tsx');
   assert.match(pos,/if\(unresolvedPrompt\?\.parked&&method==="promptpay"\)\{/);
-  assert.match(pos,/promptConfig\?\.ready!==true\|\|netPayable<=0\|\|!!parkedRecord/);
+  assert.match(pos,/\(online\?promptConfig\?\.ready!==true:!offlineQrId\)\|\|netPayable<=0\|\|!!parkedRecord/);
 });
 
 test('parked QR keeps polling every 2 s, never reopens the sheet, and expiry is announced',async()=>{

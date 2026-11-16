@@ -66,10 +66,12 @@ for(const rows of [null,[{...good,body:{...good.body,requestKey:'different'}}],[
 
 test('POS validates existing offline bills before capturing another offline sale',async()=>{
   const source=await readFile(new URL('../app/pos/page.tsx',import.meta.url),'utf8');
-  const start=source.indexOf('if(offlineAtStart)'),end=source.indexOf('if(method==="promptpay")',start);
+  // Owner-approved 2026-11-16: the offline block now also holds offline PromptPay.
+  const start=source.indexOf('if(offlineAtStart)'),end=source.indexOf('promptConfig?.ready!==true)throw',start);
   const block=source.slice(start,end);
   assert.ok(block.indexOf('await refreshOfflineStats()')>=0);
   assert.ok(block.indexOf('await refreshOfflineStats()')<block.indexOf('queueOfflineCashSale(body)'));
+  assert.ok(block.indexOf('await refreshOfflineStats()')<block.indexOf('queueOfflineCashSale(ppBody)'));
   assert.match(source,/ยังอ่านบิลที่เก็บในเครื่องไม่ได้/);
   assert.match(source,/ห้ามล้างข้อมูลแอปหรือเบราว์เซอร์/);
 });
