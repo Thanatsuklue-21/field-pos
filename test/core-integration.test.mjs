@@ -618,3 +618,34 @@ test('real libSQL: concurrent expense requests commit once and reject another ac
   assert.equal(conflict.status,409);
   assert.equal(conflict.body.error,'request_key_conflict');
 });
+
+test('real libSQL: solo handoff_now records call + pickup atomically with FIFO, readiness and replay guards',async t=>{
+ const db=await setup(t),first=await sell(db,'solo-first'),second=await sell(db,'solo-second');
+ // Not ready yet → rejected, nothing changes.
+ await assert.rejects(act(db,first.orderId,'handoff_now'),/order_not_ready/);
+ await act(db,first.orderId,'complete_item',{itemIndex:0,expectedReadyQty:0});
+ // Later queue can never be handed over before the FIFO head.
+ await assert.rejects(act(db,second.orderId,'handoff_now'),/order_not_ready|fifo_violation/);
+ const body={requestKey:'solo-handoff-first',orderId:first.orderId,action:'handoff_now'};
+ const done=await queuePosAction({db,user,now:7000,body});
+ assert.equal(done.replayed,false);
+ const replay=await queuePosAction({db,user,now:8000,body});
+ assert.equal(replay.replayed,true);
+ let doc=await state(db);
+ const order=doc.orders.find(o=>o.id===first.orderId);
+ assert.equal(order.status,'returned');
+ assert.equal(order.calledAt,7000);assert.equal(order.deliveredAt,7000);
+ assert.equal(order.handoffMode,'counter');
+ assert.ok(order.items.every(x=>x.calledQty===x.qty));
+ // Stock is only the sale deduction; handoff never touches inventory.
+ assert.equal(doc.ingredients.matcha.qty,980);
+ // A queue already called by pager can still be closed with handoff_now.
+ await act(db,second.orderId,'complete_item',{itemIndex:0,expectedReadyQty:0});
+ await act(db,second.orderId,'call');
+ await act(db,second.orderId,'handoff_now');
+ assert.equal((await getQueueSnapshot({db})).orders.length,0);
+ doc=await state(db);
+ assert.equal(doc.orders.find(o=>o.id===second.orderId).status,'returned');
+ // Unknown/changed payload under the same key is rejected by durable idempotency.
+ await assert.rejects(queuePosAction({db,user,body:{...body,orderId:second.orderId}}));
+});

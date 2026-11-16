@@ -1,4 +1,4 @@
-export type QueueAction="complete_item"|"waste_remake"|"call"|"call_item"|"return";
+export type QueueAction="complete_item"|"waste_remake"|"call"|"call_item"|"return"|"handoff_now";
 export type QueueActionBody={
   requestKey:string;
   orderId:string;
@@ -17,7 +17,7 @@ export type QueueActionIntent={
 type StorageLike=Pick<Storage,"getItem"|"setItem"|"removeItem">;
 export const QUEUE_ACTION_INTENT_PREFIX="field-queue-action-pending-v1:";
 const REQUEST_KEY_RE=/^[A-Za-z0-9._:-]{8,128}$/;
-const ACTIONS=new Set<QueueAction>(["complete_item","waste_remake","call","call_item","return"]);
+const ACTIONS=new Set<QueueAction>(["complete_item","waste_remake","call","call_item","return","handoff_now"]);
 const keyFor=(actorId:string)=>QUEUE_ACTION_INTENT_PREFIX+encodeURIComponent(actorId);
 const fail=(code:string,cause?:unknown)=>Object.assign(new Error(code),{status:0,cause});
 

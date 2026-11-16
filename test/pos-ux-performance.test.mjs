@@ -493,7 +493,8 @@ test('continuous next-order action remains on POS and resets operator UI without
   assert.match(pos,/setQ\(""\)/);
   assert.match(pos,/setCat\("ทั้งหมด"\)/);
   assert.match(pos,/รับออเดอร์ถัดไป/);
-  assert.match(pos,/ไม่ต้องเลือกทางเอง/);
+  // Owner-approved 2026-11-16: solo operator chooses make-now vs take-next-order.
+  assert.match(pos,/ไม่มีลูกค้ารอ → ทำเลย · มีคนต่อแถว → รับออเดอร์ก่อน/);
   assert.match(pos,/field-payment-handoff-title/);
   assert.match(pos,/data-handoff-primary/);
   const block=pos.slice(pos.indexOf('function startNextOrder'),pos.indexOf('function startNextOrder')+500);

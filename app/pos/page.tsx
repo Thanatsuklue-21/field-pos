@@ -11,6 +11,7 @@ import {cacheGet,cachePut} from "@/lib/offline-db";
 import {applyOfflineCashToBootstrap,getOfflineCashSummary,queueOfflineCashSale,syncOfflineCashSales,type OfflineCashSummary} from "@/lib/offline-sales";
 import {additionalServingsAvailable,additionalServingsForVariant,cartAvailability} from "@/lib/domain/availability.mjs";
 import {planCartChange} from "@/lib/domain/cart-change-policy.mjs";
+import {moveOneUnitToVariant,quickAddVariant,shortVariantLabel} from "@/lib/domain/quick-order.mjs";
 import {useCartStore} from "@/stores/cart-store";
 import {useHeldCartStore} from "@/stores/held-cart-store";
 import {writeQueueSnapshotCache} from "@/lib/queue-cache";
@@ -510,11 +511,32 @@ function PosView({session}:{session:Session}){
   }
 
   function chooseMenu(product:MenuItem){
-    if(product.variants.length===1){
-      addVariant(product,product.variants[0]);
-      return;
-    }
+    // One tap = the shop's default recipe (normal sweetness). Sweetness is
+    // changed from the cart chips; size-style variants still open the picker.
+    const quick=quickAddVariant(product.variants);
+    if(quick){addVariant(product,quick);return}
     setSelected(product);
+  }
+
+  // Move one cup of a cart line to another sweetness of the same menu. Uses the
+  // same stock check as any cart change (recipes differ per variant).
+  function changeVariant(key:string,label:string){
+    const live=useCartStore.getState().items;
+    const moved=moveOneUnitToVariant(live,key,label);
+    if(moved===live)return;
+    const next=moved.map(x=>({id:x.id,variant:x.variant,qty:x.qty}));
+    void validateCartChange(next,()=>{cart.replaceItems(moved);tapHaptic()});
+  }
+
+  function sweetnessChips(item:{key:string;id:string;name:string;variant:string;qty:number},locked=false){
+    const product=data?.menu.find(m=>m.id===item.id);
+    if(!product||product.variants.length<2)return <small className="mt-1 block text-slate-500">{orderOptionLabel(item.variant)}</small>;
+    return <div className="mt-2">
+      <div role="group" aria-label={"ความหวาน "+item.name} className="flex flex-wrap gap-1.5">
+        {product.variants.map(v=>{const active=v.label===item.variant;return <button key={v.label} type="button" data-sweetness-chip aria-pressed={active} disabled={locked||(!active&&!v.available)} onClick={()=>changeVariant(item.key,v.label)} className={"min-h-11 rounded-xl border px-3 text-xs font-bold "+(active?"border-[#1F4D3A] bg-[#1F4D3A] text-white":"border-slate-300 bg-white text-slate-700")}>{shortVariantLabel(v.label)}</button>})}
+      </div>
+      {item.qty>1&&<small className="mt-1 block text-[11px] text-slate-500">แตะความหวานอื่นเพื่อเปลี่ยนทีละ 1 แก้ว</small>}
+    </div>;
   }
 
   function updateCartQuantity(key:string,nextQty:number){
@@ -1029,7 +1051,7 @@ function PosView({session}:{session:Session}){
 
     <aside className="glass m-3 ml-0 hidden w-[360px] shrink-0 flex-col rounded-[24px] p-5 lg:flex">
       <div className="mb-4 flex items-center justify-between"><div><p className="m-0 text-[10px] tracking-[.25em] text-slate-500">ขั้นตอน 2 · ตรวจออเดอร์</p><h2 className="m-0 mt-1 text-lg">รายการที่สั่ง</h2></div><span key={cart.items.reduce((s,i)=>s+i.qty,0)} className="field-bump rounded-full border border-slate-200 bg-slate-100 px-3 py-1 text-xs">{cart.items.reduce((s,i)=>s+i.qty,0)} แก้ว</span></div>
-      <div className="soft-scroll min-h-0 flex-1 overflow-auto">{cart.items.length===0?<div className="grid h-full place-items-center text-sm text-slate-400">1. แตะเมนูเพื่อเริ่มออเดอร์</div>:cart.items.map(i=><div key={i.key} className="mb-3 rounded-[18px] border border-slate-200 bg-slate-100/70 p-4"><div className="flex gap-3"><div className="flex-1"><b className="text-sm">{i.name}</b><small className="mt-1 block text-slate-500">{i.variant}</small></div><button aria-label={"ลบ "+i.name} onClick={()=>cart.removeItem(i.key)} className="grid h-11 w-11 place-items-center rounded-xl text-slate-500 hover:bg-red-50 hover:text-red-600"><Trash2 size={16}/></button></div><div className="mt-3 flex items-center justify-between"><div className="flex items-center gap-2"><button aria-label={"ลดจำนวน "+i.name} onClick={()=>updateCartQuantity(i.key,i.qty-1)} className="grid h-11 w-11 place-items-center rounded-xl border border-slate-300 bg-white"><Minus size={13}/></button><span className="w-5 text-center">{i.qty}</span><button aria-label={"เพิ่มจำนวน "+i.name} onClick={()=>updateCartQuantity(i.key,i.qty+1)} className="grid h-11 w-11 place-items-center rounded-xl border border-slate-300 bg-white"><Plus size={13}/></button></div><b className="text-[#765b08]">฿{formatBaht((i.price*i.qty))}</b></div></div>)}</div>
+      <div className="soft-scroll min-h-0 flex-1 overflow-auto">{cart.items.length===0?<div className="grid h-full place-items-center text-sm text-slate-400">1. แตะเมนูเพื่อเริ่มออเดอร์</div>:cart.items.map(i=><div key={i.key} className="mb-3 rounded-[18px] border border-slate-200 bg-slate-100/70 p-4"><div className="flex gap-3"><div className="min-w-0 flex-1"><b className="text-sm">{i.name}</b>{sweetnessChips(i)}</div><button aria-label={"ลบ "+i.name} onClick={()=>cart.removeItem(i.key)} className="grid h-11 w-11 place-items-center rounded-xl text-slate-500 hover:bg-red-50 hover:text-red-600"><Trash2 size={16}/></button></div><div className="mt-3 flex items-center justify-between"><div className="flex items-center gap-2"><button aria-label={"ลดจำนวน "+i.name} onClick={()=>updateCartQuantity(i.key,i.qty-1)} className="grid h-11 w-11 place-items-center rounded-xl border border-slate-300 bg-white"><Minus size={13}/></button><span className="w-5 text-center">{i.qty}</span><button aria-label={"เพิ่มจำนวน "+i.name} onClick={()=>updateCartQuantity(i.key,i.qty+1)} className="grid h-11 w-11 place-items-center rounded-xl border border-slate-300 bg-white"><Plus size={13}/></button></div><b className="text-[#765b08]">฿{formatBaht((i.price*i.qty))}</b></div></div>)}</div>
       <div className="border-t border-slate-300 pt-4"><div className="mb-2 flex justify-between text-sm text-slate-600"><span>ยอดสินค้า</span><span>฿{formatBaht(cart.getSubtotal())}</span></div><div className="mb-4 flex justify-between text-xl font-semibold"><span>รวมสุทธิ</span><span className="text-[#765b08]">฿{formatBaht(total)}</span></div><div className="grid grid-cols-[auto_1fr] gap-2"><button disabled={!cart.items.length} onClick={holdCurrentBill} className="field-cart-action flex min-h-12 items-center justify-center gap-2 rounded-2xl border border-slate-300 bg-white px-4 text-sm font-bold text-slate-700 disabled:opacity-30"><Clock3 size={17}/>พักบิล</button><button aria-label="ชำระเงิน" disabled={!cart.items.length} onClick={openPayment} className="field-cart-action flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-[#d4af37] px-4 font-bold text-black disabled:opacity-30"><WalletCards size={18}/>ชำระเงิน</button></div></div>
     </aside>
 
@@ -1059,7 +1081,7 @@ function PosView({session}:{session:Session}){
         <div className="flex items-center justify-between gap-3"><div className="min-w-0"><b className="text-sm">{splitBill?"เลือกสำหรับบิลนี้":"รายการที่สั่ง"}</b><p className="mt-0.5 text-[11px] text-slate-500">{splitBill?"เลือกได้แม้เมนูเดียวกันมีหลายแก้ว":"ทวนเมนู ราคา และระดับหวานก่อนรับเงินเมื่อจำเป็น · ไม่ต้องยืนยันซ้ำ"}</p></div><div className="flex shrink-0 items-center gap-2"><b className="text-lg text-[#765b08]">฿{formatBaht(payableTotal)}</b>{!splitBill&&<button type="button" disabled={busy} onClick={()=>setPaymentReviewOpen(v=>!v)} className="min-h-11 rounded-xl border border-slate-300 bg-white px-3 text-xs font-semibold text-slate-700 disabled:opacity-40">{paymentReviewOpen?"ซ่อนรายการ":"ดูรายการ"}</button>}</div></div>
         {(splitBill||paymentReviewOpen)&&<div className="soft-scroll mt-3 max-h-[230px] space-y-2 overflow-auto pr-1">
           {cart.items.map(i=>{const selectedQty=splitBill?Math.min(i.qty,Math.max(0,Number(splitSelection[i.key])||0)):i.qty;return <div key={i.key} className={"rounded-2xl border bg-white p-3 "+(splitBill&&selectedQty>0?"border-[#d4af37]":"border-slate-200")}>
-            <div className="flex items-start justify-between gap-3"><div className="min-w-0 flex-1"><b className="block text-sm">{i.name}</b><span className="mt-1 inline-block rounded-full bg-[#f4ecd0] px-2 py-1 text-[10px] font-semibold text-[#765b08]">{orderOptionLabel(i.variant)}</span></div>{!splitBill&&<button disabled={busy||hasPendingPrompt} onClick={()=>cart.removeItem(i.key)} className="grid h-11 w-11 shrink-0 place-items-center rounded-xl text-slate-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-30" aria-label={"ลบ "+i.name}><Trash2 size={15}/></button>}</div>
+            <div className="flex items-start justify-between gap-3"><div className="min-w-0 flex-1"><b className="block text-sm">{i.name}</b>{splitBill?<span className="mt-1 inline-block rounded-full bg-[#f4ecd0] px-2 py-1 text-[10px] font-semibold text-[#765b08]">{orderOptionLabel(i.variant)}</span>:sweetnessChips(i,busy||hasPendingPrompt)}</div>{!splitBill&&<button disabled={busy||hasPendingPrompt} onClick={()=>cart.removeItem(i.key)} className="grid h-11 w-11 shrink-0 place-items-center rounded-xl text-slate-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-30" aria-label={"ลบ "+i.name}><Trash2 size={15}/></button>}</div>
             <div className="mt-3 flex flex-wrap items-center justify-between gap-2">{splitBill?<div className="flex items-center gap-2"><button aria-label={"ลดจำนวนในบิลนี้ "+i.name} disabled={busy||selectedQty<=0} onClick={()=>setSplitSelection(s=>({...s,[i.key]:Math.max(0,selectedQty-1)}))} className="grid h-11 w-11 place-items-center rounded-xl border border-slate-300 bg-white disabled:opacity-30"><Minus size={13}/></button><span className="min-w-[68px] text-center text-xs font-semibold">บิลนี้ {selectedQty}/{i.qty}</span><button aria-label={"เพิ่มจำนวนในบิลนี้ "+i.name} disabled={busy||selectedQty>=i.qty} onClick={()=>setSplitSelection(s=>({...s,[i.key]:Math.min(i.qty,selectedQty+1)}))} className="grid h-11 w-11 place-items-center rounded-xl border border-slate-300 bg-white disabled:opacity-30"><Plus size={13}/></button></div>:<div className="flex items-center gap-2"><button aria-label={"ลดจำนวน "+i.name} disabled={busy||hasPendingPrompt} onClick={()=>updateCartQuantity(i.key,i.qty-1)} className="grid h-11 w-11 place-items-center rounded-xl border border-slate-300 bg-white disabled:opacity-30"><Minus size={13}/></button><span className="min-w-6 text-center text-sm font-semibold">{i.qty}</span><button aria-label={"เพิ่มจำนวน "+i.name} disabled={busy||hasPendingPrompt} onClick={()=>updateCartQuantity(i.key,i.qty+1)} className="grid h-11 w-11 place-items-center rounded-xl border border-slate-300 bg-white disabled:opacity-30"><Plus size={13}/></button></div>}<div className="text-right"><small className="block text-[10px] text-slate-500">{selectedQty} × ฿{formatBaht(i.price)}</small><b className="text-sm text-[#765b08]">฿{formatBaht((selectedQty*i.price))}</b></div></div>
           </div>})}
         </div>}
@@ -1077,7 +1099,7 @@ function PosView({session}:{session:Session}){
       {method==="cash"&&<><div className="mt-4 grid grid-cols-[1fr_auto] gap-2"><input aria-label="จำนวนเงินที่รับจากลูกค้า" autoFocus inputMode="decimal" value={received} onChange={e=>setReceived(e.target.value)} placeholder="รับเงินมาเท่าไร" className="min-w-0 rounded-2xl border border-slate-300 bg-slate-100 px-4 py-3 text-lg outline-none focus:border-[#c59b19]"/><button type="button" disabled={busy||!payableItems.length} onClick={()=>setReceived(String(netPayable))} className="min-h-12 rounded-2xl border border-[#d4af37] bg-[#fff8dc] px-3 text-sm font-bold text-[#765b08] disabled:opacity-40">รับเงินพอดี ฿{formatBaht(netPayable)}</button></div><div className="mt-2 grid grid-cols-3 gap-2">{quickCashAmounts.map(amount=><button key={amount} type="button" disabled={busy||!payableItems.length} onClick={()=>setReceived(String(amount))} className="min-h-11 rounded-xl border border-slate-300 bg-white text-sm font-bold text-slate-700 disabled:opacity-40">฿{amount}</button>)}</div>{received.trim()!==""&&Number.isFinite(cashDelta)&&<div className={"mt-3 flex items-center justify-between rounded-2xl border px-4 py-3 "+(cashDelta>=0?"border-emerald-300 bg-emerald-50 text-emerald-900":"border-red-300 bg-red-50 text-red-800")}><span>{cashDelta>=0?"เงินทอน":"ขาดอีก"}</span><b className="text-xl">฿{formatBaht(Math.abs(cashDelta))}</b></div>}</>}
       {method==="promptpay"&&prompt?.qrUrl&&<div className="mt-4 rounded-[20px] border border-slate-300 bg-white p-4 text-center"><img src={prompt.qrUrl} alt="PromptPay QR" className="mx-auto max-h-56 w-auto"/><p className="mt-2 text-xs font-semibold text-black">{prompt.paid?"ชำระเงินแล้ว":"สแกน QR แล้วระบบจะตรวจสอบอัตโนมัติ"}</p></div>}
       <div className="sticky bottom-0 z-10 -mx-4 mt-4 border-t border-slate-200 bg-white/95 px-4 pb-[max(.5rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur sm:-mx-6 sm:px-6">
-        <button disabled={busy||!payableItems.length||(method==="promptpay"&&hasPendingPrompt)||(method==="cash"&&(!Number.isFinite(cashReceived)||cashReceived<netPayable))} onClick={checkout} className="w-full rounded-2xl bg-[#d4af37] py-3.5 font-bold text-black shadow-sm disabled:opacity-40">{busy?(method==="promptpay"&&prompt?"กำลังตรวจสอบการชำระเงิน...":"กำลังบันทึกบิล..."):(method==="promptpay"?(hasPendingPrompt?"กำลังรอผล QR เดิม...":"สร้าง QR ให้ลูกค้า"):method==="delivery"?"ยืนยันออเดอร์เดลิเวอรี":method==="bank"?"ยืนยันรับเงินโอน":method==="card"?"ยืนยันรับบัตร":!online?"บันทึกเงินสด Offline":"ยืนยันรับเงิน")}</button>
+        <button disabled={busy||!payableItems.length||(method==="promptpay"&&hasPendingPrompt)||(method==="cash"&&(!Number.isFinite(cashReceived)||cashReceived<netPayable))} onClick={checkout} className="field-cart-action w-full rounded-2xl bg-[#d4af37] py-3.5 font-bold text-black shadow-sm disabled:opacity-40">{busy?(method==="promptpay"&&prompt?"กำลังตรวจสอบการชำระเงิน...":"กำลังบันทึกบิล..."):(method==="promptpay"?(hasPendingPrompt?"กำลังรอผล QR เดิม...":"สร้าง QR ให้ลูกค้า"):method==="delivery"?"ยืนยันออเดอร์เดลิเวอรี":method==="bank"?"ยืนยันรับเงินโอน":method==="card"?"ยืนยันรับบัตร":!online?"บันทึกเงินสด Offline":"ยืนยันรับเงิน")}</button>
         {!busy&&method==="cash"&&Number.isFinite(cashReceived)&&cashReceived===netPayable&&<p className="mt-2 text-center text-xs font-semibold text-emerald-700">รับเงินพอดียอด · กดยืนยันชำระได้เลย</p>}
         {result&&<p className="mt-2 rounded-xl bg-slate-100 px-3 py-2 text-center text-sm text-slate-700">{result}</p>}
       </div>
@@ -1099,8 +1121,9 @@ function PosView({session}:{session:Session}){
                 {lastSale.offline||splitPaymentPending?<Plus size={16}/>:<ArrowRight size={15}/>}
                 {lastSale.offline?"รับออเดอร์ถัดไป":splitPaymentPending?"เลือกของคนถัดไป":"ทำคิว "+lastSale.queueNo+" ต่อเลย"}
               </button>
+              {!lastSale.offline&&!splitPaymentPending&&<button type="button" data-handoff-next-order onClick={startNextOrder} className="mt-2 flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl border-2 border-slate-300 bg-white px-3 text-sm font-bold text-slate-800"><Plus size={16}/>รับออเดอร์ถัดไปก่อน · ทำทีหลัง</button>}
             </div>
-            <p className="mt-2 text-center text-[11px] text-slate-500">{lastSale.offline?"ยอดถูกเก็บในเครื่องแล้ว · ห้ามล้างข้อมูลแอปหรือเบราว์เซอร์ จนกว่าระบบจะแจ้งว่าส่งบิลสำเร็จ":splitPaymentPending?"อย่าเปิดออเดอร์ใหม่จนกว่าจะรับเงินคิวนี้ครบ · ปุ่มเดียวจะพาไปเลือกรายการของคนถัดไป":"ชำระแล้วระบบพาไปทำคิวนี้ต่อในหน้า POS เดิม · ไม่ต้องเลือกทางเอง"}</p>
+            <p className="mt-2 text-center text-[11px] text-slate-500">{lastSale.offline?"ยอดถูกเก็บในเครื่องแล้ว · ห้ามล้างข้อมูลแอปหรือเบราว์เซอร์ จนกว่าระบบจะแจ้งว่าส่งบิลสำเร็จ":splitPaymentPending?"อย่าเปิดออเดอร์ใหม่จนกว่าจะรับเงินคิวนี้ครบ · ปุ่มเดียวจะพาไปเลือกรายการของคนถัดไป":"ไม่มีลูกค้ารอ → ทำเลย · มีคนต่อแถว → รับออเดอร์ก่อน คิวจะรอตามลำดับ"}</p>
           </div>
         </div>
       </ModalFocus>

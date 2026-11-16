@@ -70,14 +70,16 @@ with sync_playwright() as p:
 
     nonlocal_taps=[0]
     expect(page.get_by_text("แตะเมนูที่ลูกค้าสั่ง",exact=True)).to_be_visible()
+    # One tap adds the default recipe; sweetness is changed with the cart chip.
     tap(page.get_by_role("button",name="เมนูทดสอบ").first)
-    variant=page.get_by_role("dialog")
-    expect(variant).to_be_visible()
-    tap(variant.get_by_role("button",name=re.compile(r"หวานน้อย.*50%")).first)
+    expect(page.get_by_role("dialog",name="เมนูทดสอบ")).to_have_count(0)
     expect(page.get_by_text("แตะเมนูเพิ่ม หรือกดชำระเงินเมื่อสั่งครบ",exact=True)).to_be_visible()
     tap(page.get_by_role("button",name="ชำระเงิน",exact=True))
     payment=page.get_by_role("dialog",name="ชำระเงิน ฿55")
     expect(payment).to_be_visible()
+    payment.get_by_role("button",name="ดูรายการ",exact=True).click()
+    tap(payment.get_by_role("group",name="ความหวาน เมนูทดสอบ").get_by_role("button",name="หวานน้อย",exact=True))
+    expect(payment.get_by_role("group",name="ความหวาน เมนูทดสอบ").get_by_role("button",name="หวานน้อย",exact=True)).to_have_attribute("aria-pressed","true")
     expect(payment.get_by_text("รับเงินจากลูกค้า",exact=True)).to_be_visible()
     tap(payment.get_by_role("button",name="รับเงินพอดี ฿55",exact=True))
     # Use 100 to exercise the change path while keeping payment deterministic.
@@ -97,8 +99,9 @@ with sync_playwright() as p:
     expect(handoff).to_be_visible()
     primary=handoff.get_by_role("button",name="ทำคิว Q001 ต่อเลย",exact=True)
     expect(primary).to_be_visible()
-    # Payment handoff is intentionally non-dismissible and exposes one guided next action.
-    assert handoff.get_by_role("button").count()==1
+    # Payment handoff stays non-dismissible: make now, or take the next order first.
+    assert handoff.get_by_role("button").count()==2
+    expect(handoff.get_by_role("button",name="รับออเดอร์ถัดไปก่อน · ทำทีหลัง",exact=True)).to_be_visible()
     assert handoff.get_by_role("button",name=re.compile(r"ปิด|Close|Dismiss")).count()==0
     tap(primary)
     expect(page.get_by_text("ชำระเงินสำเร็จ",exact=True)).to_have_count(0)
