@@ -63,3 +63,13 @@ test('handing over the last queued drink returns the solo operator to the menu',
   const ws=await readFile(new URL('../components/pos-daily-workspace.tsx',import.meta.url),'utf8');
   assert.match(ws,/if\(action==="handoff_now"&&Array\.isArray\(result\?\.orders\)&&result\.orders\.length===0\)\{setQueueFeedback\(""\);onClose\(\);return\}/);
 });
+
+test('a quick-added multi-sweetness cup can be switched from a strip above the cart bar in one tap',async()=>{
+  const pos=await readFile(new URL('../app/pos/page.tsx',import.meta.url),'utf8');
+  assert.match(pos,/data-quick-sweetness/);
+  assert.match(pos,/aria-label=\{"ความหวานแก้วล่าสุด "\+line\.name\}/);
+  assert.match(pos,/onClick=\{\(\)=>\{if\(!active\)changeVariant\(line\.key,v\.label\);setLastQuick\(null\)\}\}/);
+  // Hidden while paying or on the success sheet; auto-hides after 8 s.
+  assert.match(pos,/lastQuick&&!payOpen&&!lastSale\?cart\.items\.find/);
+  assert.match(pos,/setLastQuick\(current=>current\?\.at===lastQuick\.at\?null:current\),8000\)/);
+});

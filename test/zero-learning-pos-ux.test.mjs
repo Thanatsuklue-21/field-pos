@@ -18,7 +18,7 @@ test("menu tap adds the default recipe directly; non-sweetness variants still as
   assert.ok(pos.includes("function chooseMenu(product:MenuItem)"));
   // Owner-approved 2026-11-16: single variant or normal sweetness → one tap.
   assert.ok(pos.includes("const quick=quickAddVariant(product.variants)"));
-  assert.ok(pos.includes("if(quick){addVariant(product,quick);return}"));
+  assert.match(pos,/if\(quick\)\{\s*addVariant\(product,quick,/);
   assert.ok(pos.includes("setSelected(product)"));
   assert.ok(pos.includes("onClick={()=>chooseMenu(x)}"));
 });

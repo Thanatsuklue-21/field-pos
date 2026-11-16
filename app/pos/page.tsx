@@ -82,6 +82,9 @@ function PosView({session}:{session:Session}){
   const [q,setQ]=useState("");
   const [cat,setCat]=useState("ทั้งหมด");
   const [selected,setSelected]=useState<MenuItem|null>(null);
+  // Last quick-added cup of a multi-sweetness drink: a one-tap strip above the
+  // cart bar lets the operator switch its sweetness without opening any sheet.
+  const [lastQuick,setLastQuick]=useState<{key:string;id:string;name:string;variant:string;at:number}|null>(null);
   const [payOpen,setPayOpen]=useState(false);
   const [paymentReviewOpen,setPaymentReviewOpen]=useState(false);
   const [otherPaymentOpen,setOtherPaymentOpen]=useState(false);
@@ -499,7 +502,7 @@ function PosView({session}:{session:Session}){
     }).catch(()=>{});
   }
 
-  function addVariant(product:MenuItem,variant:MenuItem["variants"][number]){
+  function addVariant(product:MenuItem,variant:MenuItem["variants"][number],onAdded?:()=>void){
     const remaining=additionalServingsForVariant({variant,demand:cartStockState.demand,stock:data?.availabilityStock||{}});
     if(!variant.available||remaining<1){setNotice("วัตถุดิบเพียงพออีก 0 แก้วเท่านั้น"+(variant.missingIngredients?.length?" · ขาด: "+variant.missingIngredients.map(x=>x.name).join(", "):""));return}
     // Read the live store, not the render snapshot, so two taps in one frame
@@ -507,19 +510,28 @@ function PosView({session}:{session:Session}){
     const next=useCartStore.getState().items.map(x=>({id:x.id,variant:x.variant,qty:x.qty}));
     const existing=next.find(x=>x.id===product.id&&x.variant===variant.label);
     if(existing)existing.qty+=1;else next.push({id:product.id,variant:variant.label,qty:1});
-    void validateCartChange(next,()=>{cart.addItem({id:product.id,name:product.name,variant:variant.label,price:product.price});setSelected(null);tapHaptic()});
+    void validateCartChange(next,()=>{cart.addItem({id:product.id,name:product.name,variant:variant.label,price:product.price});setSelected(null);tapHaptic();onAdded?.()});
   }
 
   function chooseMenu(product:MenuItem){
     // One tap = the shop's default recipe (normal sweetness). Sweetness is
     // changed from the cart chips; size-style variants still open the picker.
     const quick=quickAddVariant(product.variants);
-    if(quick){addVariant(product,quick);return}
+    if(quick){
+      addVariant(product,quick,product.variants.length>1?()=>setLastQuick({key:product.id+"::"+quick.label,id:product.id,name:product.name,variant:quick.label,at:Date.now()}):()=>setLastQuick(null));
+      return;
+    }
     setSelected(product);
   }
 
   // Move one cup of a cart line to another sweetness of the same menu. Uses the
   // same stock check as any cart change (recipes differ per variant).
+  useEffect(()=>{
+    if(!lastQuick)return;
+    const timer=window.setTimeout(()=>setLastQuick(current=>current?.at===lastQuick.at?null:current),8000);
+    return()=>window.clearTimeout(timer);
+  },[lastQuick]);
+
   function changeVariant(key:string,label:string){
     const live=useCartStore.getState().items;
     const moved=moveOneUnitToVariant(live,key,label);
@@ -1044,6 +1056,17 @@ function PosView({session}:{session:Session}){
     </div>
 
     <div className="field-pos-mobile-cartbar fixed left-2 right-2 z-30 flex items-center justify-between gap-2 rounded-[18px] border border-slate-300 bg-white/95 p-1.5 pl-3 shadow-lg backdrop-blur sm:left-4 sm:right-4 sm:rounded-[22px] sm:p-2 sm:pl-5 lg:hidden">
+      {(()=>{
+        const line=lastQuick&&!payOpen&&!lastSale?cart.items.find(i=>i.key===lastQuick.key):null;
+        const product=line?data?.menu.find(m=>m.id===line.id):null;
+        if(!line||!product||product.variants.length<2)return null;
+        return <div data-quick-sweetness className="field-sheet-in absolute bottom-full left-0 right-0 mb-2 rounded-[18px] border border-[#1F4D3A]/25 bg-white p-2 shadow-lg">
+          <p className="px-1 text-[11px] font-bold text-slate-600">เพิ่ม {line.name} แล้ว · เปลี่ยนความหวานแก้วนี้</p>
+          <div role="group" aria-label={"ความหวานแก้วล่าสุด "+line.name} className="mt-1.5 flex gap-1.5">
+            {product.variants.map(v=>{const active=v.label===line.variant;return <button key={v.label} type="button" aria-pressed={active} disabled={!active&&!v.available} onClick={()=>{if(!active)changeVariant(line.key,v.label);setLastQuick(null)}} className={"min-h-11 flex-1 rounded-xl border px-2 text-xs font-bold "+(active?"border-[#1F4D3A] bg-[#1F4D3A] text-white":"border-slate-300 bg-white text-slate-700")}>{shortVariantLabel(v.label)}</button>})}
+          </div>
+        </div>;
+      })()}
       <div className="min-w-0 flex-1"><small className="block text-[10px] tracking-widest text-slate-500">{cart.items.reduce((s,i)=>s+i.qty,0)} แก้ว</small><b key={total} className="field-bump block text-lg text-[#765b08]">฿{formatBaht(total)}</b></div>
       <button disabled={!cart.items.length} onClick={holdCurrentBill} className="field-cart-action min-h-11 shrink-0 rounded-2xl border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 disabled:opacity-30"><Clock3 size={14} className="mx-auto mb-0.5"/>พักบิล</button>
       <button aria-label="ชำระเงิน" disabled={!cart.items.length} onClick={openPayment} className="field-cart-action min-h-11 shrink-0 rounded-2xl bg-[#d4af37] px-4 py-2.5 text-sm font-bold text-black disabled:opacity-30 sm:px-5 sm:py-3">ชำระเงิน ฿{formatBaht(total)}</button>
