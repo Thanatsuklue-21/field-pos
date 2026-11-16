@@ -134,3 +134,11 @@ test('health reports only the database region label, never the host or token',as
   assert.equal(res.body.dbRegion,'aws-ap-northeast-1');
   assert.doesNotMatch(res.raw,/field-shop-acme|turso\.io/);
 });
+
+test('production DB client uses libSQL HTTP keep-alive unless FIELD_DB_TRANSPORT=ws',async()=>{
+  const {dbClientUrl}=await import('../lib/db.mjs');
+  assert.equal(dbClientUrl('libsql://shop-org.aws-ap-northeast-1.turso.io',undefined),'https://shop-org.aws-ap-northeast-1.turso.io');
+  assert.equal(dbClientUrl('libsql://shop-org.aws-ap-northeast-1.turso.io','ws'),'libsql://shop-org.aws-ap-northeast-1.turso.io');
+  assert.equal(dbClientUrl('file:/tmp/x.db',undefined),'file:/tmp/x.db');
+  assert.equal(dbClientUrl('https://shop.turso.io',undefined),'https://shop.turso.io');
+});
