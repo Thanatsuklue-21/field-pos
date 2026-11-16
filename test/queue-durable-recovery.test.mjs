@@ -80,7 +80,9 @@ test("server queue acknowledgement echoes durable request identity before replay
   const pos=await readFile(new URL("../lib/pos-api.mjs",import.meta.url),"utf8");
   const start=pos.indexOf("export async function queuePosAction");
   const block=pos.slice(start,pos.indexOf("\nexport ",start+40)>0?pos.indexOf("\nexport ",start+40):undefined);
-  assert.match(block,/const old=await replay\(tx,doc,body\.requestKey,context\)/);
+  // Owner-approved 2026-11-16: state + request ledger read in one round trip; same replay check.
+  assert.match(block,/const \{row,requestRow\}=await readStateAndRequest\(tx,body\.requestKey\)/);
+  assert.match(block,/const old=replayFromRow\(doc,requestRow,body\.requestKey,context\)/);
   assert.match(block,/requestKey:body\.requestKey/);
   assert.match(block,/performedBy:user\.id/);
   assert.match(block,/rememberStatement\(doc,body\.requestKey,response,context,now\)/);

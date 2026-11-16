@@ -136,6 +136,10 @@ function PosView({session}:{session:Session}){
   // matches it to a bank notification.
   const [offlineQrId,setOfflineQrId]=useState<string|null>(null);
   const [offlineQr,setOfflineQr]=useState<{total:number;key:string;url:string}|null>(null);
+  // Instant QR (owner-approved 2026-11-16): the identical QR drawn locally while the
+  // server opens the charge. Display only; payment is still confirmed server-side.
+  const [qrPreview,setQrPreview]=useState<{total:number;url:string}|null>(null);
+  const qrPreviewRef=useRef<typeof qrPreview>(null);qrPreviewRef.current=qrPreview;
   // Own-account PromptPay: two-step manual confirm when the bank notification does not arrive.
   const [directConfirmArmed,setDirectConfirmArmed]=useState(false);
   const [directConfirmBusy,setDirectConfirmBusy]=useState(false);
@@ -477,7 +481,7 @@ function PosView({session}:{session:Session}){
     }
     setPayOpen(false);
     setResult("");
-    setPrompt(null);
+    setPrompt(null);setQrPreview(null);
     cart.clearCart();
     setReceived("");
     setCustomerId("");
@@ -511,7 +515,7 @@ function PosView({session}:{session:Session}){
     const serverChange=Number(r?.change??(opts.payment==="cash"?Math.max(0,serverReceived-serverTotal):0));
     setPayOpen(false);
     setResult("");
-    setPrompt(null);
+    setPrompt(null);setQrPreview(null);
     const remaining=opts.splitBill&&opts.paidCart?subtractPaidCart(opts.paidCart):(cart.clearCart(),[]);
     setReceived("");
     setCustomerId("");
@@ -711,7 +715,7 @@ function PosView({session}:{session:Session}){
     setLastSale(null);
     setNotice("");
     setResult("");
-    setPrompt(null);
+    setPrompt(null);setQrPreview(null);
     setReceived("");
     setMethod("cash");
     setSelected(null);
@@ -764,7 +768,7 @@ function PosView({session}:{session:Session}){
     setParkedStatus(prompt);
     setDirectConfirmArmed(false);
     cart.clearCart();
-    setPrompt(null);setResult("");setReceived("");setMethod("cash");
+    setPrompt(null);setQrPreview(null);setResult("");setReceived("");setMethod("cash");
     setPayOpen(false);
     setParkedTick(t=>t+1);
     setNotice("QR ฿"+formatBaht(p.total)+" รอเงินเข้าอยู่เบื้องหลัง · รับออเดอร์ถัดไปได้เลย");
@@ -1045,6 +1049,10 @@ function PosView({session}:{session:Session}){
           const payRequestKey=crypto.randomUUID();
           activePending={requestKey:reservationKey,payRequestKey,date:localDate(),cart:cartPayload,paymentReference:"",total:checkoutTotal,customerId:customerId||null,pointsRedeemed:redeemPoints,createdAt:Date.now(),checkoutMode,targetOrderId:splitGroup?.orderId||null};
           pendingWrite(activePending);
+          if(offlineQrId&&promptConfig?.provider==="direct"&&checkoutMode==="full"){
+            const previewTotal=checkoutTotal;
+            renderLocalPromptPayQr(offlineQrId,previewTotal).then(url=>setQrPreview(cur=>cur===null?{total:previewTotal,url}:cur)).catch(()=>{});
+          }
           const setup=await ensurePendingPrompt(activePending);
           activePending=setup.pending;
           st=setup.status||await api<any>("/api/payments/promptpay/status",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({chargeId:activePending.paymentReference})});
@@ -1052,6 +1060,7 @@ function PosView({session}:{session:Session}){
           paymentReference=activePending.paymentReference;
         }
         setPrompt(st);
+        setQrPreview(null);
         if(["failed","expired","reversed","cancelled"].includes(String(st.status||"").toLowerCase())){
           if(activePending)await cancelPendingReservation(activePending);
           pendingClear();
@@ -1090,6 +1099,10 @@ function PosView({session}:{session:Session}){
       if(method==="cash")cashPendingClear();
       finishSale(r,{payment:method,total:checkoutTotal,received:method==="cash"?Number(received):checkoutTotal,splitBill:checkoutMode==="split_bill",paidCart:cartPayload});
     }catch(e:any){
+      if(qrPreviewRef.current){
+        setQrPreview(null);
+        setNotice("เปิดรับ QR ไม่สำเร็จ · ถ้าลูกค้าโอนแล้ว ให้ดูยอดในแอปธนาคาร แล้วบันทึกเป็น ช่องทางอื่น → โอน");
+      }
       if(method==="cash"&&e?.status&&e.status<500)cashPendingClear();
       const message=errorText(e.message);
       if(["menu_unavailable","variant_unavailable"].includes(e.message)||e.message==="stock_shortage"||e.message.startsWith("stock_shortage:")){
@@ -1308,6 +1321,7 @@ function PosView({session}:{session:Session}){
       {["bank","card"].includes(method)&&<div className="mt-3 rounded-[20px] border border-slate-200 bg-slate-50 p-3"><label className="text-xs font-semibold text-slate-700">{method==="bank"?"เลขอ้างอิงโอน / หมายเหตุ":"เลขอ้างอิงจากเครื่องรับบัตร"}</label><input value={manualPaymentReference} onChange={e=>setManualPaymentReference(e.target.value)} placeholder={method==="bank"?"เช่น เลขท้ายรายการโอน (ใส่ได้ถ้ามี)":"เช่น เลขท้ายรายการจากเครื่อง (ใส่ได้ถ้ามี)"} className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-3 py-3"/><p className="mt-2 text-[11px] text-slate-500">ระบบเก็บช่องทางนี้แยกในรายงานบัญชี · ไม่กระทบเงินสดในลิ้นชัก</p></div>}
       {method==="delivery"&&<div className="mt-3 rounded-[20px] border border-slate-200 bg-slate-50 p-3"><label className="text-xs font-semibold text-slate-700">แพลตฟอร์ม Delivery</label><select value={deliveryPlatform} onChange={e=>setDeliveryPlatform(e.target.value as any)} className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-3 py-3"><option value="grab">Grab</option><option value="lineman">LINE MAN</option><option value="other_delivery">Delivery อื่น</option></select><div className="mt-3 grid grid-cols-3 gap-2 text-center text-xs"><div className="rounded-xl bg-white p-2"><span className="text-slate-500">ยอดขาย</span><b className="mt-1 block">฿{formatBaht(netPayable)}</b></div><div className="rounded-xl bg-white p-2"><span className="text-slate-500">GP {(deliveryGpRate*100).toFixed(1)}%</span><b className="mt-1 block text-red-600">−฿{deliveryGpFee.toFixed(2)}</b></div><div className="rounded-xl bg-white p-2"><span className="text-slate-500">รับสุทธิ</span><b className="mt-1 block text-emerald-700">฿{deliveryNetSettlement.toFixed(2)}</b></div></div><p className="mt-2 text-[11px] text-slate-500">ยอดขายยังบันทึกเต็มจำนวน ส่วน GP แยกเป็นค่าธรรมเนียมเพื่อให้รายงานกระแสเงินสดตรงกับเงินที่จะได้รับจริง</p></div>}
       {method==="cash"&&<><div className="mt-4 grid grid-cols-[1fr_auto] gap-2"><input aria-label="จำนวนเงินที่รับจากลูกค้า" autoFocus inputMode="decimal" value={received} onChange={e=>setReceived(e.target.value)} placeholder="รับเงินมาเท่าไร" className="min-w-0 rounded-2xl border border-slate-300 bg-slate-100 px-4 py-3 text-lg outline-none focus:border-[#c59b19]"/><button type="button" disabled={busy||!payableItems.length} onClick={()=>setReceived(String(netPayable))} className="min-h-12 rounded-2xl border border-[#d4af37] bg-[#fff8dc] px-3 text-sm font-bold text-[#765b08] disabled:opacity-40">รับเงินพอดี ฿{formatBaht(netPayable)}</button></div><div className="mt-2 grid grid-cols-3 gap-2">{quickCashAmounts.map(amount=><button key={amount} type="button" disabled={busy||!payableItems.length} onClick={()=>setReceived(String(amount))} className="min-h-11 rounded-xl border border-slate-300 bg-white text-sm font-bold text-slate-700 disabled:opacity-40">฿{amount}</button>)}</div>{received.trim()!==""&&Number.isFinite(cashDelta)&&<div className={"mt-3 flex items-center justify-between rounded-2xl border px-4 py-3 "+(cashDelta>=0?"border-emerald-300 bg-emerald-50 text-emerald-900":"border-red-300 bg-red-50 text-red-800")}><span>{cashDelta>=0?"เงินทอน":"ขาดอีก"}</span><b className="text-xl">฿{formatBaht(Math.abs(cashDelta))}</b></div>}</>}
+      {method==="promptpay"&&!prompt?.qrUrl&&qrPreview&&qrPreview.total===netPayable&&<div data-qr-preview className="mt-4 rounded-[20px] border border-slate-300 bg-white p-4 text-center"><img src={qrPreview.url} alt="PromptPay QR" className="mx-auto max-h-56 w-auto"/><p className="mt-2 text-sm font-black text-black">ยอด ฿{formatBaht(qrPreview.total)} · ให้ลูกค้าสแกนได้เลย</p><p className="mt-1 text-[11px] text-slate-600">กำลังเปิดรับเงินในระบบ…</p></div>}
       {method==="promptpay"&&prompt?.qrUrl&&<div className="mt-4 rounded-[20px] border border-slate-300 bg-white p-4 text-center"><img src={prompt.qrUrl} alt="PromptPay QR" className="mx-auto max-h-56 w-auto"/><p className="mt-2 text-xs font-semibold text-black">{prompt.paid?"ชำระเงินแล้ว":"สแกน QR แล้วระบบจะตรวจสอบอัตโนมัติ"}</p>
         {prompt.provider==="direct"&&!prompt.paid&&String(prompt.status||"")==="pending"&&<div className="mt-3 border-t border-slate-200 pt-3">
           <p className="text-[11px] text-slate-600">ยอดล็อก ฿{formatBaht(Number(prompt.amount)||0)} · เข้าบัญชีร้านโดยตรง · ระบบปิดบิลเองเมื่อแจ้งเตือนธนาคารมาถึง</p>
