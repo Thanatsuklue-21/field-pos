@@ -13,13 +13,17 @@ test('offline cash uses durable IndexedDB outbox while generic API writes remain
   assert.match(client,/offline_write_blocked/);
 });
 
+// Owner-approved 2026-11-16: offline accepts cash, plus PromptPay only via the
+// cached own-account QR id (recorded unverified, matched server-side later).
 test('POS captures only cash offline and syncs the same idempotent request later',async()=>{
   const pos=await read('app/pos/page.tsx'),sync=await read('lib/offline-sales.ts');
   assert.match(pos,/offlineAtStart/);
   assert.match(pos,/offlineFulfilled:true/);
   assert.match(pos,/queueOfflineCashSale/);
   assert.match(pos,/offlineMenuRevision:data\.revision/);
-  assert.match(pos,/if\(method!==\"cash\"\).*offline_cash_only/);
+  assert.match(pos,/if\(method!==\"cash\"&&!\(method===\"promptpay\"&&offlineQrId\)\).*offline_cash_only/);
+  assert.match(pos,/offlinePromptPay:true/);
+  assert.match(pos,/if\(pendingRead\(\)\)throw Object\.assign\(new Error\("pending_promptpay_exists"\)/);
   assert.match(pos,/offline_split_not_supported/);
   assert.match(pos,/offline_loyalty_not_supported/);
   assert.match(sync,/\/api\/pos\/checkout/);

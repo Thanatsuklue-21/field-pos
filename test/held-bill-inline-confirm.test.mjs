@@ -15,7 +15,8 @@ test("held bills use in-app destructive confirmation instead of browser confirm"
 
 test("held bill delete confirmation explains financial and stock impact before removal",async()=>{
   const pos=await read("app/pos/page.tsx");
-  const start=pos.indexOf('role="alertdialog"');
+  // The held-bill confirm is the alertdialog labelled ยืนยันลบบิลพัก (others exist, e.g. PromptPay manual confirm).
+  const start=pos.lastIndexOf('role="alertdialog"',pos.indexOf('aria-label="ยืนยันลบบิลพัก"'));
   const block=pos.slice(start,start+1800);
   assert.match(block,/ยังไม่ขายและยังไม่ตัด Stock/);
   assert.match(block,/การลบจะเอารายการนี้ออกจากเครื่องเท่านั้น/);

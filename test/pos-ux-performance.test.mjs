@@ -588,6 +588,8 @@ test('POS critical path defers optional PromptPay configuration until payment UI
   assert.doesNotMatch(startup,/\/api\/payments\/promptpay\/config/);
   assert.match(pos,/if\(\(paymentReviewOpen\|\|payOpen\)&&promptConfig===null\)/);
   assert.match(pos,/api<any>\("\/api\/payments\/promptpay\/config"\)/);
+  // Owner-approved 2026-11-16: an idle, delayed prefetch caches the own-account QR id for offline PromptPay.
+  assert.match(pos,/setTimeout\(\(\)=>loadPromptConfig\(\),2500\)/);
 });
 
 test('global AI supervisor is code-split and does not poll while hidden on POS',async()=>{

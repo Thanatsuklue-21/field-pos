@@ -20,7 +20,8 @@ test('POS hold action clears the active cart only after storing a copy',async()=
   const segment=pos.slice(start,end);
   assert.ok(start>=0&&end>start);
   assert.ok(segment.indexOf('heldBills.holdCart(cart.items)')<segment.indexOf('cart.clearCart()'));
-  assert.match(segment,/pendingRead\(\)\|\|cashPendingRead\(\)/);
+  // A parked PromptPay (waiting for the bank in the background) no longer blocks holding the new order.
+  assert.match(segment,/\(pendingRead\(\)&&!pendingRead\(\)\?\.parked\)\|\|cashPendingRead\(\)/);
   assert.match(segment,/if\(splitGroup\)/);
 });
 
