@@ -142,3 +142,25 @@ test('production DB client uses libSQL HTTP keep-alive unless FIELD_DB_TRANSPORT
   assert.equal(dbClientUrl('file:/tmp/x.db',undefined),'file:/tmp/x.db');
   assert.equal(dbClientUrl('https://shop.turso.io',undefined),'https://shop.turso.io');
 });
+
+test('full backup exports the PromptPay ledger and a restore never removes newer payment records',async t=>{
+  withEnv(t,{PROMPTPAY_DIRECT_ID:'0826119798',BANK_NOTIFY_SECRET:SECRET,PUBLIC_ORIGIN:'https://field.test'});
+  const db=await setup(t);const now=Date.now();const key={'x-field-bank-key':SECRET};
+  await receiveBankNotification({body:{text:KRUNGSRI_IN('55.00')},headers:key},{db,now:now-60_000});
+  const api=createApi({db,origin:'https://field.test'});
+  const run=async(method,route,body)=>{const res={writeHead(s){this.status=s},end(r){this.body=JSON.parse(r)}};
+    await api({method,query:{route},headers:{origin:'https://field.test',cookie:'field_session=token','x-csrf-token':'csrf'},body,rawBody:JSON.stringify(body||{})},res);return res};
+  const exp=await run('GET','admin/backup/export');
+  assert.equal(exp.status,200,JSON.stringify(exp.body).slice(0,200));
+  assert.equal(exp.body.paymentLedger.bankNotifications.length,1);
+  assert.equal(Array.isArray(exp.body.paymentLedger.promptpayDirect),true);
+  // A newer payment arrives after the backup was taken.
+  await receiveBankNotification({body:{text:KRUNGSRI_IN('60.00')},headers:key},{db,now:now-30_000});
+  const prev=await run('POST','admin/backup/preview',{backup:exp.body});
+  assert.equal(prev.status,200,JSON.stringify(prev.body));
+  const rev=Number((await db.execute('SELECT revision FROM field_state')).rows[0].revision);
+  const rest=await run('POST','admin/backup/restore',{backup:exp.body,confirm:true,requestKey:'restore-ledger-0001',backupFingerprint:prev.body.fingerprint,expectedRevision:rev});
+  assert.equal(rest.status,200,JSON.stringify(rest.body));
+  const rows=(await db.execute('SELECT amount_satang FROM field_bank_notifications ORDER BY amount_satang')).rows.map(r=>Number(r.amount_satang));
+  assert.deepEqual(rows,[5500,6000]);
+});

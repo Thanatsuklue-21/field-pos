@@ -58,6 +58,7 @@ jobs:
           python scripts/qa-promptpay-parked.py --base-url http://127.0.0.1:3000 --output /tmp/field-promptpay-parked-qa
           python scripts/qa-promptpay-offline.py --base-url http://127.0.0.1:3000 --output /tmp/field-promptpay-offline-qa
           python scripts/qa-promptpay-instant.py --base-url http://127.0.0.1:3000 --output /tmp/field-promptpay-instant-qa
+          python scripts/qa-pay-mode-toggle.py --base-url http://127.0.0.1:3000 --output /tmp/field-pay-mode-qa
           python scripts/qa-solo-flow.py --base-url http://127.0.0.1:3000 --output /tmp/field-solo-flow-qa
           python scripts/qa-close-day-recovery.py --base-url http://127.0.0.1:3000 --output /tmp/field-close-day-qa
           python scripts/qa-queue-waste-review.py --base-url http://127.0.0.1:3000 --output /tmp/field-queue-waste-qa

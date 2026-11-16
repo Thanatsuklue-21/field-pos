@@ -405,6 +405,7 @@ function PosView({session}:{session:Session}){
   const hasConfiguredMenu=(data?.menu||[]).some(sellable);
   const allUnavailable=menu.length>0&&menu.every(x=>!x.available);
   const unavailableNames=useMemo(()=>Array.from(new Set(menu.flatMap(x=>x.variants.flatMap(v=>v.missingIngredients||[]).map(i=>i.name)))).slice(0,4),[menu]);
+  const cartQtyByMenu=useMemo(()=>{const m=new Map<string,number>();for(const i of cart.items)m.set(i.id,(m.get(i.id)||0)+Number(i.qty||0));return m},[cart.items]);
   const cartStockState=useMemo(()=>cartAvailability({cart:cart.items,menu:data?.menu||[],stock:data?.availabilityStock||{}}),[cart.items,data?.menu,data?.availabilityStock]);
   const total=useMemo(()=>cart.items.reduce((sum,item)=>sum+item.price*item.qty,0),[cart.items]);
   const payableItems=splitBill?cart.items.map(i=>({...i,qty:Math.min(i.qty,Math.max(0,Number(splitSelection[i.key])||0))})).filter(i=>i.qty>0):cart.items;
@@ -1212,6 +1213,11 @@ function PosView({session}:{session:Session}){
         </div>
       </div>
 
+      {!offlineStorageError&&!online&&<div role="status" data-offline-banner className="mb-3 rounded-2xl border border-[#E8B04B] bg-[#FFF4E5] px-4 py-2.5 text-[#7A3E0B]">
+        <b className="block text-sm">เน็ตหลุด · ขายเงินสด{offlineQrId?" และ PromptPay (QR ในเครื่อง)":""}ได้ตามปกติ</b>
+        <span className="block text-[11px]">แยกจ่าย / แต้มปิดชั่วคราว{offlineStats.total>0?" · บิลเก็บในเครื่อง "+offlineStats.total+" บิล":""} · ส่งเข้าระบบเองเมื่อเน็ตกลับ</span>
+      </div>}
+      {!offlineStorageError&&online&&offlineStats.pending>0&&<div role="status" data-offline-banner className="mb-3 rounded-2xl border border-emerald-300 bg-emerald-50 px-4 py-2 text-xs font-semibold text-emerald-900">เน็ตกลับแล้ว · กำลังส่งบิลค้าง {offlineStats.pending} บิล</div>}
       {parkedRecord&&<button type="button" data-parked-prompt onClick={()=>setParkedOpen(true)} className="mb-3 flex min-h-12 w-full items-center justify-between gap-3 rounded-2xl border-2 border-[#1F4D3A] bg-[#E8F2EC] px-4 text-left text-[#1F4D3A]">
         <span className="flex items-center gap-2"><span className="h-2.5 w-2.5 animate-pulse rounded-full bg-[#2F7D57]"/><b className="text-sm">รอเงินเข้า PromptPay ฿{formatBaht(parkedRecord.total)}</b></span>
         <span className="flex items-center gap-2 text-xs font-semibold"><ParkedElapsed since={parkedRecord.parkedAt||parkedRecord.createdAt}/> · แตะดู QR</span>
@@ -1242,7 +1248,15 @@ function PosView({session}:{session:Session}){
           <p className="mt-2 text-xs">{hasConfiguredMenu?"ลองดูเมนูทั้งหมด แล้วเลือกเมนูอีกครั้ง ออเดอร์ที่เลือกไว้ยังอยู่":"ให้เจ้าของร้านตรวจเมนู ราคา และสูตรก่อนเริ่มรับออเดอร์"}</p>
           {hasConfiguredMenu?<button type="button" onClick={()=>{setQ("");setCat("ทั้งหมด")}} className="mt-4 min-h-11 rounded-xl border border-[#b98b00] bg-[#fff8dc] px-4 text-sm font-bold text-[#6f5510]">ดูทุกเมนู</button>:session.user.role==="admin"?<Link prefetch={false} href="/products" className="mt-4 inline-flex min-h-11 items-center rounded-xl border border-[#b98b00] bg-[#fff8dc] px-4 text-sm font-bold text-[#6f5510]">ไปจัดเมนู</Link>:null}
         </div>}
-        <div className="grid grid-cols-2 items-stretch gap-2 sm:gap-3 lg:grid-cols-3 2xl:grid-cols-4">{menu.map(x=><button key={x.id} disabled={!x.available} onClick={()=>chooseMenu(x)} className="glass pos-menu-card group flex min-h-[154px] flex-col overflow-hidden rounded-[20px] text-left sm:min-h-[190px] sm:rounded-[24px] hover:border-[#c59b19] disabled:border-slate-200 disabled:bg-slate-100"><div className="relative h-20 shrink-0 bg-[#f4ecd0] sm:h-24">{x.image?<img src={x.image} alt={x.name} loading="lazy" decoding="async" className="h-full w-full object-cover"/>:<div className="grid h-full place-items-center text-2xl font-bold text-[#765b08]">{x.name.slice(0,1)}</div>}<div className="absolute right-2 top-2">{!x.available?<span className="rounded-full bg-red-100 px-2 py-1 text-[10px] font-bold text-red-700">หมดชั่วคราว</span>:x.lowStock?<span className="rounded-full bg-amber-100 px-2 py-1 text-[10px] font-bold text-amber-800">เหลือประมาณ {x.maxServings} แก้ว</span>:null}</div></div><div className="flex flex-1 flex-col p-3 sm:p-4"><div className="text-[9px] uppercase tracking-widest text-slate-500 sm:text-[10px]">{x.category||"DRINK"}</div><b className="mt-1 block line-clamp-2 text-base leading-snug sm:text-lg">{x.name}</b><div className="mt-auto pt-2 text-base font-semibold text-[#765b08] sm:pt-3 sm:text-lg">฿{formatBaht(x.price)}</div>{!x.available&&<small className="mt-2 block text-xs text-red-600">{Array.from(new Set(x.variants.flatMap(v=>v.missingIngredients||[]).map(i=>i.name))).slice(0,2).join(", ")||"สูตรยังไม่พร้อม"}</small>}</div></button>)}</div>
+        <div className="grid grid-cols-2 items-stretch gap-2 sm:grid-cols-3 sm:gap-2.5 lg:grid-cols-4">{menu.map(x=>{const inCart=cartQtyByMenu.get(x.id)||0;const missing=Array.from(new Set(x.variants.flatMap(v=>v.missingIngredients||[]).map(i=>i.name))).slice(0,2).join(", ");return <button key={x.id} data-menu-card disabled={!x.available} onClick={()=>chooseMenu(x)} aria-label={x.name+" ฿"+formatBaht(x.price)+(inCart?" · ในตะกร้า "+inCart+" แก้ว":"")+(!x.available?" · หมดชั่วคราว":x.lowStock?" · เหลือ "+x.maxServings+" แก้ว":"")} className={"pos-menu-card relative flex min-h-[84px] flex-col justify-between rounded-[14px] bg-white px-3.5 py-3 text-left text-[#1B2A22] disabled:bg-[#F1EEE7] "+(inCart?"border-2 border-[#1F4D3A]":"border border-[#E4DED2]")}>
+          {x.image&&<img src={x.image} alt="" loading="lazy" decoding="async" className="absolute right-2 top-2 h-9 w-9 rounded-lg object-cover opacity-90"/>}
+          <b className={"block line-clamp-2 text-[15px] font-bold leading-snug sm:text-base "+(x.image?"pr-10":"")}>{x.name}</b>
+          <div className="mt-2 flex w-full items-end justify-between gap-2">
+            <span className="text-[15px] font-bold text-[#1F4D3A]">฿{formatBaht(x.price)}</span>
+            {!x.available?<span className="shrink-0 whitespace-nowrap rounded-full bg-[#FBE9E3] px-2 py-0.5 text-[11px] font-bold text-[#9A3412]">หมดชั่วคราว</span>:inCart?<span className="rounded-full bg-[#1F4D3A] px-2 py-0.5 text-xs font-black text-white">×{inCart}</span>:x.lowStock?<span className="rounded-full bg-[#FFF4E5] px-2 py-0.5 text-[11px] font-bold text-[#9A3412]">เหลือ {x.maxServings}</span>:null}
+          </div>
+          {!x.available&&<small className="mt-1 block text-[11px] text-[#9A3412]">ขาด {missing||"สูตรยังไม่พร้อม"}</small>}
+        </button>})}</div>
       </div>
     </div>
 
@@ -1291,6 +1305,9 @@ function PosView({session}:{session:Session}){
         <span className="mt-0.5 block text-[11px]">{cashierGuide.detail}</span>
       </div>}
 
+      {!splitGroup&&cart.items.reduce((s,i)=>s+i.qty,0)>=2&&<div role="radiogroup" aria-label="วิธีจ่ายของบิลนี้" data-pay-mode className="mt-4 grid grid-cols-2 gap-1 rounded-2xl bg-[#EFEAE0] p-1">
+        {([["single","จ่ายรวมบิลเดียว"],["split","แยกจ่ายตามคน"]] as const).map(([mode,label])=>{const on=mode==="split"?splitBill:!splitBill;const blocked=busy||hasPendingPrompt||(mode==="split"&&(!online||method==="delivery"));return <button key={mode} type="button" role="radio" aria-checked={on} disabled={blocked&&!on} onClick={()=>{if(on)return;setSplitBill(mode==="split");setPaymentReviewOpen(mode==="split");setSplitSelection({});setPointsRedeemed(0);setReceived("");setResult("")}} className={"min-h-11 rounded-xl text-sm font-bold disabled:opacity-40 "+(on?"bg-white text-[#1F4D3A] shadow-sm":"text-[#5B6660]")}>{label}</button>})}
+      </div>}
       <button type="button" aria-expanded={orderOptionsVisible} aria-controls="field-order-payment-options" disabled={busy||hasPendingPrompt} onClick={()=>{if(!splitGroup)setOrderOptionsOpen(v=>!v)}} className={"mt-4 min-h-11 w-full rounded-2xl border px-4 text-sm font-semibold "+(orderOptionsVisible?"border-[#d4af37] bg-[#fff8dc] text-[#765b08]":"border-slate-300 bg-white text-slate-700")+" disabled:opacity-40"}>{splitGroup?"คิวนี้กำลังแยกจ่าย":splitBill?"กำลังแยกจ่าย · สมาชิก/แต้ม":"ตัวเลือกบิล / สมาชิก"}</button>
       {orderOptionsVisible&&<div id="field-order-payment-options" className="mt-2 rounded-2xl border border-slate-200 bg-white p-3"><p className="mb-2 text-[11px] text-slate-500">ใช้เมื่อต้องแยกจ่าย หรือเลือกลูกค้าสมาชิก · บิลทั่วไปข้ามส่วนนี้ได้</p>
       <button type="button" disabled={busy||hasPendingPrompt||!online||method==="delivery"||cart.items.reduce((s,i)=>s+i.qty,0)<2} onClick={()=>{setOrderOptionsOpen(true);setSplitBill(v=>{const next=!v;setPaymentReviewOpen(next);return next});setSplitSelection({});setPointsRedeemed(0);setReceived("");setResult("")}} className={"mt-4 min-h-11 w-full rounded-2xl border px-4 text-sm font-semibold "+(splitBill?"border-[#d4af37] bg-[#fff8dc] text-[#765b08]":"border-slate-300 bg-white text-slate-700")+" disabled:opacity-40"}>{splitBill?"ยกเลิกแยกบิล":"แยกบิล / จ่ายแยกตามคน"}</button>

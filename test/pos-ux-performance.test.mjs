@@ -203,7 +203,8 @@ test('mobile operational pages use compact density while preserving touch action
   assert.match(shell,/const primaryMobile=\["\/pos","\/queue","\/orders"\]/);
   assert.match(shell,/Settings/);
   assert.match(shell,/aria-label="เมนูหลังบ้าน"/);
-  assert.match(pos,/min-h-\[154px\]/);
+  // Owner-approved 2026-11-16 redesign: compact 84px menu cards (4 columns on tablet).
+  assert.match(pos,/min-h-\[84px\]/);
   assert.match(pos,/field-pos-mobile-cartbar/);
   assert.doesNotMatch(pos,/bottom-\[70px\]/);
   const css=await read('app/globals.css');
@@ -255,9 +256,10 @@ test('separate-person bills keep unpaid drinks in cart and pay only selected qua
 test('mobile menu cards keep long names and prices aligned above checkout bar',async()=>{
   const pos=await read('app/pos/page.tsx');
   assert.match(pos,/overflow-auto pb-28 lg:pb-0/);
-  assert.match(pos,/flex min-h-\[154px\] flex-col/);
-  assert.match(pos,/flex flex-1 flex-col p-3/);
-  assert.match(pos,/mt-auto pt-2 text-base font-semibold/);
+  // Owner-approved 2026-11-16 redesign: name clamps to 2 lines, price row pinned to the bottom.
+  assert.match(pos,/flex min-h-\[84px\] flex-col justify-between/);
+  assert.match(pos,/line-clamp-2 text-\[15px\]/);
+  assert.match(pos,/mt-2 flex w-full items-end justify-between/);
 });
 
 test('cash checkout batches state and idempotency reads plus accounting state and audit writes',async()=>{
