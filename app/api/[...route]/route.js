@@ -33,11 +33,22 @@ async function handle(request,{params}){
       // Second query on the now-open connection = one pure database round trip.
       const rttStarted=performance.now();await getDb().execute("SELECT 1 AS ok");
       const dbRoundTripMs=Number(Math.max(0,performance.now()-rttStarted).toFixed(1));
+      // Read-only transport probe (owner-approved 2026-11-16): the same SELECT 1 over
+      // libSQL HTTP keep-alive, to compare per-round-trip latency with the default client.
+      let httpRoundTripMs=null;
+      if(new URL(request.url).searchParams.get("probe")==="http"){
+        try{
+          globalThis.__fieldHttpProbe??=(await import("@libsql/client")).createClient({url:String(process.env.TURSO_DATABASE_URL).replace(/^libsql:/,"https:"),authToken:process.env.TURSO_AUTH_TOKEN});
+          await globalThis.__fieldHttpProbe.execute("SELECT 1 AS ok");
+          const t=performance.now();await globalThis.__fieldHttpProbe.execute("SELECT 1 AS ok");
+          httpRoundTripMs=Number((performance.now()-t).toFixed(1));
+        }catch{httpRoundTripMs=-1}
+      }
       // Cloud-region label of the database host only (never the host or token).
       let dbRegion="unknown";try{const m=new URL(String(process.env.TURSO_DATABASE_URL).replace(/^libsql:/,"https:")).hostname.match(/\.((?:aws|gcp|fly|azure)-[a-z0-9-]{2,30})\.turso\.io$/);if(m)dbRegion=m[1]}catch{}
       const totalMs=Math.max(0,performance.now()-healthStarted);
       const release={commit:String(process.env.VERCEL_GIT_COMMIT_SHA||process.env.GIT_COMMIT_SHA||"local").slice(0,40),branch:String(process.env.VERCEL_GIT_COMMIT_REF||process.env.GIT_BRANCH||"local").slice(0,120),environment:String(process.env.VERCEL_ENV||process.env.NODE_ENV||"development").slice(0,40),deploymentId:String(process.env.VERCEL_DEPLOYMENT_ID||"").slice(0,120)};
-      return Response.json({ok:true,storage:"turso",dbRegion,release,timing:{dbMs:Number(dbMs.toFixed(1)),dbRoundTripMs,totalMs:Number(totalMs.toFixed(1))}},{status:200,headers:{"Cache-Control":"no-store","Server-Timing":`db;dur=${dbMs.toFixed(1)},app;dur=${totalMs.toFixed(1)}`}});
+      return Response.json({ok:true,storage:"turso",dbRegion,release,timing:{dbMs:Number(dbMs.toFixed(1)),dbRoundTripMs,httpRoundTripMs,totalMs:Number(totalMs.toFixed(1))}},{status:200,headers:{"Cache-Control":"no-store","Server-Timing":`db;dur=${dbMs.toFixed(1)},app;dur=${totalMs.toFixed(1)}`}});
     }catch{
       const dbMs=Math.max(0,performance.now()-dbStarted);
       const totalMs=Math.max(0,performance.now()-healthStarted);
