@@ -52,9 +52,8 @@ with sync_playwright() as p:
         page.screenshot(path=str(output/f"01-menu-{width}.png"))
         expect(menu).to_contain_text("฿55.50")
         menu.click()
-        variant=page.get_by_role("dialog")
-        expect(variant.get_by_role("button",name=re.compile(r"หวานน้อย.*50%"))).to_contain_text("฿55.50")
-        variant.get_by_role("button",name=re.compile(r"หวานน้อย.*50%")).click()
+        # Menu tap adds the normal-sweetness recipe directly (solo quick add).
+        expect(page.get_by_role("dialog",name="เมนูทดสอบ")).to_have_count(0)
         page.get_by_role("button",name="ชำระเงิน",exact=True).click()
         payment=page.get_by_role("dialog",name="ชำระเงิน ฿55.50",exact=True)
         expect(payment).to_be_visible()

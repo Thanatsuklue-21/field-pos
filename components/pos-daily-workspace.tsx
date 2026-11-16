@@ -164,13 +164,16 @@ export default function PosDailyWorkspace({
     onRecoveryError:error=>setQueueFeedback(queueActionError(error?.message||"queue_action_result_unknown"))
   });
 
-  async function runQueueTailAction(order:QueueOrder,action:"call"|"return"){
+  async function runQueueTailAction(order:QueueOrder,action:"call"|"return"|"handoff_now"){
     if(!online||!queueFresh||queueActionLocked||busy)return;
     setQueueFeedback("");
     try{
       const result=await sendQueueAction({requestKey:crypto.randomUUID(),orderId:order.id,action});
       if(Array.isArray(result?.orders))setQueue(result.orders);
-      setQueueFeedback(action==="call"?"เรียกลูกค้าแล้ว · รอส่งมอบเมื่อรับเครื่องดื่ม":"บันทึกส่งมอบแล้ว · ไปคิวถัดไปได้");
+      // Solo flow: the last drink is handed over → straight back to the menu
+      // for the next customer, no extra close tap.
+      if(action==="handoff_now"&&Array.isArray(result?.orders)&&result.orders.length===0){setQueueFeedback("");onClose();return}
+      setQueueFeedback(action==="call"?"เรียกลูกค้าแล้ว · รอส่งมอบเมื่อรับเครื่องดื่ม":action==="handoff_now"?"ส่งมอบ "+(order.queueNo||"")+" แล้ว · รับออเดอร์ถัดไปได้":"บันทึกส่งมอบแล้ว · ไปคิวถัดไปได้");
     }catch(error:any){
       setQueueFeedback(queueActionError(error?.message||"queue_action_result_unknown"));
     }
@@ -651,7 +654,11 @@ export default function PosDailyWorkspace({
               </div>
               <p className="mt-2 line-clamp-2 text-xs text-slate-500">{(order.items||[]).map(x=>x.name+" ×"+x.qty).join(" · ")}</p>
               {calledAll?<button type="button" disabled={!online||!queueFresh||busy||queueActionLocked} onClick={()=>runQueueTailAction(order,"return")} className="mt-3 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#1F4D3A] px-4 text-sm font-black text-white disabled:opacity-40"><CheckCircle2 size={17}/>ลูกค้ารับแล้ว</button>:
-                isProductionHead&&readyAll?<button type="button" disabled={!online||!queueFresh||busy||queueActionLocked} onClick={()=>runQueueTailAction(order,"call")} className="mt-3 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#d4af37] px-4 text-sm font-black text-black disabled:opacity-40"><BellRing size={17}/>เรียกบัตร {order.pagerNo||order.queueNo}</button>:
+                isProductionHead&&readyAll?<div className="mt-3 grid grid-cols-2 gap-2">
+                  {/* Solo counter: customer is at the bar → one tap records call + pickup. */}
+                  <button type="button" data-solo-handoff disabled={!online||!queueFresh||busy||queueActionLocked} onClick={()=>runQueueTailAction(order,"handoff_now")} className="flex min-h-14 flex-col items-center justify-center rounded-xl bg-[#1F4D3A] px-3 text-sm font-black text-white disabled:opacity-40"><span className="flex items-center gap-1.5"><CheckCircle2 size={17}/>ส่งมอบเลย</span><small className="text-[11px] font-semibold text-emerald-100">ลูกค้ารออยู่หน้าบาร์</small></button>
+                  <button type="button" disabled={!online||!queueFresh||busy||queueActionLocked} onClick={()=>runQueueTailAction(order,"call")} className="flex min-h-14 flex-col items-center justify-center rounded-xl border-2 border-[#d4af37] bg-[#fffaf0] px-3 text-sm font-black text-[#5c4708] disabled:opacity-40"><span className="flex items-center gap-1.5"><BellRing size={17}/>เรียกบัตร {order.pagerNo||order.queueNo}</span><small className="text-[11px] font-semibold text-[#765b08]">ลูกค้านั่งรอ</small></button>
+                </div>:
                 isProductionHead&&currentPrepTask?<div className="mt-3 rounded-2xl border-2 border-[#d4af37] bg-[#fffaf0] p-3">
                   <div className="flex items-start justify-between gap-3">
                     <div><p className="text-[9px] font-black tracking-[.14em] text-[#9a7a16]">ทำต่อขั้นนี้</p><b className="mt-1 block text-sm text-slate-900">{currentPrepTask.item.name}</b><p className="mt-1 text-[11px] text-slate-600">{currentPrepTask.item.variant&&currentPrepTask.item.variant!=="Standard"?currentPrepTask.item.variant+" · ":""}ทำอีก {currentPrepTask.remaining} แก้ว</p></div>

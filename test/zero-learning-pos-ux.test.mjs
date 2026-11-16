@@ -13,11 +13,12 @@ test("POS teaches the core sale flow with visible 1-2-3 guidance",async()=>{
   assert.ok(pos.includes('aria-current={active?"step":undefined}'));
 });
 
-test("single-variant products add directly while multi-variant drinks still ask for a choice",async()=>{
+test("menu tap adds the default recipe directly; non-sweetness variants still ask for a choice",async()=>{
   const pos=await read("app/pos/page.tsx");
   assert.ok(pos.includes("function chooseMenu(product:MenuItem)"));
-  assert.ok(pos.includes("if(product.variants.length===1)"));
-  assert.ok(pos.includes("addVariant(product,product.variants[0])"));
+  // Owner-approved 2026-11-16: single variant or normal sweetness → one tap.
+  assert.ok(pos.includes("const quick=quickAddVariant(product.variants)"));
+  assert.match(pos,/if\(quick\)\{\s*addVariant\(product,quick,/);
   assert.ok(pos.includes("setSelected(product)"));
   assert.ok(pos.includes("onClick={()=>chooseMenu(x)}"));
 });
@@ -150,10 +151,14 @@ test("post-payment handoff blocks the sale screen until the cashier chooses the 
   assert.match(handoff,/data-handoff-primary/);
   assert.match(handoff,/รับออเดอร์ถัดไป/);
   assert.match(handoff,/"ทำคิว "\+lastSale\.queueNo\+" ต่อเลย"/);
-  assert.match(handoff,/ไม่ต้องเลือกทางเอง/);
+  assert.match(handoff,/ไม่มีลูกค้ารอ → ทำเลย/);
   assert.doesNotMatch(handoff,/onEscape=/);
   assert.match(handoff,/onClick=\{\(\)=>\{if\(lastSale\.offline\|\|splitPaymentPending\)\{startNextOrder\(\);return\}setLastSale\(null\);openWorkspace\("queue"\)\}\}/);
-  assert.equal((handoff.match(/<button/g)||[]).length,1,"handoff must expose one primary action");
+  // Owner-approved 2026-11-16: one primary (make now) + one guarded secondary
+  // (take next order) for solo operators; still no close/dismiss control.
+  assert.equal((handoff.match(/<button/g)||[]).length,2,"handoff exposes make-now + next-order only");
+  assert.match(handoff,/\{!lastSale\.offline&&!splitPaymentPending&&<button type="button" data-handoff-next-order onClick=\{startNextOrder\}/);
+  assert.doesNotMatch(handoff,/ปิด<\/button>|aria-label="ปิด/);
   assert.doesNotMatch(handoff,/router\.push\("\/queue"\)/);
   assert.match(pos,/function startNextOrder\(\)/);
   assert.match(pos,/setLastSale\(null\)/);
@@ -201,7 +206,8 @@ test("split-payment handoff keeps the cashier on the same queue until every paye
   assert.match(handoff,/ปุ่มเดียวจะพาไปเลือกรายการของคนถัดไป/);
   assert.match(handoff,/if\(lastSale\.offline\|\|splitPaymentPending\)\{startNextOrder\(\);return\}setLastSale\(null\);openWorkspace\("queue"\)/);
   assert.match(handoff,/lastSale\.offline\?"รับออเดอร์ถัดไป":splitPaymentPending\?"เลือกของคนถัดไป":"ทำคิว "/);
-  assert.doesNotMatch(handoff,/!lastSale\.offline&&!splitPaymentPending&&<button/);
+  // The solo "next order" shortcut is hidden while a split payment is still open.
+  assert.match(handoff,/\{!lastSale\.offline&&!splitPaymentPending&&<button type="button" data-handoff-next-order/);
 });
 
 

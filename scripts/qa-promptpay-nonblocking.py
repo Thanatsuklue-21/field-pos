@@ -62,8 +62,7 @@ with sync_playwright() as p:
     page.route("**/api/**",handler)
     page.goto(args.base_url+"/pos",wait_until="domcontentloaded",timeout=60000)
     page.get_by_role("button",name="เมนูทดสอบ").first.click()
-    variant=page.get_by_role("dialog")
-    variant.get_by_role("button",name=re.compile(r"หวานน้อย.*50%")).first.click()
+    # Menu tap adds the default recipe directly (solo quick add).
     page.get_by_role("button",name="ชำระเงิน",exact=True).click()
     payment=page.get_by_role("dialog",name="ชำระเงิน ฿55")
     expect(payment).to_be_visible()

@@ -7,7 +7,8 @@ const read=p=>readFile(new URL('../'+p,import.meta.url),'utf8');
 test('schema startup uses a durable Turso metadata row before replaying DDL',async()=>{
   const db=await read('lib/db.mjs');
   const startup=db.slice(db.indexOf('schemaReady=(async()=>{'));
-  assert.match(db,/const SCHEMA_VERSION=1/);
+  // v2 (2026-11-16): direct PromptPay intents + bank notification log.
+  assert.match(db,/const SCHEMA_VERSION=2/);
   assert.match(db,/field_schema_meta/);
   assert.match(db,/SELECT version FROM/);
   assert.match(db,/CREATE TABLE IF NOT EXISTS/);

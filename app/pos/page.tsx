@@ -10,6 +10,8 @@ import {api,type Bootstrap,type MenuItem,type RevisionUnchanged,type Session} fr
 import {cacheGet,cachePut} from "@/lib/offline-db";
 import {applyOfflineCashToBootstrap,getOfflineCashSummary,queueOfflineCashSale,syncOfflineCashSales,type OfflineCashSummary} from "@/lib/offline-sales";
 import {additionalServingsAvailable,additionalServingsForVariant,cartAvailability} from "@/lib/domain/availability.mjs";
+import {planCartChange} from "@/lib/domain/cart-change-policy.mjs";
+import {moveOneUnitToVariant,quickAddVariant,shortVariantLabel} from "@/lib/domain/quick-order.mjs";
 import {useCartStore} from "@/stores/cart-store";
 import {useHeldCartStore} from "@/stores/held-cart-store";
 import {writeQueueSnapshotCache} from "@/lib/queue-cache";
@@ -26,6 +28,24 @@ const PosDailyWorkspace=dynamic(loadPosDailyWorkspace,{
   ssr:false,
   loading:()=> <div role="status" aria-live="polite" className="fixed inset-0 z-[90] grid place-items-center bg-black/20"><div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 shadow-xl">กำลังเปิดงานร้าน…</div></div>
 });
+
+type CartItems=ReturnType<typeof useCartStore.getState>["items"];
+
+// Thai voice confirmation for transfers, so a solo operator making a drink
+// hears that the money arrived. Silent where speech is unavailable.
+function announcePayment(total:number){
+  try{
+    if(!Number.isFinite(total)||typeof window==="undefined"||!("speechSynthesis" in window))return;
+    const baht=Number.isInteger(total)?String(total):total.toFixed(2);
+    const u=new SpeechSynthesisUtterance("ได้รับเงิน "+baht+" บาท เรียบร้อยแล้ว");
+    u.lang="th-TH";u.rate=1;
+    window.speechSynthesis.cancel();window.speechSynthesis.speak(u);
+  }catch{}
+}
+
+// Light confirmation tick where the platform supports it (Android/Chrome).
+// iOS Safari ignores navigator.vibrate; the visual bump still confirms the tap.
+function tapHaptic(){try{navigator.vibrate?.(8)}catch{}}
 
 export default function Pos(){return <AuthGate preloadPath="/api/pos/bootstrap">{s=><PosView session={s}/>}</AuthGate>}
 
@@ -74,6 +94,9 @@ function PosView({session}:{session:Session}){
   const [q,setQ]=useState("");
   const [cat,setCat]=useState("ทั้งหมด");
   const [selected,setSelected]=useState<MenuItem|null>(null);
+  // Last quick-added cup of a multi-sweetness drink: a one-tap strip above the
+  // cart bar lets the operator switch its sweetness without opening any sheet.
+  const [lastQuick,setLastQuick]=useState<{key:string;id:string;name:string;variant:string;at:number}|null>(null);
   const [payOpen,setPayOpen]=useState(false);
   const [paymentReviewOpen,setPaymentReviewOpen]=useState(false);
   const [otherPaymentOpen,setOtherPaymentOpen]=useState(false);
@@ -93,6 +116,15 @@ function PosView({session}:{session:Session}){
   const [lastSale,setLastSale]=useState<LastSale|null>(null);
   const [prompt,setPrompt]=useState<any|null>(null);
   const [promptConfig,setPromptConfig]=useState<any|null>(null);
+  // Own-account PromptPay: two-step manual confirm when the bank notification does not arrive.
+  const [directConfirmArmed,setDirectConfirmArmed]=useState(false);
+  const [directConfirmBusy,setDirectConfirmBusy]=useState(false);
+  useEffect(()=>{
+    if(!directConfirmArmed)return;
+    // Keep both confirm buttons above the sticky payment footer on small phones.
+    const id=window.setTimeout(()=>document.querySelector('[data-direct-confirm-panel]')?.scrollIntoView({block:"center",behavior:"smooth"}),30);
+    return()=>window.clearTimeout(id);
+  },[directConfirmArmed]);
   const [customers,setCustomers]=useState<any[]>([]);
   const [customerId,setCustomerId]=useState("");
   const [loyalty,setLoyalty]=useState({pointsSpend:0,pointsRedeemValue:0});
@@ -110,6 +142,8 @@ function PosView({session}:{session:Session}){
   const promptReconcileRef=useRef(false);
   const checkoutInFlightRef=useRef(false);
   const cartCheckInFlightRef=useRef(false);
+  // When the in-memory stock projection was last confirmed by a bootstrap read.
+  const projectionAtRef=useRef(0);
   const cart=useCartStore();
   const heldBills=useHeldCartStore();
 
@@ -127,7 +161,9 @@ function PosView({session}:{session:Session}){
     return()=>window.clearTimeout(timer);
   },[]);
 
-  const acceptBootstrap=(next:Bootstrap|RevisionUnchanged)=>{
+  const acceptBootstrap=(next:Bootstrap|RevisionUnchanged,confirmed=true)=>{
+    // An "unchanged" answer still confirms the current projection is fresh.
+    if(confirmed)projectionAtRef.current=Date.now();
     if(next?.unchanged===true)return false;
     revisionRef.current=Math.max(revisionRef.current||0,Number(next.revision)||0);
     setData(prev=>!prev||next.revision>=prev.revision?next:prev);
@@ -143,7 +179,7 @@ function PosView({session}:{session:Session}){
     // Render the last known sellable catalog immediately, then revalidate from Cloud.
     // acceptBootstrap is revision-aware, so a late cache read cannot overwrite newer server data.
     cacheGet<Bootstrap>("/api/pos/bootstrap",BOOTSTRAP_CACHE_MAX_AGE_MS)
-      .then(cached=>{if(active&&cached)acceptBootstrap(cached)})
+      .then(cached=>{if(active&&cached)acceptBootstrap(cached,false)})
       .catch(()=>{});
     load(true).catch(()=>{});
 
@@ -398,6 +434,8 @@ function PosView({session}:{session:Session}){
 
   function finishSale(r:any,opts:{payment:"cash"|"promptpay"|"bank"|"card"|"delivery";total:number;received:number;recovered?:boolean;splitBill?:boolean;paidCart?:{id:string;variant:string;qty:number}[]}){
     applyServerState(r);
+    setDirectConfirmArmed(false);
+    if(opts.payment==="promptpay")announcePayment(Number(r?.total??opts.total));
     const serverTotal=Number(r?.total??opts.total);
     const serverReceived=Number(r?.received??opts.received);
     const serverChange=Number(r?.change??(opts.payment==="cash"?Math.max(0,serverReceived-serverTotal):0));
@@ -445,6 +483,16 @@ function PosView({session}:{session:Session}){
 
   async function validateCartChange(next:{id:string;variant:string;qty:number}[],apply:()=>void,allowShortage=false){
     if(cartCheckInFlightRef.current||checkoutInFlightRef.current)return;
+    // Fast path: a fresh local projection that already allows the change is
+    // applied in the same frame. Precheck never reserves stock; payment opening
+    // and the server checkout transaction remain the stock authority.
+    const plan=planCartChange({next,menu:data?.menu,stock:data?.availabilityStock,allowShortage,projectionAt:projectionAtRef.current});
+    if(plan.mode==="apply-local"){
+      const before=useCartStore.getState().items;
+      apply();
+      revalidateCartInBackground(allowShortage?null:{before,after:useCartStore.getState().items});
+      return;
+    }
     cartCheckInFlightRef.current=true;
     const before=JSON.stringify(useCartStore.getState().items);
     try{
@@ -461,26 +509,75 @@ function PosView({session}:{session:Session}){
     finally{cartCheckInFlightRef.current=false}
   }
 
-  function addVariant(product:MenuItem,variant:MenuItem["variants"][number]){
+  // Revision-aware refresh after an instant cart change. GET requests are
+  // coalesced by the API client, so rapid taps share one network read.
+  // If the server says the tap is no longer sellable (sold on another device),
+  // the instant change is rolled back so the cart matches the tap-time precheck.
+  function revalidateCartInBackground(guard:{before:CartItems;after:CartItems}|null){
+    api<Bootstrap|RevisionUnchanged>("/api/pos/bootstrap",revisionRef.current!==null?{headers:{"X-Field-Revision":String(revisionRef.current)}}:{}).then(res=>{
+      if(!acceptBootstrap(res))return;
+      const fresh=res as Bootstrap,latest=useCartStore.getState().items;
+      if(!latest.length)return;
+      const checked=cartAvailability({cart:latest,menu:fresh.menu,stock:fresh.availabilityStock||{}});
+      if(checked.available)return;
+      if(guard&&useCartStore.getState().items===guard.after)cart.replaceItems(guard.before);
+      setNotice(availabilityMessage(checked));
+    }).catch(()=>{});
+  }
+
+  function addVariant(product:MenuItem,variant:MenuItem["variants"][number],onAdded?:()=>void){
     const remaining=additionalServingsForVariant({variant,demand:cartStockState.demand,stock:data?.availabilityStock||{}});
     if(!variant.available||remaining<1){setNotice("วัตถุดิบเพียงพออีก 0 แก้วเท่านั้น"+(variant.missingIngredients?.length?" · ขาด: "+variant.missingIngredients.map(x=>x.name).join(", "):""));return}
-    const next=cart.items.map(x=>({id:x.id,variant:x.variant,qty:x.qty}));
+    // Read the live store, not the render snapshot, so two taps in one frame
+    // are both counted in the availability check.
+    const next=useCartStore.getState().items.map(x=>({id:x.id,variant:x.variant,qty:x.qty}));
     const existing=next.find(x=>x.id===product.id&&x.variant===variant.label);
     if(existing)existing.qty+=1;else next.push({id:product.id,variant:variant.label,qty:1});
-    void validateCartChange(next,()=>{cart.addItem({id:product.id,name:product.name,variant:variant.label,price:product.price});setSelected(null)});
+    void validateCartChange(next,()=>{cart.addItem({id:product.id,name:product.name,variant:variant.label,price:product.price});setSelected(null);tapHaptic();onAdded?.()});
   }
 
   function chooseMenu(product:MenuItem){
-    if(product.variants.length===1){
-      addVariant(product,product.variants[0]);
+    // One tap = the shop's default recipe (normal sweetness). Sweetness is
+    // changed from the cart chips; size-style variants still open the picker.
+    const quick=quickAddVariant(product.variants);
+    if(quick){
+      addVariant(product,quick,product.variants.length>1?()=>setLastQuick({key:product.id+"::"+quick.label,id:product.id,name:product.name,variant:quick.label,at:Date.now()}):()=>setLastQuick(null));
       return;
     }
     setSelected(product);
   }
 
+  // Move one cup of a cart line to another sweetness of the same menu. Uses the
+  // same stock check as any cart change (recipes differ per variant).
+  useEffect(()=>{
+    if(!lastQuick)return;
+    const timer=window.setTimeout(()=>setLastQuick(current=>current?.at===lastQuick.at?null:current),8000);
+    return()=>window.clearTimeout(timer);
+  },[lastQuick]);
+
+  function changeVariant(key:string,label:string){
+    const live=useCartStore.getState().items;
+    const moved=moveOneUnitToVariant(live,key,label);
+    if(moved===live)return;
+    const next=moved.map(x=>({id:x.id,variant:x.variant,qty:x.qty}));
+    void validateCartChange(next,()=>{cart.replaceItems(moved);tapHaptic()});
+  }
+
+  function sweetnessChips(item:{key:string;id:string;name:string;variant:string;qty:number},locked=false){
+    const product=data?.menu.find(m=>m.id===item.id);
+    if(!product||product.variants.length<2)return <small className="mt-1 block text-slate-500">{orderOptionLabel(item.variant)}</small>;
+    return <div className="mt-2">
+      <div role="group" aria-label={"ความหวาน "+item.name} className="flex flex-wrap gap-1.5">
+        {product.variants.map(v=>{const active=v.label===item.variant;return <button key={v.label} type="button" data-sweetness-chip aria-pressed={active} disabled={locked||(!active&&!v.available)} onClick={()=>changeVariant(item.key,v.label)} className={"min-h-11 rounded-xl border px-3 text-xs font-bold "+(active?"border-[#1F4D3A] bg-[#1F4D3A] text-white":"border-slate-300 bg-white text-slate-700")}>{shortVariantLabel(v.label)}</button>})}
+      </div>
+      {item.qty>1&&<small className="mt-1 block text-[11px] text-slate-500">แตะความหวานอื่นเพื่อเปลี่ยนทีละ 1 แก้ว</small>}
+    </div>;
+  }
+
   function updateCartQuantity(key:string,nextQty:number){
-    const item=cart.items.find(x=>x.key===key);if(!item)return;
-    const next=cart.items.map(x=>({id:x.id,variant:x.variant,qty:x.key===key?nextQty:x.qty})).filter(x=>x.qty>0);
+    const liveItems=useCartStore.getState().items;
+    const item=liveItems.find(x=>x.key===key);if(!item)return;
+    const next=liveItems.map(x=>({id:x.id,variant:x.variant,qty:x.key===key?nextQty:x.qty})).filter(x=>x.qty>0);
     if(nextQty<=item.qty){void validateCartChange(next,()=>cart.updateQuantity(key,nextQty),true);return}
     const remaining=additionalServingsAvailable({cart:cart.items,menu:data?.menu||[],stock:data?.availabilityStock||{},menuId:item.id,variantLabel:item.variant,demand:cartStockState.demand});
     if(remaining<1){setNotice("วัตถุดิบเพียงพออีก 0 แก้วเท่านั้น");return}
@@ -649,6 +746,18 @@ function PosView({session}:{session:Session}){
     return {pending:next,status:st};
   }
 
+  async function confirmDirectPayment(){
+    if(!session||!prompt?.chargeId||directConfirmBusy)return;
+    setDirectConfirmBusy(true);
+    try{
+      await api<any>("/api/payments/promptpay/direct/confirm",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({chargeId:prompt.chargeId})});
+      setDirectConfirmArmed(false);
+      // The normal pending-payment path re-reads the charge on the server and finalises once.
+      await recoverPending();
+    }catch(e:any){setResult(errorText(String(e?.message||"")))}
+    finally{setDirectConfirmBusy(false)}
+  }
+
   async function recoverPending(){
     if(promptReconcileRef.current)return;
     promptReconcileRef.current=true;
@@ -672,7 +781,7 @@ function PosView({session}:{session:Session}){
       }
       const st=await api<any>("/api/payments/promptpay/status",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({chargeId:p.paymentReference})});
       if(st.paid){await finalizePending(p,st.chargeId||p.paymentReference);return}
-      if(["failed","expired","reversed"].includes(String(st.status||"").toLowerCase())){await cancelPendingReservation(p);pendingClear();return}
+      if(["failed","expired","reversed","cancelled"].includes(String(st.status||"").toLowerCase())){await cancelPendingReservation(p);pendingClear();return}
       setMethod("promptpay");
       setPrompt(st);
       setPayOpen(true);
@@ -688,6 +797,8 @@ function PosView({session}:{session:Session}){
 
   function errorText(code:string){
     return code==="cash_insufficient"?"จำนวนเงินรับไม่พอ":
+      code==="promptpay_direct_amount_in_use"?"มี QR ยอดเดียวกันรอจ่ายอยู่ · ปิดหรือยกเลิก QR เดิมก่อน เพื่อไม่ให้ยอดโอนจับคู่ผิดบิล":
+      code==="promptpay_direct_not_pending"?"QR นี้ไม่ได้รอจ่ายแล้ว (หมดเวลา/ยกเลิก/จ่ายแล้ว) · ระบบกำลังตรวจสถานะล่าสุด":
       code==="menu_unavailable"?"มีเมนูในตะกร้าที่ปิดขาย ราคาเป็น 0 หรือยังไม่พร้อมขาย กรุณาตรวจตะกร้าใหม่":
       code==="request_key_conflict"?"รายการเดิมถูกเปลี่ยน กรุณาตรวจประวัติออเดอร์ก่อนชำระอีกครั้ง":
       code==="recipe_unavailable"?"สูตรเมนูยังไม่ครบหรือมีปริมาณผิด กรุณาตรวจสูตรก่อนขาย":
@@ -789,7 +900,7 @@ function PosView({session}:{session:Session}){
           }
           if(!current)current=await api<any>("/api/payments/promptpay/status",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({chargeId:resumed.paymentReference})});
           if(current.paid){await finalizePending(resumed,current.chargeId||resumed.paymentReference);return}
-          if(["failed","expired","reversed"].includes(String(current.status||"").toLowerCase())){await cancelPendingReservation(resumed);pendingClear()}
+          if(["failed","expired","reversed","cancelled"].includes(String(current.status||"").toLowerCase())){await cancelPendingReservation(resumed);pendingClear()}
           else if(!samePending(resumed,checkoutTotal,cartPayload,customerId,redeemPoints,splitGroup?.orderId||null))throw Object.assign(new Error("pending_promptpay_exists"),{status:409});
           else{st=current;paymentReference=resumed.paymentReference;requestKey=resumed.requestKey;activePending=resumed;checkoutTotal=resumed.total}
         }
@@ -805,7 +916,7 @@ function PosView({session}:{session:Session}){
           paymentReference=activePending.paymentReference;
         }
         setPrompt(st);
-        if(["failed","expired","reversed"].includes(String(st.status||"").toLowerCase())){
+        if(["failed","expired","reversed","cancelled"].includes(String(st.status||"").toLowerCase())){
           if(activePending)await cancelPendingReservation(activePending);
           pendingClear();
           throw Object.assign(new Error("promptpay_failed"),{status:409});
@@ -982,15 +1093,26 @@ function PosView({session}:{session:Session}){
     </div>
 
     <div className="field-pos-mobile-cartbar fixed left-2 right-2 z-30 flex items-center justify-between gap-2 rounded-[18px] border border-slate-300 bg-white/95 p-1.5 pl-3 shadow-lg backdrop-blur sm:left-4 sm:right-4 sm:rounded-[22px] sm:p-2 sm:pl-5 lg:hidden">
-      <div className="min-w-0 flex-1"><small className="block text-[10px] tracking-widest text-slate-500">{cart.items.reduce((s,i)=>s+i.qty,0)} แก้ว</small><b className="text-lg text-[#765b08]">฿{formatBaht(total)}</b></div>
-      <button disabled={!cart.items.length} onClick={holdCurrentBill} className="min-h-11 shrink-0 rounded-2xl border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 disabled:opacity-30"><Clock3 size={14} className="mx-auto mb-0.5"/>พักบิล</button>
-      <button aria-label="ชำระเงิน" disabled={!cart.items.length} onClick={openPayment} className="min-h-11 shrink-0 rounded-2xl bg-[#d4af37] px-4 py-2.5 text-sm font-bold text-black disabled:opacity-30 sm:px-5 sm:py-3">ชำระเงิน ฿{formatBaht(total)}</button>
+      {(()=>{
+        const line=lastQuick&&!payOpen&&!lastSale?cart.items.find(i=>i.key===lastQuick.key):null;
+        const product=line?data?.menu.find(m=>m.id===line.id):null;
+        if(!line||!product||product.variants.length<2)return null;
+        return <div data-quick-sweetness className="field-sheet-in absolute bottom-full left-0 right-0 mb-2 rounded-[18px] border border-[#1F4D3A]/25 bg-white p-2 shadow-lg">
+          <p className="px-1 text-[11px] font-bold text-slate-600">เพิ่ม {line.name} แล้ว · เปลี่ยนความหวานแก้วนี้</p>
+          <div role="group" aria-label={"ความหวานแก้วล่าสุด "+line.name} className="mt-1.5 flex gap-1.5">
+            {product.variants.map(v=>{const active=v.label===line.variant;return <button key={v.label} type="button" aria-pressed={active} disabled={!active&&!v.available} onClick={()=>{if(!active)changeVariant(line.key,v.label);setLastQuick(null)}} className={"min-h-11 flex-1 rounded-xl border px-2 text-xs font-bold "+(active?"border-[#1F4D3A] bg-[#1F4D3A] text-white":"border-slate-300 bg-white text-slate-700")}>{shortVariantLabel(v.label)}</button>})}
+          </div>
+        </div>;
+      })()}
+      <div className="min-w-0 flex-1"><small className="block text-[10px] tracking-widest text-slate-500">{cart.items.reduce((s,i)=>s+i.qty,0)} แก้ว</small><b key={total} className="field-bump block text-lg text-[#765b08]">฿{formatBaht(total)}</b></div>
+      <button disabled={!cart.items.length} onClick={holdCurrentBill} className="field-cart-action min-h-11 shrink-0 rounded-2xl border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 disabled:opacity-30"><Clock3 size={14} className="mx-auto mb-0.5"/>พักบิล</button>
+      <button aria-label="ชำระเงิน" disabled={!cart.items.length} onClick={openPayment} className="field-cart-action min-h-11 shrink-0 rounded-2xl bg-[#d4af37] px-4 py-2.5 text-sm font-bold text-black disabled:opacity-30 sm:px-5 sm:py-3">ชำระเงิน ฿{formatBaht(total)}</button>
     </div>
 
     <aside className="glass m-3 ml-0 hidden w-[360px] shrink-0 flex-col rounded-[24px] p-5 lg:flex">
-      <div className="mb-4 flex items-center justify-between"><div><p className="m-0 text-[10px] tracking-[.25em] text-slate-500">ขั้นตอน 2 · ตรวจออเดอร์</p><h2 className="m-0 mt-1 text-lg">รายการที่สั่ง</h2></div><span className="rounded-full border border-slate-200 bg-slate-100 px-3 py-1 text-xs">{cart.items.reduce((s,i)=>s+i.qty,0)} แก้ว</span></div>
-      <div className="soft-scroll min-h-0 flex-1 overflow-auto">{cart.items.length===0?<div className="grid h-full place-items-center text-sm text-slate-400">1. แตะเมนูเพื่อเริ่มออเดอร์</div>:cart.items.map(i=><div key={i.key} className="mb-3 rounded-[18px] border border-slate-200 bg-slate-100/70 p-4"><div className="flex gap-3"><div className="flex-1"><b className="text-sm">{i.name}</b><small className="mt-1 block text-slate-500">{i.variant}</small></div><button aria-label={"ลบ "+i.name} onClick={()=>cart.removeItem(i.key)} className="grid h-11 w-11 place-items-center rounded-xl text-slate-500 hover:bg-red-50 hover:text-red-600"><Trash2 size={16}/></button></div><div className="mt-3 flex items-center justify-between"><div className="flex items-center gap-2"><button aria-label={"ลดจำนวน "+i.name} onClick={()=>updateCartQuantity(i.key,i.qty-1)} className="grid h-11 w-11 place-items-center rounded-xl border border-slate-300 bg-white"><Minus size={13}/></button><span className="w-5 text-center">{i.qty}</span><button aria-label={"เพิ่มจำนวน "+i.name} onClick={()=>updateCartQuantity(i.key,i.qty+1)} className="grid h-11 w-11 place-items-center rounded-xl border border-slate-300 bg-white"><Plus size={13}/></button></div><b className="text-[#765b08]">฿{formatBaht((i.price*i.qty))}</b></div></div>)}</div>
-      <div className="border-t border-slate-300 pt-4"><div className="mb-2 flex justify-between text-sm text-slate-600"><span>ยอดสินค้า</span><span>฿{formatBaht(cart.getSubtotal())}</span></div><div className="mb-4 flex justify-between text-xl font-semibold"><span>รวมสุทธิ</span><span className="text-[#765b08]">฿{formatBaht(total)}</span></div><div className="grid grid-cols-[auto_1fr] gap-2"><button disabled={!cart.items.length} onClick={holdCurrentBill} className="flex min-h-12 items-center justify-center gap-2 rounded-2xl border border-slate-300 bg-white px-4 text-sm font-bold text-slate-700 disabled:opacity-30"><Clock3 size={17}/>พักบิล</button><button aria-label="ชำระเงิน" disabled={!cart.items.length} onClick={openPayment} className="flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-[#d4af37] px-4 font-bold text-black disabled:opacity-30"><WalletCards size={18}/>ชำระเงิน</button></div></div>
+      <div className="mb-4 flex items-center justify-between"><div><p className="m-0 text-[10px] tracking-[.25em] text-slate-500">ขั้นตอน 2 · ตรวจออเดอร์</p><h2 className="m-0 mt-1 text-lg">รายการที่สั่ง</h2></div><span key={cart.items.reduce((s,i)=>s+i.qty,0)} className="field-bump rounded-full border border-slate-200 bg-slate-100 px-3 py-1 text-xs">{cart.items.reduce((s,i)=>s+i.qty,0)} แก้ว</span></div>
+      <div className="soft-scroll min-h-0 flex-1 overflow-auto">{cart.items.length===0?<div className="grid h-full place-items-center text-sm text-slate-400">1. แตะเมนูเพื่อเริ่มออเดอร์</div>:cart.items.map(i=><div key={i.key} className="mb-3 rounded-[18px] border border-slate-200 bg-slate-100/70 p-4"><div className="flex gap-3"><div className="min-w-0 flex-1"><b className="text-sm">{i.name}</b>{sweetnessChips(i)}</div><button aria-label={"ลบ "+i.name} onClick={()=>cart.removeItem(i.key)} className="grid h-11 w-11 place-items-center rounded-xl text-slate-500 hover:bg-red-50 hover:text-red-600"><Trash2 size={16}/></button></div><div className="mt-3 flex items-center justify-between"><div className="flex items-center gap-2"><button aria-label={"ลดจำนวน "+i.name} onClick={()=>updateCartQuantity(i.key,i.qty-1)} className="grid h-11 w-11 place-items-center rounded-xl border border-slate-300 bg-white"><Minus size={13}/></button><span className="w-5 text-center">{i.qty}</span><button aria-label={"เพิ่มจำนวน "+i.name} onClick={()=>updateCartQuantity(i.key,i.qty+1)} className="grid h-11 w-11 place-items-center rounded-xl border border-slate-300 bg-white"><Plus size={13}/></button></div><b className="text-[#765b08]">฿{formatBaht((i.price*i.qty))}</b></div></div>)}</div>
+      <div className="border-t border-slate-300 pt-4"><div className="mb-2 flex justify-between text-sm text-slate-600"><span>ยอดสินค้า</span><span>฿{formatBaht(cart.getSubtotal())}</span></div><div className="mb-4 flex justify-between text-xl font-semibold"><span>รวมสุทธิ</span><span className="text-[#765b08]">฿{formatBaht(total)}</span></div><div className="grid grid-cols-[auto_1fr] gap-2"><button disabled={!cart.items.length} onClick={holdCurrentBill} className="field-cart-action flex min-h-12 items-center justify-center gap-2 rounded-2xl border border-slate-300 bg-white px-4 text-sm font-bold text-slate-700 disabled:opacity-30"><Clock3 size={17}/>พักบิล</button><button aria-label="ชำระเงิน" disabled={!cart.items.length} onClick={openPayment} className="field-cart-action flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-[#d4af37] px-4 font-bold text-black disabled:opacity-30"><WalletCards size={18}/>ชำระเงิน</button></div></div>
     </aside>
 
     {heldOpen&&<div className="field-modal-overlay fixed inset-0 z-[85] grid place-items-center bg-black/55" onMouseDown={()=>setHeldOpen(false)}><ModalFocus labelId="field-held-title" onEscape={()=>setHeldOpen(false)} className="field-modal-panel card soft-scroll w-full max-w-lg overflow-auto border border-slate-300 bg-white p-4 shadow-2xl sm:p-5" initialFocusSelector='[aria-label="ปิดบิลที่พักไว้"]'><div onMouseDown={e=>e.stopPropagation()}><div className="flex items-start justify-between gap-3"><div><p className="gold text-[10px] font-bold tracking-[.25em]">พักรายการไว้ก่อน</p><h3 id="field-held-title" className="mt-1 text-xl font-semibold">บิลที่พักไว้ · {heldBills.held.length}</h3><p className="mt-1 text-xs text-slate-500">ยังไม่สร้างยอดขาย ไม่ตัด Stock และไม่เข้าคิวจนกว่าจะชำระจริง</p></div><button aria-label="ปิดบิลที่พักไว้" onClick={()=>{setHeldDeleteConfirmId(null);setHeldOpen(false)}} className="grid h-11 w-11 place-items-center rounded-xl hover:bg-slate-100"><X size={18}/></button></div>{heldBills.held.length===0?<div className="mt-5 rounded-2xl border border-dashed border-slate-300 p-8 text-center text-sm text-slate-400">ยังไม่มีบิลพัก</div>:<div className="mt-4 space-y-2">{heldBills.held.map(h=>{const qty=h.items.reduce((s,i)=>s+i.qty,0),amount=h.items.reduce((s,i)=>s+i.price*i.qty,0);return <div key={h.id} className="rounded-[20px] border border-slate-200 bg-slate-50 p-3 sm:p-4"><div className="flex items-start justify-between gap-3"><div><b className="text-sm">พักเวลา {localTime(h.createdAt)}</b><p className="mt-1 text-xs text-slate-500">{qty} แก้ว · {h.items.length} เมนู · ฿{formatBaht(amount)}</p><p className="mt-1 line-clamp-2 text-[11px] text-slate-500">{h.items.map(i=>i.name+" ×"+i.qty).join(" · ")}</p></div><button onClick={()=>setHeldDeleteConfirmId(h.id)} className="grid h-11 w-11 shrink-0 place-items-center rounded-xl text-slate-400 hover:bg-red-50 hover:text-red-600" aria-label={"ขอลบบิลพักเวลา "+localTime(h.createdAt)}><Trash2 size={15}/></button></div>{heldDeleteConfirmId===h.id?<div role="alertdialog" aria-label="ยืนยันลบบิลพัก" className="mt-3 rounded-2xl border border-red-200 bg-red-50 p-3"><b className="text-sm text-red-900">ลบบิลพักนี้ใช่ไหม?</b><p className="mt-1 text-xs leading-5 text-red-800">บิลพัก ฿{formatBaht(amount)} · {qty} แก้ว · ยังไม่ขายและยังไม่ตัด Stock การลบจะเอารายการนี้ออกจากเครื่องเท่านั้น</p><div className="mt-3 grid grid-cols-2 gap-2"><button type="button" onClick={()=>setHeldDeleteConfirmId(null)} className="min-h-11 rounded-xl border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700">เก็บบิลไว้</button><button type="button" onClick={()=>{heldBills.removeHeld(h.id);setHeldDeleteConfirmId(null)}} className="min-h-11 rounded-xl bg-red-700 px-3 text-xs font-bold text-white">ลบบิลพัก</button></div></div>:<button onClick={()=>resumeHeldBill(h.id)} className="mt-3 min-h-11 w-full rounded-2xl bg-[#d4af37] px-4 text-sm font-bold text-black">เรียกบิลนี้กลับ</button>}</div>})}</div>}</div></ModalFocus></div>}
@@ -1019,7 +1141,7 @@ function PosView({session}:{session:Session}){
         <div className="flex items-center justify-between gap-3"><div className="min-w-0"><b className="text-sm">{splitBill?"เลือกสำหรับบิลนี้":"รายการที่สั่ง"}</b><p className="mt-0.5 text-[11px] text-slate-500">{splitBill?"เลือกได้แม้เมนูเดียวกันมีหลายแก้ว":"ทวนเมนู ราคา และระดับหวานก่อนรับเงินเมื่อจำเป็น · ไม่ต้องยืนยันซ้ำ"}</p></div><div className="flex shrink-0 items-center gap-2"><b className="text-lg text-[#765b08]">฿{formatBaht(payableTotal)}</b>{!splitBill&&<button type="button" disabled={busy} onClick={()=>setPaymentReviewOpen(v=>!v)} className="min-h-11 rounded-xl border border-slate-300 bg-white px-3 text-xs font-semibold text-slate-700 disabled:opacity-40">{paymentReviewOpen?"ซ่อนรายการ":"ดูรายการ"}</button>}</div></div>
         {(splitBill||paymentReviewOpen)&&<div className="soft-scroll mt-3 max-h-[230px] space-y-2 overflow-auto pr-1">
           {cart.items.map(i=>{const selectedQty=splitBill?Math.min(i.qty,Math.max(0,Number(splitSelection[i.key])||0)):i.qty;return <div key={i.key} className={"rounded-2xl border bg-white p-3 "+(splitBill&&selectedQty>0?"border-[#d4af37]":"border-slate-200")}>
-            <div className="flex items-start justify-between gap-3"><div className="min-w-0 flex-1"><b className="block text-sm">{i.name}</b><span className="mt-1 inline-block rounded-full bg-[#f4ecd0] px-2 py-1 text-[10px] font-semibold text-[#765b08]">{orderOptionLabel(i.variant)}</span></div>{!splitBill&&<button disabled={busy||hasPendingPrompt} onClick={()=>cart.removeItem(i.key)} className="grid h-11 w-11 shrink-0 place-items-center rounded-xl text-slate-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-30" aria-label={"ลบ "+i.name}><Trash2 size={15}/></button>}</div>
+            <div className="flex items-start justify-between gap-3"><div className="min-w-0 flex-1"><b className="block text-sm">{i.name}</b>{splitBill?<span className="mt-1 inline-block rounded-full bg-[#f4ecd0] px-2 py-1 text-[10px] font-semibold text-[#765b08]">{orderOptionLabel(i.variant)}</span>:sweetnessChips(i,busy||hasPendingPrompt)}</div>{!splitBill&&<button disabled={busy||hasPendingPrompt} onClick={()=>cart.removeItem(i.key)} className="grid h-11 w-11 shrink-0 place-items-center rounded-xl text-slate-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-30" aria-label={"ลบ "+i.name}><Trash2 size={15}/></button>}</div>
             <div className="mt-3 flex flex-wrap items-center justify-between gap-2">{splitBill?<div className="flex items-center gap-2"><button aria-label={"ลดจำนวนในบิลนี้ "+i.name} disabled={busy||selectedQty<=0} onClick={()=>setSplitSelection(s=>({...s,[i.key]:Math.max(0,selectedQty-1)}))} className="grid h-11 w-11 place-items-center rounded-xl border border-slate-300 bg-white disabled:opacity-30"><Minus size={13}/></button><span className="min-w-[68px] text-center text-xs font-semibold">บิลนี้ {selectedQty}/{i.qty}</span><button aria-label={"เพิ่มจำนวนในบิลนี้ "+i.name} disabled={busy||selectedQty>=i.qty} onClick={()=>setSplitSelection(s=>({...s,[i.key]:Math.min(i.qty,selectedQty+1)}))} className="grid h-11 w-11 place-items-center rounded-xl border border-slate-300 bg-white disabled:opacity-30"><Plus size={13}/></button></div>:<div className="flex items-center gap-2"><button aria-label={"ลดจำนวน "+i.name} disabled={busy||hasPendingPrompt} onClick={()=>updateCartQuantity(i.key,i.qty-1)} className="grid h-11 w-11 place-items-center rounded-xl border border-slate-300 bg-white disabled:opacity-30"><Minus size={13}/></button><span className="min-w-6 text-center text-sm font-semibold">{i.qty}</span><button aria-label={"เพิ่มจำนวน "+i.name} disabled={busy||hasPendingPrompt} onClick={()=>updateCartQuantity(i.key,i.qty+1)} className="grid h-11 w-11 place-items-center rounded-xl border border-slate-300 bg-white disabled:opacity-30"><Plus size={13}/></button></div>}<div className="text-right"><small className="block text-[10px] text-slate-500">{selectedQty} × ฿{formatBaht(i.price)}</small><b className="text-sm text-[#765b08]">฿{formatBaht((selectedQty*i.price))}</b></div></div>
           </div>})}
         </div>}
@@ -1035,9 +1157,22 @@ function PosView({session}:{session:Session}){
       {["bank","card"].includes(method)&&<div className="mt-3 rounded-[20px] border border-slate-200 bg-slate-50 p-3"><label className="text-xs font-semibold text-slate-700">{method==="bank"?"เลขอ้างอิงโอน / หมายเหตุ":"เลขอ้างอิงจากเครื่องรับบัตร"}</label><input value={manualPaymentReference} onChange={e=>setManualPaymentReference(e.target.value)} placeholder={method==="bank"?"เช่น เลขท้ายรายการโอน (ใส่ได้ถ้ามี)":"เช่น เลขท้ายรายการจากเครื่อง (ใส่ได้ถ้ามี)"} className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-3 py-3"/><p className="mt-2 text-[11px] text-slate-500">ระบบเก็บช่องทางนี้แยกในรายงานบัญชี · ไม่กระทบเงินสดในลิ้นชัก</p></div>}
       {method==="delivery"&&<div className="mt-3 rounded-[20px] border border-slate-200 bg-slate-50 p-3"><label className="text-xs font-semibold text-slate-700">แพลตฟอร์ม Delivery</label><select value={deliveryPlatform} onChange={e=>setDeliveryPlatform(e.target.value as any)} className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-3 py-3"><option value="grab">Grab</option><option value="lineman">LINE MAN</option><option value="other_delivery">Delivery อื่น</option></select><div className="mt-3 grid grid-cols-3 gap-2 text-center text-xs"><div className="rounded-xl bg-white p-2"><span className="text-slate-500">ยอดขาย</span><b className="mt-1 block">฿{formatBaht(netPayable)}</b></div><div className="rounded-xl bg-white p-2"><span className="text-slate-500">GP {(deliveryGpRate*100).toFixed(1)}%</span><b className="mt-1 block text-red-600">−฿{deliveryGpFee.toFixed(2)}</b></div><div className="rounded-xl bg-white p-2"><span className="text-slate-500">รับสุทธิ</span><b className="mt-1 block text-emerald-700">฿{deliveryNetSettlement.toFixed(2)}</b></div></div><p className="mt-2 text-[11px] text-slate-500">ยอดขายยังบันทึกเต็มจำนวน ส่วน GP แยกเป็นค่าธรรมเนียมเพื่อให้รายงานกระแสเงินสดตรงกับเงินที่จะได้รับจริง</p></div>}
       {method==="cash"&&<><div className="mt-4 grid grid-cols-[1fr_auto] gap-2"><input aria-label="จำนวนเงินที่รับจากลูกค้า" autoFocus inputMode="decimal" value={received} onChange={e=>setReceived(e.target.value)} placeholder="รับเงินมาเท่าไร" className="min-w-0 rounded-2xl border border-slate-300 bg-slate-100 px-4 py-3 text-lg outline-none focus:border-[#c59b19]"/><button type="button" disabled={busy||!payableItems.length} onClick={()=>setReceived(String(netPayable))} className="min-h-12 rounded-2xl border border-[#d4af37] bg-[#fff8dc] px-3 text-sm font-bold text-[#765b08] disabled:opacity-40">รับเงินพอดี ฿{formatBaht(netPayable)}</button></div><div className="mt-2 grid grid-cols-3 gap-2">{quickCashAmounts.map(amount=><button key={amount} type="button" disabled={busy||!payableItems.length} onClick={()=>setReceived(String(amount))} className="min-h-11 rounded-xl border border-slate-300 bg-white text-sm font-bold text-slate-700 disabled:opacity-40">฿{amount}</button>)}</div>{received.trim()!==""&&Number.isFinite(cashDelta)&&<div className={"mt-3 flex items-center justify-between rounded-2xl border px-4 py-3 "+(cashDelta>=0?"border-emerald-300 bg-emerald-50 text-emerald-900":"border-red-300 bg-red-50 text-red-800")}><span>{cashDelta>=0?"เงินทอน":"ขาดอีก"}</span><b className="text-xl">฿{formatBaht(Math.abs(cashDelta))}</b></div>}</>}
-      {method==="promptpay"&&prompt?.qrUrl&&<div className="mt-4 rounded-[20px] border border-slate-300 bg-white p-4 text-center"><img src={prompt.qrUrl} alt="PromptPay QR" className="mx-auto max-h-56 w-auto"/><p className="mt-2 text-xs font-semibold text-black">{prompt.paid?"ชำระเงินแล้ว":"สแกน QR แล้วระบบจะตรวจสอบอัตโนมัติ"}</p></div>}
+      {method==="promptpay"&&prompt?.qrUrl&&<div className="mt-4 rounded-[20px] border border-slate-300 bg-white p-4 text-center"><img src={prompt.qrUrl} alt="PromptPay QR" className="mx-auto max-h-56 w-auto"/><p className="mt-2 text-xs font-semibold text-black">{prompt.paid?"ชำระเงินแล้ว":"สแกน QR แล้วระบบจะตรวจสอบอัตโนมัติ"}</p>
+        {prompt.provider==="direct"&&!prompt.paid&&String(prompt.status||"")==="pending"&&<div className="mt-3 border-t border-slate-200 pt-3">
+          <p className="text-[11px] text-slate-600">ยอดล็อก ฿{formatBaht(Number(prompt.amount)||0)} · เข้าบัญชีร้านโดยตรง · ระบบปิดบิลเองเมื่อแจ้งเตือนธนาคารมาถึง</p>
+          {!directConfirmArmed?<button type="button" data-direct-confirm onClick={()=>setDirectConfirmArmed(true)} className="mt-2 min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700">แจ้งเตือนไม่มา · เห็นเงินเข้าในแอปธนาคารแล้ว</button>:
+          <div role="alertdialog" data-direct-confirm-panel aria-label="ยืนยันเห็นเงินเข้า" className="mt-2 scroll-mb-28 rounded-xl border border-amber-300 bg-amber-50 p-3 text-left">
+            <b className="text-sm text-amber-950">เห็นยอด ฿{formatBaht(Number(prompt.amount)||0)} เข้าบัญชีร้านแล้วจริงใช่ไหม?</b>
+            <p className="mt-1 text-[11px] text-amber-900">ตรวจในแอปธนาคารก่อนกด · ระบบบันทึกชื่อผู้ยืนยันไว้ตรวจตอนปิดวัน</p>
+            <div className="mt-2 grid grid-cols-2 gap-2">
+              <button type="button" onClick={()=>setDirectConfirmArmed(false)} className="min-h-11 rounded-xl border border-slate-300 bg-white text-xs font-bold text-slate-700">ยังไม่เห็น</button>
+              <button type="button" data-direct-confirm-yes disabled={directConfirmBusy} onClick={confirmDirectPayment} className="min-h-11 rounded-xl bg-[#1F4D3A] text-xs font-black text-white disabled:opacity-40">{directConfirmBusy?"กำลังบันทึก...":"เห็นแล้ว · ปิดบิล"}</button>
+            </div>
+          </div>}
+        </div>}
+      </div>}
       <div className="sticky bottom-0 z-10 -mx-4 mt-4 border-t border-slate-200 bg-white/95 px-4 pb-[max(.5rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur sm:-mx-6 sm:px-6">
-        <button disabled={busy||!payableItems.length||(method==="promptpay"&&hasPendingPrompt)||(method==="cash"&&(!Number.isFinite(cashReceived)||cashReceived<netPayable))} onClick={checkout} className="w-full rounded-2xl bg-[#d4af37] py-3.5 font-bold text-black shadow-sm disabled:opacity-40">{busy?(method==="promptpay"&&prompt?"กำลังตรวจสอบการชำระเงิน...":"กำลังบันทึกบิล..."):(method==="promptpay"?(hasPendingPrompt?"กำลังรอผล QR เดิม...":"สร้าง QR ให้ลูกค้า"):method==="delivery"?"ยืนยันออเดอร์เดลิเวอรี":method==="bank"?"ยืนยันรับเงินโอน":method==="card"?"ยืนยันรับบัตร":!online?"บันทึกเงินสด Offline":"ยืนยันรับเงิน")}</button>
+        <button disabled={busy||!payableItems.length||(method==="promptpay"&&hasPendingPrompt)||(method==="cash"&&(!Number.isFinite(cashReceived)||cashReceived<netPayable))} onClick={checkout} className="field-cart-action w-full rounded-2xl bg-[#d4af37] py-3.5 font-bold text-black shadow-sm disabled:opacity-40">{busy?(method==="promptpay"&&prompt?"กำลังตรวจสอบการชำระเงิน...":"กำลังบันทึกบิล..."):(method==="promptpay"?(hasPendingPrompt?"กำลังรอผล QR เดิม...":"สร้าง QR ให้ลูกค้า"):method==="delivery"?"ยืนยันออเดอร์เดลิเวอรี":method==="bank"?"ยืนยันรับเงินโอน":method==="card"?"ยืนยันรับบัตร":!online?"บันทึกเงินสด Offline":"ยืนยันรับเงิน")}</button>
         {!busy&&method==="cash"&&Number.isFinite(cashReceived)&&cashReceived===netPayable&&<p className="mt-2 text-center text-xs font-semibold text-emerald-700">รับเงินพอดียอด · กดยืนยันชำระได้เลย</p>}
         {result&&<p className="mt-2 rounded-xl bg-slate-100 px-3 py-2 text-center text-sm text-slate-700">{result}</p>}
       </div>
@@ -1059,8 +1194,9 @@ function PosView({session}:{session:Session}){
                 {lastSale.offline||splitPaymentPending?<Plus size={16}/>:<ArrowRight size={15}/>}
                 {lastSale.offline?"รับออเดอร์ถัดไป":splitPaymentPending?"เลือกของคนถัดไป":"ทำคิว "+lastSale.queueNo+" ต่อเลย"}
               </button>
+              {!lastSale.offline&&!splitPaymentPending&&<button type="button" data-handoff-next-order onClick={startNextOrder} className="mt-2 flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl border-2 border-slate-300 bg-white px-3 text-sm font-bold text-slate-800"><Plus size={16}/>รับออเดอร์ถัดไปก่อน · ทำทีหลัง</button>}
             </div>
-            <p className="mt-2 text-center text-[11px] text-slate-500">{lastSale.offline?"ยอดถูกเก็บในเครื่องแล้ว · ห้ามล้างข้อมูลแอปหรือเบราว์เซอร์ จนกว่าระบบจะแจ้งว่าส่งบิลสำเร็จ":splitPaymentPending?"อย่าเปิดออเดอร์ใหม่จนกว่าจะรับเงินคิวนี้ครบ · ปุ่มเดียวจะพาไปเลือกรายการของคนถัดไป":"ชำระแล้วระบบพาไปทำคิวนี้ต่อในหน้า POS เดิม · ไม่ต้องเลือกทางเอง"}</p>
+            <p className="mt-2 text-center text-[11px] text-slate-500">{lastSale.offline?"ยอดถูกเก็บในเครื่องแล้ว · ห้ามล้างข้อมูลแอปหรือเบราว์เซอร์ จนกว่าระบบจะแจ้งว่าส่งบิลสำเร็จ":splitPaymentPending?"อย่าเปิดออเดอร์ใหม่จนกว่าจะรับเงินคิวนี้ครบ · ปุ่มเดียวจะพาไปเลือกรายการของคนถัดไป":"ไม่มีลูกค้ารอ → ทำเลย · มีคนต่อแถว → รับออเดอร์ก่อน คิวจะรอตามลำดับ"}</p>
           </div>
         </div>
       </ModalFocus>

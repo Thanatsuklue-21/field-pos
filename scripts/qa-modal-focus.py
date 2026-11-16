@@ -49,7 +49,6 @@ with sync_playwright() as p:
     page.route("**/api/**",handler)
     page.goto(args.base_url+"/pos",wait_until="domcontentloaded",timeout=60000)
     page.get_by_role("button",name="เมนูทดสอบ").first.click()
-    page.get_by_role("dialog").get_by_role("button",name=re.compile(r"หวานน้อย.*50%")).click()
     page.get_by_role("button",name="ชำระเงิน",exact=True).click()
     payment=page.get_by_role("dialog",name="ชำระเงิน ฿55",exact=True)
     payment.get_by_role("button",name="รับเงินพอดี ฿55",exact=True).click()

@@ -8,7 +8,8 @@ test('POS bootstrap is cache-first and still revalidates against the server',asy
   const pos=await read('app/pos/page.tsx');
   assert.match(pos,/cacheGet<Bootstrap>\("\/api\/pos\/bootstrap",BOOTSTRAP_CACHE_MAX_AGE_MS\)/);
   assert.match(pos,/load\(true\)\.catch/);
-  assert.match(pos,/acceptBootstrap\(cached\)/);
+  // A cached catalog renders immediately but never counts as a fresh stock projection.
+  assert.match(pos,/acceptBootstrap\(cached,false\)/);
   assert.match(pos,/36\*60\*60\*1000/);
   const effectStart=pos.indexOf('// Render the last known sellable catalog immediately');
   const cache=pos.indexOf('cacheGet<Bootstrap>',effectStart);
