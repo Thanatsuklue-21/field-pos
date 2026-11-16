@@ -125,3 +125,12 @@ test('bank-notifications endpoint lists offline PromptPay bills and counts the u
   assert.equal(res.body.offlinePromptPayUnverified,1);
   assert.equal(res.body.offlinePromptPay[0].verification,'unverified');
 });
+
+test('health reports only the database region label, never the host or token',async t=>{
+  withEnv(t,{TURSO_DATABASE_URL:'libsql://field-shop-acme.aws-ap-northeast-1.turso.io',PUBLIC_ORIGIN:'https://field.test'});
+  const db=await setup(t);const api=createApi({db});
+  const res={writeHead(status){this.status=status},end(raw){this.raw=raw;this.body=JSON.parse(raw)}};
+  await api({method:'GET',query:{route:'health'},headers:{}},res);
+  assert.equal(res.body.dbRegion,'aws-ap-northeast-1');
+  assert.doesNotMatch(res.raw,/field-shop-acme|turso\.io/);
+});
