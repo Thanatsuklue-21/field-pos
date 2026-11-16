@@ -128,7 +128,7 @@ test('Next route health fast path exposes the same release identity contract',as
   const health=route.slice(route.indexOf('if(routePath==="/api/health"'),route.indexOf('if(routePath==="/api/build"'));
   for(const field of ['VERCEL_GIT_COMMIT_SHA','VERCEL_GIT_COMMIT_REF','VERCEL_ENV','VERCEL_DEPLOYMENT_ID','commit','branch','environment','deploymentId']) assert.match(health,new RegExp(field));
   // Owner-approved 2026-11-16: adds the DB region label (no host/token) and a warm round-trip timing.
-  assert.match(health,/Response\.json\(\{ok:true,storage:"turso",dbRegion,release,timing:/);
+  assert.match(health,/Response\.json\(\{ok:true,storage:"turso",dbRegion,release,dbProtocol,timing:/);
   assert.match(health,/Server-Timing/);
   assert.match(health,/await getDb\(\)\.execute\("SELECT 1 AS ok"\)/);
 });
