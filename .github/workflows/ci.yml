@@ -54,6 +54,8 @@ jobs:
           python scripts/qa-offline-outbox.py --base-url http://127.0.0.1:3000 --output /tmp/field-outbox-qa
           python scripts/qa-cashier-flow.py --base-url http://127.0.0.1:3000 --output /tmp/field-cashier-flow-qa
           python scripts/qa-promptpay-nonblocking.py --base-url http://127.0.0.1:3000 --output /tmp/field-promptpay-qa
+          python scripts/qa-promptpay-direct.py --base-url http://127.0.0.1:3000 --output /tmp/field-promptpay-direct-qa
+          python scripts/qa-solo-flow.py --base-url http://127.0.0.1:3000 --output /tmp/field-solo-flow-qa
           python scripts/qa-close-day-recovery.py --base-url http://127.0.0.1:3000 --output /tmp/field-close-day-qa
           python scripts/qa-queue-waste-review.py --base-url http://127.0.0.1:3000 --output /tmp/field-queue-waste-qa
           python scripts/qa-expense-recovery.py --base-url http://127.0.0.1:3000 --output /tmp/field-expense-qa

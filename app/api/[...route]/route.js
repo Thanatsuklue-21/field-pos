@@ -12,7 +12,12 @@ async function handle(request,{params}){
   if(!["GET","HEAD"].includes(request.method)){
     const raw=await request.text();
     rawBody=raw;
-    if(raw){
+    const plainNotification=route.join("/")==="payments/bank-notification"&&!String(headers["content-type"]||"").includes("json");
+    if(raw&&plainNotification){
+      // MacroDroid can send the notification as text/plain, so quotes inside
+      // the bank text can never break the JSON and silently drop a payment.
+      body={text:raw.slice(0,2000)};
+    }else if(raw){
       try{body=JSON.parse(raw)}catch{return Response.json({error:"invalid_json"},{status:400})}
     }
   }

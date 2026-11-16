@@ -31,6 +31,18 @@ const PosDailyWorkspace=dynamic(loadPosDailyWorkspace,{
 
 type CartItems=ReturnType<typeof useCartStore.getState>["items"];
 
+// Thai voice confirmation for transfers, so a solo operator making a drink
+// hears that the money arrived. Silent where speech is unavailable.
+function announcePayment(total:number){
+  try{
+    if(!Number.isFinite(total)||typeof window==="undefined"||!("speechSynthesis" in window))return;
+    const baht=Number.isInteger(total)?String(total):total.toFixed(2);
+    const u=new SpeechSynthesisUtterance("ได้รับเงิน "+baht+" บาท เรียบร้อยแล้ว");
+    u.lang="th-TH";u.rate=1;
+    window.speechSynthesis.cancel();window.speechSynthesis.speak(u);
+  }catch{}
+}
+
 // Light confirmation tick where the platform supports it (Android/Chrome).
 // iOS Safari ignores navigator.vibrate; the visual bump still confirms the tap.
 function tapHaptic(){try{navigator.vibrate?.(8)}catch{}}
@@ -104,6 +116,15 @@ function PosView({session}:{session:Session}){
   const [lastSale,setLastSale]=useState<LastSale|null>(null);
   const [prompt,setPrompt]=useState<any|null>(null);
   const [promptConfig,setPromptConfig]=useState<any|null>(null);
+  // Own-account PromptPay: two-step manual confirm when the bank notification does not arrive.
+  const [directConfirmArmed,setDirectConfirmArmed]=useState(false);
+  const [directConfirmBusy,setDirectConfirmBusy]=useState(false);
+  useEffect(()=>{
+    if(!directConfirmArmed)return;
+    // Keep both confirm buttons above the sticky payment footer on small phones.
+    const id=window.setTimeout(()=>document.querySelector('[data-direct-confirm-panel]')?.scrollIntoView({block:"center",behavior:"smooth"}),30);
+    return()=>window.clearTimeout(id);
+  },[directConfirmArmed]);
   const [customers,setCustomers]=useState<any[]>([]);
   const [customerId,setCustomerId]=useState("");
   const [loyalty,setLoyalty]=useState({pointsSpend:0,pointsRedeemValue:0});
@@ -413,6 +434,8 @@ function PosView({session}:{session:Session}){
 
   function finishSale(r:any,opts:{payment:"cash"|"promptpay"|"bank"|"card"|"delivery";total:number;received:number;recovered?:boolean;splitBill?:boolean;paidCart?:{id:string;variant:string;qty:number}[]}){
     applyServerState(r);
+    setDirectConfirmArmed(false);
+    if(opts.payment==="promptpay")announcePayment(Number(r?.total??opts.total));
     const serverTotal=Number(r?.total??opts.total);
     const serverReceived=Number(r?.received??opts.received);
     const serverChange=Number(r?.change??(opts.payment==="cash"?Math.max(0,serverReceived-serverTotal):0));
@@ -723,6 +746,18 @@ function PosView({session}:{session:Session}){
     return {pending:next,status:st};
   }
 
+  async function confirmDirectPayment(){
+    if(!session||!prompt?.chargeId||directConfirmBusy)return;
+    setDirectConfirmBusy(true);
+    try{
+      await api<any>("/api/payments/promptpay/direct/confirm",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({chargeId:prompt.chargeId})});
+      setDirectConfirmArmed(false);
+      // The normal pending-payment path re-reads the charge on the server and finalises once.
+      await recoverPending();
+    }catch(e:any){setResult(errorText(String(e?.message||"")))}
+    finally{setDirectConfirmBusy(false)}
+  }
+
   async function recoverPending(){
     if(promptReconcileRef.current)return;
     promptReconcileRef.current=true;
@@ -746,7 +781,7 @@ function PosView({session}:{session:Session}){
       }
       const st=await api<any>("/api/payments/promptpay/status",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({chargeId:p.paymentReference})});
       if(st.paid){await finalizePending(p,st.chargeId||p.paymentReference);return}
-      if(["failed","expired","reversed"].includes(String(st.status||"").toLowerCase())){await cancelPendingReservation(p);pendingClear();return}
+      if(["failed","expired","reversed","cancelled"].includes(String(st.status||"").toLowerCase())){await cancelPendingReservation(p);pendingClear();return}
       setMethod("promptpay");
       setPrompt(st);
       setPayOpen(true);
@@ -762,6 +797,8 @@ function PosView({session}:{session:Session}){
 
   function errorText(code:string){
     return code==="cash_insufficient"?"จำนวนเงินรับไม่พอ":
+      code==="promptpay_direct_amount_in_use"?"มี QR ยอดเดียวกันรอจ่ายอยู่ · ปิดหรือยกเลิก QR เดิมก่อน เพื่อไม่ให้ยอดโอนจับคู่ผิดบิล":
+      code==="promptpay_direct_not_pending"?"QR นี้ไม่ได้รอจ่ายแล้ว (หมดเวลา/ยกเลิก/จ่ายแล้ว) · ระบบกำลังตรวจสถานะล่าสุด":
       code==="menu_unavailable"?"มีเมนูในตะกร้าที่ปิดขาย ราคาเป็น 0 หรือยังไม่พร้อมขาย กรุณาตรวจตะกร้าใหม่":
       code==="request_key_conflict"?"รายการเดิมถูกเปลี่ยน กรุณาตรวจประวัติออเดอร์ก่อนชำระอีกครั้ง":
       code==="recipe_unavailable"?"สูตรเมนูยังไม่ครบหรือมีปริมาณผิด กรุณาตรวจสูตรก่อนขาย":
@@ -863,7 +900,7 @@ function PosView({session}:{session:Session}){
           }
           if(!current)current=await api<any>("/api/payments/promptpay/status",{method:"POST",headers:{"X-CSRF-Token":session.csrf},body:JSON.stringify({chargeId:resumed.paymentReference})});
           if(current.paid){await finalizePending(resumed,current.chargeId||resumed.paymentReference);return}
-          if(["failed","expired","reversed"].includes(String(current.status||"").toLowerCase())){await cancelPendingReservation(resumed);pendingClear()}
+          if(["failed","expired","reversed","cancelled"].includes(String(current.status||"").toLowerCase())){await cancelPendingReservation(resumed);pendingClear()}
           else if(!samePending(resumed,checkoutTotal,cartPayload,customerId,redeemPoints,splitGroup?.orderId||null))throw Object.assign(new Error("pending_promptpay_exists"),{status:409});
           else{st=current;paymentReference=resumed.paymentReference;requestKey=resumed.requestKey;activePending=resumed;checkoutTotal=resumed.total}
         }
@@ -879,7 +916,7 @@ function PosView({session}:{session:Session}){
           paymentReference=activePending.paymentReference;
         }
         setPrompt(st);
-        if(["failed","expired","reversed"].includes(String(st.status||"").toLowerCase())){
+        if(["failed","expired","reversed","cancelled"].includes(String(st.status||"").toLowerCase())){
           if(activePending)await cancelPendingReservation(activePending);
           pendingClear();
           throw Object.assign(new Error("promptpay_failed"),{status:409});
@@ -1120,7 +1157,20 @@ function PosView({session}:{session:Session}){
       {["bank","card"].includes(method)&&<div className="mt-3 rounded-[20px] border border-slate-200 bg-slate-50 p-3"><label className="text-xs font-semibold text-slate-700">{method==="bank"?"เลขอ้างอิงโอน / หมายเหตุ":"เลขอ้างอิงจากเครื่องรับบัตร"}</label><input value={manualPaymentReference} onChange={e=>setManualPaymentReference(e.target.value)} placeholder={method==="bank"?"เช่น เลขท้ายรายการโอน (ใส่ได้ถ้ามี)":"เช่น เลขท้ายรายการจากเครื่อง (ใส่ได้ถ้ามี)"} className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-3 py-3"/><p className="mt-2 text-[11px] text-slate-500">ระบบเก็บช่องทางนี้แยกในรายงานบัญชี · ไม่กระทบเงินสดในลิ้นชัก</p></div>}
       {method==="delivery"&&<div className="mt-3 rounded-[20px] border border-slate-200 bg-slate-50 p-3"><label className="text-xs font-semibold text-slate-700">แพลตฟอร์ม Delivery</label><select value={deliveryPlatform} onChange={e=>setDeliveryPlatform(e.target.value as any)} className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-3 py-3"><option value="grab">Grab</option><option value="lineman">LINE MAN</option><option value="other_delivery">Delivery อื่น</option></select><div className="mt-3 grid grid-cols-3 gap-2 text-center text-xs"><div className="rounded-xl bg-white p-2"><span className="text-slate-500">ยอดขาย</span><b className="mt-1 block">฿{formatBaht(netPayable)}</b></div><div className="rounded-xl bg-white p-2"><span className="text-slate-500">GP {(deliveryGpRate*100).toFixed(1)}%</span><b className="mt-1 block text-red-600">−฿{deliveryGpFee.toFixed(2)}</b></div><div className="rounded-xl bg-white p-2"><span className="text-slate-500">รับสุทธิ</span><b className="mt-1 block text-emerald-700">฿{deliveryNetSettlement.toFixed(2)}</b></div></div><p className="mt-2 text-[11px] text-slate-500">ยอดขายยังบันทึกเต็มจำนวน ส่วน GP แยกเป็นค่าธรรมเนียมเพื่อให้รายงานกระแสเงินสดตรงกับเงินที่จะได้รับจริง</p></div>}
       {method==="cash"&&<><div className="mt-4 grid grid-cols-[1fr_auto] gap-2"><input aria-label="จำนวนเงินที่รับจากลูกค้า" autoFocus inputMode="decimal" value={received} onChange={e=>setReceived(e.target.value)} placeholder="รับเงินมาเท่าไร" className="min-w-0 rounded-2xl border border-slate-300 bg-slate-100 px-4 py-3 text-lg outline-none focus:border-[#c59b19]"/><button type="button" disabled={busy||!payableItems.length} onClick={()=>setReceived(String(netPayable))} className="min-h-12 rounded-2xl border border-[#d4af37] bg-[#fff8dc] px-3 text-sm font-bold text-[#765b08] disabled:opacity-40">รับเงินพอดี ฿{formatBaht(netPayable)}</button></div><div className="mt-2 grid grid-cols-3 gap-2">{quickCashAmounts.map(amount=><button key={amount} type="button" disabled={busy||!payableItems.length} onClick={()=>setReceived(String(amount))} className="min-h-11 rounded-xl border border-slate-300 bg-white text-sm font-bold text-slate-700 disabled:opacity-40">฿{amount}</button>)}</div>{received.trim()!==""&&Number.isFinite(cashDelta)&&<div className={"mt-3 flex items-center justify-between rounded-2xl border px-4 py-3 "+(cashDelta>=0?"border-emerald-300 bg-emerald-50 text-emerald-900":"border-red-300 bg-red-50 text-red-800")}><span>{cashDelta>=0?"เงินทอน":"ขาดอีก"}</span><b className="text-xl">฿{formatBaht(Math.abs(cashDelta))}</b></div>}</>}
-      {method==="promptpay"&&prompt?.qrUrl&&<div className="mt-4 rounded-[20px] border border-slate-300 bg-white p-4 text-center"><img src={prompt.qrUrl} alt="PromptPay QR" className="mx-auto max-h-56 w-auto"/><p className="mt-2 text-xs font-semibold text-black">{prompt.paid?"ชำระเงินแล้ว":"สแกน QR แล้วระบบจะตรวจสอบอัตโนมัติ"}</p></div>}
+      {method==="promptpay"&&prompt?.qrUrl&&<div className="mt-4 rounded-[20px] border border-slate-300 bg-white p-4 text-center"><img src={prompt.qrUrl} alt="PromptPay QR" className="mx-auto max-h-56 w-auto"/><p className="mt-2 text-xs font-semibold text-black">{prompt.paid?"ชำระเงินแล้ว":"สแกน QR แล้วระบบจะตรวจสอบอัตโนมัติ"}</p>
+        {prompt.provider==="direct"&&!prompt.paid&&String(prompt.status||"")==="pending"&&<div className="mt-3 border-t border-slate-200 pt-3">
+          <p className="text-[11px] text-slate-600">ยอดล็อก ฿{formatBaht(Number(prompt.amount)||0)} · เข้าบัญชีร้านโดยตรง · ระบบปิดบิลเองเมื่อแจ้งเตือนธนาคารมาถึง</p>
+          {!directConfirmArmed?<button type="button" data-direct-confirm onClick={()=>setDirectConfirmArmed(true)} className="mt-2 min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700">แจ้งเตือนไม่มา · เห็นเงินเข้าในแอปธนาคารแล้ว</button>:
+          <div role="alertdialog" data-direct-confirm-panel aria-label="ยืนยันเห็นเงินเข้า" className="mt-2 scroll-mb-28 rounded-xl border border-amber-300 bg-amber-50 p-3 text-left">
+            <b className="text-sm text-amber-950">เห็นยอด ฿{formatBaht(Number(prompt.amount)||0)} เข้าบัญชีร้านแล้วจริงใช่ไหม?</b>
+            <p className="mt-1 text-[11px] text-amber-900">ตรวจในแอปธนาคารก่อนกด · ระบบบันทึกชื่อผู้ยืนยันไว้ตรวจตอนปิดวัน</p>
+            <div className="mt-2 grid grid-cols-2 gap-2">
+              <button type="button" onClick={()=>setDirectConfirmArmed(false)} className="min-h-11 rounded-xl border border-slate-300 bg-white text-xs font-bold text-slate-700">ยังไม่เห็น</button>
+              <button type="button" data-direct-confirm-yes disabled={directConfirmBusy} onClick={confirmDirectPayment} className="min-h-11 rounded-xl bg-[#1F4D3A] text-xs font-black text-white disabled:opacity-40">{directConfirmBusy?"กำลังบันทึก...":"เห็นแล้ว · ปิดบิล"}</button>
+            </div>
+          </div>}
+        </div>}
+      </div>}
       <div className="sticky bottom-0 z-10 -mx-4 mt-4 border-t border-slate-200 bg-white/95 px-4 pb-[max(.5rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur sm:-mx-6 sm:px-6">
         <button disabled={busy||!payableItems.length||(method==="promptpay"&&hasPendingPrompt)||(method==="cash"&&(!Number.isFinite(cashReceived)||cashReceived<netPayable))} onClick={checkout} className="field-cart-action w-full rounded-2xl bg-[#d4af37] py-3.5 font-bold text-black shadow-sm disabled:opacity-40">{busy?(method==="promptpay"&&prompt?"กำลังตรวจสอบการชำระเงิน...":"กำลังบันทึกบิล..."):(method==="promptpay"?(hasPendingPrompt?"กำลังรอผล QR เดิม...":"สร้าง QR ให้ลูกค้า"):method==="delivery"?"ยืนยันออเดอร์เดลิเวอรี":method==="bank"?"ยืนยันรับเงินโอน":method==="card"?"ยืนยันรับบัตร":!online?"บันทึกเงินสด Offline":"ยืนยันรับเงิน")}</button>
         {!busy&&method==="cash"&&Number.isFinite(cashReceived)&&cashReceived===netPayable&&<p className="mt-2 text-center text-xs font-semibold text-emerald-700">รับเงินพอดียอด · กดยืนยันชำระได้เลย</p>}
