@@ -1,3 +1,3 @@
 FIELD POS production release marker
-source_main=b226546614d2155c3fc1202a09aa963f551abc96
-purpose=release-fix-qr-vanish-race
+source_main=b421e32b6bbcbfadf127370dc5d0386b370d4a31
+purpose=release-fix-stuck-promptpay-sheet
