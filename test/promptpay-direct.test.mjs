@@ -193,3 +193,47 @@ test('HTTP: an interrupted own-account QR attempt resumes on retry and is attach
   const doc=await state(db);const sess=doc.paymentSessions.find(x=>x.id===s.session.id);
   assert.equal(sess.providerCharge.chargeId,a.body.chargeId);
 });
+
+// Field report 2026-11-17: an interrupted own-account QR left a ฿45 bill in
+// "รายการรับเงินค้าง" with reserved stock and no way to release it.
+async function stuckSession(t,{key,attemptProvider='direct',expire=true}={}){
+  withEnv(t,{PROMPTPAY_PROVIDER:'direct',PROMPTPAY_DIRECT_ID:'0812345678',BANK_NOTIFY_SECRET:SECRET,PUBLIC_ORIGIN:'https://field.test'});
+  const db=await setup(t),api=createApi({db,origin:'https://field.test'});
+  const s=await startSplitPayment({db,user,body:{requestKey:key,cart:[{id:'latte',variant:'100%',qty:1}],date:bangkokDate(),mode:'promptpay_full'}});
+  await beginSplitPaymentProviderCharge({db,user,body:{sessionId:s.session.id,provider:attemptProvider,attemptKey:'promptpay:'+s.session.id}});
+  if(expire){const doc=await state(db);doc.paymentSessions.find(x=>x.id===s.session.id).expiresAt=1;await db.execute({sql:'UPDATE field_state SET document=? WHERE singleton=1',args:[JSON.stringify(doc)]})}
+  return {db,api,id:s.session.id};
+}
+const release=(api,id,key,opts)=>call(api,['pos','split','promptpay-release-stuck'],{requestKey:key,sessionId:id},opts);
+
+test('owner releases a stuck own-account bill with no QR: stock returned, session cancelled, replay-safe',async t=>{
+  const {db,api,id}=await stuckSession(t,{key:'stuck-rel-1'});
+  const before=(await state(db)).ingredients.matcha.qty;
+  const r=await release(api,id,'stuck-release-0001');
+  assert.equal(r.status,200,JSON.stringify(r.body));assert.equal(r.body.released,true);
+  const doc=await state(db);const s=doc.paymentSessions.find(x=>x.id===id);
+  assert.equal(s.status,'cancelled');assert.equal(doc.ingredients.matcha.qty,before+5);assert.equal(doc.sales.length,0);
+  const again=await release(api,id,'stuck-release-0001');
+  assert.equal(again.status,200);assert.equal((await state(db)).ingredients.matcha.qty,before+5);
+});
+
+test('stuck release cancels a pending own-account QR first, and refuses a paid one',async t=>{
+  const {db,api,id}=await stuckSession(t,{key:'stuck-rel-2',expire:false});
+  const c=await call(api,['payments','promptpay','create'],{reference:id});assert.equal(c.status,200,JSON.stringify(c.body));
+  const r=await release(api,id,'stuck-release-0002');
+  assert.equal(r.status,200,JSON.stringify(r.body));
+  const row=(await db.execute('SELECT status FROM field_promptpay_direct')).rows[0];assert.equal(row.status,'cancelled');
+
+  const p=await stuckSession(t,{key:'stuck-rel-3',expire:false});
+  const c2=await call(p.api,['payments','promptpay','create'],{reference:p.id});assert.equal(c2.status,200);
+  await p.db.execute({sql:"UPDATE field_promptpay_direct SET status='paid',paid_at=? WHERE id=?",args:[Date.now(),c2.body.chargeId]});
+  const r2=await release(p.api,p.id,'stuck-release-0003');
+  assert.equal(r2.status,409);assert.equal(r2.body.error,'promptpay_already_paid');
+  assert.notEqual((await state(p.db)).paymentSessions.find(x=>x.id===p.id).status,'cancelled');
+});
+
+test('stuck release is owner-only and never touches an external-provider (Beam) attempt',async t=>{
+  const {api,id}=await stuckSession(t,{key:'stuck-rel-4',attemptProvider:'beam'});
+  const r=await release(api,id,'stuck-release-0004');
+  assert.equal(r.status,409);assert.equal(r.body.error,'promptpay_stuck_release_direct_only');
+});
