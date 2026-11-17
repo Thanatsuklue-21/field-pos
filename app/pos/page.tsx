@@ -1240,6 +1240,10 @@ function PosView({session}:{session:Session}){
         </div>
       </div>
 
+      {cashShiftUnavailable&&<div role="status" data-shift-banner className="mb-3 flex items-center justify-between gap-3 rounded-2xl border border-[#E8B04B] bg-[#FFF4E5] px-4 py-2.5 text-[#7A3E0B]">
+        <div className="min-w-0"><b className="block text-sm">ยังไม่เปิดร้านวันนี้</b><span className="block text-[11px]">เปิดกะ + ใส่เงินทอนตั้งต้นก่อน · ทำครั้งเดียวต่อวัน รับเงินสดได้ทันที</span></div>
+        {session.user.role==="admin"?<button type="button" data-shift-open onClick={()=>{setWorkspaceMounted(true);setWorkspaceOpen(true)}} className="min-h-11 shrink-0 rounded-xl bg-[#1F4D3A] px-4 text-sm font-bold text-white">เปิดร้าน</button>:<span className="shrink-0 text-[11px] font-semibold">ให้เจ้าของร้านเปิดกะ</span>}
+      </div>}
       {!offlineStorageError&&!online&&<div role="status" data-offline-banner className="mb-3 rounded-2xl border border-[#E8B04B] bg-[#FFF4E5] px-4 py-2.5 text-[#7A3E0B]">
         <b className="block text-sm">เน็ตหลุด · ขายเงินสด{offlineQrId?" และ PromptPay (QR ในเครื่อง)":""}ได้ตามปกติ</b>
         <span className="block text-[11px]">แยกจ่าย / แต้มปิดชั่วคราว{offlineStats.total>0?" · บิลเก็บในเครื่อง "+offlineStats.total+" บิล":""} · ส่งเข้าระบบเองเมื่อเน็ตกลับ</span>
@@ -1365,7 +1369,6 @@ function PosView({session}:{session:Session}){
           <p className="mt-1 text-[11px] text-amber-900">ถ้าไม่แน่ใจ ดูแอปธนาคารก่อน · ถ้าเงินเข้าแล้วระบบจะไม่ยอมยกเลิก</p>
           <div className="mt-2 grid grid-cols-2 gap-2"><button type="button" onClick={()=>setCancelPromptArmed(false)} className="min-h-11 rounded-xl border border-slate-300 bg-white text-xs font-bold text-slate-700">กลับ</button><button type="button" data-cancel-prompt-yes disabled={cancelPromptBusy} onClick={()=>cancelActivePrompt()} className="min-h-11 rounded-xl bg-[#9A3412] text-xs font-black text-white disabled:opacity-40">{cancelPromptBusy?"กำลังยกเลิก...":"ยกเลิก QR"}</button></div>
         </div>)}
-      {hasPendingPrompt&&method==="promptpay"&&!splitBill&&!splitGroup&&String(prompt?.status||"").toLowerCase()==="pending"&&!prompt?.paid&&<button type="button" data-park-prompt onClick={parkPendingPrompt} className="mt-3 flex min-h-12 w-full items-center justify-center rounded-2xl border-2 border-[#1F4D3A] bg-white px-4 text-sm font-black text-[#1F4D3A]">ลูกค้าสแกนแล้ว · รับออเดอร์ถัดไประหว่างรอเงินเข้า</button>}
       {cashShiftUnavailable&&<div className="mt-3 rounded-2xl border border-amber-300 bg-amber-50 px-3 py-3 text-xs text-amber-900"><div className="flex items-center justify-between gap-3"><div><b>เงินสดยังไม่พร้อม</b><p className="mt-1">ต้องเปิดกะเงินสดก่อน เพื่อให้ยอดตั้งต้น เงินทอน และปิดวันกระทบกันได้ถูกต้อง</p></div>{session.user.role==="admin"&&<button type="button" onClick={()=>{setPayOpen(false);setWorkspaceMounted(true);setWorkspaceOpen(true)}} className="min-h-11 shrink-0 rounded-xl border border-[#b98b00] bg-[#d4af37] px-3 font-bold text-black">เปิดกะตรงนี้</button>}</div>{session.user.role!=="admin"&&<p className="mt-2 font-semibold">ให้เจ้าของร้านเปิดกะ หรือเลือก PromptPay/ช่องทางอื่น</p>}</div>}
       {online&&promptConfig?.ready!==true&&<div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">PromptPay ยังไม่เปิดรับเงินจริง · ใช้เงินสดหรือช่องทางอื่นไปก่อน และให้เจ้าของร้านตรวจการตั้งค่า PromptPay</div>}
       {["bank","card"].includes(method)&&<div className="mt-3 rounded-[20px] border border-slate-200 bg-slate-50 p-3"><label className="text-xs font-semibold text-slate-700">{method==="bank"?"เลขอ้างอิงโอน / หมายเหตุ":"เลขอ้างอิงจากเครื่องรับบัตร"}</label><input value={manualPaymentReference} onChange={e=>setManualPaymentReference(e.target.value)} placeholder={method==="bank"?"เช่น เลขท้ายรายการโอน (ใส่ได้ถ้ามี)":"เช่น เลขท้ายรายการจากเครื่อง (ใส่ได้ถ้ามี)"} className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-3 py-3"/><p className="mt-2 text-[11px] text-slate-500">ระบบเก็บช่องทางนี้แยกในรายงานบัญชี · ไม่กระทบเงินสดในลิ้นชัก</p></div>}
@@ -1386,6 +1389,7 @@ function PosView({session}:{session:Session}){
           </div>}
         </div>}
       </div>}
+      {hasPendingPrompt&&method==="promptpay"&&!splitBill&&!splitGroup&&String(prompt?.status||"").toLowerCase()==="pending"&&!prompt?.paid&&<button type="button" data-park-prompt onClick={parkPendingPrompt} className="mt-3 flex min-h-12 w-full items-center justify-center rounded-2xl border-2 border-[#1F4D3A] bg-white px-4 text-sm font-black text-[#1F4D3A]">ลูกค้าสแกนแล้ว ✓ · รับคนถัดไประหว่างรอเงินเข้า</button>}
       {method==="promptpay"&&offlineQr&&<div data-offline-qr className="mt-4 rounded-[20px] border-2 border-amber-300 bg-white p-4 text-center">
         <img src={offlineQr.url} alt="PromptPay QR ออฟไลน์" className="mx-auto max-h-56 w-auto"/>
         <p className="mt-2 text-sm font-black text-black">ยอด ฿{formatBaht(offlineQr.total)} · เข้าบัญชีร้านโดยตรง</p>
