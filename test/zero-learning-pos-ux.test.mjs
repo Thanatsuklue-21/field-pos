@@ -16,8 +16,9 @@ test("POS teaches the core sale flow with visible 1-2-3 guidance",async()=>{
 test("menu tap adds the default recipe directly; non-sweetness variants still ask for a choice",async()=>{
   const pos=await read("app/pos/page.tsx");
   assert.ok(pos.includes("function chooseMenu(product:MenuItem)"));
-  // Owner-approved 2026-11-16: single variant or normal sweetness → one tap.
-  assert.ok(pos.includes("const quick=quickAddVariant(product.variants)"));
+  // Owner-approved 2026-11-16: single variant or 100% sweetness → one tap.
+  // Owner-approved 2026-11-24: Americano / Pure Matcha ask sweetness every cup.
+  assert.ok(pos.includes("const quick=quickAddVariant(product.variants,product.name)"));
   assert.match(pos,/if\(quick\)\{\s*addVariant\(product,quick,/);
   assert.ok(pos.includes("setSelected(product)"));
   assert.ok(pos.includes("onClick={()=>chooseMenu(x)}"));

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
-import {moveOneUnitToVariant,quickAddVariant,shortVariantLabel} from '../lib/domain/quick-order.mjs';
+import {moveOneUnitToVariant,mustAskSweetness,quickAddVariant,shortVariantLabel} from '../lib/domain/quick-order.mjs';
 
 const sweet=[{label:'100%',available:true},{label:'50%',available:true},{label:'0%',available:true}];
 
@@ -19,7 +19,7 @@ test('size variants or an unavailable default still open the picker',()=>{
 });
 
 test('short chip labels stay readable Thai',()=>{
-  assert.deepEqual(['100%','50%','0%','Standard','L'].map(shortVariantLabel),['หวานปกติ','หวานน้อย','ไม่หวาน','มาตรฐาน','L']);
+  assert.deepEqual(['100%','50%','0%','Standard','L'].map(shortVariantLabel),['หวาน','หวานน้อย','ไม่หวาน','มาตรฐาน','L']);
 });
 
 const line=(variant,qty)=>({key:'tea::'+variant,id:'tea',name:'ชาไทย',variant,price:55,qty});
@@ -45,7 +45,7 @@ test('moving into an existing line merges, single cup line is replaced, no-op is
 
 test('POS uses quick add, inline sweetness chips and a two-way payment handoff',async()=>{
   const pos=await readFile(new URL('../app/pos/page.tsx',import.meta.url),'utf8');
-  assert.match(pos,/const quick=quickAddVariant\(product\.variants\)/);
+  assert.match(pos,/const quick=quickAddVariant\(product\.variants,product\.name\)/);
   assert.match(pos,/moveOneUnitToVariant\(/);
   assert.match(pos,/data-sweetness-chip/);
   assert.match(pos,/data-handoff-next-order/);
@@ -72,4 +72,12 @@ test('a quick-added multi-sweetness cup can be switched from a strip above the c
   // Hidden while paying or on the success sheet; auto-hides after 8 s.
   assert.match(pos,/lastQuick&&!payOpen&&!lastSale\?cart\.items\.find/);
   assert.match(pos,/setLastQuick\(current=>current\?\.at===lastQuick\.at\?null:current\),8000\)/);
+});
+
+test('Americano and Pure Matcha have no default sweetness: the tap opens the picker',()=>{
+  for(const n of ['Americano','อเมริกาโน่','อเมริกาโน่ร้อน','Pure Matcha Iced','Pure Hot Matcha','เพียวมัทฉะ'])assert.equal(quickAddVariant(sweet,n),null,n);
+  for(const n of ['Coconut Americano','อเมริกาโน่มะพร้าว','Honey Americano','Latte','Matcha Latte','ชาใต้'])assert.equal(quickAddVariant(sweet,n).label,'100%',n);
+  assert.equal(mustAskSweetness('Americano'),true);
+  assert.equal(mustAskSweetness('อเมริกาโน่บ๊วยโซดา'),false);
+  assert.equal(quickAddVariant([{label:'Standard'}],'Americano').label,'Standard','single recipe still quick-adds');
 });

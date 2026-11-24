@@ -220,7 +220,7 @@ test('payment modal reviews cart items prices quantities and sweetness before co
   assert.match(pos,/รายการที่สั่ง/);
   assert.match(pos,/ทวนเมนู ราคา และระดับหวานก่อนรับเงิน/);
   assert.match(pos,/orderOptionLabel/);
-  assert.match(pos,/หวานปกติ \(100%\)/);
+  assert.match(pos,/หวาน \(100%\)/);
   assert.match(pos,/หวานน้อย \(50%\)/);
   assert.match(pos,/ไม่หวาน \(0%\)/);
   assert.match(pos,/\{selectedQty\} × ฿\{formatBaht\(i\.price\)\}/);

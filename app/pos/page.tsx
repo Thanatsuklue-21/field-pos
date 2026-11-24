@@ -96,7 +96,7 @@ const splitGroupClear=()=>sessionStorage.removeItem(SPLIT_GROUP_KEY);
 const sellable=(x:MenuItem)=>!!x.enabled&&Number(x.price)>0&&Array.isArray(x.variants)&&x.variants.length>0;
 function orderOptionLabel(label:string){
   const raw=String(label||"").trim(),v=raw.toLowerCase().replace(/\s+/g,"");
-  if(["100%","normal","ปกติ","หวานปกติ"].includes(v))return "หวานปกติ (100%)";
+  if(["100%","normal","ปกติ","หวานปกติ","หวาน"].includes(v))return "หวาน (100%)";
   if(["50%","less","lesssweet","หวานน้อย"].includes(v))return "หวานน้อย (50%)";
   if(["0%","no","nosweet","ไม่หวาน"].includes(v))return "ไม่หวาน (0%)";
   if(!raw||v==="standard")return "สูตรมาตรฐาน";
@@ -616,9 +616,10 @@ function PosView({session}:{session:Session}){
   }
 
   function chooseMenu(product:MenuItem){
-    // One tap = the shop's default recipe (normal sweetness). Sweetness is
+    // One tap = the shop's default recipe (100% sweetness); Americano and Pure
+    // Matcha open the picker because the operator asks sweetness every cup. Sweetness is
     // changed from the cart chips; size-style variants still open the picker.
-    const quick=quickAddVariant(product.variants);
+    const quick=quickAddVariant(product.variants,product.name);
     if(quick){
       addVariant(product,quick,product.variants.length>1?()=>setLastQuick({key:product.id+"::"+quick.label,id:product.id,name:product.name,variant:quick.label,at:Date.now()}):()=>setLastQuick(null));
       return;
